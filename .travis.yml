@@ -1,0 +1,8 @@
+language: c
+sudo: required
+
+before_script:
+    - ./install_curl.sh
+
+script:
+    - ls
