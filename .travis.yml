@@ -1,5 +1,19 @@
 language: c
 sudo: required
+addons:
+    apt:
+        sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.7
+        packages:
+            - lcov
+            - clang-3.7
+            - libev-dev
+            - libc-ares-dev
+            - libstdc++-4.8-dev
+            - libidn2-0-dev
+            - libssh2-1-dev
+            - krb5-user
 
 before_script:
     - ./install_curl.sh
