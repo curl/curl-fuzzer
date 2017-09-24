@@ -21,7 +21,8 @@
 ###########################################################################
 AUTOMAKE_OPTIONS = foreign nostdinc
 
-AM_CXXFLAGS = -I@INSTALLDIR@/include
+# Include debug symbols by default as recommended by libfuzzer.
+AM_CXXFLAGS = -g -I@INSTALLDIR@/include
 
 LIBS = -lpthread -lm
 
@@ -46,7 +47,7 @@ zip:
 	zip -q -r curl_fuzzer_seed_corpus.zip curl_fuzz_data
 
 check: all
-	./curl_fuzzer curl_fuzz_data/*
+	./check_data.sh
 
 noinst_PROGRAMS = $(FUZZPROGS)
 noinst_LIBRARIES = $(FUZZLIBS)
