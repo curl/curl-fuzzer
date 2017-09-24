@@ -3,21 +3,23 @@
 # If any commands fail, fail the script immediately.
 set -ex
 
-# Make an install target for curl.
-mkdir /tmp/curl_install
+# Import compiler settings
+. compile_settings
 
-git clone http://github.com/curl/curl /tmp/curl
+SRCDIR=$1
+INSTALLDIR=$2
 
-pushd /tmp/curl
+if [[ ! -d ${INSTALLDIR} ]]
+then
+  # Make an install target for curl.
+  mkdir ${INSTALLDIR}
+fi
+
+pushd ${SRCDIR}
 
 # Build the library.
-export CC=clang
-export CXX=clang++
-export CFLAGS="-fsanitize=address"
-export CXXFLAGS="-fsanitize=address -stdlib=libstdc++"
-
 ./buildconf
-./configure --prefix=/tmp/curl_install --disable-shared --enable-debug --enable-maintainer-mode
+./configure --prefix=${INSTALLDIR} --disable-shared --enable-debug --enable-maintainer-mode
 make
 make install
 

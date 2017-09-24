@@ -18,35 +18,25 @@
 # This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
 # KIND, either express or implied.
 #
-###########################################################################
-AUTOMAKE_OPTIONS = foreign nostdinc
+#***************************************************************************
+dnl Process this file with autoconf to produce a configure script.
 
-AM_CXXFLAGS = -I@INSTALLDIR@/include
+AC_PREREQ(2.57)
 
-LIBS = -lpthread -lm
+dnl We don't know the version number "statically" so we use a dash here
+AC_INIT([curl-fuzzer], [-], [a suitable curl mailing list: https://curl.haxx.se/mail/])
 
-# Run e.g. "make all LIB_FUZZING_ENGINE=/path/to/libFuzzer.a"
-# to link the fuzzer(s) against a real fuzzing engine.
-#
-# OSS-Fuzz will define its own value for LIB_FUZZING_ENGINE.
-LIB_FUZZING_ENGINE ?= libstandaloneengine.a
+dnl configure script copyright
+AC_COPYRIGHT([Copyright (c) 1998 - 2017 Daniel Stenberg, <daniel@haxx.se>
+This configure script may be copied, distributed and modified under the
+terms of the curl license; see COPYING for more details])
 
-FUZZPROGS = curl_fuzzer
-FUZZLIBS = libstandaloneengine.a
+AM_INIT_AUTOMAKE()
+AC_PROG_CXX
+AC_PROG_LIBTOOL
 
-curl_fuzzer_SOURCES = curl_fuzzer.cc
-curl_fuzzer_CXXFLAGS = $(AM_CXXFLAGS)
-curl_fuzzer_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE)
-
-libstandaloneengine_a_SOURCES = standalone_fuzz_target_runner.cc
-libstandaloneengine_a_CXXFLAGS = $(AM_CXXFLAGS)
-
-# Some more targets.
-zip:
-	zip -q -r curl_fuzzer_seed_corpus.zip curl_fuzz_data
-
-check: all
-	./curl_fuzzer curl_fuzz_data/*
-
-noinst_PROGRAMS = $(FUZZPROGS)
-noinst_LIBRARIES = $(FUZZLIBS)
+AC_CONFIG_FILES([
+  Makefile
+])
+AC_SUBST([INSTALLDIR])
+AC_OUTPUT

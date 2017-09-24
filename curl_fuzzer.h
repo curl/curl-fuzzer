@@ -21,7 +21,7 @@
  ***************************************************************************/
 
 #include <curl/curl.h>
-#include <testinput.h>
+#include "testinput.h"
 
 /**
  * TLV types.
