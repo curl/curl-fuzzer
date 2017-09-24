@@ -3,6 +3,7 @@ FUZZLIBS = libstandaloneengine.a
 
 curl_fuzzer_SOURCES = curl_fuzzer.cc
 curl_fuzzer_CXXFLAGS = $(AM_CXXFLAGS)
+curl_fuzzer_LDADD = @INSTALLDIR@/lib/libcurl.la
 
 libstandaloneengine_a_SOURCES = standalone_fuzz_target_runner.cc
 libstandaloneengine_a_CXXFLAGS = $(AM_CXXFLAGS)
