@@ -22,6 +22,7 @@ class BaseType(object):
     TYPE_MIME_PART = 13
     TYPE_MIME_PART_NAME = 14
     TYPE_MIME_PART_DATA = 15
+    TYPE_HTTPAUTH = 16
 
     TYPEMAP = {
         TYPE_URL: "CURLOPT_URL",
@@ -39,8 +40,8 @@ class BaseType(object):
         TYPE_MIME_PART: "curl_mime_addpart",
         TYPE_MIME_PART_NAME: "curl_mime_name",
         TYPE_MIME_PART_DATA: "curl_mime_data",
+        TYPE_HTTPAUTH: "CURLOPT_HTTPAUTH",
     }
-
 
 
 class TLVEncoder(BaseType):
@@ -51,12 +52,20 @@ class TLVEncoder(BaseType):
         data = wstring.encode("utf-8")
         self.write_tlv(tlv_type, len(data), data)
 
+    def write_u32(self, tlv_type, num):
+        data = struct.pack("!L", num)
+        self.write_tlv(tlv_type, len(data), data)
+
     def write_bytes(self, tlv_type, bytedata):
         self.write_tlv(tlv_type, len(bytedata), bytedata)
 
     def maybe_write_string(self, tlv_type, wstring):
         if wstring is not None:
             self.write_string(tlv_type, wstring)
+
+    def maybe_write_u32(self, tlv_type, num):
+        if num is not None:
+            self.write_u32(tlv_type, num)
 
     def write_mimepart(self, namevalue):
         (name, value) = namevalue.split(":", 1)

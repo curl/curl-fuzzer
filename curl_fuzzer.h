@@ -41,6 +41,7 @@
 #define TLV_TYPE_MIME_PART              13
 #define TLV_TYPE_MIME_PART_NAME         14
 #define TLV_TYPE_MIME_PART_DATA         15
+#define TLV_TYPE_HTTPAUTH               16
 
 /**
  * TLV function return codes.
@@ -138,8 +139,8 @@ typedef struct fuzz_data
 } FUZZ_DATA;
 
 /* Function prototypes */
-uint32_t to_u32(uint8_t b[4]);
-uint16_t to_u16(uint8_t b[2]);
+uint32_t to_u32(const uint8_t b[4]);
+uint16_t to_u16(const uint8_t b[2]);
 int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
                               const uint8_t *data,
                               size_t data_len);

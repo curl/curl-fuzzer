@@ -43,6 +43,7 @@ def generate_corpus(options):
         enc.maybe_write_string(enc.TYPE_RANGE, options.range)
         enc.maybe_write_string(enc.TYPE_CUSTOMREQUEST, options.customrequest)
         enc.maybe_write_string(enc.TYPE_MAIL_FROM, options.mailfrom)
+        enc.maybe_write_u32(enc.TYPE_HTTPAUTH, options.httpauth)
 
         # Write the first upload to the file.
         if options.upload1:
@@ -84,6 +85,7 @@ def get_options():
     parser.add_argument("--mailfrom")
     parser.add_argument("--mailrecipient", action="append")
     parser.add_argument("--mimepart", action="append")
+    parser.add_argument("--httpauth", type=int)
 
     rsp1 = parser.add_mutually_exclusive_group(required=True)
     rsp1.add_argument("--rsp1")

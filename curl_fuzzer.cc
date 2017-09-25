@@ -94,7 +94,7 @@ EXIT_LABEL:
 /**
  * Utility function to convert 4 bytes to a u32 predictably.
  */
-uint32_t to_u32(uint8_t b[4])
+uint32_t to_u32(const uint8_t b[4])
 {
   uint32_t u;
   u = (b[0] << 24) + (b[1] << 16) + (b[2] << 8) + b[3];
@@ -104,7 +104,7 @@ uint32_t to_u32(uint8_t b[4])
 /**
  * Utility function to convert 2 bytes to a u16 predictably.
  */
-uint16_t to_u16(uint8_t b[2])
+uint16_t to_u16(const uint8_t b[2])
 {
   uint16_t u;
   u = (b[0] << 8) + b[1];
@@ -377,6 +377,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
 {
   int rc;
   char *tmp;
+  uint32_t tmp_u32;
 
   switch(tlv->type) {
     case TLV_TYPE_RESPONSE1:
@@ -412,12 +413,21 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       break;
 
     case TLV_TYPE_MIME_PART:
-      if (fuzz->mime == NULL) {
+      if(fuzz->mime == NULL) {
         fuzz->mime = curl_mime_init(fuzz->easy);
       }
 
       fuzz->part = curl_mime_addpart(fuzz->mime);
+      break;
 
+    case TLV_TYPE_HTTPAUTH:
+      if(tlv->length != 4) {
+        rc = 255;
+        goto EXIT_LABEL;
+      }
+
+      tmp_u32 = to_u32(tlv->value);
+      curl_easy_setopt(fuzz->easy, CURLOPT_HTTPAUTH, tmp_u32);
       break;
 
     /* Define a set of singleton TLVs - they can only have their value set once
