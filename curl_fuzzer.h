@@ -38,6 +38,9 @@
 #define TLV_TYPE_CUSTOMREQUEST          10
 #define TLV_TYPE_MAIL_RECIPIENT         11
 #define TLV_TYPE_MAIL_FROM              12
+#define TLV_TYPE_MIME_PART              13
+#define TLV_TYPE_MIME_PART_NAME         14
+#define TLV_TYPE_MIME_PART_DATA         15
 
 /**
  * TLV function return codes.
@@ -128,6 +131,10 @@ typedef struct fuzz_data
   /* List of mail recipients */
   struct curl_slist *mail_recipients_list;
 
+  /* Mime data */
+  curl_mime *mime;
+  curl_mimepart *part;
+
 } FUZZ_DATA;
 
 /* Function prototypes */
@@ -157,6 +164,9 @@ int fuzz_get_next_tlv(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_get_tlv_comn(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv);
 char *fuzz_tlv_to_string(TLV *tlv);
+
+int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
+int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
 
 /* Macros */
 #define FTRY(FUNC)                                                             \

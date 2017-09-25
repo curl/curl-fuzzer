@@ -77,6 +77,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     curl_easy_setopt(fuzz.easy, CURLOPT_MAIL_RCPT, fuzz.mail_recipients_list);
   }
 
+  if(fuzz.mime != NULL) {
+    curl_easy_setopt(fuzz.easy, CURLOPT_MIMEPOST, fuzz.mime);
+  }
+
   curl_easy_perform(fuzz.easy);
 
 EXIT_LABEL:
@@ -182,6 +186,11 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   if(fuzz->mail_recipients_list != NULL) {
     curl_slist_free_all(fuzz->mail_recipients_list);
     fuzz->mail_recipients_list = NULL;
+  }
+
+  if(fuzz->mime != NULL) {
+    curl_mime_free(fuzz->mime);
+    fuzz->mime = NULL;
   }
 
   if(fuzz->easy != NULL) {
@@ -402,6 +411,15 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       fuzz_free((void **)&tmp);
       break;
 
+    case TLV_TYPE_MIME_PART:
+      if (fuzz->mime == NULL) {
+        fuzz->mime = curl_mime_init(fuzz->easy);
+      }
+
+      fuzz->part = curl_mime_addpart(fuzz->mime);
+
+      break;
+
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
     FSINGLETONTLV(TLV_TYPE_URL, url, CURLOPT_URL);
@@ -444,4 +462,82 @@ char *fuzz_tlv_to_string(TLV *tlv)
   }
 
   return tlvstr;
+}
+
+/**
+ * Extract the values from the TLV.
+ */
+int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part)
+{
+  FUZZ_DATA part_fuzz;
+  TLV tlv;
+  int rc = 0;
+  int tlv_rc;
+
+  memset(&part_fuzz, 0, sizeof(FUZZ_DATA));
+
+  if(src_tlv->length < sizeof(TLV_RAW)) {
+    /* Not enough data for a single TLV - don't continue */
+    goto EXIT_LABEL;
+  }
+
+  /* Set up the state parser */
+  part_fuzz.state.data = src_tlv->value;
+  part_fuzz.state.data_len = src_tlv->length;
+
+  for(tlv_rc = fuzz_get_first_tlv(&part_fuzz, &tlv);
+      tlv_rc == 0;
+      tlv_rc = fuzz_get_next_tlv(&part_fuzz, &tlv)) {
+
+    /* Have the TLV in hand. Parse the TLV. */
+    rc = fuzz_parse_mime_tlv(part, &tlv);
+
+    if(rc != 0) {
+      /* Failed to parse the TLV. Can't continue. */
+      goto EXIT_LABEL;
+    }
+  }
+
+  if(tlv_rc != TLV_RC_NO_MORE_TLVS) {
+    /* A TLV call failed. Can't continue. */
+    goto EXIT_LABEL;
+  }
+
+EXIT_LABEL:
+
+  return(rc);
+}
+
+/**
+ * Do different actions on the mime part for different received TLVs.
+ */
+int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv)
+{
+  int rc;
+  char *tmp;
+
+  switch(tlv->type) {
+    case TLV_TYPE_MIME_PART_NAME:
+      tmp = fuzz_tlv_to_string(tlv);
+      curl_mime_name(part, tmp);
+      fuzz_free((void **)&tmp);
+      break;
+
+    case TLV_TYPE_MIME_PART_DATA:
+      curl_mime_data(part, (const char *)tlv->value, tlv->length);
+      break;
+
+    default:
+      /* The fuzzer generates lots of unknown TLVs - we don't want these in the
+         corpus so we reject any unknown TLVs. */
+      rc = 255;
+      goto EXIT_LABEL;
+      break;
+  }
+
+  rc = 0;
+
+EXIT_LABEL:
+
+  return rc;
 }

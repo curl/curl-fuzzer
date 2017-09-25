@@ -1,9 +1,12 @@
 *.o
+*.pyc
+.idea/
 .deps/
 Makefile
 Makefile.in
 aclocal.m4*
 autom4te.cache/
+buildconf.tmp*
 compile
 config.guess
 config.log

@@ -4,15 +4,18 @@
 
 import argparse
 import logging
-import corpus
+import os
 import sys
-sys.path.append("..")
-import curl_test_data
+import corpus
 log = logging.getLogger(__name__)
 
 
 def generate_corpus(options):
-    td = curl_test_data.TestData("../data")
+    sys.path.append(options.curl_test_dir)
+    import curl_test_data
+
+    td = curl_test_data.TestData(os.path.join(options.curl_test_dir,
+                                              "data"))
 
     with open(options.output, "wb") as f:
         enc = corpus.TLVEncoder(f)
@@ -58,6 +61,11 @@ def generate_corpus(options):
             for mailrecipient in options.mailrecipient:
                 enc.write_string(enc.TYPE_MAIL_RECIPIENT, mailrecipient)
 
+        # Write an array of mimeparts to the file.
+        if options.mimepart:
+            for mimepart in options.mimepart:
+                enc.write_mimepart(mimepart)
+
     return ScriptRC.SUCCESS
 
 
@@ -65,6 +73,7 @@ def get_options():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--url", required=True)
+    parser.add_argument("--curl_test_dir", required=True)
     parser.add_argument("--username")
     parser.add_argument("--password")
     parser.add_argument("--postfields")
@@ -74,6 +83,7 @@ def get_options():
     parser.add_argument("--customrequest")
     parser.add_argument("--mailfrom")
     parser.add_argument("--mailrecipient", action="append")
+    parser.add_argument("--mimepart", action="append")
 
     rsp1 = parser.add_mutually_exclusive_group(required=True)
     rsp1.add_argument("--rsp1")
