@@ -152,6 +152,9 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
                         fuzz_write_callback));
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_WRITEDATA, fuzz));
 
+  /* Set the cookie jar so cookies are tested. */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_COOKIEJAR, FUZZ_COOKIE_JAR_PATH));
+
   /* Can enable verbose mode by changing 0L to 1L */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 0L));
 

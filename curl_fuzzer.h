@@ -53,6 +53,9 @@
 /* Temporary write array size */
 #define TEMP_WRITE_ARRAY_SIZE           10
 
+/* Cookie-jar path. */
+#define FUZZ_COOKIE_JAR_PATH            "/dev/null"
+
 /**
  * Byte stream representation of the TLV header. Casting the byte stream
  * to a TLV_RAW allows us to examine the type and length.
