@@ -1,9 +1,9 @@
+*.gcda
+*.gcno
 *.o
 *.pyc
-.idea/
 .deps/
-Makefile
-Makefile.in
+.idea/
 aclocal.m4*
 autom4te.cache/
 buildconf.tmp*
@@ -13,10 +13,14 @@ config.log
 config.status
 config.sub
 configure
+curl-fuzzer---*
 curl_fuzzer
 depcomp
 install-sh
 libstandaloneengine.a
 libtool
 ltmain.sh
+m4/
+Makefile
+Makefile.in
 missing

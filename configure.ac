@@ -34,7 +34,9 @@ terms of the curl license; see COPYING for more details])
 AM_INIT_AUTOMAKE()
 AC_PROG_CXX
 AC_PROG_LIBTOOL
+AX_CODE_COVERAGE
 
+AC_CONFIG_MACRO_DIRS([m4])
 AC_CONFIG_FILES([
   Makefile
 ])

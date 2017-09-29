@@ -3,8 +3,19 @@
 # If any commands fail, fail the script immediately.
 set -ex
 
-# Import compiler settings
-. compile_settings
+# Parse the options.
+OPTIND=1
+CODE_COVERAGE_OPTION=""
+
+while getopts "c" opt
+do
+	case "$opt" in
+		c) CODE_COVERAGE_OPTION="--enable-code-coverage"
+           ;;
+    esac
+done
+
+shift $((OPTIND-1))
 
 SRCDIR=$1
 INSTALLDIR=$2
@@ -19,7 +30,7 @@ pushd ${SRCDIR}
 
 # Build the library.
 ./buildconf
-./configure --prefix=${INSTALLDIR} --disable-shared --enable-debug --enable-maintainer-mode
+./configure --prefix=${INSTALLDIR} --disable-shared --enable-debug --enable-maintainer-mode ${CODE_COVERAGE_OPTION}
 make
 make install
 

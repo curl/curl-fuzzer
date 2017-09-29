@@ -15,9 +15,10 @@ addons:
             - libssh2-1-dev
             - krb5-user
 
-before_script:
-    - ./download_curl.sh /tmp/curl
-    - ./install_curl.sh /tmp/curl /tmp/curl_install
+matrix:
+    include:
+        - env: T=mainline
+        - env: T=codecoverage
 
 script:
-    - ./compile_fuzzer.sh /tmp/curl_install
+    - ./${T}.sh
