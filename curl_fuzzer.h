@@ -27,7 +27,7 @@
  * TLV types.
  */
 #define TLV_TYPE_URL                    1
-#define TLV_TYPE_RESPONSE1              2
+#define TLV_TYPE_RESPONSE0              2
 #define TLV_TYPE_USERNAME               3
 #define TLV_TYPE_PASSWORD               4
 #define TLV_TYPE_POSTFIELDS             5
@@ -42,6 +42,16 @@
 #define TLV_TYPE_MIME_PART_NAME         14
 #define TLV_TYPE_MIME_PART_DATA         15
 #define TLV_TYPE_HTTPAUTH               16
+#define TLV_TYPE_RESPONSE1              17
+#define TLV_TYPE_RESPONSE2              18
+#define TLV_TYPE_RESPONSE3              19
+#define TLV_TYPE_RESPONSE4              20
+#define TLV_TYPE_RESPONSE5              21
+#define TLV_TYPE_RESPONSE6              22
+#define TLV_TYPE_RESPONSE7              23
+#define TLV_TYPE_RESPONSE8              24
+#define TLV_TYPE_RESPONSE9              25
+#define TLV_TYPE_RESPONSE10             26
 
 /**
  * TLV function return codes.
@@ -55,6 +65,9 @@
 
 /* Cookie-jar path. */
 #define FUZZ_COOKIE_JAR_PATH            "/dev/null"
+
+/* Number of supported responses */
+#define TLV_MAX_NUM_RESPONSES           11
 
 /**
  * Byte stream representation of the TLV header. Casting the byte stream
@@ -98,6 +111,17 @@ typedef struct fuzz_parse_state
 } FUZZ_PARSE_STATE;
 
 /**
+ * Structure to use for responses.
+ */
+typedef struct fuzz_response
+{
+  /* Response data and length */
+  const uint8_t *data;
+  size_t data_len;
+
+} FUZZ_RESPONSE;
+
+/**
  * Data local to a fuzzing run.
  */
 typedef struct fuzz_data
@@ -111,9 +135,10 @@ typedef struct fuzz_data
   /* Temporary writefunction state */
   char write_array[TEMP_WRITE_ARRAY_SIZE];
 
-  /* Response data and length */
-  const uint8_t *rsp1_data;
-  size_t rsp1_data_len;
+  /* Responses. Response 0 is sent as soon as the socket is connected. Further
+     responses are sent when the socket becomes readable. */
+  FUZZ_RESPONSE responses[TLV_MAX_NUM_RESPONSES];
+  int response_index;
 
   /* Upload data and length; */
   const uint8_t *upload1_data;
@@ -138,6 +163,10 @@ typedef struct fuzz_data
   /* Mime data */
   curl_mime *mime;
   curl_mimepart *part;
+
+  /* Server file descriptor. */
+  int server_fd_set;
+  curl_socket_t server_fd;
 
 } FUZZ_DATA;
 
@@ -171,6 +200,8 @@ char *fuzz_tlv_to_string(TLV *tlv);
 
 int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
 int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
+int fuzz_handle_transfer(FUZZ_DATA *fuzz);
+int fuzz_send_next_response(FUZZ_DATA *fuzz);
 
 /* Macros */
 #define FTRY(FUNC)                                                             \
@@ -197,4 +228,10 @@ int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
       FCHECK(fuzz->FIELDNAME == NULL);                                         \
       fuzz->FIELDNAME = fuzz_tlv_to_string(tlv);                               \
       FTRY(curl_easy_setopt(fuzz->easy, OPTNAME, fuzz->FIELDNAME));            \
+      break
+
+#define FRESPONSETLV(TLVNAME, INDEX)                                           \
+    case TLVNAME:                                                              \
+      fuzz->responses[(INDEX)].data = tlv->value;                              \
+      fuzz->responses[(INDEX)].data_len = tlv->length;                         \
       break

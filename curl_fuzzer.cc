@@ -20,6 +20,7 @@
  *
  ***************************************************************************/
 
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,7 +69,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     goto EXIT_LABEL;
   }
 
-  /* Do the CURL stuff! */
+  /**
+   * Add in more curl options that have been accumulated over possibly
+   * multiple TLVs.
+   */
   if(fuzz.header_list != NULL) {
     curl_easy_setopt(fuzz.easy, CURLOPT_HTTPHEADER, fuzz.header_list);
   }
@@ -81,7 +85,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     curl_easy_setopt(fuzz.easy, CURLOPT_MIMEPOST, fuzz.mime);
   }
 
-  curl_easy_perform(fuzz.easy);
+  /* Run the transfer. */
+  fuzz_handle_transfer(&fuzz);
 
 EXIT_LABEL:
 
@@ -155,8 +160,14 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   /* Set the cookie jar so cookies are tested. */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_COOKIEJAR, FUZZ_COOKIE_JAR_PATH));
 
-  /* Can enable verbose mode by changing 0L to 1L */
-  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 0L));
+  /* Time out requests quickly. */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS, 200L));
+
+  /* Can enable verbose mode by having the environment variable FUZZ_VERBOSE. */
+  if (getenv("FUZZ_VERBOSE") != NULL)
+  {
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
+  }
 
   /* Set up the state parser */
   fuzz->state.data = data;
@@ -222,32 +233,56 @@ static curl_socket_t fuzz_open_socket(void *ptr,
 {
   FUZZ_DATA *fuzz = (FUZZ_DATA *)ptr;
   int fds[2];
-  curl_socket_t server_fd;
   curl_socket_t client_fd;
+  int flags;
+  int status;
+  const uint8_t *data;
+  size_t data_len;
 
   /* Handle unused parameters */
   (void)purpose;
   (void)address;
+
+  if(fuzz->server_fd_set) {
+    /* A socket has already been opened. */
+    return CURL_SOCKET_BAD;
+  }
 
   if(socketpair(AF_UNIX, SOCK_STREAM, 0, fds)) {
     /* Failed to create a pair of sockets. */
     return CURL_SOCKET_BAD;
   }
 
-  server_fd = fds[0];
+  fuzz->server_fd = fds[0];
   client_fd = fds[1];
 
-  /* Try and write the response data to the server file descriptor so the
-     client can read it. */
-  if(write(server_fd,
-           fuzz->rsp1_data,
-           fuzz->rsp1_data_len) != (ssize_t)fuzz->rsp1_data_len) {
-    /* Failed to write the data. */
+  /* Make the server non-blocking. */
+  flags = fcntl(fuzz->server_fd, F_GETFL, 0);
+  status = fcntl(fuzz->server_fd, F_SETFL, flags | O_NONBLOCK);
+
+  if(status == -1) {
+    /* Setting non-blocking failed. Return a negative response code. */
     return CURL_SOCKET_BAD;
   }
 
-  if(shutdown(server_fd, SHUT_WR)) {
-    return CURL_SOCKET_BAD;
+  fuzz->server_fd_set = 1;
+
+  /* If the server should be sending data immediately, send it here. */
+  data = fuzz->responses[0].data;
+  data_len = fuzz->responses[0].data_len;
+
+  if(data != NULL) {
+    if(write(fuzz->server_fd, data, data_len) != (ssize_t)data_len) {
+      /* Failed to write all of the response data. */
+      return CURL_SOCKET_BAD;
+    }
+  }
+
+  /* Check to see if the socket should be shut down immediately. */
+  if(fuzz->responses[1].data == NULL) {
+    shutdown(fuzz->server_fd, SHUT_WR);
+    fuzz->server_fd_set = 0;
+    fuzz->server_fd = -1;
   }
 
   return client_fd;
@@ -383,12 +418,19 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
   uint32_t tmp_u32;
 
   switch(tlv->type) {
-    case TLV_TYPE_RESPONSE1:
-      /* The pointers in the TLV will always be valid as long as the fuzz data
-         is in scope, which is the entirety of this file. */
-      fuzz->rsp1_data = tlv->value;
-      fuzz->rsp1_data_len = tlv->length;
-      break;
+    /* The pointers in response TLVs will always be valid as long as the fuzz
+       data is in scope, which is the entirety of this file. */
+    FRESPONSETLV(TLV_TYPE_RESPONSE0, 0);
+    FRESPONSETLV(TLV_TYPE_RESPONSE1, 1);
+    FRESPONSETLV(TLV_TYPE_RESPONSE2, 2);
+    FRESPONSETLV(TLV_TYPE_RESPONSE3, 3);
+    FRESPONSETLV(TLV_TYPE_RESPONSE4, 4);
+    FRESPONSETLV(TLV_TYPE_RESPONSE5, 5);
+    FRESPONSETLV(TLV_TYPE_RESPONSE6, 6);
+    FRESPONSETLV(TLV_TYPE_RESPONSE7, 7);
+    FRESPONSETLV(TLV_TYPE_RESPONSE8, 8);
+    FRESPONSETLV(TLV_TYPE_RESPONSE9, 9);
+    FRESPONSETLV(TLV_TYPE_RESPONSE10, 10);
 
     case TLV_TYPE_UPLOAD1:
       /* The pointers in the TLV will always be valid as long as the fuzz data
@@ -553,4 +595,163 @@ int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv)
 EXIT_LABEL:
 
   return rc;
+}
+
+/**
+ * Function for handling the fuzz transfer, including sending responses to
+ * requests.
+ */
+int fuzz_handle_transfer(FUZZ_DATA *fuzz)
+{
+  int rc = 0;
+  CURLM *multi_handle;
+  int still_running; /* keep number of running handles */
+  CURLMsg *msg; /* for picking up messages with the transfer status */
+  int msgs_left; /* how many messages are left */
+  int double_timeout = 0;
+  fd_set fdread;
+  fd_set fdwrite;
+  fd_set fdexcep;
+  struct timeval timeout;
+  int select_rc;
+  CURLMcode mc;
+  int maxfd = -1;
+  long curl_timeo = -1;
+
+  /* Set up the starting index for responses. */
+  fuzz->response_index = 1;
+
+  /* init a multi stack */
+  multi_handle = curl_multi_init();
+
+  /* add the individual transfers */
+  curl_multi_add_handle(multi_handle, fuzz->easy);
+
+  do {
+    /* Reset the sets of file descriptors. */
+    FD_ZERO(&fdread);
+    FD_ZERO(&fdwrite);
+    FD_ZERO(&fdexcep);
+
+    /* Set a timeout of 10ms. This is lower than recommended by the multi guide
+       but we're not going to any remote servers, so everything should complete
+       very quickly. */
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 10000;
+
+    /* get file descriptors from the transfers */
+    mc = curl_multi_fdset(multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
+    if(mc != CURLM_OK) {
+      fprintf(stderr, "curl_multi_fdset() failed, code %d.\n", mc);
+      rc = -1;
+      break;
+    }
+
+    /* Add the socket FD into the readable set if connected. */
+    if(fuzz->server_fd_set) {
+      FD_SET(fuzz->server_fd, &fdread);
+
+      /* Work out the maximum FD between the cURL file descriptors and the
+         server FD. */
+      maxfd = (fuzz->server_fd > maxfd) ? fuzz->server_fd : maxfd;
+    }
+
+    /* Work out what file descriptors need work. */
+    rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
+
+    if(rc == -1) {
+      /* Had an issue while selecting a file descriptor. Let's just exit. */
+      break;
+    }
+    else if(rc == 0) {
+      /* Timed out. */
+      if(double_timeout == 1) {
+        /* We don't expect multiple timeouts in a row. If there are double
+           timeouts then exit. */
+        break;
+      }
+      else {
+        /* Set the timeout flag for the next time we select(). */
+        double_timeout = 1;
+      }
+    }
+    else {
+      /* There's an active file descriptor. Reset the timeout flag. */
+      double_timeout = 0;
+    }
+
+    /* Check to see if the server file descriptor is readable. If it is,
+       then send the next response from the fuzzing data. */
+    if(fuzz->server_fd_set && FD_ISSET(fuzz->server_fd, &fdread)) {
+      rc = fuzz_send_next_response(fuzz);
+      if(rc != 0) {
+        /* Failed to send a response. Break out here. */
+        break;
+      }
+    }
+
+    /* Process the multi object. */
+    curl_multi_perform(multi_handle, &still_running);
+
+  } while(still_running);
+
+  /* Clean up the multi handle - the top level function will handle the easy
+     handle. */
+  curl_multi_cleanup(multi_handle);
+
+  return(rc);
+}
+
+/**
+ * Sends the next fuzzing response to the server file descriptor.
+ */
+int fuzz_send_next_response(FUZZ_DATA *fuzz)
+{
+  int rc = 0;
+  ssize_t ret_in;
+  ssize_t ret_out;
+  char buffer[8192];
+  const uint8_t *data;
+  size_t data_len;
+  int is_verbose;
+
+  /* Work out if we're tracing out. If we are, trace out the received data. */
+  is_verbose = (getenv("FUZZ_VERBOSE") != NULL);
+
+  /* Need to read all data sent by the client so the file descriptor becomes
+     unreadable. Because the file descriptor is non-blocking we won't just
+     hang here. */
+  do {
+    ret_in = read(fuzz->server_fd, buffer, sizeof(buffer));
+    if(is_verbose && ret_in > 0) {
+      printf("FUZZ: Received %zu bytes \n==>\n", ret_in);
+      fwrite(buffer, ret_in, 1, stdout);
+      printf("\n<==\n");
+    }
+  } while (ret_in > 0);
+
+  /* Now send a response to the request that the client just made. */
+  data = fuzz->responses[fuzz->response_index].data;
+  data_len = fuzz->responses[fuzz->response_index].data_len;
+
+  if(data != NULL) {
+    if(write(fuzz->server_fd, data, data_len) != (ssize_t)data_len) {
+      /* Failed to write the data back to the client. Prevent any further
+         testing. */
+      rc = -1;
+    }
+  }
+
+  /* Work out if there are any more responses. If not, then shut down the
+     server. */
+  fuzz->response_index++;
+
+  if(fuzz->response_index > TLV_MAX_NUM_RESPONSES ||
+     fuzz->responses[fuzz->response_index].data == NULL) {
+    shutdown(fuzz->server_fd, SHUT_WR);
+    fuzz->server_fd_set = 0;
+    fuzz->server_fd = -1;
+  }
+
+  return(rc);
 }
