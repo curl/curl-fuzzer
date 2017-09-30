@@ -18,22 +18,23 @@ def generate_corpus(options):
                                               "data"))
 
     with open(options.output, "wb") as f:
-        enc = corpus.TLVEncoder(f)
+        enc = corpus.TLVEncoder(f, td)
 
         # Write the URL to the file.
         enc.write_string(enc.TYPE_URL, options.url)
 
-        # Write the first response to the file.
-        if options.rsp1:
-            enc.write_bytes(enc.TYPE_RSP1, options.rsp1.encode("utf-8"))
-
-        elif options.rsp1file:
-            with open(options.rsp1file, "rb") as g:
-                enc.write_bytes(enc.TYPE_RSP1, g.read())
-
-        elif options.rsp1test:
-            wstring = td.get_test_data(options.rsp1test)
-            enc.write_bytes(enc.TYPE_RSP1, wstring.encode("utf-8"))
+        # Write any responses to the file.
+        enc.maybe_write_response(enc.TYPE_RSP0, options.rsp0, options.rsp0file, options.rsp0test)
+        enc.maybe_write_response(enc.TYPE_RSP1, options.rsp1, options.rsp1file, options.rsp1test)
+        enc.maybe_write_response(enc.TYPE_RSP2, options.rsp2, options.rsp2file, options.rsp2test)
+        enc.maybe_write_response(enc.TYPE_RSP3, options.rsp3, options.rsp3file, options.rsp3test)
+        enc.maybe_write_response(enc.TYPE_RSP4, options.rsp4, options.rsp4file, options.rsp4test)
+        enc.maybe_write_response(enc.TYPE_RSP5, options.rsp5, options.rsp5file, options.rsp5test)
+        enc.maybe_write_response(enc.TYPE_RSP6, options.rsp6, options.rsp6file, options.rsp6test)
+        enc.maybe_write_response(enc.TYPE_RSP7, options.rsp7, options.rsp7file, options.rsp7test)
+        enc.maybe_write_response(enc.TYPE_RSP8, options.rsp8, options.rsp8file, options.rsp8test)
+        enc.maybe_write_response(enc.TYPE_RSP9, options.rsp9, options.rsp9file, options.rsp9test)
+        enc.maybe_write_response(enc.TYPE_RSP10, options.rsp10, options.rsp10file, options.rsp10test)
 
         # Write other options to file.
         enc.maybe_write_string(enc.TYPE_USERNAME, options.username)
@@ -87,14 +88,15 @@ def get_options():
     parser.add_argument("--mimepart", action="append")
     parser.add_argument("--httpauth", type=int)
 
-    rsp1 = parser.add_mutually_exclusive_group(required=True)
-    rsp1.add_argument("--rsp1")
-    rsp1.add_argument("--rsp1file")
-    rsp1.add_argument("--rsp1test", type=int)
-
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")
     upload1.add_argument("--upload1file")
+
+    for ii in range(0, 11):
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument("--rsp{0}".format(ii))
+        group.add_argument("--rsp{0}file".format(ii))
+        group.add_argument("--rsp{0}test".format(ii), type=int)
 
     return parser.parse_args()
 
