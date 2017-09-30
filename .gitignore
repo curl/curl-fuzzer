@@ -16,6 +16,7 @@ configure
 curl-fuzzer---*
 curl_fuzzer
 depcomp
+extra_corpus/
 install-sh
 libstandaloneengine.a
 libtool
