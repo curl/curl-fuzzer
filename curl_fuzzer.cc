@@ -312,7 +312,7 @@ static size_t fuzz_read_callback(char *buffer,
                                  void *ptr)
 {
   FUZZ_DATA *fuzz = (FUZZ_DATA *)ptr;
-  curl_off_t nread;
+  size_t remaining_data;
 
   /* If no upload data has been specified, then return an error code. */
   if(fuzz->upload1_data_len == 0) {
@@ -320,12 +320,20 @@ static size_t fuzz_read_callback(char *buffer,
     return CURL_READFUNC_ABORT;
   }
 
-  /* Send the upload data. */
-  memcpy(buffer,
-         fuzz->upload1_data,
-         fuzz->upload1_data_len);
+  /* Work out how much data is remaining to upload. */
+  remaining_data = fuzz->upload1_data_len - fuzz->upload1_data_written;
 
-  return fuzz->upload1_data_len;
+  if(remaining_data > 0) {
+    /* Send the upload data. */
+    memcpy(&buffer[fuzz->upload1_data_written],
+           fuzz->upload1_data,
+           remaining_data);
+
+    /* Increase the count of written data */
+    fuzz->upload1_data_written += remaining_data;
+  }
+
+  return(remaining_data);
 }
 
 /**

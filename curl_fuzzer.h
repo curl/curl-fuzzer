@@ -143,6 +143,7 @@ typedef struct fuzz_data
   /* Upload data and length; */
   const uint8_t *upload1_data;
   size_t upload1_data_len;
+  size_t upload1_data_written;
 
   /* Singleton string fields. */
   char *url;
