@@ -33,6 +33,8 @@ class BaseType(object):
     TYPE_RSP8 = 24
     TYPE_RSP9 = 25
     TYPE_RSP10 = 26
+    TYPE_OPTHEADER = 27
+    TYPE_NOBODY = 28
 
     TYPEMAP = {
         TYPE_URL: "CURLOPT_URL",
@@ -61,6 +63,8 @@ class BaseType(object):
         TYPE_MIME_PART_NAME: "curl_mime_name",
         TYPE_MIME_PART_DATA: "curl_mime_data",
         TYPE_HTTPAUTH: "CURLOPT_HTTPAUTH",
+        TYPE_OPTHEADER: "CURLOPT_HEADER",
+        TYPE_NOBODY: "CURLOPT_NOBODY",
     }
 
 

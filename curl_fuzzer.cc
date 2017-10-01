@@ -473,15 +473,10 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       fuzz->part = curl_mime_addpart(fuzz->mime);
       break;
 
-    case TLV_TYPE_HTTPAUTH:
-      if(tlv->length != 4) {
-        rc = 255;
-        goto EXIT_LABEL;
-      }
-
-      tmp_u32 = to_u32(tlv->value);
-      curl_easy_setopt(fuzz->easy, CURLOPT_HTTPAUTH, tmp_u32);
-      break;
+    /* Define a set of u32 options. */
+    FU32TLV(TLV_TYPE_HTTPAUTH, CURLOPT_HTTPAUTH);
+    FU32TLV(TLV_TYPE_OPTHEADER, CURLOPT_HEADER);
+    FU32TLV(TLV_TYPE_NOBODY, CURLOPT_NOBODY);
 
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */

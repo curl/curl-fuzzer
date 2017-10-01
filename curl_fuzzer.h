@@ -52,6 +52,8 @@
 #define TLV_TYPE_RESPONSE8              24
 #define TLV_TYPE_RESPONSE9              25
 #define TLV_TYPE_RESPONSE10             26
+#define TLV_TYPE_OPTHEADER              27
+#define TLV_TYPE_NOBODY                 28
 
 /**
  * TLV function return codes.
@@ -235,4 +237,14 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz);
     case TLVNAME:                                                              \
       fuzz->responses[(INDEX)].data = tlv->value;                              \
       fuzz->responses[(INDEX)].data_len = tlv->length;                         \
+      break
+
+#define FU32TLV(TLVNAME, OPTNAME)                                              \
+    case TLVNAME:                                                              \
+      if(tlv->length != 4) {                                                   \
+        rc = 255;                                                              \
+        goto EXIT_LABEL;                                                       \
+      }                                                                        \
+      tmp_u32 = to_u32(tlv->value);                                            \
+      curl_easy_setopt(fuzz->easy, OPTNAME, tmp_u32);                          \
       break
