@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 class BaseType(object):
     TYPE_URL = 1
-    TYPE_RSP1 = 2
+    TYPE_RSP0 = 2
     TYPE_USERNAME = 3
     TYPE_PASSWORD = 4
     TYPE_POSTFIELDS = 5
@@ -23,10 +23,30 @@ class BaseType(object):
     TYPE_MIME_PART_NAME = 14
     TYPE_MIME_PART_DATA = 15
     TYPE_HTTPAUTH = 16
+    TYPE_RSP1 = 17
+    TYPE_RSP2 = 18
+    TYPE_RSP3 = 19
+    TYPE_RSP4 = 20
+    TYPE_RSP5 = 21
+    TYPE_RSP6 = 22
+    TYPE_RSP7 = 23
+    TYPE_RSP8 = 24
+    TYPE_RSP9 = 25
+    TYPE_RSP10 = 26
 
     TYPEMAP = {
         TYPE_URL: "CURLOPT_URL",
-        TYPE_RSP1: "First server response",
+        TYPE_RSP0: "Server banner (sent on connection)",
+        TYPE_RSP1: "Server response 1",
+        TYPE_RSP2: "Server response 2",
+        TYPE_RSP3: "Server response 3",
+        TYPE_RSP4: "Server response 4",
+        TYPE_RSP5: "Server response 5",
+        TYPE_RSP6: "Server response 6",
+        TYPE_RSP7: "Server response 7",
+        TYPE_RSP8: "Server response 8",
+        TYPE_RSP9: "Server response 9",
+        TYPE_RSP10: "Server response 10",
         TYPE_USERNAME: "CURLOPT_USERNAME",
         TYPE_PASSWORD: "CURLOPT_PASSWORD",
         TYPE_POSTFIELDS: "CURLOPT_POSTFIELDS",
@@ -45,8 +65,9 @@ class BaseType(object):
 
 
 class TLVEncoder(BaseType):
-    def __init__(self, output):
+    def __init__(self, output, test_data):
         self.output = output
+        self.test_data = test_data
 
     def write_string(self, tlv_type, wstring):
         data = wstring.encode("utf-8")
@@ -66,6 +87,17 @@ class TLVEncoder(BaseType):
     def maybe_write_u32(self, tlv_type, num):
         if num is not None:
             self.write_u32(tlv_type, num)
+
+    def maybe_write_response(self, rsp_type, rsp, rsp_file, rsp_test):
+        if rsp:
+            self.write_bytes(rsp_type,
+                             rsp.encode("utf-8"))
+        elif rsp_file:
+            with open(rsp_file, "rb") as g:
+                self.write_bytes(rsp_type, g.read())
+        elif rsp_test:
+            wstring = self.test_data.get_test_data(rsp_test)
+            self.write_bytes(rsp_type, wstring.encode("utf-8"))
 
     def write_mimepart(self, namevalue):
         (name, value) = namevalue.split(":", 1)
