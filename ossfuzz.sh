@@ -42,4 +42,4 @@ make zip
 cp -v curl_fuzzer curl_fuzzer_seed_corpus.zip $OUT/
 
 # Copy dictionary and options file to $OUT.
-cp $SRC/*.dict $SRC/*.options $OUT/
+cp -v *.dict *.options $OUT/
