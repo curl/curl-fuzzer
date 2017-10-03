@@ -47,7 +47,7 @@ libstandaloneengine_a_CXXFLAGS = $(AM_CXXFLAGS)
 
 # Some more targets.
 zip:
-	zip -q -r curl_fuzzer_seed_corpus.zip curl_fuzz_data
+	./create_zip.sh
 
 check: all
 	./check_data.sh
