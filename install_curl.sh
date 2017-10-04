@@ -30,7 +30,17 @@ pushd ${SRCDIR}
 
 # Build the library.
 ./buildconf
-./configure --prefix=${INSTALLDIR} --disable-shared --enable-debug --enable-maintainer-mode ${CODE_COVERAGE_OPTION}
+./configure --prefix=${INSTALLDIR} \
+            --disable-shared \
+            --enable-debug \
+            --enable-maintainer-mode \
+            --disable-symbol-hiding \
+            --disable-threaded-resolver \
+            --enable-ipv6 \
+            --with-random=/dev/null \
+            --without-ssl \
+            ${CODE_COVERAGE_OPTION}
+
 make
 make install
 
