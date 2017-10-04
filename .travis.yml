@@ -19,6 +19,7 @@ matrix:
     include:
         - env: T=mainline
         - env: T=codecoverage
+        - env: T=codeprofile
 
 script:
     - ./${T}.sh
