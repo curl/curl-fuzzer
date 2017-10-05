@@ -706,6 +706,9 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
 
   } while(still_running);
 
+  /* Remove the easy handle from the multi stack. */
+  curl_multi_remove_handle(multi_handle, fuzz->easy);
+
   /* Clean up the multi handle - the top level function will handle the easy
      handle. */
   curl_multi_cleanup(multi_handle);
