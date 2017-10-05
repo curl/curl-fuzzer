@@ -1,8 +1,13 @@
 #!/bin/bash
 
-set -e
-
 DEBUG=0
+
+if [[ ${DEBUG} == 1 ]]
+then
+  set -x
+else
+  set -e
+fi
 
 # Allows us to add an extra testing corpus locally.
 if [[ -d ./extra_corpus ]]
