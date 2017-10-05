@@ -71,6 +71,12 @@
 /* Number of supported responses */
 #define TLV_MAX_NUM_RESPONSES           11
 
+typedef enum fuzz_sock_state {
+  FUZZ_SOCK_CLOSED,
+  FUZZ_SOCK_OPEN,
+  FUZZ_SOCK_SHUTDOWN
+} FUZZ_SOCK_STATE;
+
 /**
  * Byte stream representation of the TLV header. Casting the byte stream
  * to a TLV_RAW allows us to examine the type and length.
@@ -168,7 +174,7 @@ typedef struct fuzz_data
   curl_mimepart *part;
 
   /* Server file descriptor. */
-  int server_fd_set;
+  FUZZ_SOCK_STATE server_fd_state;
   curl_socket_t server_fd;
 
 } FUZZ_DATA;

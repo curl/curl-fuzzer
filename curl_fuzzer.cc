@@ -173,6 +173,9 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   fuzz->state.data = data;
   fuzz->state.data_len = data_len;
 
+  /* Set up the state of the server socket. */
+  fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
+
 EXIT_LABEL:
 
   return rc;
@@ -191,6 +194,11 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   fuzz_free((void **)&fuzz->range);
   fuzz_free((void **)&fuzz->customrequest);
   fuzz_free((void **)&fuzz->mail_from);
+
+  if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED){
+    close(fuzz->server_fd);
+    fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
+  }
 
   if(fuzz->header_list != NULL) {
     curl_slist_free_all(fuzz->header_list);
@@ -243,7 +251,7 @@ static curl_socket_t fuzz_open_socket(void *ptr,
   (void)purpose;
   (void)address;
 
-  if(fuzz->server_fd_set) {
+  if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED) {
     /* A socket has already been opened. */
     return CURL_SOCKET_BAD;
   }
@@ -265,7 +273,7 @@ static curl_socket_t fuzz_open_socket(void *ptr,
     return CURL_SOCKET_BAD;
   }
 
-  fuzz->server_fd_set = 1;
+  fuzz->server_fd_state = FUZZ_SOCK_OPEN;
 
   /* If the server should be sending data immediately, send it here. */
   data = fuzz->responses[0].data;
@@ -281,8 +289,7 @@ static curl_socket_t fuzz_open_socket(void *ptr,
   /* Check to see if the socket should be shut down immediately. */
   if(fuzz->responses[1].data == NULL) {
     shutdown(fuzz->server_fd, SHUT_WR);
-    fuzz->server_fd_set = 0;
-    fuzz->server_fd = -1;
+    fuzz->server_fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
   return client_fd;
@@ -651,7 +658,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
     }
 
     /* Add the socket FD into the readable set if connected. */
-    if(fuzz->server_fd_set) {
+    if(fuzz->server_fd_state == FUZZ_SOCK_OPEN) {
       FD_SET(fuzz->server_fd, &fdread);
 
       /* Work out the maximum FD between the cURL file descriptors and the
@@ -685,7 +692,8 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
 
     /* Check to see if the server file descriptor is readable. If it is,
        then send the next response from the fuzzing data. */
-    if(fuzz->server_fd_set && FD_ISSET(fuzz->server_fd, &fdread)) {
+    if(fuzz->server_fd_state == FUZZ_SOCK_OPEN &&
+       FD_ISSET(fuzz->server_fd, &fdread)) {
       rc = fuzz_send_next_response(fuzz);
       if(rc != 0) {
         /* Failed to send a response. Break out here. */
@@ -752,8 +760,7 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz)
   if(fuzz->response_index > TLV_MAX_NUM_RESPONSES ||
      fuzz->responses[fuzz->response_index].data == NULL) {
     shutdown(fuzz->server_fd, SHUT_WR);
-    fuzz->server_fd_set = 0;
-    fuzz->server_fd = -1;
+    fuzz->server_fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
   return(rc);
