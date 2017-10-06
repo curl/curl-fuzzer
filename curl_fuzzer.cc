@@ -478,6 +478,9 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       }
 
       fuzz->part = curl_mime_addpart(fuzz->mime);
+
+      /* This TLV may have sub TLVs. */
+      fuzz_add_mime_part(tlv, fuzz->part);
       break;
 
     /* Define a set of u32 options. */
