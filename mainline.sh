@@ -11,8 +11,10 @@ fi
 # Use clang to test the code as it allows use of libsanitizer.
 export CC=clang
 export CXX=clang++
+FUZZ_FLAG="-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 export CFLAGS="-fsanitize=address"
-export CXXFLAGS="-fsanitize=address -stdlib=libstdc++"
+export CXXFLAGS="-fsanitize=address -stdlib=libstdc++ $FUZZ_FLAG"
+export CPPFLAGS="$FUZZ_FLAG"
 
 if [[ ! -d ${CURLDIR} ]]
 then

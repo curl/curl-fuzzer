@@ -5,8 +5,10 @@ set -ex
 # Use gcc to test the code as code coverage is easier.
 export CC=gcc
 export CXX=g++
-export CFLAGS=
-export CXXFLAGS=
+FUZZ_FLAG="-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
+export CFLAGS=""
+export CXXFLAGS="$FUZZ_FLAG"
+export CPPFLAGS="$FUZZ_FLAG"
 
 # Download cURL to a temporary folder.
 ./download_curl.sh /tmp/curlcov
