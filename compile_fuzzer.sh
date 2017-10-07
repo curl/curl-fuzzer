@@ -24,7 +24,7 @@ then
 fi
 
 # Build the fuzzer.
-./buildconf
-./configure ${CODE_COVERAGE_OPTION}
-make
-make check
+./buildconf || exit 2
+./configure ${CODE_COVERAGE_OPTION} || exit 3
+make || exit 4
+make check || exit 5

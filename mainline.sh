@@ -23,7 +23,7 @@ then
 fi
 
 # Compile and install cURL to a second folder.
-./install_curl.sh ${CURLDIR} /tmp/curl_install
+./install_curl.sh ${CURLDIR} /tmp/curl_install || exit 1
 
 # Compile and test the fuzzer.
-./compile_fuzzer.sh /tmp/curl_install
+./compile_fuzzer.sh /tmp/curl_install || exit 2
