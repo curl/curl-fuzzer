@@ -40,10 +40,12 @@ int main(int argc, char **argv)
   size_t buffer_len;
 
   for(ii = 1; ii < argc; ii++) {
+    printf("[%s] ", argv[ii]);
+
     /* Try and open the file. */
     infile = fopen(argv[ii], "rb");
     if(infile) {
-      printf("[%s] Open succeeded! \n", argv[ii]);
+      printf("Opened.. ");
 
       /* Get the length of the file. */
       fseek(infile, 0L, SEEK_END);
@@ -57,12 +59,12 @@ int main(int argc, char **argv)
       if(buffer) {
         /* Read all the text from the file into the buffer. */
         fread(buffer, sizeof(uint8_t), buffer_len, infile);
-        printf("[%s] Read %zu bytes, calling fuzzer\n", argv[ii], buffer_len);
+        printf("Read %zu bytes, fuzzing.. ", buffer_len);
 
         /* Call the fuzzer with the data. */
         LLVMFuzzerTestOneInput(buffer, buffer_len);
 
-        printf("[%s] Fuzzing complete\n", argv[ii]);
+        printf("complete !!");
 
         /* Free the buffer as it's no longer needed. */
         free(buffer);
@@ -85,5 +87,7 @@ int main(int argc, char **argv)
       /* Failed to open the file. Maybe wrong name or wrong permissions? */
       fprintf(stderr, "[%s] Open failed. \n", argv[ii]);
     }
+
+    printf("\n");
   }
 }
