@@ -185,8 +185,9 @@ uint16_t to_u16(const uint8_t b[2]);
 int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
                               const uint8_t *data,
                               size_t data_len);
+int fuzz_set_easy_options(FUZZ_DATA *fuzz);
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz);
-void fuzz_free(void **ptr);
+static void fuzz_free(void **ptr);
 static curl_socket_t fuzz_open_socket(void *ptr,
                                       curlsocktype purpose,
                                       struct curl_sockaddr *address);

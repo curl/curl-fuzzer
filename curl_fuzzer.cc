@@ -69,6 +69,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     goto EXIT_LABEL;
   }
 
+  /* Set up the standard easy options. */
+  FTRY(fuzz_set_easy_options(&fuzz));
+
   /**
    * Add in more curl options that have been accumulated over possibly
    * multiple TLVs.
@@ -133,6 +136,25 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   fuzz->easy = curl_easy_init();
   FCHECK(fuzz->easy != NULL);
 
+  /* Set up the state parser */
+  fuzz->state.data = data;
+  fuzz->state.data_len = data_len;
+
+  /* Set up the state of the server socket. */
+  fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
+
+EXIT_LABEL:
+
+  return rc;
+}
+
+/**
+ * Set standard options on the curl easy.
+ */
+int fuzz_set_easy_options(FUZZ_DATA *fuzz)
+{
+  int rc = 0;
+
   /* Set some standard options on the CURL easy handle. We need to override the
      socket function so that we create our own sockets to present to CURL. */
   FTRY(curl_easy_setopt(fuzz->easy,
@@ -168,13 +190,6 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   {
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
   }
-
-  /* Set up the state parser */
-  fuzz->state.data = data;
-  fuzz->state.data_len = data_len;
-
-  /* Set up the state of the server socket. */
-  fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
 
 EXIT_LABEL:
 
@@ -224,7 +239,7 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 /**
  * If a pointer has been allocated, free that pointer.
  */
-void fuzz_free(void **ptr)
+static void fuzz_free(void **ptr)
 {
   if(*ptr != NULL) {
     free(*ptr);
