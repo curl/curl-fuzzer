@@ -201,6 +201,8 @@ EXIT_LABEL:
  */
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 {
+  fuzz_free((void **)&fuzz->postfields);
+
   if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED){
     close(fuzz->server_fd);
     fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
@@ -490,6 +492,12 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       fuzz_add_mime_part(tlv, fuzz->part);
       break;
 
+    case TLV_TYPE_POSTFIELDS:
+      FCHECK_OPTION_UNSET(fuzz, CURLOPT_POSTFIELDS);
+      fuzz->postfields = fuzz_tlv_to_string(tlv);
+      FSET_OPTION(fuzz, CURLOPT_POSTFIELDS, fuzz->postfields);
+      break;
+
     /* Define a set of u32 options. */
     FU32TLV(fuzz, TLV_TYPE_HTTPAUTH, CURLOPT_HTTPAUTH);
     FU32TLV(fuzz, TLV_TYPE_OPTHEADER, CURLOPT_HEADER);
@@ -500,7 +508,6 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FSINGLETONTLV(fuzz, TLV_TYPE_URL, CURLOPT_URL);
     FSINGLETONTLV(fuzz, TLV_TYPE_USERNAME, CURLOPT_USERNAME);
     FSINGLETONTLV(fuzz, TLV_TYPE_PASSWORD, CURLOPT_PASSWORD);
-    FSINGLETONTLV(fuzz, TLV_TYPE_POSTFIELDS, CURLOPT_POSTFIELDS);
     FSINGLETONTLV(fuzz, TLV_TYPE_COOKIE, CURLOPT_COOKIE);
     FSINGLETONTLV(fuzz, TLV_TYPE_RANGE, CURLOPT_RANGE);
     FSINGLETONTLV(fuzz, TLV_TYPE_CUSTOMREQUEST, CURLOPT_CUSTOMREQUEST);

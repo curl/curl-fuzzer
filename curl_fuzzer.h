@@ -159,6 +159,9 @@ typedef struct fuzz_data
   /* Singleton option tracker. Options should only be set once. */
   unsigned char options[FUZZ_CURLOPT_TRACKER_SPACE];
 
+  /* CURLOPT_POSTFIELDS data. */
+  char *postfields;
+
   /* List of headers */
   struct curl_slist *header_list;
 
