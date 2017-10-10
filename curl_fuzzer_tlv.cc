@@ -1,0 +1,276 @@
+/***************************************************************************
+ *                                  _   _ ____  _
+ *  Project                     ___| | | |  _ \| |
+ *                             / __| | | | |_) | |
+ *                            | (__| |_| |  _ <| |___
+ *                             \___|\___/|_| \_\_____|
+ *
+ * Copyright (C) 2017, Max Dymond, <cmeister2@gmail.com>, et al.
+ *
+ * This software is licensed as described in the file COPYING, which
+ * you should have received as part of this distribution. The terms
+ * are also available at https://curl.haxx.se/docs/copyright.html.
+ *
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell
+ * copies of the Software, and permit persons to whom the Software is
+ * furnished to do so, under the terms of the COPYING file.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ***************************************************************************/
+#include <stdlib.h>
+#include <string.h>
+#include <curl/curl.h>
+#include "curl_fuzzer.h"
+
+/**
+ * TLV access function - gets the first TLV from a data stream.
+ */
+int fuzz_get_first_tlv(FUZZ_DATA *fuzz,
+                       TLV *tlv)
+{
+  /* Reset the cursor. */
+  fuzz->state.data_pos = 0;
+  return fuzz_get_tlv_comn(fuzz, tlv);
+}
+
+/**
+ * TLV access function - gets the next TLV from a data stream.
+*/
+int fuzz_get_next_tlv(FUZZ_DATA *fuzz,
+                      TLV *tlv)
+{
+  /* Advance the cursor by the full length of the previous TLV. */
+  fuzz->state.data_pos += sizeof(TLV_RAW) + tlv->length;
+
+  /* Work out if there's a TLV's worth of data to read */
+  if(fuzz->state.data_pos + sizeof(TLV_RAW) > fuzz->state.data_len) {
+    /* No more TLVs to parse */
+    return TLV_RC_NO_MORE_TLVS;
+  }
+
+  return fuzz_get_tlv_comn(fuzz, tlv);
+}
+
+/**
+ * Common TLV function for accessing TLVs in a data stream.
+ */
+int fuzz_get_tlv_comn(FUZZ_DATA *fuzz,
+                      TLV *tlv)
+{
+  int rc = 0;
+  size_t data_offset;
+  TLV_RAW *raw;
+
+  /* Start by casting the data stream to a TLV. */
+  raw = (TLV_RAW *)&fuzz->state.data[fuzz->state.data_pos];
+  data_offset = fuzz->state.data_pos + sizeof(TLV_RAW);
+
+  /* Set the TLV values. */
+  tlv->type = to_u16(raw->raw_type);
+  tlv->length = to_u32(raw->raw_length);
+  tlv->value = &fuzz->state.data[data_offset];
+
+  /* Sanity check that the TLV length is ok. */
+  if(data_offset + tlv->length > fuzz->state.data_len) {
+    rc = TLV_RC_SIZE_ERROR;
+  }
+
+  return rc;
+}
+
+/**
+ * Do different actions on the CURL handle for different received TLVs.
+ */
+int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
+{
+  int rc;
+  char *tmp = NULL;
+  uint32_t tmp_u32;
+
+  switch(tlv->type) {
+    /* The pointers in response TLVs will always be valid as long as the fuzz
+       data is in scope, which is the entirety of this file. */
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE0, 0);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE1, 1);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE2, 2);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE3, 3);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE4, 4);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE5, 5);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE6, 6);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE7, 7);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE8, 8);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE9, 9);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE10, 10);
+
+    case TLV_TYPE_UPLOAD1:
+      /* The pointers in the TLV will always be valid as long as the fuzz data
+         is in scope, which is the entirety of this file. */
+
+      FCHECK_OPTION_UNSET(fuzz, CURLOPT_UPLOAD);
+
+      fuzz->upload1_data = tlv->value;
+      fuzz->upload1_data_len = tlv->length;
+
+      FSET_OPTION(fuzz, CURLOPT_UPLOAD, 1L);
+      FSET_OPTION(fuzz,
+                  CURLOPT_INFILESIZE_LARGE,
+                  (curl_off_t)fuzz->upload1_data_len);
+      break;
+
+    case TLV_TYPE_HEADER:
+      tmp = fuzz_tlv_to_string(tlv);
+      fuzz->header_list = curl_slist_append(fuzz->header_list, tmp);
+      break;
+
+    case TLV_TYPE_MAIL_RECIPIENT:
+      tmp = fuzz_tlv_to_string(tlv);
+      fuzz->mail_recipients_list =
+                            curl_slist_append(fuzz->mail_recipients_list, tmp);
+      break;
+
+    case TLV_TYPE_MIME_PART:
+      if(fuzz->mime == NULL) {
+        fuzz->mime = curl_mime_init(fuzz->easy);
+      }
+
+      fuzz->part = curl_mime_addpart(fuzz->mime);
+
+      /* This TLV may have sub TLVs. */
+      fuzz_add_mime_part(tlv, fuzz->part);
+      break;
+
+    case TLV_TYPE_POSTFIELDS:
+      FCHECK_OPTION_UNSET(fuzz, CURLOPT_POSTFIELDS);
+      fuzz->postfields = fuzz_tlv_to_string(tlv);
+      FSET_OPTION(fuzz, CURLOPT_POSTFIELDS, fuzz->postfields);
+      break;
+
+    /* Define a set of u32 options. */
+    FU32TLV(fuzz, TLV_TYPE_HTTPAUTH, CURLOPT_HTTPAUTH);
+    FU32TLV(fuzz, TLV_TYPE_OPTHEADER, CURLOPT_HEADER);
+    FU32TLV(fuzz, TLV_TYPE_NOBODY, CURLOPT_NOBODY);
+
+    /* Define a set of singleton TLVs - they can only have their value set once
+       and all follow the same pattern. */
+    FSINGLETONTLV(fuzz, TLV_TYPE_URL, CURLOPT_URL);
+    FSINGLETONTLV(fuzz, TLV_TYPE_USERNAME, CURLOPT_USERNAME);
+    FSINGLETONTLV(fuzz, TLV_TYPE_PASSWORD, CURLOPT_PASSWORD);
+    FSINGLETONTLV(fuzz, TLV_TYPE_COOKIE, CURLOPT_COOKIE);
+    FSINGLETONTLV(fuzz, TLV_TYPE_RANGE, CURLOPT_RANGE);
+    FSINGLETONTLV(fuzz, TLV_TYPE_CUSTOMREQUEST, CURLOPT_CUSTOMREQUEST);
+    FSINGLETONTLV(fuzz, TLV_TYPE_MAIL_FROM, CURLOPT_MAIL_FROM);
+
+    default:
+      /* The fuzzer generates lots of unknown TLVs - we don't want these in the
+         corpus so we reject any unknown TLVs. */
+      rc = 255;
+      goto EXIT_LABEL;
+      break;
+  }
+
+  rc = 0;
+
+EXIT_LABEL:
+
+  fuzz_free((void **)&tmp);
+
+  return rc;
+}
+
+/**
+ * Converts a TLV data and length into an allocated string.
+ */
+char *fuzz_tlv_to_string(TLV *tlv)
+{
+  char *tlvstr;
+
+  /* Allocate enough space, plus a null terminator */
+  tlvstr = (char *)malloc(tlv->length + 1);
+
+  if(tlvstr != NULL) {
+    memcpy(tlvstr, tlv->value, tlv->length);
+    tlvstr[tlv->length] = 0;
+  }
+
+  return tlvstr;
+}
+
+/**
+ * Extract the values from the TLV.
+ */
+int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part)
+{
+  FUZZ_DATA part_fuzz;
+  TLV tlv;
+  int rc = 0;
+  int tlv_rc;
+
+  memset(&part_fuzz, 0, sizeof(FUZZ_DATA));
+
+  if(src_tlv->length < sizeof(TLV_RAW)) {
+    /* Not enough data for a single TLV - don't continue */
+    goto EXIT_LABEL;
+  }
+
+  /* Set up the state parser */
+  part_fuzz.state.data = src_tlv->value;
+  part_fuzz.state.data_len = src_tlv->length;
+
+  for(tlv_rc = fuzz_get_first_tlv(&part_fuzz, &tlv);
+      tlv_rc == 0;
+      tlv_rc = fuzz_get_next_tlv(&part_fuzz, &tlv)) {
+
+    /* Have the TLV in hand. Parse the TLV. */
+    rc = fuzz_parse_mime_tlv(part, &tlv);
+
+    if(rc != 0) {
+      /* Failed to parse the TLV. Can't continue. */
+      goto EXIT_LABEL;
+    }
+  }
+
+  if(tlv_rc != TLV_RC_NO_MORE_TLVS) {
+    /* A TLV call failed. Can't continue. */
+    goto EXIT_LABEL;
+  }
+
+EXIT_LABEL:
+
+  return(rc);
+}
+
+/**
+ * Do different actions on the mime part for different received TLVs.
+ */
+int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv)
+{
+  int rc;
+  char *tmp;
+
+  switch(tlv->type) {
+    case TLV_TYPE_MIME_PART_NAME:
+      tmp = fuzz_tlv_to_string(tlv);
+      curl_mime_name(part, tmp);
+      fuzz_free((void **)&tmp);
+      break;
+
+    case TLV_TYPE_MIME_PART_DATA:
+      curl_mime_data(part, (const char *)tlv->value, tlv->length);
+      break;
+
+    default:
+      /* The fuzzer generates lots of unknown TLVs - we don't want these in the
+         corpus so we reject any unknown TLVs. */
+      rc = 255;
+      goto EXIT_LABEL;
+      break;
+  }
+
+  rc = 0;
+
+EXIT_LABEL:
+
+  return rc;
+}

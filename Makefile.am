@@ -38,7 +38,9 @@ LIB_FUZZING_ENGINE ?= libstandaloneengine.a
 FUZZPROGS = curl_fuzzer
 FUZZLIBS = libstandaloneengine.a
 
-curl_fuzzer_SOURCES = curl_fuzzer.cc
+curl_fuzzer_SOURCES = curl_fuzzer.cc \
+                      curl_fuzzer_tlv.cc \
+                      curl_fuzzer_callback.cc
 curl_fuzzer_CXXFLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
 curl_fuzzer_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
 

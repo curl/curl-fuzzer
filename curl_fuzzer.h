@@ -19,7 +19,7 @@
  * KIND, either express or implied.
  *
  ***************************************************************************/
-
+#include <inttypes.h>
 #include <curl/curl.h>
 #include "testinput.h"
 
@@ -186,21 +186,21 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
                               size_t data_len);
 int fuzz_set_easy_options(FUZZ_DATA *fuzz);
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz);
-static void fuzz_free(void **ptr);
-static curl_socket_t fuzz_open_socket(void *ptr,
-                                      curlsocktype purpose,
-                                      struct curl_sockaddr *address);
-static int fuzz_sockopt_callback(void *ptr,
-                                 curl_socket_t curlfd,
-                                 curlsocktype purpose);
-static size_t fuzz_read_callback(char *buffer,
-                                 size_t size,
-                                 size_t nitems,
-                                 void *ptr);
-static size_t fuzz_write_callback(void *contents,
-                                  size_t size,
-                                  size_t nmemb,
-                                  void *ptr);
+void fuzz_free(void **ptr);
+curl_socket_t fuzz_open_socket(void *ptr,
+                               curlsocktype purpose,
+                               struct curl_sockaddr *address);
+int fuzz_sockopt_callback(void *ptr,
+                          curl_socket_t curlfd,
+                          curlsocktype purpose);
+size_t fuzz_read_callback(char *buffer,
+                          size_t size,
+                          size_t nitems,
+                          void *ptr);
+size_t fuzz_write_callback(void *contents,
+                           size_t size,
+                           size_t nmemb,
+                           void *ptr);
 int fuzz_get_first_tlv(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_get_next_tlv(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_get_tlv_comn(FUZZ_DATA *fuzz, TLV *tlv);
