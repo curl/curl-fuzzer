@@ -71,6 +71,9 @@
 /* Number of supported responses */
 #define TLV_MAX_NUM_RESPONSES           11
 
+/* Space variable for all CURLOPTs. */
+#define FUZZ_CURLOPT_TRACKER_SPACE      300
+
 typedef enum fuzz_sock_state {
   FUZZ_SOCK_CLOSED,
   FUZZ_SOCK_OPEN,
@@ -153,15 +156,8 @@ typedef struct fuzz_data
   size_t upload1_data_len;
   size_t upload1_data_written;
 
-  /* Singleton string fields. */
-  char *url;
-  char *username;
-  char *password;
-  char *postfields;
-  char *cookie;
-  char *range;
-  char *customrequest;
-  char *mail_from;
+  /* Singleton option tracker. Options should only be set once. */
+  unsigned char options[FUZZ_CURLOPT_TRACKER_SPACE];
 
   /* List of headers */
   struct curl_slist *header_list;
@@ -214,44 +210,52 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz);
 int fuzz_send_next_response(FUZZ_DATA *fuzz);
 
 /* Macros */
-#define FTRY(FUNC)                                                             \
-        {                                                                      \
-          int _func_rc = (FUNC);                                               \
-          if (_func_rc)                                                        \
-          {                                                                    \
-            rc = _func_rc;                                                     \
-            goto EXIT_LABEL;                                                   \
-          }                                                                    \
+#define FTRY(FUNC)                                                            \
+        {                                                                     \
+          int _func_rc = (FUNC);                                              \
+          if (_func_rc)                                                       \
+          {                                                                   \
+            rc = _func_rc;                                                    \
+            goto EXIT_LABEL;                                                  \
+          }                                                                   \
         }
 
-#define FCHECK(COND)                                                           \
-        {                                                                      \
-          if (!(COND))                                                         \
-          {                                                                    \
-            rc = 255;                                                          \
-            goto EXIT_LABEL;                                                   \
-          }                                                                    \
+#define FCHECK(COND)                                                          \
+        {                                                                     \
+          if (!(COND))                                                        \
+          {                                                                   \
+            rc = 255;                                                         \
+            goto EXIT_LABEL;                                                  \
+          }                                                                   \
         }
 
-#define FSINGLETONTLV(TLVNAME, FIELDNAME, OPTNAME)                             \
-    case TLVNAME:                                                              \
-      FCHECK(fuzz->FIELDNAME == NULL);                                         \
-      fuzz->FIELDNAME = fuzz_tlv_to_string(tlv);                               \
-      FTRY(curl_easy_setopt(fuzz->easy, OPTNAME, fuzz->FIELDNAME));            \
-      break
+#define FSET_OPTION(FUZZP, OPTNAME, OPTVALUE)                                 \
+        FTRY(curl_easy_setopt((FUZZP)->easy, OPTNAME, OPTVALUE));             \
+        (FUZZP)->options[OPTNAME % 1000] = 1
 
-#define FRESPONSETLV(TLVNAME, INDEX)                                           \
-    case TLVNAME:                                                              \
-      fuzz->responses[(INDEX)].data = tlv->value;                              \
-      fuzz->responses[(INDEX)].data_len = tlv->length;                         \
-      break
+#define FCHECK_OPTION_UNSET(FUZZP, OPTNAME)                                   \
+        FCHECK((FUZZP)->options[OPTNAME % 1000] == 0)
 
-#define FU32TLV(TLVNAME, OPTNAME)                                              \
-    case TLVNAME:                                                              \
-      if(tlv->length != 4) {                                                   \
-        rc = 255;                                                              \
-        goto EXIT_LABEL;                                                       \
-      }                                                                        \
-      tmp_u32 = to_u32(tlv->value);                                            \
-      curl_easy_setopt(fuzz->easy, OPTNAME, tmp_u32);                          \
-      break
+#define FSINGLETONTLV(FUZZP, TLVNAME, OPTNAME)                                \
+        case TLVNAME:                                                         \
+          FCHECK_OPTION_UNSET(FUZZP, OPTNAME);                                \
+          tmp = fuzz_tlv_to_string(tlv);                                      \
+          FSET_OPTION(FUZZP, OPTNAME, tmp);                                   \
+          break
+
+#define FRESPONSETLV(FUZZP, TLVNAME, INDEX)                                   \
+        case TLVNAME:                                                         \
+          (FUZZP)->responses[(INDEX)].data = tlv->value;                      \
+          (FUZZP)->responses[(INDEX)].data_len = tlv->length;                 \
+          break
+
+#define FU32TLV(FUZZP, TLVNAME, OPTNAME)                                      \
+        case TLVNAME:                                                         \
+          if(tlv->length != 4) {                                              \
+            rc = 255;                                                         \
+            goto EXIT_LABEL;                                                  \
+          }                                                                   \
+          FCHECK_OPTION_UNSET(FUZZP, OPTNAME);                                \
+          tmp_u32 = to_u32(tlv->value);                                       \
+          FSET_OPTION(FUZZP, OPTNAME, tmp_u32);                               \
+          break

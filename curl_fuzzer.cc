@@ -201,15 +201,6 @@ EXIT_LABEL:
  */
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 {
-  fuzz_free((void **)&fuzz->url);
-  fuzz_free((void **)&fuzz->username);
-  fuzz_free((void **)&fuzz->password);
-  fuzz_free((void **)&fuzz->postfields);
-  fuzz_free((void **)&fuzz->cookie);
-  fuzz_free((void **)&fuzz->range);
-  fuzz_free((void **)&fuzz->customrequest);
-  fuzz_free((void **)&fuzz->mail_from);
-
   if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED){
     close(fuzz->server_fd);
     fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
@@ -444,47 +435,48 @@ int fuzz_get_tlv_comn(FUZZ_DATA *fuzz,
 int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
 {
   int rc;
-  char *tmp;
+  char *tmp = NULL;
   uint32_t tmp_u32;
 
   switch(tlv->type) {
     /* The pointers in response TLVs will always be valid as long as the fuzz
        data is in scope, which is the entirety of this file. */
-    FRESPONSETLV(TLV_TYPE_RESPONSE0, 0);
-    FRESPONSETLV(TLV_TYPE_RESPONSE1, 1);
-    FRESPONSETLV(TLV_TYPE_RESPONSE2, 2);
-    FRESPONSETLV(TLV_TYPE_RESPONSE3, 3);
-    FRESPONSETLV(TLV_TYPE_RESPONSE4, 4);
-    FRESPONSETLV(TLV_TYPE_RESPONSE5, 5);
-    FRESPONSETLV(TLV_TYPE_RESPONSE6, 6);
-    FRESPONSETLV(TLV_TYPE_RESPONSE7, 7);
-    FRESPONSETLV(TLV_TYPE_RESPONSE8, 8);
-    FRESPONSETLV(TLV_TYPE_RESPONSE9, 9);
-    FRESPONSETLV(TLV_TYPE_RESPONSE10, 10);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE0, 0);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE1, 1);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE2, 2);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE3, 3);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE4, 4);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE5, 5);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE6, 6);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE7, 7);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE8, 8);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE9, 9);
+    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE10, 10);
 
     case TLV_TYPE_UPLOAD1:
       /* The pointers in the TLV will always be valid as long as the fuzz data
          is in scope, which is the entirety of this file. */
+
+      FCHECK_OPTION_UNSET(fuzz, CURLOPT_UPLOAD);
+
       fuzz->upload1_data = tlv->value;
       fuzz->upload1_data_len = tlv->length;
 
-      curl_easy_setopt(fuzz->easy, CURLOPT_UPLOAD, 1L);
-      curl_easy_setopt(fuzz->easy,
-                       CURLOPT_INFILESIZE_LARGE,
-                       (curl_off_t)fuzz->upload1_data_len);
+      FSET_OPTION(fuzz, CURLOPT_UPLOAD, 1L);
+      FSET_OPTION(fuzz,
+                  CURLOPT_INFILESIZE_LARGE,
+                  (curl_off_t)fuzz->upload1_data_len);
       break;
 
     case TLV_TYPE_HEADER:
       tmp = fuzz_tlv_to_string(tlv);
       fuzz->header_list = curl_slist_append(fuzz->header_list, tmp);
-      fuzz_free((void **)&tmp);
       break;
 
     case TLV_TYPE_MAIL_RECIPIENT:
       tmp = fuzz_tlv_to_string(tlv);
       fuzz->mail_recipients_list =
-                             curl_slist_append(fuzz->mail_recipients_list, tmp);
-      fuzz_free((void **)&tmp);
+                            curl_slist_append(fuzz->mail_recipients_list, tmp);
       break;
 
     case TLV_TYPE_MIME_PART:
@@ -499,20 +491,20 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       break;
 
     /* Define a set of u32 options. */
-    FU32TLV(TLV_TYPE_HTTPAUTH, CURLOPT_HTTPAUTH);
-    FU32TLV(TLV_TYPE_OPTHEADER, CURLOPT_HEADER);
-    FU32TLV(TLV_TYPE_NOBODY, CURLOPT_NOBODY);
+    FU32TLV(fuzz, TLV_TYPE_HTTPAUTH, CURLOPT_HTTPAUTH);
+    FU32TLV(fuzz, TLV_TYPE_OPTHEADER, CURLOPT_HEADER);
+    FU32TLV(fuzz, TLV_TYPE_NOBODY, CURLOPT_NOBODY);
 
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
-    FSINGLETONTLV(TLV_TYPE_URL, url, CURLOPT_URL);
-    FSINGLETONTLV(TLV_TYPE_USERNAME, username, CURLOPT_USERNAME);
-    FSINGLETONTLV(TLV_TYPE_PASSWORD, password, CURLOPT_PASSWORD);
-    FSINGLETONTLV(TLV_TYPE_POSTFIELDS, postfields, CURLOPT_POSTFIELDS);
-    FSINGLETONTLV(TLV_TYPE_COOKIE, cookie, CURLOPT_COOKIE);
-    FSINGLETONTLV(TLV_TYPE_RANGE, range, CURLOPT_RANGE);
-    FSINGLETONTLV(TLV_TYPE_CUSTOMREQUEST, customrequest, CURLOPT_CUSTOMREQUEST);
-    FSINGLETONTLV(TLV_TYPE_MAIL_FROM, mail_from, CURLOPT_MAIL_FROM);
+    FSINGLETONTLV(fuzz, TLV_TYPE_URL, CURLOPT_URL);
+    FSINGLETONTLV(fuzz, TLV_TYPE_USERNAME, CURLOPT_USERNAME);
+    FSINGLETONTLV(fuzz, TLV_TYPE_PASSWORD, CURLOPT_PASSWORD);
+    FSINGLETONTLV(fuzz, TLV_TYPE_POSTFIELDS, CURLOPT_POSTFIELDS);
+    FSINGLETONTLV(fuzz, TLV_TYPE_COOKIE, CURLOPT_COOKIE);
+    FSINGLETONTLV(fuzz, TLV_TYPE_RANGE, CURLOPT_RANGE);
+    FSINGLETONTLV(fuzz, TLV_TYPE_CUSTOMREQUEST, CURLOPT_CUSTOMREQUEST);
+    FSINGLETONTLV(fuzz, TLV_TYPE_MAIL_FROM, CURLOPT_MAIL_FROM);
 
     default:
       /* The fuzzer generates lots of unknown TLVs - we don't want these in the
@@ -525,6 +517,8 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
   rc = 0;
 
 EXIT_LABEL:
+
+  fuzz_free((void **)&tmp);
 
   return rc;
 }
