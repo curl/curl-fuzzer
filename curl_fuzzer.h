@@ -168,6 +168,9 @@ typedef struct fuzz_data
   /* List of mail recipients */
   struct curl_slist *mail_recipients_list;
 
+  /* List of connect_to strings */
+  struct curl_slist *connect_to_list;
+
   /* Mime data */
   curl_mime *mime;
   curl_mimepart *part;

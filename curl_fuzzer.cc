@@ -188,6 +188,9 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
   }
 
+  fuzz->connect_to_list = curl_slist_append(NULL, "::127.0.1.127:");
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_TO, fuzz->connect_to_list));
+
 EXIT_LABEL:
 
   return rc;
@@ -203,6 +206,11 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED){
     close(fuzz->server_fd);
     fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
+  }
+
+  if(fuzz->connect_to_list != NULL) {
+    curl_slist_free_all(fuzz->connect_to_list);
+    fuzz->connect_to_list = NULL;
   }
 
   if(fuzz->header_list != NULL) {
