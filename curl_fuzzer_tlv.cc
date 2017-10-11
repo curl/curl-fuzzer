@@ -92,17 +92,20 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
   switch(tlv->type) {
     /* The pointers in response TLVs will always be valid as long as the fuzz
        data is in scope, which is the entirety of this file. */
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE0, 0);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE1, 1);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE2, 2);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE3, 3);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE4, 4);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE5, 5);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE6, 6);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE7, 7);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE8, 8);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE9, 9);
-    FRESPONSETLV(fuzz, TLV_TYPE_RESPONSE10, 10);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE0, 0);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE1, 1);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE2, 2);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE3, 3);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE4, 4);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE5, 5);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE6, 6);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE7, 7);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE8, 8);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE9, 9);
+    FRESPONSETLV(&fuzz->sockman[0], TLV_TYPE_RESPONSE10, 10);
+
+    FRESPONSETLV(&fuzz->sockman[1], TLV_TYPE_SECOND_RESPONSE0, 0);
+    FRESPONSETLV(&fuzz->sockman[1], TLV_TYPE_SECOND_RESPONSE1, 1);
 
     case TLV_TYPE_UPLOAD1:
       /* The pointers in the TLV will always be valid as long as the fuzz data

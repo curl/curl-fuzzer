@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/un.h>
 #include <curl/curl.h>
 #include "curl_fuzzer.h"
 
@@ -40,55 +41,69 @@ curl_socket_t fuzz_open_socket(void *ptr,
   int status;
   const uint8_t *data;
   size_t data_len;
+  struct sockaddr_un client_addr;
+  FUZZ_SOCKET_MANAGER *sman;
 
   /* Handle unused parameters */
   (void)purpose;
   (void)address;
 
-  if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED) {
-    /* A socket has already been opened. */
+  if(fuzz->sockman[0].fd_state != FUZZ_SOCK_CLOSED &&
+     fuzz->sockman[1].fd_state != FUZZ_SOCK_CLOSED) {
+    /* Both sockets have already been opened. */
     return CURL_SOCKET_BAD;
   }
+  else if(fuzz->sockman[0].fd_state != FUZZ_SOCK_CLOSED) {
+    sman = &fuzz->sockman[1];
+  }
+  else {
+    FV_PRINTF(fuzz, "FUZZ: Using socket manager 0 \n");
+    sman = &fuzz->sockman[0];
+  }
+  FV_PRINTF(fuzz, "FUZZ[%d]: Using socket manager %d \n",
+            sman->index,
+            sman->index);
 
   if(socketpair(AF_UNIX, SOCK_STREAM, 0, fds)) {
     /* Failed to create a pair of sockets. */
     return CURL_SOCKET_BAD;
   }
 
-  fuzz->server_fd = fds[0];
+  sman->fd = fds[0];
   client_fd = fds[1];
 
   /* Make the server non-blocking. */
-  flags = fcntl(fuzz->server_fd, F_GETFL, 0);
-  status = fcntl(fuzz->server_fd, F_SETFL, flags | O_NONBLOCK);
+  flags = fcntl(sman->fd, F_GETFL, 0);
+  status = fcntl(sman->fd, F_SETFL, flags | O_NONBLOCK);
 
   if(status == -1) {
     /* Setting non-blocking failed. Return a negative response code. */
     return CURL_SOCKET_BAD;
   }
 
-  fuzz->server_fd_state = FUZZ_SOCK_OPEN;
+  sman->fd_state = FUZZ_SOCK_OPEN;
 
   /* If the server should be sending data immediately, send it here. */
-  data = fuzz->responses[0].data;
-  data_len = fuzz->responses[0].data_len;
+  data = sman->responses[0].data;
+  data_len = sman->responses[0].data_len;
 
   if(data != NULL) {
-    FV_PRINTF(fuzz, "FUZZ: Sending initial response \n");
+    FV_PRINTF(fuzz, "FUZZ[%d]: Sending initial response \n", sman->index);
 
-    if(write(fuzz->server_fd, data, data_len) != (ssize_t)data_len) {
+    if(write(sman->fd, data, data_len) != (ssize_t)data_len) {
       /* Failed to write all of the response data. */
       return CURL_SOCKET_BAD;
     }
   }
 
   /* Check to see if the socket should be shut down immediately. */
-  if(fuzz->responses[1].data == NULL) {
+  if(sman->responses[1].data == NULL) {
     FV_PRINTF(fuzz,
-              "FUZZ: Shutting down server socket: %d \n",
-              fuzz->server_fd);
-    shutdown(fuzz->server_fd, SHUT_WR);
-    fuzz->server_fd_state = FUZZ_SOCK_SHUTDOWN;
+              "FUZZ[%d]: Shutting down server socket: %d \n",
+              sman->index,
+              sman->fd);
+    shutdown(sman->fd, SHUT_WR);
+    sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
   return client_fd;

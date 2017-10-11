@@ -36,6 +36,10 @@ def generate_corpus(options):
         enc.maybe_write_response(enc.TYPE_RSP9, options.rsp9, options.rsp9file, options.rsp9test)
         enc.maybe_write_response(enc.TYPE_RSP10, options.rsp10, options.rsp10file, options.rsp10test)
 
+        # Write any second socket responses to the file.
+        enc.maybe_write_response(enc.TYPE_SECRSP0, options.secrsp0, options.secrsp0file, options.secrsp0test)
+        enc.maybe_write_response(enc.TYPE_SECRSP1, options.secrsp1, options.secrsp1file, options.secrsp1test)
+
         # Write other options to file.
         enc.maybe_write_string(enc.TYPE_USERNAME, options.username)
         enc.maybe_write_string(enc.TYPE_PASSWORD, options.password)
@@ -105,6 +109,12 @@ def get_options():
         group.add_argument("--rsp{0}".format(ii))
         group.add_argument("--rsp{0}file".format(ii))
         group.add_argument("--rsp{0}test".format(ii), type=int)
+
+    for ii in range(0, 2):
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument("--secrsp{0}".format(ii))
+        group.add_argument("--secrsp{0}file".format(ii))
+        group.add_argument("--secrsp{0}test".format(ii), type=int)
 
     return parser.parse_args()
 

@@ -37,6 +37,8 @@ class BaseType(object):
     TYPE_NOBODY = 28
     TYPE_FOLLOWLOCATION = 29
     TYPE_ACCEPT_ENCODING = 30
+    TYPE_SECRSP0 = 31
+    TYPE_SECRSP1 = 32
 
     TYPEMAP = {
         TYPE_URL: "CURLOPT_URL",
@@ -51,6 +53,8 @@ class BaseType(object):
         TYPE_RSP8: "Server response 8",
         TYPE_RSP9: "Server response 9",
         TYPE_RSP10: "Server response 10",
+        TYPE_SECRSP0: "Socket 2: Server banner (sent on connection)",
+        TYPE_SECRSP1: "Socket 2: Server response 1",
         TYPE_USERNAME: "CURLOPT_USERNAME",
         TYPE_PASSWORD: "CURLOPT_PASSWORD",
         TYPE_POSTFIELDS: "CURLOPT_POSTFIELDS",

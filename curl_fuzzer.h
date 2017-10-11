@@ -56,6 +56,8 @@
 #define TLV_TYPE_NOBODY                 28
 #define TLV_TYPE_FOLLOWLOCATION         29
 #define TLV_TYPE_ACCEPTENCODING         30
+#define TLV_TYPE_SECOND_RESPONSE0       31
+#define TLV_TYPE_SECOND_RESPONSE1       32
 
 /**
  * TLV function return codes.
@@ -134,6 +136,21 @@ typedef struct fuzz_response
 
 } FUZZ_RESPONSE;
 
+typedef struct fuzz_socket_manager
+{
+  unsigned char index;
+
+  /* Responses. Response 0 is sent as soon as the socket is connected. Further
+     responses are sent when the socket becomes readable. */
+  FUZZ_RESPONSE responses[TLV_MAX_NUM_RESPONSES];
+  int response_index;
+
+  /* Server file descriptor. */
+  FUZZ_SOCK_STATE fd_state;
+  curl_socket_t fd;
+
+} FUZZ_SOCKET_MANAGER;
+
 /**
  * Data local to a fuzzing run.
  */
@@ -147,11 +164,6 @@ typedef struct fuzz_data
 
   /* Temporary writefunction state */
   char write_array[TEMP_WRITE_ARRAY_SIZE];
-
-  /* Responses. Response 0 is sent as soon as the socket is connected. Further
-     responses are sent when the socket becomes readable. */
-  FUZZ_RESPONSE responses[TLV_MAX_NUM_RESPONSES];
-  int response_index;
 
   /* Upload data and length; */
   const uint8_t *upload1_data;
@@ -177,9 +189,9 @@ typedef struct fuzz_data
   curl_mime *mime;
   curl_mimepart *part;
 
-  /* Server file descriptor. */
-  FUZZ_SOCK_STATE server_fd_state;
-  curl_socket_t server_fd;
+  /* Server socket managers. Primarily socket manager 0 is used, but some
+     protocols (FTP) use two sockets. */
+  FUZZ_SOCKET_MANAGER sockman[2];
 
   /* Verbose mode. */
   int verbose;
@@ -218,7 +230,7 @@ char *fuzz_tlv_to_string(TLV *tlv);
 int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
 int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
 int fuzz_handle_transfer(FUZZ_DATA *fuzz);
-int fuzz_send_next_response(FUZZ_DATA *fuzz);
+int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sockman);
 
 /* Macros */
 #define FTRY(FUNC)                                                            \
@@ -254,10 +266,10 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz);
           FSET_OPTION(FUZZP, OPTNAME, tmp);                                   \
           break
 
-#define FRESPONSETLV(FUZZP, TLVNAME, INDEX)                                   \
+#define FRESPONSETLV(SMAN, TLVNAME, INDEX)                                    \
         case TLVNAME:                                                         \
-          (FUZZP)->responses[(INDEX)].data = tlv->value;                      \
-          (FUZZP)->responses[(INDEX)].data_len = tlv->length;                 \
+          (SMAN)->responses[(INDEX)].data = tlv->value;                       \
+          (SMAN)->responses[(INDEX)].data_len = tlv->length;                  \
           break
 
 #define FU32TLV(FUZZP, TLVNAME, OPTNAME)                                      \
@@ -275,3 +287,5 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz);
         if((FUZZP)->verbose) {                                                \
           printf(__VA_ARGS__);                                                \
         }
+
+#define FUZZ_MAX(A, B) ((A) > (B) ? (A) : (B))

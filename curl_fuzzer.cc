@@ -137,8 +137,11 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   fuzz->state.data = data;
   fuzz->state.data_len = data_len;
 
-  /* Set up the state of the server socket. */
-  fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
+  /* Set up the state of the server sockets. */
+  fuzz->sockman[0].index = 0;
+  fuzz->sockman[0].fd_state = FUZZ_SOCK_CLOSED;
+  fuzz->sockman[1].index = 1;
+  fuzz->sockman[1].fd_state = FUZZ_SOCK_CLOSED;
 
   /* Check for verbose mode. */
   fuzz->verbose = (getenv("FUZZ_VERBOSE") != NULL);
@@ -211,9 +214,14 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 {
   fuzz_free((void **)&fuzz->postfields);
 
-  if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED) {
-    close(fuzz->server_fd);
-    fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
+  if(fuzz->sockman[0].fd_state != FUZZ_SOCK_CLOSED) {
+    close(fuzz->sockman[0].fd);
+    fuzz->sockman[0].fd_state = FUZZ_SOCK_CLOSED;
+  }
+
+  if(fuzz->sockman[1].fd_state != FUZZ_SOCK_CLOSED) {
+    close(fuzz->sockman[1].fd);
+    fuzz->sockman[1].fd_state = FUZZ_SOCK_CLOSED;
   }
 
   if(fuzz->connect_to_list != NULL) {
@@ -273,9 +281,15 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
   CURLMcode mc;
   int maxfd = -1;
   long curl_timeo = -1;
+  int ii;
+  FUZZ_SOCKET_MANAGER *sman[2];
 
-  /* Set up the starting index for responses. */
-  fuzz->response_index = 1;
+  for(ii = 0; ii < 2; ii++) {
+    sman[ii] = &fuzz->sockman[ii];
+
+    /* Set up the starting index for responses. */
+    sman[ii]->response_index = 1;
+  }
 
   /* init a multi stack */
   multi_handle = curl_multi_init();
@@ -309,13 +323,15 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       break;
     }
 
-    /* Add the socket FD into the readable set if connected. */
-    if(fuzz->server_fd_state == FUZZ_SOCK_OPEN) {
-      FD_SET(fuzz->server_fd, &fdread);
+    for(ii = 0; ii < 2; ii++) {
+      /* Add the socket FD into the readable set if connected. */
+      if(sman[ii]->fd_state == FUZZ_SOCK_OPEN) {
+        FD_SET(sman[ii]->fd, &fdread);
 
-      /* Work out the maximum FD between the cURL file descriptors and the
-         server FD. */
-      maxfd = (fuzz->server_fd > maxfd) ? fuzz->server_fd : maxfd;
+        /* Work out the maximum FD between the cURL file descriptors and the
+           server FD. */
+        maxfd = FUZZ_MAX(sman[ii]->fd, maxfd);
+      }
     }
 
     /* Work out what file descriptors need work. */
@@ -347,14 +363,16 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       double_timeout = 0;
     }
 
-    /* Check to see if the server file descriptor is readable. If it is,
+    /* Check to see if a server file descriptor is readable. If it is,
        then send the next response from the fuzzing data. */
-    if(fuzz->server_fd_state == FUZZ_SOCK_OPEN &&
-       FD_ISSET(fuzz->server_fd, &fdread)) {
-      rc = fuzz_send_next_response(fuzz);
-      if(rc != 0) {
-        /* Failed to send a response. Break out here. */
-        break;
+    for(ii = 0; ii < 2; ii++) {
+      if(sman[ii]->fd_state == FUZZ_SOCK_OPEN &&
+         FD_ISSET(sman[ii]->fd, &fdread)) {
+        rc = fuzz_send_next_response(fuzz, sman[ii]);
+        if(rc != 0) {
+          /* Failed to send a response. Break out here. */
+          break;
+        }
       }
     }
 
@@ -374,7 +392,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
 /**
  * Sends the next fuzzing response to the server file descriptor.
  */
-int fuzz_send_next_response(FUZZ_DATA *fuzz)
+int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sman)
 {
   int rc = 0;
   ssize_t ret_in;
@@ -387,21 +405,24 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz)
      unreadable. Because the file descriptor is non-blocking we won't just
      hang here. */
   do {
-    ret_in = read(fuzz->server_fd, buffer, sizeof(buffer));
+    ret_in = read(sman->fd, buffer, sizeof(buffer));
     if(fuzz->verbose && ret_in > 0) {
-      printf("FUZZ: Received %zu bytes \n==>\n", ret_in);
+      printf("FUZZ[%d]: Received %zu bytes \n==>\n", sman->index, ret_in);
       fwrite(buffer, ret_in, 1, stdout);
       printf("\n<==\n");
     }
   } while (ret_in > 0);
 
   /* Now send a response to the request that the client just made. */
-  FV_PRINTF(fuzz, "FUZZ: Sending next response: %d \n", fuzz->response_index);
-  data = fuzz->responses[fuzz->response_index].data;
-  data_len = fuzz->responses[fuzz->response_index].data_len;
+  FV_PRINTF(fuzz,
+            "FUZZ[%d]: Sending next response: %d \n",
+            sman->index,
+            sman->response_index);
+  data = sman->responses[sman->response_index].data;
+  data_len = sman->responses[sman->response_index].data_len;
 
   if(data != NULL) {
-    if(write(fuzz->server_fd, data, data_len) != (ssize_t)data_len) {
+    if(write(sman->fd, data, data_len) != (ssize_t)data_len) {
       /* Failed to write the data back to the client. Prevent any further
          testing. */
       rc = -1;
@@ -410,15 +431,16 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz)
 
   /* Work out if there are any more responses. If not, then shut down the
      server. */
-  fuzz->response_index++;
+  sman->response_index++;
 
-  if(fuzz->response_index > TLV_MAX_NUM_RESPONSES ||
-     fuzz->responses[fuzz->response_index].data == NULL) {
+  if(sman->response_index > TLV_MAX_NUM_RESPONSES ||
+     sman->responses[sman->response_index].data == NULL) {
     FV_PRINTF(fuzz,
-              "FUZZ: Shutting down server socket: %d \n",
-              fuzz->server_fd);
-    shutdown(fuzz->server_fd, SHUT_WR);
-    fuzz->server_fd_state = FUZZ_SOCK_SHUTDOWN;
+              "FUZZ[%d]: Shutting down server socket: %d \n",
+              sman->index,
+              sman->fd);
+    shutdown(sman->fd, SHUT_WR);
+    sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
   return(rc);
