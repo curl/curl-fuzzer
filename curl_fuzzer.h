@@ -179,6 +179,9 @@ typedef struct fuzz_data
   FUZZ_SOCK_STATE server_fd_state;
   curl_socket_t server_fd;
 
+  /* Verbose mode. */
+  int verbose;
+
 } FUZZ_DATA;
 
 /* Function prototypes */
@@ -265,3 +268,8 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz);
           tmp_u32 = to_u32(tlv->value);                                       \
           FSET_OPTION(FUZZP, OPTNAME, tmp_u32);                               \
           break
+
+#define FV_PRINTF(FUZZP, ...)                                                 \
+        if((FUZZP)->verbose) {                                                \
+          printf(__VA_ARGS__);                                                \
+        }

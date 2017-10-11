@@ -140,6 +140,9 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   /* Set up the state of the server socket. */
   fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
 
+  /* Check for verbose mode. */
+  fuzz->verbose = (getenv("FUZZ_VERBOSE") != NULL);
+
 EXIT_LABEL:
 
   return rc;
@@ -183,8 +186,7 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS, 200L));
 
   /* Can enable verbose mode by having the environment variable FUZZ_VERBOSE. */
-  if (getenv("FUZZ_VERBOSE") != NULL)
-  {
+  if(fuzz->verbose) {
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
   }
 
@@ -203,7 +205,7 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 {
   fuzz_free((void **)&fuzz->postfields);
 
-  if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED){
+  if(fuzz->server_fd_state != FUZZ_SOCK_CLOSED) {
     close(fuzz->server_fd);
     fuzz->server_fd_state = FUZZ_SOCK_CLOSED;
   }
@@ -277,8 +279,11 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
 
   /* Do an initial process. This might end the transfer immediately. */
   curl_multi_perform(multi_handle, &still_running);
+  FV_PRINTF(fuzz,
+            "FUZZ: Initial perform; still running? %d \n",
+            still_running);
 
-  while(&still_running) {
+  while(still_running) {
     /* Reset the sets of file descriptors. */
     FD_ZERO(&fdread);
     FD_ZERO(&fdwrite);
@@ -312,9 +317,14 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
 
     if(rc == -1) {
       /* Had an issue while selecting a file descriptor. Let's just exit. */
+      FV_PRINTF(fuzz, "FUZZ: select failed, exiting \n");
       break;
     }
     else if(rc == 0) {
+      FV_PRINTF(fuzz,
+                "FUZZ: Timed out; double timeout? %d \n",
+                double_timeout);
+
       /* Timed out. */
       if(double_timeout == 1) {
         /* We don't expect multiple timeouts in a row. If there are double
@@ -366,17 +376,13 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz)
   char buffer[8192];
   const uint8_t *data;
   size_t data_len;
-  int is_verbose;
-
-  /* Work out if we're tracing out. If we are, trace out the received data. */
-  is_verbose = (getenv("FUZZ_VERBOSE") != NULL);
 
   /* Need to read all data sent by the client so the file descriptor becomes
      unreadable. Because the file descriptor is non-blocking we won't just
      hang here. */
   do {
     ret_in = read(fuzz->server_fd, buffer, sizeof(buffer));
-    if(is_verbose && ret_in > 0) {
+    if(fuzz->verbose && ret_in > 0) {
       printf("FUZZ: Received %zu bytes \n==>\n", ret_in);
       fwrite(buffer, ret_in, 1, stdout);
       printf("\n<==\n");
@@ -384,6 +390,7 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz)
   } while (ret_in > 0);
 
   /* Now send a response to the request that the client just made. */
+  FV_PRINTF(fuzz, "FUZZ: Sending next response: %d \n", fuzz->response_index);
   data = fuzz->responses[fuzz->response_index].data;
   data_len = fuzz->responses[fuzz->response_index].data_len;
 
@@ -401,6 +408,9 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz)
 
   if(fuzz->response_index > TLV_MAX_NUM_RESPONSES ||
      fuzz->responses[fuzz->response_index].data == NULL) {
+    FV_PRINTF(fuzz,
+              "FUZZ: Shutting down server socket: %d \n",
+              fuzz->server_fd);
     shutdown(fuzz->server_fd, SHUT_WR);
     fuzz->server_fd_state = FUZZ_SOCK_SHUTDOWN;
   }

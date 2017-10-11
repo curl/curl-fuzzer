@@ -74,6 +74,8 @@ curl_socket_t fuzz_open_socket(void *ptr,
   data_len = fuzz->responses[0].data_len;
 
   if(data != NULL) {
+    FV_PRINTF(fuzz, "FUZZ: Sending initial response \n");
+
     if(write(fuzz->server_fd, data, data_len) != (ssize_t)data_len) {
       /* Failed to write all of the response data. */
       return CURL_SOCKET_BAD;
@@ -82,6 +84,9 @@ curl_socket_t fuzz_open_socket(void *ptr,
 
   /* Check to see if the socket should be shut down immediately. */
   if(fuzz->responses[1].data == NULL) {
+    FV_PRINTF(fuzz,
+              "FUZZ: Shutting down server socket: %d \n",
+              fuzz->server_fd);
     shutdown(fuzz->server_fd, SHUT_WR);
     fuzz->server_fd_state = FUZZ_SOCK_SHUTDOWN;
   }
