@@ -275,7 +275,10 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
   /* add the individual transfers */
   curl_multi_add_handle(multi_handle, fuzz->easy);
 
-  do {
+  /* Do an initial process. This might end the transfer immediately. */
+  curl_multi_perform(multi_handle, &still_running);
+
+  while(&still_running) {
     /* Reset the sets of file descriptors. */
     FD_ZERO(&fdread);
     FD_ZERO(&fdwrite);
@@ -339,10 +342,8 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       }
     }
 
-    /* Process the multi object. */
     curl_multi_perform(multi_handle, &still_running);
-
-  } while(still_running);
+  }
 
   /* Remove the easy handle from the multi stack. */
   curl_multi_remove_handle(multi_handle, fuzz->easy);
