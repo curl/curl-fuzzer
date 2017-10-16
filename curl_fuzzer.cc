@@ -154,6 +154,7 @@ EXIT_LABEL:
 int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 {
   int rc = 0;
+  unsigned long allowed_protocols;
 
   /* Set some standard options on the CURL easy handle. We need to override the
      socket function so that we create our own sockets to present to CURL. */
@@ -190,8 +191,13 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
   }
 
+  /* Force resolution of all addresses to a specific IP address. */
   fuzz->connect_to_list = curl_slist_append(NULL, "::127.0.1.127:");
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_TO, fuzz->connect_to_list));
+
+  /* Remove telnet from the list of allowed protocols. */
+  allowed_protocols = CURLPROTO_ALL & ~CURLPROTO_TELNET;
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS, allowed_protocols));
 
 EXIT_LABEL:
 
