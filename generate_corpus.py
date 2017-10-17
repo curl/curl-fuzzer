@@ -44,6 +44,7 @@ def generate_corpus(options):
         enc.maybe_write_string(enc.TYPE_RANGE, options.range)
         enc.maybe_write_string(enc.TYPE_CUSTOMREQUEST, options.customrequest)
         enc.maybe_write_string(enc.TYPE_MAIL_FROM, options.mailfrom)
+        enc.maybe_write_string(enc.TYPE_ACCEPT_ENCODING, options.acceptencoding)
         enc.maybe_write_u32(enc.TYPE_HTTPAUTH, options.httpauth)
         enc.maybe_write_u32(enc.TYPE_OPTHEADER, options.optheader)
         enc.maybe_write_u32(enc.TYPE_NOBODY, options.nobody)
@@ -93,6 +94,7 @@ def get_options():
     parser.add_argument("--optheader", type=int)
     parser.add_argument("--nobody", type=int)
     parser.add_argument("--followlocation", type=int)
+    parser.add_argument("--acceptencoding")
 
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")

@@ -162,6 +162,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FSINGLETONTLV(fuzz, TLV_TYPE_RANGE, CURLOPT_RANGE);
     FSINGLETONTLV(fuzz, TLV_TYPE_CUSTOMREQUEST, CURLOPT_CUSTOMREQUEST);
     FSINGLETONTLV(fuzz, TLV_TYPE_MAIL_FROM, CURLOPT_MAIL_FROM);
+    FSINGLETONTLV(fuzz, TLV_TYPE_ACCEPTENCODING, CURLOPT_ACCEPT_ENCODING);
 
     default:
       /* The fuzzer generates lots of unknown TLVs - we don't want these in the

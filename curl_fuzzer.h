@@ -55,6 +55,7 @@
 #define TLV_TYPE_OPTHEADER              27
 #define TLV_TYPE_NOBODY                 28
 #define TLV_TYPE_FOLLOWLOCATION         29
+#define TLV_TYPE_ACCEPTENCODING         30
 
 /**
  * TLV function return codes.
