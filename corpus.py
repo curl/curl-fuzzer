@@ -35,6 +35,7 @@ class BaseType(object):
     TYPE_RSP10 = 26
     TYPE_OPTHEADER = 27
     TYPE_NOBODY = 28
+    TYPE_FOLLOWLOCATION = 29
 
     TYPEMAP = {
         TYPE_URL: "CURLOPT_URL",
@@ -65,6 +66,7 @@ class BaseType(object):
         TYPE_HTTPAUTH: "CURLOPT_HTTPAUTH",
         TYPE_OPTHEADER: "CURLOPT_HEADER",
         TYPE_NOBODY: "CURLOPT_NOBODY",
+        TYPE_FOLLOWLOCATION: "CURLOPT_FOLLOWLOCATION",
     }
 
 

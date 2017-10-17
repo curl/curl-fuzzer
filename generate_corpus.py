@@ -47,6 +47,7 @@ def generate_corpus(options):
         enc.maybe_write_u32(enc.TYPE_HTTPAUTH, options.httpauth)
         enc.maybe_write_u32(enc.TYPE_OPTHEADER, options.optheader)
         enc.maybe_write_u32(enc.TYPE_NOBODY, options.nobody)
+        enc.maybe_write_u32(enc.TYPE_FOLLOWLOCATION, options.followlocation)
 
         # Write the first upload to the file.
         if options.upload1:
@@ -91,6 +92,7 @@ def get_options():
     parser.add_argument("--httpauth", type=int)
     parser.add_argument("--optheader", type=int)
     parser.add_argument("--nobody", type=int)
+    parser.add_argument("--followlocation", type=int)
 
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")

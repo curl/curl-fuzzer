@@ -151,6 +151,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FU32TLV(fuzz, TLV_TYPE_HTTPAUTH, CURLOPT_HTTPAUTH);
     FU32TLV(fuzz, TLV_TYPE_OPTHEADER, CURLOPT_HEADER);
     FU32TLV(fuzz, TLV_TYPE_NOBODY, CURLOPT_NOBODY);
+    FU32TLV(fuzz, TLV_TYPE_FOLLOWLOCATION, CURLOPT_FOLLOWLOCATION);
 
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
