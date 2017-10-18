@@ -58,6 +58,7 @@
 #define TLV_TYPE_ACCEPTENCODING         30
 #define TLV_TYPE_SECOND_RESPONSE0       31
 #define TLV_TYPE_SECOND_RESPONSE1       32
+#define TLV_TYPE_WILDCARDMATCH          33
 
 /**
  * TLV function return codes.
