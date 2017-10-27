@@ -21,6 +21,7 @@
  ***************************************************************************/
 
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
 #include <curl/curl.h>
@@ -36,6 +37,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   int tlv_rc;
   FUZZ_DATA fuzz;
   TLV tlv;
+
+  /* Ignore SIGPIPE errors. We'll handle the errors ourselves. */
+  signal(SIGPIPE, SIG_IGN);
 
   /* Have to set all fields to zero before getting to the terminate function */
   memset(&fuzz, 0, sizeof(FUZZ_DATA));
