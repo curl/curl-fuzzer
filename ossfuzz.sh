@@ -15,11 +15,14 @@
 #
 ################################################################################
 
+. fuzz_targets
+
 echo "CC: $CC"
 echo "CXX: $CXX"
 echo "LIB_FUZZING_ENGINE: $LIB_FUZZING_ENGINE"
 echo "CFLAGS: $CFLAGS"
 echo "CXXFLAGS: $CXXFLAGS"
+echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 
 export MAKEFLAGS+="-j$(nproc)"
 
@@ -29,11 +32,15 @@ export INSTALLDIR=/src/curl_install
 # Compile curl
 ./install_curl.sh /src/curl ${INSTALLDIR}
 
-# Build the fuzzer.
+# Build the fuzzers.
 ./compile_fuzzer.sh ${INSTALLDIR}
 make zip
 
-cp -v curl_fuzzer curl_fuzzer_seed_corpus.zip $OUT/
+# Copy the fuzzers over.
+for TARGET in $FUZZ_TARGETS
+do
+	cp -v ${TARGET} ${TARGET}_seed_corpus.zip $OUT/
+done
 
 # Copy dictionary and options file to $OUT.
 cp -v *.dict *.options $OUT/

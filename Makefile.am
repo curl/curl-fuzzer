@@ -35,24 +35,90 @@ LIBS = -lpthread -lm
 # OSS-Fuzz will define its own value for LIB_FUZZING_ENGINE.
 LIB_FUZZING_ENGINE ?= libstandaloneengine.a
 
-FUZZPROGS = curl_fuzzer
+FUZZPROGS = curl_fuzzer \
+			curl_fuzzer_dict \
+			curl_fuzzer_file \
+			curl_fuzzer_ftp \
+			curl_fuzzer_gopher \
+			curl_fuzzer_http \
+			curl_fuzzer_imap \
+			curl_fuzzer_ldap \
+			curl_fuzzer_pop3 \
+			curl_fuzzer_rtmp \
+			curl_fuzzer_rtsp \
+			curl_fuzzer_scp \
+			curl_fuzzer_sftp \
+			curl_fuzzer_smb \
+			curl_fuzzer_smtp \
+			curl_fuzzer_tftp
 FUZZLIBS = libstandaloneengine.a
 
-curl_fuzzer_SOURCES = curl_fuzzer.cc \
-                      curl_fuzzer_tlv.cc \
-                      curl_fuzzer_callback.cc
-curl_fuzzer_CXXFLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
-curl_fuzzer_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
+COMMON_SOURCES = curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc
+COMMON_FLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
+COMMON_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
 
 libstandaloneengine_a_SOURCES = standalone_fuzz_target_runner.cc
 libstandaloneengine_a_CXXFLAGS = $(AM_CXXFLAGS)
 
-# Some more targets.
+# The main fuzzer; tests everything
+curl_fuzzer_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_ALL
+curl_fuzzer_LDADD = $(COMMON_LDADD)
+
+# Protocol specific fuzzers
+curl_fuzzer_dict_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_dict_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_DICT
+curl_fuzzer_dict_LDADD = $(COMMON_LDADD)
+curl_fuzzer_file_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_file_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_FILE
+curl_fuzzer_file_LDADD = $(COMMON_LDADD)
+curl_fuzzer_ftp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_ftp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_FTP
+curl_fuzzer_ftp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_gopher_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_gopher_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_GOPHER
+curl_fuzzer_gopher_LDADD = $(COMMON_LDADD)
+curl_fuzzer_http_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_http_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_HTTP
+curl_fuzzer_http_LDADD = $(COMMON_LDADD)
+curl_fuzzer_imap_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_imap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_IMAP
+curl_fuzzer_imap_LDADD = $(COMMON_LDADD)
+curl_fuzzer_ldap_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_ldap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_LDAP
+curl_fuzzer_ldap_LDADD = $(COMMON_LDADD)
+curl_fuzzer_pop3_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_pop3_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_POP3
+curl_fuzzer_pop3_LDADD = $(COMMON_LDADD)
+curl_fuzzer_rtmp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_rtmp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_RTMP
+curl_fuzzer_rtmp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_rtsp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_rtsp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_RTSP
+curl_fuzzer_rtsp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_scp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_scp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SCP
+curl_fuzzer_scp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_sftp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_sftp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SFTP
+curl_fuzzer_sftp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_smb_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_smb_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SMB
+curl_fuzzer_smb_LDADD = $(COMMON_LDADD)
+curl_fuzzer_smtp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_smtp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SMTP
+curl_fuzzer_smtp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_tftp_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_tftp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_TFTP
+curl_fuzzer_tftp_LDADD = $(COMMON_LDADD)
+
+# Create the seed corpora zip files.
 zip:
 	./create_zip.sh
 
+# Test the seed corpora regressibly.
 check: all
-	./check_data.sh
+	./check_data.sh ./curl_fuzzer
 
 noinst_PROGRAMS = $(FUZZPROGS)
 noinst_LIBRARIES = $(FUZZLIBS)

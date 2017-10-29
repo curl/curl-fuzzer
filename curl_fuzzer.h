@@ -240,6 +240,7 @@ int fuzz_select(int nfds,
                 fd_set *writefds,
                 fd_set *exceptfds,
                 struct timeval *timeout);
+int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz);
 
 /* Macros */
 #define FTRY(FUNC)                                                            \
