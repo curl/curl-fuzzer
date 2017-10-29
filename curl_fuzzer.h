@@ -79,6 +79,9 @@
 /* Space variable for all CURLOPTs. */
 #define FUZZ_CURLOPT_TRACKER_SPACE      300
 
+/* Number of connections allowed to be opened */
+#define FUZZ_NUM_CONNECTIONS            2
+
 typedef enum fuzz_sock_state {
   FUZZ_SOCK_CLOSED,
   FUZZ_SOCK_OPEN,
@@ -192,7 +195,7 @@ typedef struct fuzz_data
 
   /* Server socket managers. Primarily socket manager 0 is used, but some
      protocols (FTP) use two sockets. */
-  FUZZ_SOCKET_MANAGER sockman[2];
+  FUZZ_SOCKET_MANAGER sockman[FUZZ_NUM_CONNECTIONS];
 
   /* Verbose mode. */
   int verbose;
@@ -232,6 +235,11 @@ int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
 int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
 int fuzz_handle_transfer(FUZZ_DATA *fuzz);
 int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sockman);
+int fuzz_select(int nfds,
+                fd_set *readfds,
+                fd_set *writefds,
+                fd_set *exceptfds,
+                struct timeval *timeout);
 
 /* Macros */
 #define FTRY(FUNC)                                                            \

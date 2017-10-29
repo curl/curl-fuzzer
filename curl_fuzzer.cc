@@ -128,6 +128,7 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
                               size_t data_len)
 {
   int rc = 0;
+  int ii;
 
   /* Initialize the fuzz data. */
   memset(fuzz, 0, sizeof(FUZZ_DATA));
@@ -142,10 +143,10 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   fuzz->state.data_len = data_len;
 
   /* Set up the state of the server sockets. */
-  fuzz->sockman[0].index = 0;
-  fuzz->sockman[0].fd_state = FUZZ_SOCK_CLOSED;
-  fuzz->sockman[1].index = 1;
-  fuzz->sockman[1].fd_state = FUZZ_SOCK_CLOSED;
+  for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
+    fuzz->sockman[ii].index = ii;
+    fuzz->sockman[ii].fd_state = FUZZ_SOCK_CLOSED;
+  }
 
   /* Check for verbose mode. */
   fuzz->verbose = (getenv("FUZZ_VERBOSE") != NULL);
@@ -216,16 +217,16 @@ EXIT_LABEL:
  */
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 {
+  int ii;
+
   fuzz_free((void **)&fuzz->postfields);
 
-  if(fuzz->sockman[0].fd_state != FUZZ_SOCK_CLOSED) {
-    close(fuzz->sockman[0].fd);
-    fuzz->sockman[0].fd_state = FUZZ_SOCK_CLOSED;
-  }
 
-  if(fuzz->sockman[1].fd_state != FUZZ_SOCK_CLOSED) {
-    close(fuzz->sockman[1].fd);
-    fuzz->sockman[1].fd_state = FUZZ_SOCK_CLOSED;
+  for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
+    if(fuzz->sockman[ii].fd_state != FUZZ_SOCK_CLOSED) {
+      close(fuzz->sockman[ii].fd);
+      fuzz->sockman[ii].fd_state = FUZZ_SOCK_CLOSED;
+    }
   }
 
   if(fuzz->connect_to_list != NULL) {
@@ -286,9 +287,9 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
   int maxfd = -1;
   long curl_timeo = -1;
   int ii;
-  FUZZ_SOCKET_MANAGER *sman[2];
+  FUZZ_SOCKET_MANAGER *sman[FUZZ_NUM_CONNECTIONS];
 
-  for(ii = 0; ii < 2; ii++) {
+  for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
     sman[ii] = &fuzz->sockman[ii];
 
     /* Set up the starting index for responses. */
@@ -327,7 +328,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       break;
     }
 
-    for(ii = 0; ii < 2; ii++) {
+    for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
       /* Add the socket FD into the readable set if connected. */
       if(sman[ii]->fd_state == FUZZ_SOCK_OPEN) {
         FD_SET(sman[ii]->fd, &fdread);
@@ -339,7 +340,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
     }
 
     /* Work out what file descriptors need work. */
-    rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
+    rc = fuzz_select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
 
     if(rc == -1) {
       /* Had an issue while selecting a file descriptor. Let's just exit. */
@@ -369,7 +370,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
 
     /* Check to see if a server file descriptor is readable. If it is,
        then send the next response from the fuzzing data. */
-    for(ii = 0; ii < 2; ii++) {
+    for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
       if(sman[ii]->fd_state == FUZZ_SOCK_OPEN &&
          FD_ISSET(sman[ii]->fd, &fdread)) {
         rc = fuzz_send_next_response(fuzz, sman[ii]);
@@ -448,4 +449,15 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sman)
   }
 
   return(rc);
+}
+
+/**
+ * Wrapper for select() so profiling can track it.
+ */
+int fuzz_select(int nfds,
+                fd_set *readfds,
+                fd_set *writefds,
+                fd_set *exceptfds,
+                struct timeval *timeout) {
+  return select(nfds, readfds, writefds, exceptfds, timeout);
 }
