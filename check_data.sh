@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. fuzz_targets
+
 DEBUG=0
 
 if [[ ${DEBUG} == 1 ]]
@@ -17,14 +19,19 @@ else
     EXTRA_CORPUS=
 fi
 
-if [[ ${DEBUG} == 1 ]]
-then
-  # Run each test individually so we can see where it crashes
-  for ii in curl_fuzz_data/* ${EXTRA_CORPUS}
-  do
-    ./curl_fuzzer $ii
-  done
-else
-  # Run the fuzzer over all tests at once, which is faster.
-  ./curl_fuzzer curl_fuzz_data/* ${EXTRA_CORPUS}
-fi
+for TARGET in ${FUZZ_TARGETS}
+do
+  TEST_CASES=corpora/${TARGET}/* ${EXTRA_CORPUS}
+
+  if [[ ${DEBUG} == 1 ]]
+  then
+    # Run each test individually so we can see where it crashes
+    for ii in ${TEST_CASES}
+    do
+      ./${TARGET} $ii
+    done
+  else
+    # Run the fuzzer over all tests at once, which is faster.
+    ./${TARGET} ${TEST_CASES}
+  fi
+done

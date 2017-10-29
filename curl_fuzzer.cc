@@ -203,9 +203,8 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
   fuzz->connect_to_list = curl_slist_append(NULL, "::127.0.1.127:");
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_TO, fuzz->connect_to_list));
 
-  /* Remove telnet from the list of allowed protocols. */
-  allowed_protocols = CURLPROTO_ALL & ~CURLPROTO_TELNET;
-  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS, allowed_protocols));
+  /* Limit the protocols in use by this fuzzer. */
+  FTRY(fuzz_set_allowed_protocols(fuzz));
 
 EXIT_LABEL:
 
@@ -220,7 +219,6 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   int ii;
 
   fuzz_free((void **)&fuzz->postfields);
-
 
   for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
     if(fuzz->sockman[ii].fd_state != FUZZ_SOCK_CLOSED) {
@@ -460,4 +458,81 @@ int fuzz_select(int nfds,
                 fd_set *exceptfds,
                 struct timeval *timeout) {
   return select(nfds, readfds, writefds, exceptfds, timeout);
+}
+
+/**
+ * Set allowed protocols based on the compile options
+ */
+int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
+{
+  int rc;
+  unsigned long allowed_protocols = 0;
+
+#ifdef FUZZ_PROTOCOLS_ALL
+  /* Do not allow telnet currently as it accepts input from stdin. */
+  allowed_protocols |= CURLPROTO_ALL & ~CURLPROTO_TELNET;
+#endif
+#ifdef FUZZ_PROTOCOLS_DICT
+  allowed_protocols |= CURLPROTO_DICT;
+#endif
+#ifdef FUZZ_PROTOCOLS_FILE
+  allowed_protocols |= CURLPROTO_FILE;
+#endif
+#ifdef FUZZ_PROTOCOLS_FTP
+  allowed_protocols |= CURLPROTO_FTP;
+  allowed_protocols |= CURLPROTO_FTPS;
+#endif
+#ifdef FUZZ_PROTOCOLS_GOPHER
+  allowed_protocols |= CURLPROTO_GOPHER;
+#endif
+#ifdef FUZZ_PROTOCOLS_HTTP
+  allowed_protocols |= CURLPROTO_HTTP;
+  allowed_protocols |= CURLPROTO_HTTPS;
+#endif
+#ifdef FUZZ_PROTOCOLS_IMAP
+  allowed_protocols |= CURLPROTO_IMAP;
+  allowed_protocols |= CURLPROTO_IMAPS;
+#endif
+#ifdef FUZZ_PROTOCOLS_LDAP
+  allowed_protocols |= CURLPROTO_LDAP;
+  allowed_protocols |= CURLPROTO_LDAPS;
+#endif
+#ifdef FUZZ_PROTOCOLS_POP3
+  allowed_protocols |= CURLPROTO_POP3;
+  allowed_protocols |= CURLPROTO_POP3S;
+#endif
+#ifdef FUZZ_PROTOCOLS_RTMP
+  allowed_protocols |= CURLPROTO_RTMP;
+  allowed_protocols |= CURLPROTO_RTMPE;
+  allowed_protocols |= CURLPROTO_RTMPS;
+  allowed_protocols |= CURLPROTO_RTMPT;
+  allowed_protocols |= CURLPROTO_RTMPTE;
+  allowed_protocols |= CURLPROTO_RTMPTS;
+#endif
+#ifdef FUZZ_PROTOCOLS_RTSP
+  allowed_protocols |= CURLPROTO_RTSP;
+#endif
+#ifdef FUZZ_PROTOCOLS_SCP
+  allowed_protocols |= CURLPROTO_SCP;
+#endif
+#ifdef FUZZ_PROTOCOLS_SFTP
+  allowed_protocols |= CURLPROTO_SFTP;
+#endif
+#ifdef FUZZ_PROTOCOLS_SMB
+  allowed_protocols |= CURLPROTO_SMB;
+  allowed_protocols |= CURLPROTO_SMBS;
+#endif
+#ifdef FUZZ_PROTOCOLS_SMTP
+  allowed_protocols |= CURLPROTO_SMTP;
+  allowed_protocols |= CURLPROTO_SMTPS;
+#endif
+#ifdef FUZZ_PROTOCOLS_TFTP
+  allowed_protocols |= CURLPROTO_TFTP;
+#endif
+
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS, allowed_protocols));
+
+EXIT_LABEL:
+
+  return rc;
 }

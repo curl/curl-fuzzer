@@ -2,8 +2,11 @@
 
 set -ex
 
-pushd curl_fuzz_data
+. fuzz_targets
 
-zip ../curl_fuzzer_seed_corpus.zip *
-
-popd
+for TARGET in ${FUZZ_TARGETS}
+do
+	pushd corpora/${TARGET}
+	zip ../../${TARGET}_seed_corpus.zip *
+	popd
+done

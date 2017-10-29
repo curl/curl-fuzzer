@@ -23,7 +23,7 @@ then
   exit 1
 fi
 
-# Build the fuzzer.
+# Build the fuzzers.
 ./buildconf || exit 2
 ./configure ${CODE_COVERAGE_OPTION} || exit 3
 make || exit 4
