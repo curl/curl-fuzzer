@@ -436,7 +436,7 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sman)
      server. */
   sman->response_index++;
 
-  if(sman->response_index > TLV_MAX_NUM_RESPONSES ||
+  if(sman->response_index >= TLV_MAX_NUM_RESPONSES ||
      sman->responses[sman->response_index].data == NULL) {
     FV_PRINTF(fuzz,
               "FUZZ[%d]: Shutting down server socket: %d \n",
