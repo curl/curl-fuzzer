@@ -29,6 +29,11 @@ export MAKEFLAGS+="-j$(nproc)"
 # Make an install directory
 export INSTALLDIR=/src/curl_install
 
+# Install openssl
+export OPENSSLFLAGS="-fno-sanitize=alignment"
+OPENSSLDIR=/src/openssl
+./handle_openssl.sh ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+
 # Compile curl
 ./install_curl.sh /src/curl ${INSTALLDIR}
 
@@ -39,7 +44,7 @@ make zip
 # Copy the fuzzers over.
 for TARGET in $FUZZ_TARGETS
 do
-	cp -v ${TARGET} ${TARGET}_seed_corpus.zip $OUT/
+  cp -v ${TARGET} ${TARGET}_seed_corpus.zip $OUT/
 done
 
 # Copy dictionary and options file to $OUT.

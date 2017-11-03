@@ -26,6 +26,13 @@ then
   mkdir ${INSTALLDIR}
 fi
 
+if [[ -f ${INSTALLDIR}/lib/libssl.a ]]
+then
+  SSLOPTION=--with-ssl=${INSTALLDIR}/lib
+else
+  SSLOPTION=--without-ssl
+fi
+
 pushd ${SRCDIR}
 
 # Build the library.
@@ -37,7 +44,7 @@ pushd ${SRCDIR}
             --disable-symbol-hiding \
             --enable-ipv6 \
             --with-random=/dev/null \
-            --without-ssl \
+            ${SSLOPTION} \
             ${CODE_COVERAGE_OPTION}
 
 make

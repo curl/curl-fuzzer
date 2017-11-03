@@ -10,6 +10,12 @@ export CFLAGS=""
 export CXXFLAGS="$FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 
+OPENSSLDIR=/tmp/openssl
+INSTALLDIR=/tmp/curlcov_install
+
+# Install openssl
+./handle_openssl.sh ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+
 # Download cURL to a temporary folder.
 ./download_curl.sh /tmp/curlcov
 
@@ -21,10 +27,10 @@ fi
 mv /tmp/curlcov ./curl
 
 # Compile and install cURL to a second folder with code coverage.
-./install_curl.sh -c ./curl /tmp/curlcov_install
+./install_curl.sh -c ./curl ${INSTALLDIR}
 
 # Compile and test the fuzzer with code coverage
-./compile_fuzzer.sh -c /tmp/curlcov_install
+./compile_fuzzer.sh -c ${INSTALLDIR}
 
 # Do a "make check-code-coverage" run to generate the coverage info.
 make check-code-coverage
