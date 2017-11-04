@@ -465,7 +465,7 @@ int fuzz_select(int nfds,
  */
 int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 {
-  int rc;
+  int rc = 0;
   unsigned long allowed_protocols = 0;
 
 #ifdef FUZZ_PROTOCOLS_ALL
