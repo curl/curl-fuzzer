@@ -14,8 +14,8 @@ config.status
 config.sub
 configure
 curl-fuzzer---*
-curl_fuzzer
-curl_fuzzer_seed_corpus.zip
+/curl_fuzzer
+/curl_fuzzer_seed_corpus.zip
 depcomp
 extra_corpus/
 install-sh
