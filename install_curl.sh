@@ -28,7 +28,7 @@ fi
 
 if [[ -f ${INSTALLDIR}/lib/libssl.a ]]
 then
-  SSLOPTION=--with-ssl=${INSTALLDIR}
+  SSLOPTION=--with-ssl=${INSTALLDIR}/lib
 else
   SSLOPTION=--without-ssl
 fi
