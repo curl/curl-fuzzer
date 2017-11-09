@@ -54,6 +54,7 @@ def generate_corpus(options):
         enc.maybe_write_u32(enc.TYPE_NOBODY, options.nobody)
         enc.maybe_write_u32(enc.TYPE_FOLLOWLOCATION, options.followlocation)
         enc.maybe_write_u32(enc.TYPE_WILDCARDMATCH, options.wildcardmatch)
+        enc.maybe_write_u32(enc.TYPE_RTSP_REQUEST, options.rtsprequest)
 
         # Write the first upload to the file.
         if options.upload1:
@@ -101,6 +102,7 @@ def get_options():
     parser.add_argument("--followlocation", type=int)
     parser.add_argument("--acceptencoding")
     parser.add_argument("--wildcardmatch", type=int)
+    parser.add_argument("--rtsprequest", type=int)
 
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")
