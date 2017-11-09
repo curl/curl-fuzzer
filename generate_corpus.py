@@ -51,6 +51,7 @@ def generate_corpus(options):
         enc.maybe_write_string(enc.TYPE_ACCEPT_ENCODING, options.acceptencoding)
         enc.maybe_write_string(enc.TYPE_RTSP_SESSION_ID, options.rtspsessionid)
         enc.maybe_write_string(enc.TYPE_RTSP_STREAM_URI, options.rtspstreamuri)
+        enc.maybe_write_string(enc.TYPE_RTSP_TRANSPORT, options.rtsptransport)
         
         enc.maybe_write_u32(enc.TYPE_HTTPAUTH, options.httpauth)
         enc.maybe_write_u32(enc.TYPE_OPTHEADER, options.optheader)
@@ -108,6 +109,7 @@ def get_options():
     parser.add_argument("--rtsprequest", type=int)
     parser.add_argument("--rtspsessionid")
     parser.add_argument("--rtspstreamuri")
+    parser.add_argument("--rtsptransport")
 
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")
