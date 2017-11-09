@@ -157,6 +157,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FU32TLV(fuzz, TLV_TYPE_FOLLOWLOCATION, CURLOPT_FOLLOWLOCATION);
     FU32TLV(fuzz, TLV_TYPE_WILDCARDMATCH, CURLOPT_WILDCARDMATCH);
     FU32TLV(fuzz, TLV_TYPE_RTSP_REQUEST, CURLOPT_RTSP_REQUEST);
+    FU32TLV(fuzz, TLV_TYPE_RTSP_CLIENT_CSEQ, CURLOPT_RTSP_CLIENT_CSEQ);
 
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */

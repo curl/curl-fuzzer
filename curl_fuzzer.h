@@ -63,6 +63,7 @@
 #define TLV_TYPE_RTSP_SESSION_ID        35
 #define TLV_TYPE_RTSP_STREAM_URI        36
 #define TLV_TYPE_RTSP_TRANSPORT         37
+#define TLV_TYPE_RTSP_CLIENT_CSEQ       38
 
 /**
  * TLV function return codes.
