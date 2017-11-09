@@ -172,6 +172,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FSINGLETONTLV(fuzz, TLV_TYPE_RTSP_SESSION_ID, CURLOPT_RTSP_SESSION_ID);
     FSINGLETONTLV(fuzz, TLV_TYPE_RTSP_STREAM_URI, CURLOPT_RTSP_STREAM_URI);
     FSINGLETONTLV(fuzz, TLV_TYPE_RTSP_TRANSPORT, CURLOPT_RTSP_TRANSPORT);
+    FSINGLETONTLV(fuzz, TLV_TYPE_MAIL_AUTH, CURLOPT_MAIL_AUTH);
 
     default:
       /* The fuzzer generates lots of unknown TLVs - we don't want these in the
