@@ -134,6 +134,7 @@ size_t fuzz_read_callback(char *buffer,
 {
   FUZZ_DATA *fuzz = (FUZZ_DATA *)ptr;
   size_t remaining_data;
+  size_t buffer_size = size * nitems;
 
   /* If no upload data has been specified, then return an error code. */
   if(fuzz->upload1_data_len == 0) {
@@ -144,10 +145,20 @@ size_t fuzz_read_callback(char *buffer,
   /* Work out how much data is remaining to upload. */
   remaining_data = fuzz->upload1_data_len - fuzz->upload1_data_written;
 
+  /* Respect the buffer size that libcurl is giving us! */
+  if(remaining_data > buffer_size) {
+    remaining_data = buffer_size;
+  }
+
   if(remaining_data > 0) {
+    FV_PRINTF(fuzz,
+              "FUZZ: Uploading %zu bytes from position %zu \n",
+              remaining_data,
+              fuzz->upload1_data_written);
+
     /* Send the upload data. */
-    memcpy(&buffer[fuzz->upload1_data_written],
-           fuzz->upload1_data,
+    memcpy(buffer,
+           &fuzz->upload1_data[fuzz->upload1_data_written],
            remaining_data);
 
     /* Increase the count of written data */
