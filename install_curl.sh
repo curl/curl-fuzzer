@@ -50,4 +50,11 @@ pushd ${SRCDIR}
 make
 make install
 
+# Make any explicit folders which are post install
+UTFUZZDIR=${INSTALLDIR}/utfuzzer
+mkdir -p ${UTFUZZDIR}
+
+# Copy header files.
+cp -v lib/curl_fnmatch.h ${UTFUZZDIR}
+
 popd

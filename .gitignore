@@ -30,6 +30,8 @@ missing
 /curl_fuzzer_dict_seed_corpus.zip
 /curl_fuzzer_file
 /curl_fuzzer_file_seed_corpus.zip
+/curl_fuzzer_fnmatch
+/curl_fuzzer_fnmatch_seed_corpus.zip
 /curl_fuzzer_ftp
 /curl_fuzzer_ftp_seed_corpus.zip
 /curl_fuzzer_gopher
