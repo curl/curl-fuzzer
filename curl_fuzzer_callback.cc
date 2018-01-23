@@ -69,6 +69,8 @@ curl_socket_t fuzz_open_socket(void *ptr,
     return CURL_SOCKET_BAD;
   }
 
+  SOCKET_PRINTF("[socketpair %d %d]", fds[0], fds[1]);
+
   sman->fd = fds[0];
   client_fd = fds[1];
 
@@ -103,6 +105,7 @@ curl_socket_t fuzz_open_socket(void *ptr,
               sman->index,
               sman->fd);
     shutdown(sman->fd, SHUT_WR);
+    SOCKET_PRINTF("[shutdown %d]", sman->fd);
     sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 

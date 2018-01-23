@@ -304,4 +304,8 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz);
           printf(__VA_ARGS__);                                                \
         }
 
+/* Undefine this if socket diagnostics are not required. */
+#define SOCKET_PRINTF(...)                                                    \
+        printf(__VA_ARGS__);
+
 #define FUZZ_MAX(A, B) ((A) > (B) ? (A) : (B))

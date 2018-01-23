@@ -223,6 +223,7 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
     if(fuzz->sockman[ii].fd_state != FUZZ_SOCK_CLOSED) {
       close(fuzz->sockman[ii].fd);
+      SOCKET_PRINTF("[close %d]", fuzz->sockman[ii].fd);
       fuzz->sockman[ii].fd_state = FUZZ_SOCK_CLOSED;
     }
   }
@@ -443,6 +444,7 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sman)
               sman->index,
               sman->fd);
     shutdown(sman->fd, SHUT_WR);
+    SOCKET_PRINTF("[shutdown %d]", sman->fd);
     sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
