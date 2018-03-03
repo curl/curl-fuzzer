@@ -30,8 +30,7 @@ This can be useful when debugging a single testcase.
 
 ## I want to reproduce an error hit overnight by OSS-Fuzz
 
-The easiest way to do this is to follow the instructions over at
-https://github.com/google/oss-fuzz to run the `curl` project.
+Check out [REPRODUCING.md](REPRODUCING.md) for more detailed instructions.
 
 ## What's in this testcase?
 
