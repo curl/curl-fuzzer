@@ -28,6 +28,12 @@
 #include "curl_fuzzer.h"
 
 /**
+ * Define a macro which checks to see that allocated file descriptors are
+ * valid and won't cause issue with FD_SETs.  Taken from lib/select.h
+ */
+#define FUZZ_VALID_SOCK(s) (((s) >= 0) && ((s) < FD_SETSIZE))
+
+/**
  * Function for providing a socket to CURL already primed with data.
  */
 curl_socket_t fuzz_open_socket(void *ptr,
@@ -36,7 +42,6 @@ curl_socket_t fuzz_open_socket(void *ptr,
 {
   FUZZ_DATA *fuzz = (FUZZ_DATA *)ptr;
   int fds[2];
-  curl_socket_t client_fd;
   int flags;
   int status;
   const uint8_t *data;
@@ -69,18 +74,39 @@ curl_socket_t fuzz_open_socket(void *ptr,
     return CURL_SOCKET_BAD;
   }
 
-  sman->fd = fds[0];
-  client_fd = fds[1];
+  if(!FUZZ_VALID_SOCK(fds[0]) || !FUZZ_VALID_SOCK(fds[1])) {
+    /* One or more of the file descriptors is too large to fit in an fd_set,
+       so reject it here. Print out a message because this ought to be quite
+       rare. */
+    printf("FUZZ[%d]: Not using file descriptors %d,%d as FD_SETSIZE is %d\n",
+           sman->index,
+           fds[0],
+           fds[1],
+           FD_SETSIZE);
+
+    /* Close the file descriptors so they don't leak. */
+    close(fds[0]);
+    close(fds[1]);
+
+    return CURL_SOCKET_BAD;
+  }
 
   /* Make the server non-blocking. */
-  flags = fcntl(sman->fd, F_GETFL, 0);
-  status = fcntl(sman->fd, F_SETFL, flags | O_NONBLOCK);
+  flags = fcntl(fds[0], F_GETFL, 0);
+  status = fcntl(fds[0], F_SETFL, flags | O_NONBLOCK);
 
   if(status == -1) {
+    /* Close the file descriptors so they don't leak. */
+    close(fds[0]);
+    close(fds[1]);
+
     /* Setting non-blocking failed. Return a negative response code. */
     return CURL_SOCKET_BAD;
   }
 
+  /* At this point, the file descriptors in hand should be good enough to
+     work with. */
+  sman->fd = fds[0];
   sman->fd_state = FUZZ_SOCK_OPEN;
 
   /* If the server should be sending data immediately, send it here. */
@@ -91,6 +117,12 @@ curl_socket_t fuzz_open_socket(void *ptr,
     FV_PRINTF(fuzz, "FUZZ[%d]: Sending initial response \n", sman->index);
 
     if(write(sman->fd, data, data_len) != (ssize_t)data_len) {
+      /* Close the file descriptors so they don't leak. */
+      close(sman->fd);
+      sman->fd = -1;
+
+      close(fds[1]);
+
       /* Failed to write all of the response data. */
       return CURL_SOCKET_BAD;
     }
@@ -106,7 +138,8 @@ curl_socket_t fuzz_open_socket(void *ptr,
     sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
-  return client_fd;
+  /* Return the other half of the socket pair. */
+  return fds[1];
 }
 
 /**
