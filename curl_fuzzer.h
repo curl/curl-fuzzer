@@ -82,6 +82,9 @@
 /* Number of supported responses */
 #define TLV_MAX_NUM_RESPONSES           11
 
+/* Number of allowed CURLOPT_HEADERs */
+#define TLV_MAX_NUM_CURLOPT_HEADER      2000
+
 /* Space variable for all CURLOPTs. */
 #define FUZZ_CURLOPT_TRACKER_SPACE      300
 
@@ -187,6 +190,7 @@ typedef struct fuzz_data
   char *postfields;
 
   /* List of headers */
+  int header_list_count;
   struct curl_slist *header_list;
 
   /* List of mail recipients */
