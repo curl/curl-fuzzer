@@ -2,6 +2,10 @@
 
 set -ex
 
+# Save off the current folder as the build root.
+export BUILD_ROOT=$PWD
+SCRIPTDIR=${BUILD_ROOT}/scripts
+
 CURLDIR=/tmp/curlprof
 OPENSSLDIR=/tmp/openssl
 INSTALLDIR=/tmp/curlprof_install
@@ -27,12 +31,12 @@ export CFLAGS="-pg"
 export CXXFLAGS="-pg"
 
 # Install openssl
-./handle_openssl.sh ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
 
 # Install curl after all other dependencies
-./handle_curl.sh ${CURLDIR} ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/handle_x.sh curl ${CURLDIR} ${INSTALLDIR} || exit 1
 
 # Compile and test the fuzzers.
-./compile_fuzzer.sh ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIR} || exit 1
 
-gprof ./curl_fuzzer
+gprof ${BUILD_ROOT}/curl_fuzzer

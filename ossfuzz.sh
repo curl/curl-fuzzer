@@ -15,7 +15,11 @@
 #
 ################################################################################
 
-. fuzz_targets
+# Save off the current folder as the build root.
+export BUILD_ROOT=$PWD
+SCRIPTDIR=${BUILD_ROOT}/scripts
+
+. ${SCRIPTDIR}/fuzz_targets
 
 echo "CC: $CC"
 echo "CXX: $CXX"
@@ -32,13 +36,13 @@ export INSTALLDIR=/src/curl_install
 # Install openssl
 export OPENSSLFLAGS="-fno-sanitize=alignment"
 OPENSSLDIR=/src/openssl
-./handle_openssl.sh ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
 
 # Compile curl
-./install_curl.sh /src/curl ${INSTALLDIR}
+${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}
 
 # Build the fuzzers.
-./compile_fuzzer.sh ${INSTALLDIR}
+${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIR}
 make zip
 
 # Copy the fuzzers over.
@@ -48,4 +52,4 @@ do
 done
 
 # Copy dictionary and options file to $OUT.
-cp -v *.dict *.options $OUT/
+cp -v ossconfig/*.dict ossconfig/*.options $OUT/

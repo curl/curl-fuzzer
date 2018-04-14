@@ -2,6 +2,10 @@
 
 set -ex
 
+# Save off the current folder as the build root.
+export BUILD_ROOT=$PWD
+SCRIPTDIR=${BUILD_ROOT}/scripts
+
 # Use gcc to test the code as code coverage is easier.
 export CC=gcc
 export CXX=g++
@@ -14,23 +18,23 @@ OPENSSLDIR=/tmp/openssl
 INSTALLDIR=/tmp/curlcov_install
 
 # Install openssl
-./handle_openssl.sh ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
 
 # Download cURL to a temporary folder.
-./download_curl.sh /tmp/curlcov
+${SCRIPTDIR}/download_curl.sh /tmp/curlcov
 
 # Move cURL to a subfolder of this folder to get the paths right.
-if [[ -d ./curl ]]
+if [[ -d ${BUILD_ROOT}/curl ]]
 then
-  rm -rf ./curl
+  rm -rf ${BUILD_ROOT}/curl
 fi
-mv /tmp/curlcov ./curl
+mv /tmp/curlcov ${BUILD_ROOT}/curl
 
 # Compile and install cURL to a second folder with code coverage.
-./install_curl.sh -c ./curl ${INSTALLDIR}
+${SCRIPTDIR}/install_curl.sh -c ${BUILD_ROOT}/curl ${INSTALLDIR}
 
 # Compile and test the fuzzer with code coverage
-./compile_fuzzer.sh -c ${INSTALLDIR}
+${SCRIPTDIR}/compile_fuzzer.sh -c ${INSTALLDIR}
 
 # Do a "make check-code-coverage" run to generate the coverage info.
 make check-code-coverage

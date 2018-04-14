@@ -120,11 +120,11 @@ curl_fuzzer_fnmatch_LDADD = $(COMMON_LDADD)
 
 # Create the seed corpora zip files.
 zip:
-	./create_zip.sh
+	BUILD_ROOT=$(PWD) scripts/create_zip.sh
 
 # Test the seed corpora regressibly.
 check: all
-	./check_data.sh
+	BUILD_ROOT=$(PWD) scripts/check_data.sh
 
 noinst_PROGRAMS = $(FUZZPROGS)
 noinst_LIBRARIES = $(FUZZLIBS)

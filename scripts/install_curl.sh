@@ -3,6 +3,9 @@
 # If any commands fail, fail the script immediately.
 set -ex
 
+# Exit if the build root has not been defined.
+[[ -d ${BUILD_ROOT} ]] || exit 1
+
 # Parse the options.
 OPTIND=1
 CODE_COVERAGE_OPTION=""
