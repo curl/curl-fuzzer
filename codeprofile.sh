@@ -8,15 +8,18 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 CURLDIR=/tmp/curlprof
 OPENSSLDIR=/tmp/openssl
+NGHTTPDIR=/tmp/nghttp2
 INSTALLDIR=/tmp/curlprof_install
 
 # Parse the options.
 OPTIND=1
 
-while getopts "c:o:" opt
+while getopts "c:n:o:" opt
 do
   case "$opt" in
     c) CURLDIR=$OPTARG
+       ;;
+    n) NGHTTPDIR=$OPTARG
        ;;
     o) OPENSSLDIR=$OPTARG
        ;;
@@ -32,6 +35,9 @@ export CXXFLAGS="-pg"
 
 # Install openssl
 ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+
+# Install nghttp2
+${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
 
 # Install curl after all other dependencies
 ${SCRIPTDIR}/handle_x.sh curl ${CURLDIR} ${INSTALLDIR} || exit 1

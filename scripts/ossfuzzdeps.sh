@@ -9,4 +9,5 @@ apt-get install -y make \
                    automake \
                    libtool \
                    libssl-dev \
-                   zlib1g-dev
+                   zlib1g-dev \
+                   pkg-config

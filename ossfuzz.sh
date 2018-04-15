@@ -21,6 +21,9 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 . ${SCRIPTDIR}/fuzz_targets
 
+OPENSSLDIR=/src/openssl
+NGHTTPDIR=/src/nghttp2
+
 echo "CC: $CC"
 echo "CXX: $CXX"
 echo "LIB_FUZZING_ENGINE: $LIB_FUZZING_ENGINE"
@@ -35,8 +38,10 @@ export INSTALLDIR=/src/curl_install
 
 # Install openssl
 export OPENSSLFLAGS="-fno-sanitize=alignment"
-OPENSSLDIR=/src/openssl
 ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+
+# Install nghttp2
+${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
 
 # Compile curl
 ${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}

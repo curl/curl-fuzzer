@@ -15,10 +15,14 @@ export CXXFLAGS="$FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 
 OPENSSLDIR=/tmp/openssl
+NGHTTPDIR=/tmp/nghttp2
 INSTALLDIR=/tmp/curlcov_install
 
 # Install openssl
 ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+
+# Install nghttp2
+${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
 
 # Download cURL to a temporary folder.
 ${SCRIPTDIR}/download_curl.sh /tmp/curlcov

@@ -16,6 +16,7 @@ addons:
             - libidn2-0-dev
             - libssh2-1-dev
             - krb5-user
+            - pkg-config
 
 matrix:
     include:

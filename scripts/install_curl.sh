@@ -36,6 +36,13 @@ else
   SSLOPTION=--without-ssl
 fi
 
+if [[ -f ${INSTALLDIR}/lib/libnghttp2.a ]]
+then
+  NGHTTPOPTION=--with-nghttp2=${INSTALLDIR}
+else
+  NGHTTPOPTION=--without-nghttp2
+fi
+
 pushd ${SRCDIR}
 
 # Build the library.
@@ -48,6 +55,7 @@ pushd ${SRCDIR}
             --enable-ipv6 \
             --with-random=/dev/null \
             ${SSLOPTION} \
+            ${NGHTTPOPTION} \
             ${CODE_COVERAGE_OPTION}
 
 make
