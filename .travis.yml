@@ -1,5 +1,7 @@
 language: c
 sudo: required
+services:
+    - docker
 addons:
     apt:
         sources:
@@ -20,6 +22,7 @@ matrix:
         - env: T=mainline
         - env: T=codecoverage
         - env: T=codeprofile
+        - env: T=travisoss
 
 script:
     - ./${T}.sh
