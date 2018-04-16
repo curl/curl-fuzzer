@@ -65,6 +65,7 @@
 #define TLV_TYPE_RTSP_TRANSPORT         37
 #define TLV_TYPE_RTSP_CLIENT_CSEQ       38
 #define TLV_TYPE_MAIL_AUTH              39
+#define TLV_TYPE_HTTP_VERSION           40
 
 /**
  * TLV function return codes.
