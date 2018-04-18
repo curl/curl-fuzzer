@@ -6,7 +6,7 @@
 #                            | (__| |_| |  _ <| |___
 #                             \___|\___/|_| \_\_____|
 #
-# Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
+# Copyright (C) 1998 - 2018, Daniel Stenberg, <daniel@haxx.se>, et al.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
@@ -56,25 +56,6 @@ findtool(){
     fi
   done
   IFS=$old_IFS
-}
-
-#--------------------------------------------------------------------------
-# removethis() removes all files and subdirectories with the given name,
-# inside and below the current subdirectory at invocation time.
-#
-removethis(){
-  if test "$#" = "1"; then
-    find . -depth -name $1 -print > buildconf.tmp.$$
-    while read fdname
-    do
-      if test -f "$fdname"; then
-        rm -f "$fdname"
-      elif test -d "$fdname"; then
-        rm -f -r "$fdname"
-      fi
-    done < buildconf.tmp.$$
-    rm -f buildconf.tmp.$$
-  fi
 }
 
 #--------------------------------------------------------------------------
@@ -252,53 +233,6 @@ if test -z "$PERL"; then
   echo "buildconf: perl not found"
   exit 1
 fi
-
-#--------------------------------------------------------------------------
-# Remove files generated on previous buildconf/configure run.
-#
-for fname in .deps \
-    .libs \
-    *.la \
-    *.lo \
-    *.a \
-    *.o \
-    Makefile \
-    Makefile.in \
-    aclocal.m4 \
-    aclocal.m4.bak \
-    ares_build.h \
-    ares_config.h \
-    ares_config.h.in \
-    autom4te.cache \
-    compile \
-    config.guess \
-    curl_config.h \
-    curl_config.h.in \
-    config.log \
-    config.lt \
-    config.status \
-    config.sub \
-    configure \
-    configurehelp.pm \
-    curl-config \
-    depcomp \
-    libcares.pc \
-    libcurl.pc \
-    libtool \
-    libtool.m4 \
-    libtool.m4.tmp \
-    ltmain.sh \
-    ltoptions.m4 \
-    ltsugar.m4 \
-    ltversion.m4 \
-    lt~obsolete.m4 \
-    missing \
-    install-sh \
-    stamp-h1 \
-    stamp-h2 \
-    stamp-h3 ; do
-  removethis "$fname"
-done
 
 #--------------------------------------------------------------------------
 # run the correct scripts now
