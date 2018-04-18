@@ -487,6 +487,8 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #endif
 #ifdef FUZZ_PROTOCOLS_HTTP
   allowed_protocols |= CURLPROTO_HTTP;
+#endif
+#ifdef FUZZ_PROTOCOLS_HTTPS
   allowed_protocols |= CURLPROTO_HTTPS;
 #endif
 #ifdef FUZZ_PROTOCOLS_IMAP
