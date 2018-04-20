@@ -5,11 +5,9 @@
 
 . ${BUILD_ROOT}/scripts/fuzz_targets
 
-DEBUG=0
-
 if [[ ${DEBUG} == 1 ]]
 then
-  set -x
+  set -ex
 else
   set -e
 fi
