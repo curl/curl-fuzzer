@@ -38,7 +38,6 @@ LIB_FUZZING_ENGINE ?= libstandaloneengine.a
 FUZZPROGS = curl_fuzzer \
 			curl_fuzzer_dict \
 			curl_fuzzer_file \
-			curl_fuzzer_fnmatch \
 			curl_fuzzer_ftp \
 			curl_fuzzer_gopher \
 			curl_fuzzer_http \
