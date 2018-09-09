@@ -4,5 +4,5 @@
 set -ex
 
 # Clone the repository to the specified directory.
-git clone --branch v1.24.0 https://github.com/nghttp2/nghttp2 $1
+git clone --branch v1.33.0 https://github.com/nghttp2/nghttp2 $1
 
