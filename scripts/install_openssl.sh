@@ -33,6 +33,6 @@ pushd ${SRCDIR}
          ${OPENSSLFLAGS}
 
 make
-make install
+make install_sw
 
 popd
