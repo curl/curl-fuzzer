@@ -193,6 +193,7 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 
   /* Time out requests quickly. */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS, 200L));
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_SERVER_RESPONSE_TIMEOUT, 1L));
 
   /* Can enable verbose mode by having the environment variable FUZZ_VERBOSE. */
   if(fuzz->verbose) {
