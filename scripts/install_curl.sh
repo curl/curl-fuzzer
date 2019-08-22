@@ -58,7 +58,7 @@ pushd ${SRCDIR}
             ${NGHTTPOPTION} \
             ${CODE_COVERAGE_OPTION}
 
-make
+make V=1
 make install
 
 # Make any explicit folders which are post install
