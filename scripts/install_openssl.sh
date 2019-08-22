@@ -12,25 +12,35 @@ then
   mkdir ${INSTALLDIR}
 fi
 
+# For i386, set a specific crosscompile mode
+if [[ ${ARCHITECTURE} == "i386" ]]
+then
+    ARCH_PROG="setarch i386"
+    EC_FLAG=""
+else
+    ARCH_PROG=""
+    EC_FLAG="enable-ec_nistp_64_gcc_128"
+fi
+
 pushd ${SRCDIR}
 
 # Build the library.
-./config --prefix=${INSTALLDIR} \
-         --debug \
-         enable-fuzz-libfuzzer \
-         -DPEDANTIC \
-         -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION \
-         no-shared \
-         enable-tls1_3 \
-         enable-rc5 \
-         enable-md2 \
-         enable-ec_nistp_64_gcc_128 \
-         enable-ssl3 \
-         enable-ssl3-method \
-         enable-nextprotoneg \
-         enable-weak-ssl-ciphers \
-         $CFLAGS \
-         ${OPENSSLFLAGS}
+${ARCH_PROG} ./config --prefix=${INSTALLDIR} \
+                      --debug \
+                      enable-fuzz-libfuzzer \
+                      -DPEDANTIC \
+                      -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION \
+                      no-shared \
+                      enable-tls1_3 \
+                      enable-rc5 \
+                      enable-md2 \
+                      enable-ssl3 \
+                      ${EC_FLAG} \
+                      enable-ssl3-method \
+                      enable-nextprotoneg \
+                      enable-weak-ssl-ciphers \
+                      $CFLAGS \
+                      ${OPENSSLFLAGS}
 
 make
 make install

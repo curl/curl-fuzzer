@@ -29,9 +29,13 @@ echo "CXX: $CXX"
 echo "LIB_FUZZING_ENGINE: $LIB_FUZZING_ENGINE"
 echo "CFLAGS: $CFLAGS"
 echo "CXXFLAGS: $CXXFLAGS"
+echo "ARCHITECTURE: $ARCHITECTURE"
 echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 
 export MAKEFLAGS+="-j$(nproc)"
+
+# Check and install i386 libraries if necessary.
+${SCRIPTDIR}/check_i386.sh
 
 # Make an install directory
 export INSTALLDIR=/src/curl_install

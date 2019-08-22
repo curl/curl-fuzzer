@@ -15,24 +15,27 @@ fi
 # Allows us to add an extra testing corpus locally.
 if [[ -d ./extra_corpus ]]
 then
-    EXTRA_CORPUS=./extra_corpus/*
+    EXTRA_CORPUS=./extra_corpus/
 else
     EXTRA_CORPUS=
 fi
 
 for TARGET in ${FUZZ_TARGETS}
 do
-  TEST_CASES=${BUILD_ROOT}/corpora/${TARGET}/* ${EXTRA_CORPUS}
-
-  if [[ ${DEBUG} == 1 ]]
+  if [[ ${TARGET} == "curl_fuzzer_ftp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer" ]]
   then
-    # Run each test individually so we can see where it crashes
-    for ii in ${TEST_CASES}
-    do
-      ${BUILD_ROOT}/${TARGET} $ii
-    done
+    # For the moment, disable some problematic corpuses
+    echo "Skipping ${TARGET}"
   else
-    # Run the fuzzer over all tests at once, which is faster.
-    ${BUILD_ROOT}/${TARGET} ${TEST_CASES}
+    if [[ ${DEBUG} == 1 ]]
+    then
+      # Call tests individually
+      PERCALL=1
+    else
+      # Call tests 100 at a time for speed.
+      PERCALL=100
+    fi
+
+    find ${BUILD_ROOT}/corpora/${TARGET}/ ${EXTRA_CORPUS} -type f -print0 | xargs -0 -L${PERCALL} ${BUILD_ROOT}/${TARGET}
   fi
 done
