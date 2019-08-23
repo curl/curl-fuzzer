@@ -10,4 +10,5 @@ apt-get install -y make \
                    libtool \
                    libssl-dev \
                    zlib1g-dev \
-                   pkg-config
+                   pkg-config \
+                   wget

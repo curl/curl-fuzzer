@@ -21,6 +21,7 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 . ${SCRIPTDIR}/fuzz_targets
 
+ZLIBDIR=/tmp/zlib
 OPENSSLDIR=/src/openssl
 NGHTTPDIR=/src/nghttp2
 
@@ -34,11 +35,11 @@ echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 
 export MAKEFLAGS+="-j$(nproc)"
 
-# Check and install i386 libraries if necessary.
-${SCRIPTDIR}/check_i386.sh
-
 # Make an install directory
 export INSTALLDIR=/src/curl_install
+
+# Install zlib
+${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1
 
 # Install openssl
 export OPENSSLFLAGS="-fno-sanitize=alignment"
