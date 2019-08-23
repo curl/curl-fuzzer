@@ -22,6 +22,15 @@ else
     EC_FLAG="enable-ec_nistp_64_gcc_128"
 fi
 
+# For memory sanitizer, disable ASM.
+if [[ ${SANITIZER} == "memory" ]]
+then
+    ASM_FLAG="no-asm"
+else
+    ASM_FLAG=""
+fi
+
+
 pushd ${SRCDIR}
 
 # Build the library.
@@ -31,6 +40,7 @@ ${ARCH_PROG} ./config --prefix=${INSTALLDIR} \
                       -DPEDANTIC \
                       -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION \
                       no-shared \
+                      ${ASM_FLAG} \
                       enable-tls1_3 \
                       enable-rc5 \
                       enable-md2 \
