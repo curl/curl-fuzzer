@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Temporarily ignore corpus checking in memory sanitizer mode.
+if [[ ${SANITIZER} == "memory" ]]
+then
+  echo "Temporarily ignore corpuses in memory mode, to let ossfuzz have fun"
+  exit 0
+fi
+
 # Exit if the build root has not been defined.
 [[ -d ${BUILD_ROOT} ]] || exit 1
 
