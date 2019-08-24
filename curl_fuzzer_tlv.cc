@@ -72,8 +72,20 @@ int fuzz_get_tlv_comn(FUZZ_DATA *fuzz,
   tlv->length = to_u32(raw->raw_length);
   tlv->value = &fuzz->state.data[data_offset];
 
+  FV_PRINTF(fuzz, "TLV: type %x length %u\n", tlv->type, tlv->length);
+
+  /* Use uint64s to verify lengths of TLVs so that overflow problems don't
+     matter. */
+  uint64_t check_length = data_offset;
+  check_length += tlv->length;
+
+  uint64_t remaining_len = fuzz->state.data_len;
+  FV_PRINTF(fuzz, "Check length of data: %lu \n", check_length);
+  FV_PRINTF(fuzz, "Remaining length of data: %lu \n", remaining_len);
+
   /* Sanity check that the TLV length is ok. */
-  if(data_offset + tlv->length > fuzz->state.data_len) {
+  if(check_length > remaining_len) {
+    FV_PRINTF(fuzz, "Returning TLV_RC_SIZE_ERROR\n");
     rc = TLV_RC_SIZE_ERROR;
   }
 
