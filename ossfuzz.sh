@@ -21,7 +21,7 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 . ${SCRIPTDIR}/fuzz_targets
 
-ZLIBDIR=/tmp/zlib
+ZLIBDIR=/src/zlib
 OPENSSLDIR=/src/openssl
 NGHTTPDIR=/src/nghttp2
 
