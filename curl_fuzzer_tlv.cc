@@ -183,6 +183,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
     FSINGLETONTLV(fuzz, TLV_TYPE_URL, CURLOPT_URL);
+    FSINGLETONTLV(fuzz, TLV_TYPE_DOH_URL, CURLOPT_DOH_URL);
     FSINGLETONTLV(fuzz, TLV_TYPE_USERNAME, CURLOPT_USERNAME);
     FSINGLETONTLV(fuzz, TLV_TYPE_PASSWORD, CURLOPT_PASSWORD);
     FSINGLETONTLV(fuzz, TLV_TYPE_COOKIE, CURLOPT_COOKIE);
