@@ -47,6 +47,7 @@ class BaseType(object):
     TYPE_RTSP_CLIENT_CSEQ = 38
     TYPE_MAIL_AUTH = 39
     TYPE_HTTP_VERSION = 40
+    TYPE_DOH_URL = 41
 
     TYPEMAP = {
         TYPE_URL: "CURLOPT_URL",
@@ -89,6 +90,7 @@ class BaseType(object):
         TYPE_RTSP_CLIENT_CSEQ: "CURLOPT_RTSP_CLIENT_CSEQ",
         TYPE_MAIL_AUTH: "CURLOPT_MAIL_AUTH",
         TYPE_HTTP_VERSION: "CURLOPT_HTTP_VERSION",
+        TYPE_DOH_URL: "CURLOPT_DOH_URL",
     }
 
 
