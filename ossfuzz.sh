@@ -41,9 +41,14 @@ export INSTALLDIR=/src/curl_install
 # Install zlib
 ${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1
 
-# Install openssl
-export OPENSSLFLAGS="-fno-sanitize=alignment"
-${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+# For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
+# affect (see 16697, 17624)
+if [[ ${SANITIZER} != "memory" ]]
+then
+    # Install openssl
+    export OPENSSLFLAGS="-fno-sanitize=alignment"
+    ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+fi
 
 # Install nghttp2
 ${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
