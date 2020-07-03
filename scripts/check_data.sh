@@ -29,11 +29,6 @@ fi
 
 for TARGET in ${FUZZ_TARGETS}
 do
-  if [[ ${TARGET} == "curl_fuzzer_ftp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer" ]]
-  then
-    # For the moment, disable some problematic corpuses
-    echo "Skipping ${TARGET}"
-  else
     if [[ ${DEBUG} == 1 ]]
     then
       # Call tests individually
@@ -44,5 +39,4 @@ do
     fi
 
     find ${BUILD_ROOT}/corpora/${TARGET}/ ${EXTRA_CORPUS} -type f -print0 | xargs -0 -L${PERCALL} ${BUILD_ROOT}/${TARGET}
-  fi
 done
