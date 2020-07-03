@@ -19,7 +19,7 @@ autoreconf -i
 ./configure --prefix=${INSTALLDIR} \
             --disable-shared \
             --enable-static \
-            --disable-threads
+            --disable-threads --enable-lib-only
 
 make
 make install
