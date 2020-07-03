@@ -53,6 +53,6 @@ ${ARCH_PROG} ./config --prefix=${INSTALLDIR} \
                       ${OPENSSLFLAGS}
 
 make
-make install
+make install_sw
 
 popd
