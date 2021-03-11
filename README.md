@@ -2,6 +2,8 @@
 
 Code and corpora for curl and libcurl fuzzing.
 
+This is the curl fuzzing [OSS-Fuzz](https://github.com/google/oss-fuzz/tree/master/projects/curl) runs for us, non-stop.
+
 ## I just want to get fuzzing!
 
 Great! Run `./mainline.sh`. It will download you a fresh copy of curl, compile
