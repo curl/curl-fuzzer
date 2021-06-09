@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2017, Max Dymond, <cmeister2@gmail.com>, et al.
+ * Copyright (C) 2017 - 2021, Max Dymond, <cmeister2@gmail.com>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -499,6 +499,9 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_LDAP
   allowed_protocols |= CURLPROTO_LDAP;
   allowed_protocols |= CURLPROTO_LDAPS;
+#endif
+#ifdef FUZZ_PROTOCOLS_MQTT
+  allowed_protocols |= CURLPROTO_MQTT;
 #endif
 #ifdef FUZZ_PROTOCOLS_POP3
   allowed_protocols |= CURLPROTO_POP3;

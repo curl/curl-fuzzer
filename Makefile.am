@@ -5,7 +5,7 @@
 #                            | (__| |_| |  _ <| |___
 #                             \___|\___/|_| \_\_____|
 #
-# Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
+# Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
@@ -44,6 +44,7 @@ FUZZPROGS = curl_fuzzer \
 			curl_fuzzer_https \
 			curl_fuzzer_imap \
 			curl_fuzzer_ldap \
+			curl_fuzzer_mqtt \
 			curl_fuzzer_pop3 \
 			curl_fuzzer_rtmp \
 			curl_fuzzer_rtsp \
@@ -91,6 +92,9 @@ curl_fuzzer_imap_LDADD = $(COMMON_LDADD)
 curl_fuzzer_ldap_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_ldap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_LDAP
 curl_fuzzer_ldap_LDADD = $(COMMON_LDADD)
+curl_fuzzer_mqtt_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_mqtt_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_MQTT
+curl_fuzzer_mqtt_LDADD = $(COMMON_LDADD)
 curl_fuzzer_pop3_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_pop3_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_POP3
 curl_fuzzer_pop3_LDADD = $(COMMON_LDADD)
