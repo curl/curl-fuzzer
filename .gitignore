@@ -38,10 +38,14 @@ missing
 /curl_fuzzer_gopher_seed_corpus.zip
 /curl_fuzzer_http
 /curl_fuzzer_http_seed_corpus.zip
+/curl_fuzzer_https
+/curl_fuzzer_https_seed_corpus.zip
 /curl_fuzzer_imap
 /curl_fuzzer_imap_seed_corpus.zip
 /curl_fuzzer_ldap
 /curl_fuzzer_ldap_seed_corpus.zip
+/curl_fuzzer_mqtt
+/curl_fuzzer_mqtt_seed_corpus.zip
 /curl_fuzzer_pop3
 /curl_fuzzer_pop3_seed_corpus.zip
 /curl_fuzzer_rtmp
