@@ -8,7 +8,7 @@
       apt:
         name:
           - lcov
-          - clang-3.7
+          - llvm
           - libev-dev
           - libc-ares-dev
           - libstdc++-4.8-dev
