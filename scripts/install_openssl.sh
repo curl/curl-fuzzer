@@ -49,6 +49,7 @@ ${ARCH_PROG} ./config --prefix=${INSTALLDIR} \
                       enable-ssl3-method \
                       enable-nextprotoneg \
                       enable-weak-ssl-ciphers \
+                      --with-fuzzer-lib=/usr/lib/libFuzzingEngine \
                       $CFLAGS \
                       ${OPENSSLFLAGS}
 
