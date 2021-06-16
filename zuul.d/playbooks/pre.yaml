@@ -11,7 +11,7 @@
           - llvm
           - libev-dev
           - libc-ares-dev
-          - libstdc++-4.8-dev
+          - libstdc++-7-dev
           - libidn2-0-dev
           - libssh2-1-dev
           - krb5-user
