@@ -1,0 +1,39 @@
+- job:
+    name: curl-fuzz-base
+    abstract: true
+    pre-run: zuul.d/playbooks/pre.yaml
+    run: zuul.d/playbooks/run.yaml
+    nodeset: ubuntu-focal
+
+- job:
+    name: curl-fuzz-mainline
+    parent: curl-fuzz-base
+    vars:
+      curl_test: mainline
+
+- job:
+    name: curl-fuzz-code-coverage
+    parent: curl-fuzz-base
+    vars:
+      curl_test: codecoverage
+
+- job:
+    name: curl-fuzz-code-profile
+    parent: curl-fuzz-base
+    vars:
+      curl_test: codeprofile
+
+- job:
+    name: curl-fuzz-oss
+    parent: curl-fuzz-base
+    vars:
+      curl_test: oss-fuzz
+      curl_script: travisoss
+
+- project:
+    check:
+      jobs:
+        - curl-fuzz-mainline
+        - curl-fuzz-code-coverage
+        - curl-fuzz-code-profile
+        - curl-fuzz-oss

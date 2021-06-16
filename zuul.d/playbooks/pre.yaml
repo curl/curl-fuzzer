@@ -1,0 +1,18 @@
+- hosts: all
+  roles:
+    - role: ensure-docker
+      when: curl_test == 'oss-fuzz'
+  tasks:
+    - name: Install dependencies
+      become: true
+      apt:
+        name:
+          - lcov
+          - clang-3.7
+          - libev-dev
+          - libc-ares-dev
+          - libstdc++-4.8-dev
+          - libidn2-0-dev
+          - libssh2-1-dev
+          - krb5-user
+          - pkg-config
