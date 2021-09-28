@@ -78,6 +78,9 @@
 /* Temporary write array size */
 #define TEMP_WRITE_ARRAY_SIZE           10
 
+/* Maximum write size in bytes to stop unbounded writes (50MB) */
+#define MAXIMUM_WRITE_LENGTH            52428800
+
 /* Cookie-jar path. */
 #define FUZZ_COOKIE_JAR_PATH            "/dev/null"
 
@@ -179,6 +182,9 @@ typedef struct fuzz_data
 
   /* Temporary writefunction state */
   char write_array[TEMP_WRITE_ARRAY_SIZE];
+
+  /* Cumulative length of "written" data */
+  size_t written_data;
 
   /* Upload data and length; */
   const uint8_t *upload1_data;
