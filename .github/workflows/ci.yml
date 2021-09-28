@@ -15,6 +15,7 @@ jobs:
           - ubuntu-18.04
         tool:
           - mainline
+          - ci_oss
     steps:
       - name: Install dependencies (Ubuntu)
         run: >-
