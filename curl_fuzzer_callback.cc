@@ -222,5 +222,16 @@ size_t fuzz_write_callback(void *contents,
      exercised. */
   memcpy(fuzz->write_array, contents, copy_len);
 
+  /* Add on the total to the count. If it exceeds the maximum then return
+     zero to the caller so that the transfer is terminated early. */
+  fuzz->written_data += total;
+
+  if(fuzz->written_data > MAXIMUM_WRITE_LENGTH) {
+    FV_PRINTF(fuzz,
+              "FUZZ: Exceeded maximum write length (%lu) \n",
+              fuzz->written_data);
+    total = 0;
+  }
+
   return total;
 }
