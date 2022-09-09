@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2017 - 2021, Max Dymond, <cmeister2@gmail.com>, et al.
+ * Copyright (C) 2017 - 2022, Max Dymond, <cmeister2@gmail.com>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -462,81 +462,78 @@ int fuzz_select(int nfds,
 }
 
 /**
- * Set allowed protocols based on the compile options
+ * Set allowed protocols based on the compile options.
+ *
+ * Note that it can only use ONE of the FUZZ_PROTOCOLS_* defines.a
  */
 int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 {
   int rc = 0;
-  unsigned long allowed_protocols = 0;
+  const char *allowed_protocols = "";
 
 #ifdef FUZZ_PROTOCOLS_ALL
   /* Do not allow telnet currently as it accepts input from stdin. */
-  allowed_protocols |= CURLPROTO_ALL & ~CURLPROTO_TELNET;
+  allowed_protocols =
+    "dict,file,ftp,ftps,gopher,gophers,http,https,imap,imaps,"
+    "ldap,ldaps,mqtt,pop3,pop3s,rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts,"
+    "rtsp,scp,sftp,smb,smbs,smtp,smtps,tftp";
 #endif
 #ifdef FUZZ_PROTOCOLS_DICT
-  allowed_protocols |= CURLPROTO_DICT;
+  allowed_protocols = "dict";
 #endif
 #ifdef FUZZ_PROTOCOLS_FILE
-  allowed_protocols |= CURLPROTO_FILE;
+  allowed_protocols = "file";
 #endif
 #ifdef FUZZ_PROTOCOLS_FTP
-  allowed_protocols |= CURLPROTO_FTP;
-  allowed_protocols |= CURLPROTO_FTPS;
+  allowed_protocols = "ftp,ftps";
 #endif
 #ifdef FUZZ_PROTOCOLS_GOPHER
-  allowed_protocols |= CURLPROTO_GOPHER;
+  allowed_protocols = "gopher,gophers";
 #endif
 #ifdef FUZZ_PROTOCOLS_HTTP
-  allowed_protocols |= CURLPROTO_HTTP;
+  allowed_protocols = "http";
 #endif
 #ifdef FUZZ_PROTOCOLS_HTTPS
-  allowed_protocols |= CURLPROTO_HTTPS;
+  allowed_protocols = "https";
 #endif
 #ifdef FUZZ_PROTOCOLS_IMAP
-  allowed_protocols |= CURLPROTO_IMAP;
-  allowed_protocols |= CURLPROTO_IMAPS;
+  allowed_protocols = "imap,imaps";
 #endif
 #ifdef FUZZ_PROTOCOLS_LDAP
-  allowed_protocols |= CURLPROTO_LDAP;
-  allowed_protocols |= CURLPROTO_LDAPS;
+  allowed_protocols = "ldap,ldaps";
 #endif
 #ifdef FUZZ_PROTOCOLS_MQTT
-  allowed_protocols |= CURLPROTO_MQTT;
+  allowed_protocols = "mqtt";
 #endif
 #ifdef FUZZ_PROTOCOLS_POP3
-  allowed_protocols |= CURLPROTO_POP3;
-  allowed_protocols |= CURLPROTO_POP3S;
+  allowed_protocols = "pop3,pop3s";
 #endif
 #ifdef FUZZ_PROTOCOLS_RTMP
-  allowed_protocols |= CURLPROTO_RTMP;
-  allowed_protocols |= CURLPROTO_RTMPE;
-  allowed_protocols |= CURLPROTO_RTMPS;
-  allowed_protocols |= CURLPROTO_RTMPT;
-  allowed_protocols |= CURLPROTO_RTMPTE;
-  allowed_protocols |= CURLPROTO_RTMPTS;
+  allowed_protocols = "rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts";
 #endif
 #ifdef FUZZ_PROTOCOLS_RTSP
-  allowed_protocols |= CURLPROTO_RTSP;
+  allowed_protocols = "rtsp";
 #endif
 #ifdef FUZZ_PROTOCOLS_SCP
-  allowed_protocols |= CURLPROTO_SCP;
+  allowed_protocols = "scp";
 #endif
 #ifdef FUZZ_PROTOCOLS_SFTP
-  allowed_protocols |= CURLPROTO_SFTP;
+  allowed_protocols = "sftp";
 #endif
 #ifdef FUZZ_PROTOCOLS_SMB
-  allowed_protocols |= CURLPROTO_SMB;
-  allowed_protocols |= CURLPROTO_SMBS;
+  allowed_protocols = "smb,smbs";
 #endif
 #ifdef FUZZ_PROTOCOLS_SMTP
-  allowed_protocols |= CURLPROTO_SMTP;
-  allowed_protocols |= CURLPROTO_SMTPS;
+  allowed_protocols = "smtp,smtps";
 #endif
 #ifdef FUZZ_PROTOCOLS_TFTP
-  allowed_protocols |= CURLPROTO_TFTP;
+  allowed_protocols = "tftp";
+#endif
+#ifdef FUZZ_PROTOCOLS_WS
+  allowed_protocols = "ws,wss";
 #endif
 
-  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS, allowed_protocols));
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
 
 EXIT_LABEL:
 

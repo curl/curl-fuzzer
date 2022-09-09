@@ -53,6 +53,7 @@ pushd ${SRCDIR}
             --enable-maintainer-mode \
             --disable-symbol-hiding \
             --enable-ipv6 \
+            --enable-websockets \
             --with-random=/dev/null \
             ${SSLOPTION} \
             ${NGHTTPOPTION} \

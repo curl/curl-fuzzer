@@ -5,7 +5,7 @@
 #                            | (__| |_| |  _ <| |___
 #                             \___|\___/|_| \_\_____|
 #
-# Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+# Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
@@ -52,6 +52,7 @@ FUZZPROGS = curl_fuzzer \
 			curl_fuzzer_sftp \
 			curl_fuzzer_smb \
 			curl_fuzzer_smtp \
+			curl_fuzzer_ws \
 			curl_fuzzer_tftp
 FUZZLIBS = libstandaloneengine.a
 
@@ -119,6 +120,9 @@ curl_fuzzer_smtp_LDADD = $(COMMON_LDADD)
 curl_fuzzer_tftp_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_tftp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_TFTP
 curl_fuzzer_tftp_LDADD = $(COMMON_LDADD)
+curl_fuzzer_ws_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_ws_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_WS
+curl_fuzzer_ws_LDADD = $(COMMON_LDADD)
 
 # Unit test fuzzers
 curl_fuzzer_fnmatch_SOURCES = fuzz_fnmatch.cc
