@@ -36,6 +36,8 @@ LIBS = -lpthread -lm
 LIB_FUZZING_ENGINE ?= libstandaloneengine.a
 
 FUZZPROGS = curl_fuzzer \
+ curl_fuzzer_altsvc \
+ curl_fuzzer_base64 \
  curl_fuzzer_dict \
  curl_fuzzer_file \
  curl_fuzzer_ftp \
@@ -134,6 +136,14 @@ fuzz_url_LDADD = $(COMMON_LDADD)
 curl_fuzzer_fnmatch_SOURCES = fuzz_fnmatch.cc
 curl_fuzzer_fnmatch_CXXFLAGS = $(COMMON_FLAGS)
 curl_fuzzer_fnmatch_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_altsvc_SOURCES = fuzz_altsvc.cc
+curl_fuzzer_altsvc_CXXFLAGS = $(COMMON_FLAGS)
+curl_fuzzer_altsvc_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_base64_SOURCES = fuzz_base64.cc
+curl_fuzzer_base64_CXXFLAGS = $(COMMON_FLAGS)
+curl_fuzzer_base64_LDADD = $(COMMON_LDADD)
 
 # Create the seed corpora zip files.
 zip:

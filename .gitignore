@@ -26,6 +26,10 @@ m4/
 Makefile
 Makefile.in
 missing
+/curl_fuzzer_altsvc
+/curl_fuzzer_altsvc_seed_corpus.zip
+/curl_fuzzer_base64
+/curl_fuzzer_base64_seed_corpus.zip
 /curl_fuzzer_dict
 /curl_fuzzer_dict_seed_corpus.zip
 /curl_fuzzer_file
