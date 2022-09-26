@@ -31,8 +31,8 @@ shift $((OPTIND-1))
 export CC=clang
 export CXX=clang++
 FUZZ_FLAG="-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
-export CFLAGS="-fsanitize=address"
-export CXXFLAGS="-fsanitize=address -stdlib=libstdc++ $FUZZ_FLAG"
+export CFLAGS="-fsanitize=address,fuzzer-no-link"
+export CXXFLAGS="-fsanitize=address,fuzzer-no-link -stdlib=libstdc++ $FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 export OPENSSLFLAGS="-fno-sanitize=alignment"
 
