@@ -2,6 +2,8 @@
 *.gcno
 *.o
 *.pyc
+*.swp
+*.swo
 .deps/
 .idea/
 aclocal.m4*
@@ -32,6 +34,10 @@ missing
 /curl_fuzzer_base64_seed_corpus.zip
 /curl_fuzzer_dict
 /curl_fuzzer_dict_seed_corpus.zip
+/curl_fuzzer_doh
+/curl_fuzzer_doh_seed_corpus.zip
+/curl_fuzzer_escape
+/curl_fuzzer_escape_seed_corpus.zip
 /curl_fuzzer_file
 /curl_fuzzer_file_seed_corpus.zip
 /curl_fuzzer_fnmatch
@@ -50,6 +56,8 @@ missing
 /curl_fuzzer_ldap_seed_corpus.zip
 /curl_fuzzer_mqtt
 /curl_fuzzer_mqtt_seed_corpus.zip
+/curl_fuzzer_parsedate
+/curl_fuzzer_parsedate_seed_corpus.zip
 /curl_fuzzer_pop3
 /curl_fuzzer_pop3_seed_corpus.zip
 /curl_fuzzer_rtmp
@@ -66,3 +74,10 @@ missing
 /curl_fuzzer_smtp_seed_corpus.zip
 /curl_fuzzer_tftp
 /curl_fuzzer_tftp_seed_corpus.zip
+/curl_fuzzer_url
+/curl_fuzzer_url_seed_corpus.zip
+/curl_fuzzer_ws
+/curl_fuzzer_ws_seed_corpus.zip
+test-driver
+fuzz_url
+/curl/
