@@ -31,7 +31,7 @@ extern "C"
   #include <assert.h>
   #define WARN_UNUSED_RESULT /* hack */
   #define DEBUGBUILD
-  #include "curl/lib/dynbuf.h"
+  #include <lib/dynbuf.h>
 
   typedef enum {
     DOH_OK,

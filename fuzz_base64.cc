@@ -28,10 +28,10 @@ extern "C"
   #include <unistd.h>
   #include <inttypes.h>
   #include <curl/curl.h>
-  #include "curl/lib/curl_base64.h"
-  #include "curl/lib/curl_printf.h"
-  #include "curl/lib/curl_memory.h"
-  #include "curl/lib/memdebug.h"
+  #include <lib/curl_base64.h>
+  #include <lib/curl_printf.h>
+  #include <lib/curl_memory.h>
+  #include <lib/memdebug.h>
   #include <assert.h>
 }
 

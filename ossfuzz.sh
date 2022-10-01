@@ -23,6 +23,7 @@
 
 # Save off the current folder as the build root.
 export BUILD_ROOT=$PWD
+export CURLDIR=/src/curl
 SCRIPTDIR=${BUILD_ROOT}/scripts
 
 . ${SCRIPTDIR}/fuzz_targets
@@ -60,7 +61,7 @@ fi
 ${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
 
 # Compile curl
-${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}
+${SCRIPTDIR}/install_curl.sh $CURLDIR ${INSTALLDIR}
 
 # Build the fuzzers.
 ${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIR}

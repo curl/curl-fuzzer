@@ -139,15 +139,15 @@ curl_fuzzer_fnmatch_CXXFLAGS = $(COMMON_FLAGS)
 curl_fuzzer_fnmatch_LDADD = $(COMMON_LDADD)
 
 curl_fuzzer_altsvc_SOURCES = fuzz_altsvc.cc
-curl_fuzzer_altsvc_CXXFLAGS = $(COMMON_FLAGS)
+curl_fuzzer_altsvc_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
 curl_fuzzer_altsvc_LDADD = $(COMMON_LDADD)
 
 curl_fuzzer_base64_SOURCES = fuzz_base64.cc
-curl_fuzzer_base64_CXXFLAGS = $(COMMON_FLAGS)
+curl_fuzzer_base64_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
 curl_fuzzer_base64_LDADD = $(COMMON_LDADD)
 
 curl_fuzzer_doh_SOURCES = fuzz_doh.cc
-curl_fuzzer_doh_CXXFLAGS = $(COMMON_FLAGS)
+curl_fuzzer_doh_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
 curl_fuzzer_doh_LDADD = $(COMMON_LDADD)
 
 # Create the seed corpora zip files.

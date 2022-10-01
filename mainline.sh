@@ -6,7 +6,7 @@ set -ex
 export BUILD_ROOT=$PWD
 SCRIPTDIR=${BUILD_ROOT}/scripts
 
-CURLDIR=/tmp/curl
+export CURLDIR=/tmp/curl
 OPENSSLDIR=/tmp/openssl
 NGHTTPDIR=/tmp/nghttp2
 INSTALLDIR=/tmp/curl_install
