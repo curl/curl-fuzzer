@@ -36,24 +36,26 @@ LIBS = -lpthread -lm
 LIB_FUZZING_ENGINE ?= libstandaloneengine.a
 
 FUZZPROGS = curl_fuzzer \
-			curl_fuzzer_dict \
-			curl_fuzzer_file \
-			curl_fuzzer_ftp \
-			curl_fuzzer_gopher \
-			curl_fuzzer_http \
-			curl_fuzzer_https \
-			curl_fuzzer_imap \
-			curl_fuzzer_ldap \
-			curl_fuzzer_mqtt \
-			curl_fuzzer_pop3 \
-			curl_fuzzer_rtmp \
-			curl_fuzzer_rtsp \
-			curl_fuzzer_scp \
-			curl_fuzzer_sftp \
-			curl_fuzzer_smb \
-			curl_fuzzer_smtp \
-			curl_fuzzer_ws \
-			curl_fuzzer_tftp
+ curl_fuzzer_dict \
+ curl_fuzzer_file \
+ curl_fuzzer_ftp \
+ curl_fuzzer_gopher \
+ curl_fuzzer_http \
+ curl_fuzzer_https \
+ curl_fuzzer_imap \
+ curl_fuzzer_ldap \
+ curl_fuzzer_mqtt \
+ curl_fuzzer_pop3 \
+ curl_fuzzer_rtmp \
+ curl_fuzzer_rtsp \
+ curl_fuzzer_scp \
+ curl_fuzzer_sftp \
+ curl_fuzzer_smb \
+ curl_fuzzer_smtp \
+ curl_fuzzer_ws \
+ curl_fuzzer_tftp \
+ fuzz_url
+
 FUZZLIBS = libstandaloneengine.a
 
 COMMON_SOURCES = curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc
@@ -123,6 +125,10 @@ curl_fuzzer_tftp_LDADD = $(COMMON_LDADD)
 curl_fuzzer_ws_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_ws_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_WS
 curl_fuzzer_ws_LDADD = $(COMMON_LDADD)
+
+fuzz_url_SOURCES = fuzz_url.cc
+fuzz_url_CXXFLAGS = $(COMMON_FLAGS)
+fuzz_url_LDADD = $(COMMON_LDADD)
 
 # Unit test fuzzers
 curl_fuzzer_fnmatch_SOURCES = fuzz_fnmatch.cc
