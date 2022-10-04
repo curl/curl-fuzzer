@@ -70,3 +70,8 @@ To add a new TLV:
   from a file, or from test data)
 - Add support for it in the fuzzer: `curl_fuzzer.cc`, `curl_fuzzer.h`. This
   likely means adding handling of the TLV to `fuzz_parse_tlv()`.
+- Ensure that `FUZZ_CURLOPT_TRACKER_SPACE` can encompass your additional TLVs!
+- If you decide to change a TLV number after you have created it and have
+  generated test cases before you changed the TLV, rerun the test case
+  generation to ensure your current TLV numbering maps your test cases as you
+  expect.
