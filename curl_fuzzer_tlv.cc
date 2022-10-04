@@ -162,12 +162,19 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
 
       /* This TLV may have sub TLVs. */
       fuzz_add_mime_part(tlv, fuzz->part);
+
       break;
 
     case TLV_TYPE_POSTFIELDS:
       FCHECK_OPTION_UNSET(fuzz, CURLOPT_POSTFIELDS);
       fuzz->postfields = fuzz_tlv_to_string(tlv);
       FSET_OPTION(fuzz, CURLOPT_POSTFIELDS, fuzz->postfields);
+      break;
+
+    case TLV_TYPE_HTTPPOSTBODY:
+      FCHECK_OPTION_UNSET(fuzz, CURLOPT_HTTPPOST);
+      fuzz_setup_http_post(fuzz, tlv);
+      FSET_OPTION(fuzz, CURLOPT_HTTPPOST, fuzz->httppost);
       break;
 
     /* Define a set of u32 options. */
@@ -179,6 +186,10 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FU32TLV(fuzz, TLV_TYPE_RTSP_REQUEST, CURLOPT_RTSP_REQUEST);
     FU32TLV(fuzz, TLV_TYPE_RTSP_CLIENT_CSEQ, CURLOPT_RTSP_CLIENT_CSEQ);
     FU32TLV(fuzz, TLV_TYPE_HTTP_VERSION, CURLOPT_HTTP_VERSION);
+    FU32TLV(fuzz, TLV_TYPE_NETRC, CURLOPT_NETRC);
+    FU32TLV(fuzz, TLV_TYPE_WS_OPTIONS, CURLOPT_WS_OPTIONS);
+    FU32TLV(fuzz, TLV_TYPE_CONNECT_ONLY, CURLOPT_CONNECT_ONLY);
+    FU32TLV(fuzz, TLV_TYPE_POST, CURLOPT_POST);
 
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
@@ -195,6 +206,12 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FSINGLETONTLV(fuzz, TLV_TYPE_RTSP_STREAM_URI, CURLOPT_RTSP_STREAM_URI);
     FSINGLETONTLV(fuzz, TLV_TYPE_RTSP_TRANSPORT, CURLOPT_RTSP_TRANSPORT);
     FSINGLETONTLV(fuzz, TLV_TYPE_MAIL_AUTH, CURLOPT_MAIL_AUTH);
+    FSINGLETONTLV(fuzz, TLV_TYPE_LOGIN_OPTIONS, CURLOPT_LOGIN_OPTIONS);
+    FSINGLETONTLV(fuzz, TLV_TYPE_XOAUTH2_BEARER, CURLOPT_XOAUTH2_BEARER);
+    FSINGLETONTLV(fuzz, TLV_TYPE_USERPWD, CURLOPT_USERPWD);
+    FSINGLETONTLV(fuzz, TLV_TYPE_USERAGENT, CURLOPT_USERAGENT);
+    FSINGLETONTLV(fuzz, TLV_TYPE_SSH_HOST_PUBLIC_KEY_SHA256, CURLOPT_SSH_HOST_PUBLIC_KEY_SHA256);
+    FSINGLETONTLV(fuzz, TLV_TYPE_HSTS, CURLOPT_HSTS);
 
     default:
       /* The fuzzer generates lots of unknown TLVs - we don't want these in the
@@ -229,6 +246,32 @@ char *fuzz_tlv_to_string(TLV *tlv)
   }
 
   return tlvstr;
+}
+
+/* set up for CURLOPT_HTTPPOST, an alternative API to CURLOPT_MIMEPOST */
+void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv)
+{
+  if (fuzz->httppost == NULL) {
+    struct curl_httppost *post = NULL;
+    struct curl_httppost *last = NULL;
+
+    fuzz->post_body = fuzz_tlv_to_string(tlv);
+    
+    /* This is just one of several possible entrypoints to 
+     * the HTTPPOST API. see https://curl.se/libcurl/c/curl_formadd.html
+     * for lots of others which could be added here. 
+     */
+    curl_formadd(&post, &last,
+		 CURLFORM_COPYNAME, FUZZ_HTTPPOST_NAME,
+		 CURLFORM_PTRCONTENTS, fuzz->post_body,
+		 CURLFORM_CONTENTLEN, (curl_off_t) strlen(fuzz->post_body),
+		 CURLFORM_END);
+
+    fuzz->last_post_part = last;
+    fuzz->httppost = post;
+  }
+
+  return;
 }
 
 /**

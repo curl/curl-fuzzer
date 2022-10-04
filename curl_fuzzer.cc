@@ -89,6 +89,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     curl_easy_setopt(fuzz.easy, CURLOPT_MIMEPOST, fuzz.mime);
   }
 
+  if (fuzz.httppost != NULL) {
+    curl_easy_setopt(fuzz.easy, CURLOPT_HTTPPOST, fuzz.httppost);
+  }
+
   /* Run the transfer. */
   fuzz_handle_transfer(&fuzz);
 
@@ -251,6 +255,20 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   if(fuzz->easy != NULL) {
     curl_easy_cleanup(fuzz->easy);
     fuzz->easy = NULL;
+  }
+
+  /* When you have passed the struct curl_httppost pointer to curl_easy_setopt
+   * (using the CURLOPT_HTTPPOST option), you must not free the list until after
+   *  you have called curl_easy_cleanup for the curl handle.
+   *  https://curl.se/libcurl/c/curl_formadd.html */
+  if (fuzz->httppost != NULL) {
+    curl_formfree(fuzz->httppost);
+    fuzz->httppost = NULL;
+  }
+
+  // free after httppost and last_post_part.
+  if (fuzz->post_body != NULL) {
+    fuzz_free((void **)&fuzz->post_body);
   }
 }
 
