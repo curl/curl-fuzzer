@@ -192,8 +192,23 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
                         fuzz_write_callback));
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_WRITEDATA, fuzz));
 
-  /* Set the cookie jar so cookies are tested. */
+  /* Set the writable cookie jar path so cookies are tested. */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_COOKIEJAR, FUZZ_COOKIE_JAR_PATH));
+
+  /* Set the RO cookie file path so cookies are tested. */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_COOKIEFILE, FUZZ_RO_COOKIE_FILE_PATH));
+
+  /* Set altsvc header cache filepath so that it can be fuzzed. */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_ALTSVC, FUZZ_ALT_SVC_HEADER_CACHE_PATH));
+
+  /* Set the hsts header cache filepath so that it can be fuzzed. */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_HSTS, FUZZ_HSTS_HEADER_CACHE_PATH));
+
+  /* Set the Certificate Revocation List file path so it can be fuzzed */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CRLFILE, FUZZ_CRL_FILE_PATH));
+
+  /* Set the .netrc file path so it can be fuzzed */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_NETRC_FILE, FUZZ_NETRC_FILE_PATH));
 
   /* Time out requests quickly. */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS, 200L));

@@ -95,8 +95,23 @@
 /* convenience string for HTTPPOST body name */
 #define	FUZZ_HTTPPOST_NAME		"test"
 
-/* Cookie-jar path. */
+/* Cookie-jar WRITE (CURLOPT_COOKIEJAR) path. */
 #define FUZZ_COOKIE_JAR_PATH            "/dev/null"
+
+/* Cookie-jar READ (CURLOPT_COOKIEFILE) path. */
+#define FUZZ_RO_COOKIE_FILE_PATH	"/dev/null"
+
+/* Alt-Svc header cache path */
+#define FUZZ_ALT_SVC_HEADER_CACHE_PATH	"/dev/null"
+
+/* HSTS header cache path */
+#define FUZZ_HSTS_HEADER_CACHE_PATH 	"/dev/null"
+
+/* Certificate Revocation List file path */
+#define FUZZ_CRL_FILE_PATH		"/dev/null"
+
+/* .netrc file path */
+#define FUZZ_NETRC_FILE_PATH		"/dev/null"
 
 /* Number of supported responses */
 #define TLV_MAX_NUM_RESPONSES           11
