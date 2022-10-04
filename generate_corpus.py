@@ -92,7 +92,7 @@ def get_options():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--url", required=True)
-    parser.add_argument("--curl_test_dir", required=True)
+    parser.add_argument("--curl_test_dir", default=".")
     parser.add_argument("--username")
     parser.add_argument("--password")
     parser.add_argument("--postfields")
