@@ -36,14 +36,15 @@ ${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
 ${SCRIPTDIR}/download_curl.sh /tmp/curlcov
 
 # Move cURL to a subfolder of this folder to get the paths right.
-if [[ -d ${BUILD_ROOT}/curl ]]
+export CURLDIR=${BUILD_ROOT}/curl
+if [[ -d ${CURLDIR} ]]
 then
-  rm -rf ${BUILD_ROOT}/curl
+  rm -rf ${CURLDIR}
 fi
-mv /tmp/curlcov ${BUILD_ROOT}/curl
+mv /tmp/curlcov ${CURLDIR}
 
 # Compile and install cURL to a second folder with code coverage.
-${SCRIPTDIR}/install_curl.sh -c ${BUILD_ROOT}/curl ${INSTALLDIR}
+${SCRIPTDIR}/install_curl.sh -c ${CURLDIR} ${INSTALLDIR}
 
 # Compile and test the fuzzer with code coverage
 ${SCRIPTDIR}/compile_fuzzer.sh -c ${INSTALLDIR}
