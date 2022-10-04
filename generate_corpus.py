@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import corpus
+from corpus_curl_opt_http_auth import CurlOptHttpAuth
 log = logging.getLogger(__name__)
 
 
@@ -44,6 +45,7 @@ def generate_corpus(options):
         enc.maybe_write_string(enc.TYPE_USERNAME, options.username)
         enc.maybe_write_string(enc.TYPE_PASSWORD, options.password)
         enc.maybe_write_string(enc.TYPE_POSTFIELDS, options.postfields)
+        enc.maybe_write_string(enc.TYPE_HTTPPOSTBODY, options.postbody)
         enc.maybe_write_string(enc.TYPE_COOKIE, options.cookie)
         enc.maybe_write_string(enc.TYPE_RANGE, options.range)
         enc.maybe_write_string(enc.TYPE_CUSTOMREQUEST, options.customrequest)
@@ -53,8 +55,13 @@ def generate_corpus(options):
         enc.maybe_write_string(enc.TYPE_RTSP_STREAM_URI, options.rtspstreamuri)
         enc.maybe_write_string(enc.TYPE_RTSP_TRANSPORT, options.rtsptransport)
         enc.maybe_write_string(enc.TYPE_MAIL_AUTH, options.mailauth)
+        enc.maybe_write_string(enc.TYPE_LOGIN_OPTIONS, options.loginoptions)
+        enc.maybe_write_string(enc.TYPE_XOAUTH2_BEARER, options.bearertoken)
+        enc.maybe_write_string(enc.TYPE_USERPWD, options.user_and_pass)
+        enc.maybe_write_string(enc.TYPE_USERAGENT, options.useragent)
+        enc.maybe_write_string(enc.TYPE_SSH_HOST_PUBLIC_KEY_SHA256, options.hostpksha256)
+        enc.maybe_write_string(enc.TYPE_HSTS, options.hsts)
 
-        enc.maybe_write_u32(enc.TYPE_HTTPAUTH, options.httpauth)
         enc.maybe_write_u32(enc.TYPE_OPTHEADER, options.optheader)
         enc.maybe_write_u32(enc.TYPE_NOBODY, options.nobody)
         enc.maybe_write_u32(enc.TYPE_FOLLOWLOCATION, options.followlocation)
@@ -62,6 +69,26 @@ def generate_corpus(options):
         enc.maybe_write_u32(enc.TYPE_RTSP_REQUEST, options.rtsprequest)
         enc.maybe_write_u32(enc.TYPE_RTSP_CLIENT_CSEQ, options.rtspclientcseq)
         enc.maybe_write_u32(enc.TYPE_HTTP_VERSION, options.httpversion)
+        enc.maybe_write_u32(enc.TYPE_NETRC, options.netrclevel)
+        enc.maybe_write_u32(enc.TYPE_CONNECT_ONLY, options.connectonly)
+
+        if options.httpauth:
+            # translate a string HTTP auth name to an unsigned long bitmask
+            # value in the format CURLOPT_HTTPAUTH expects
+            log.debug(f"Mapping provided CURLOPT_HTTPAUTH='{options.httpauth}' "
+                f"to {CurlOptHttpAuth[options.httpauth].value}L (ulong)")
+            http_auth_value = CurlOptHttpAuth[options.httpauth].value
+            enc.maybe_write_u32(enc.TYPE_HTTPAUTH, http_auth_value)
+
+        if options.wsoptions:
+            # can only be 1 or unset currently.
+            # https://curl.se/libcurl/c/CURLOPT_WS_OPTIONS.html
+            enc.write_u32(enc.TYPE_WS_OPTIONS, 1)
+
+        if options.post:
+            # can only be set to 1 or unset
+            # https://curl.se/libcurl/c/CURLOPT_POST.html
+            enc.write_u32(enc.TYPE_POST, 1)
 
         # Write the first upload to the file.
         if options.upload1:
@@ -96,6 +123,7 @@ def get_options():
     parser.add_argument("--username")
     parser.add_argument("--password")
     parser.add_argument("--postfields")
+    parser.add_argument("--postbody", type=str)
     parser.add_argument("--header", action="append")
     parser.add_argument("--cookie")
     parser.add_argument("--range")
@@ -103,7 +131,7 @@ def get_options():
     parser.add_argument("--mailfrom")
     parser.add_argument("--mailrecipient", action="append")
     parser.add_argument("--mimepart", action="append")
-    parser.add_argument("--httpauth", type=int)
+    parser.add_argument("--httpauth", type=str)
     parser.add_argument("--optheader", type=int)
     parser.add_argument("--nobody", type=int)
     parser.add_argument("--followlocation", type=int)
@@ -116,6 +144,16 @@ def get_options():
     parser.add_argument("--rtspclientcseq", type=int)
     parser.add_argument("--mailauth")
     parser.add_argument("--httpversion", type=int)
+    parser.add_argument("--loginoptions", type=str)
+    parser.add_argument("--bearertoken", type=str)
+    parser.add_argument("--user_and_pass", type=str)
+    parser.add_argument("--useragent", type=str)
+    parser.add_argument("--netrclevel", type=int)
+    parser.add_argument("--hostpksha256", type=str)
+    parser.add_argument("--wsoptions", action='store_true')
+    parser.add_argument("--connectonly", type=int)
+    parser.add_argument("--post", action='store_true')
+    parser.add_argument("--hsts")
 
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")
