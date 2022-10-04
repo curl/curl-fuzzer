@@ -18,6 +18,14 @@ OPENSSLDIR=/tmp/openssl
 NGHTTPDIR=/tmp/nghttp2
 INSTALLDIR=/tmp/curlcov_install
 
+# mainline.sh and codecoverage.sh use different compilers and the ASAN and
+# other LLVM specific things don't work with GCC so make sure we clean up
+# if there have been earlier mainline runs locally
+if [[ -d .deps/ && -f Makefile ]]
+then
+	make distclean
+fi
+
 # Install openssl
 ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
 
