@@ -155,6 +155,9 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   /* Check for verbose mode. */
   fuzz->verbose = (getenv("FUZZ_VERBOSE") != NULL);
 
+  FCHECK(setenv("CURL_HSTS_HTTP", "1", 0) == 0);
+  FCHECK(setenv("CURL_ALTSVC_HTTP", "1", 0) == 0);
+
 EXIT_LABEL:
 
   return rc;
