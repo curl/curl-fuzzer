@@ -48,6 +48,7 @@ FUZZPROGS = curl_fuzzer \
  curl_fuzzer_imap \
  curl_fuzzer_ldap \
  curl_fuzzer_mqtt \
+ curl_fuzzer_parsedate \
  curl_fuzzer_pop3 \
  curl_fuzzer_rtmp \
  curl_fuzzer_rtsp \
@@ -149,6 +150,10 @@ curl_fuzzer_base64_LDADD = $(COMMON_LDADD)
 curl_fuzzer_doh_SOURCES = fuzz_doh.cc
 curl_fuzzer_doh_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
 curl_fuzzer_doh_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_parsedate_SOURCES = fuzz_parsedate.cc
+curl_fuzzer_parsedate_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_parsedate_LDADD = $(COMMON_LDADD)
 
 # Create the seed corpora zip files.
 zip:
