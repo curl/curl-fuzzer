@@ -40,6 +40,7 @@ FUZZPROGS = curl_fuzzer \
  curl_fuzzer_base64 \
  curl_fuzzer_dict \
  curl_fuzzer_doh \
+ curl_fuzzer_escape \
  curl_fuzzer_file \
  curl_fuzzer_ftp \
  curl_fuzzer_gopher \
@@ -150,6 +151,10 @@ curl_fuzzer_base64_LDADD = $(COMMON_LDADD)
 curl_fuzzer_doh_SOURCES = fuzz_doh.cc
 curl_fuzzer_doh_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
 curl_fuzzer_doh_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_escape_SOURCES = fuzz_escape.cc
+curl_fuzzer_escape_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_escape_LDADD = $(COMMON_LDADD)
 
 curl_fuzzer_parsedate_SOURCES = fuzz_parsedate.cc
 curl_fuzzer_parsedate_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
