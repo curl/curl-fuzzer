@@ -3,8 +3,11 @@
 # If any commands fail, fail the script immediately.
 set -ex
 
-wget https://www.zlib.net/zlib-1.2.12.tar.gz -O /tmp/zlib-1.2.12.tar.gz
-tar -xvf /tmp/zlib-1.2.12.tar.gz --directory /tmp
+latest="$(wget https://www.zlib.net/ -O - |
+  grep -o -E 'zlib-[0-9.]+\.tar.gz' | sort -u -r | head -1)"
 
-# Copy the directory into the correct place
-mv -v /tmp/zlib-1.2.12 $1
+wget "https://www.zlib.net/${latest}" -O /tmp/src.tar.gz
+tar -xvf /tmp/src.tar.gz --directory /tmp
+
+# Move the directory into the correct place
+mv -v /tmp/zlib-* "$1"
