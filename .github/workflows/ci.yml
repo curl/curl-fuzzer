@@ -34,6 +34,7 @@ jobs:
             git \
             make \
             autoconf \
-            libtool
+            libtool \
+            html-xml-utils
       - uses: actions/checkout@v2
       - run: './${{ matrix.tool }}.sh'
