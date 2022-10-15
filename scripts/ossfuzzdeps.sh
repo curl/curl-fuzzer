@@ -11,4 +11,5 @@ apt-get install -y make \
                    libssl-dev \
                    zlib1g-dev \
                    pkg-config \
-                   wget
+                   wget \
+                   html-xml-utils
