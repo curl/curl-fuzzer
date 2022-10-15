@@ -3,7 +3,7 @@
 # If any commands fail, fail the script immediately.
 set -ex
 
-wget https://www.zlib.net/zlib.tar.gz -O /tmp/src.tar.gz
+wget https://zlib.net/zlib.tar.gz -O /tmp/src.tar.gz
 tar -xvf /tmp/src.tar.gz --directory /tmp
 
 # Move the directory into the correct place
