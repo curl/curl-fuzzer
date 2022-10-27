@@ -211,7 +211,6 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FSINGLETONTLV(fuzz, TLV_TYPE_USERPWD, CURLOPT_USERPWD);
     FSINGLETONTLV(fuzz, TLV_TYPE_USERAGENT, CURLOPT_USERAGENT);
     FSINGLETONTLV(fuzz, TLV_TYPE_SSH_HOST_PUBLIC_KEY_SHA256, CURLOPT_SSH_HOST_PUBLIC_KEY_SHA256);
-    FSINGLETONTLV(fuzz, TLV_TYPE_HSTS, CURLOPT_HSTS);
 
     default:
       /* The fuzzer generates lots of unknown TLVs - we don't want these in the
@@ -256,10 +255,10 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv)
     struct curl_httppost *last = NULL;
 
     fuzz->post_body = fuzz_tlv_to_string(tlv);
-    
-    /* This is just one of several possible entrypoints to 
+
+    /* This is just one of several possible entrypoints to
      * the HTTPPOST API. see https://curl.se/libcurl/c/curl_formadd.html
-     * for lots of others which could be added here. 
+     * for lots of others which could be added here.
      */
     curl_formadd(&post, &last,
 		 CURLFORM_COPYNAME, FUZZ_HTTPPOST_NAME,
