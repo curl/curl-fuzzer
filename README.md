@@ -14,21 +14,37 @@ If you have a local copy of curl that you want to use instead, pass the path as
 an argument to `./mainline.sh`. It will compile and install that curl to a
 temporary directory instead.
 
-`./mainline.sh` is run regressibly by Travis CI.
-
-## I want to find the code coverage from the testcases
-
-Run `./codecoverage.sh`. It will download you a fresh copy of curl, compile it
-with `gcc`, install it, then compile the fuzzer against it. It'll then run a
-coverage run and work out the coverage of the test cases, using `lcov` to
-generate coverage information.
-
-`./codecoverage.sh` is run regressibly by Travis CI.
+`./mainline.sh` is run regressibly by Github Actions.
 
 ## I want more information when running a testcase or multiple testcases
 
 Setting the `FUZZ_VERBOSE` environment variable turns on curl verbose logging.
 This can be useful when debugging a single testcase.
+
+## I want to download public corpus test files from OSS-Fuzz
+
+The public corpus links for each target should be accessible here:
+
+- [curl_fuzzer_dict](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_dict/public.zip)
+- [curl_fuzzer_file](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_file/public.zip)
+- [curl_fuzzer_ftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ftp/public.zip)
+- [curl_fuzzer_gopher](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_gopher/public.zip)
+- [curl_fuzzer_http](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_http/public.zip)
+- [curl_fuzzer_https](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_https/public.zip)
+- [curl_fuzzer_imap](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_imap/public.zip)
+- [curl_fuzzer_ldap](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ldap/public.zip)
+- [curl_fuzzer_mqtt](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_mqtt/public.zip)
+- [curl_fuzzer_pop3](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_pop3/public.zip)
+- [curl_fuzzer_rtmp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_rtmp/public.zip)
+- [curl_fuzzer_rtsp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_rtsp/public.zip)
+- [curl_fuzzer_scp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_scp/public.zip)
+- [curl_fuzzer_sftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_sftp/public.zip)
+- [curl_fuzzer_smb](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_smb/public.zip)
+- [curl_fuzzer_smtp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_smtp/public.zip)
+- [curl_fuzzer_tftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_tftp/public.zip)
+- [curl_fuzzer_ws](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ws/public.zip)
+- [curl_fuzzer](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer/public.zip)
+- fuzz_url: no public link yet.
 
 ## I want to reproduce an error hit overnight by OSS-Fuzz
 
