@@ -4,5 +4,4 @@
 set -ex
 
 # Clone the repository to the specified directory.
-git clone --branch OpenSSL_1_0_2m https://github.com/openssl/openssl $1
-
+git clone --depth 1 --branch openssl-3.0.7 https://github.com/openssl/openssl $1
