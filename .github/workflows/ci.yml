@@ -3,37 +3,102 @@ name: CI
   push:
     branches:
       - master
+      - main
+      - '*/ci'
   pull_request:
     branches:
       - master
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
-  Build:
-    runs-on: '${{ matrix.os }}'
+  BuildFuzzers:
+    runs-on: ubuntu-latest
+    steps:
+    # These two checkout steps check out:
+    #
+    # - `curl_fuzzer` at the current ref
+    # - `curl` at HEAD of the default branch
+    #
+    # under the `fuzz` directory.
+    - name: Checkout curl fuzzer
+      uses: actions/checkout@v3
+      with:
+        path: fuzz/curl_fuzzer
+    - name: Checkout curl
+      uses: actions/checkout@v3
+      with:
+        repository: curl/curl
+        path: fuzz/curl
+
+    # Now that the two codebases are checked out under `fuzz`,
+    # use the CIFuzz steps to test them. To do this we pass
+    # `project-src-path`, which overrides the codebases that
+    # get checked out in the google/ossfuzz curl Dockerfile.
+    - name: Build Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'curl'
+        dry-run: false
+        project-src-path: fuzz
+
+    # Archive the fuzzer output (which maintains permissions)
+    - name: Create fuzz tar
+      run: tar cvf fuzz.tar build-out/
+
+    # Upload the fuzzer output
+    - name: Archive fuzz tar
+      uses: actions/upload-artifact@v3
+      with:
+        name: fuzz_tar
+        path: fuzz.tar
+
+  RunFuzzers:
+    needs: BuildFuzzers
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os:
-          - ubuntu-18.04
-        tool:
-          - mainline
-          - ci_oss
+        fuzzer:
+          - curl_fuzzer_dict
+          - curl_fuzzer_file
+          - curl_fuzzer_ftp
+          - curl_fuzzer_gopher
+          - curl_fuzzer_http
+          - curl_fuzzer_https
+          - curl_fuzzer_imap
+          - curl_fuzzer_ldap
+          - curl_fuzzer_mqtt
+          - curl_fuzzer_pop3
+          - curl_fuzzer_rtmp
+          - curl_fuzzer_rtsp
+          - curl_fuzzer_scp
+          - curl_fuzzer_sftp
+          - curl_fuzzer_smb
+          - curl_fuzzer_smtp
+          - curl_fuzzer_tftp
+          - curl_fuzzer_ws
+          - curl_fuzzer
+          - fuzz_url
     steps:
-      - name: Install dependencies (Ubuntu)
-        run: >-
-          sudo apt-get update
-
-          sudo apt-get install -y \
-            clang-3.7 \
-            krb5-user \
-            lcov \
-            libc-ares-dev \
-            libev-dev \
-            libidn2-0-dev \
-            libssh2-1-dev \
-            libstdc++-4.8-dev \
-            pkg-config \
-            git \
-            make \
-            autoconf \
-            libtool
-      - uses: actions/checkout@v2
-      - run: './${{ matrix.tool }}.sh'
+      - uses: actions/download-artifact@v3
+        with:
+          name: fuzz_tar
+      - name: Unpack fuzzer ${{ matrix.fuzzer }}
+        run: tar xvf fuzz.tar build-out/${{ matrix.fuzzer }} build-out/${{ matrix.fuzzer }}_seed_corpus.zip
+      - name: Display extracted files
+        run: ls -laR build-out/
+      - name: Run Fuzzer ${{ matrix.fuzzer }}
+        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+        with:
+          oss-fuzz-project-name: 'curl'
+          fuzz-seconds: 120
+          dry-run: false
+      - name: Upload Crash
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: artifacts
+          path: ./out/artifacts
