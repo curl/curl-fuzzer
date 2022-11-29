@@ -3,9 +3,17 @@ name: CI
   push:
     branches:
       - master
+      - main
+      - '*/ci'
   pull_request:
     branches:
       - master
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   Build:
     runs-on: '${{ matrix.os }}'
@@ -37,3 +45,35 @@ jobs:
             libtool
       - uses: actions/checkout@v2
       - run: './${{ matrix.tool }}.sh'
+
+  fuzzing:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout curl fuzzer
+      uses: actions/checkout@v3
+      with:
+        path: fuzz/curl_fuzzer
+    - name: Checkout curl
+      uses: actions/checkout@v3
+      with:
+        repository: curl/curl
+        path: fuzz/curl
+    - name: Build Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'curl'
+        dry-run: false
+        project-src-path: fuzz
+    - name: Run Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'curl'
+        fuzz-seconds: 2400
+        dry-run: false
+        project-src-path: fuzz
+    - name: Upload Crash
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: artifacts
+        path: ./out/artifacts
