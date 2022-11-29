@@ -21,8 +21,6 @@
 #
 ###########################################################################
 
-echo "CM2: We're doing it live"
-
 # Save off the current folder as the build root.
 export BUILD_ROOT=$PWD
 SCRIPTDIR=${BUILD_ROOT}/scripts
