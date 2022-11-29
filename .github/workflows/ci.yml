@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Fuzzing:
+  BuildFuzzers:
     runs-on: ubuntu-latest
     steps:
     # These two checkout steps check out:
@@ -45,17 +45,60 @@ jobs:
         dry-run: false
         project-src-path: fuzz
 
-    # Finally, run the fuzzers. This isn't parallelizable so will
-    # take a while.
-    - name: Run Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
-      with:
-        oss-fuzz-project-name: 'curl'
-        fuzz-seconds: 2400
-        dry-run: false
-    - name: Upload Crash
+    # Archive the fuzzer output (which maintains permissions)
+    - name: Create fuzz tar
+      run: tar cvf fuzz.tar build-out/
+
+    # Upload the fuzzer output
+    - name: Archive fuzz tar
       uses: actions/upload-artifact@v3
-      if: failure()
       with:
-        name: artifacts
-        path: ./out/artifacts
+        name: fuzz_tar
+        path: fuzz.tar
+
+  RunFuzzers:
+    needs: BuildFuzzers
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        fuzzer:
+          - curl_fuzzer_dict
+          - curl_fuzzer_file
+          - curl_fuzzer_ftp
+          - curl_fuzzer_gopher
+          - curl_fuzzer_http
+          - curl_fuzzer_https
+          - curl_fuzzer_imap
+          - curl_fuzzer_ldap
+          - curl_fuzzer_mqtt
+          - curl_fuzzer_pop3
+          - curl_fuzzer_rtmp
+          - curl_fuzzer_rtsp
+          - curl_fuzzer_scp
+          - curl_fuzzer_sftp
+          - curl_fuzzer_smb
+          - curl_fuzzer_smtp
+          - curl_fuzzer_tftp
+          - curl_fuzzer_ws
+          - curl_fuzzer
+          - fuzz_url
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: fuzz_tar
+      - name: Unpack fuzzer ${{ matrix.fuzzer }}
+        run: tar xvf fuzz.tar build-out/${{ matrix.fuzzer }} build-out/${{ matrix.fuzzer }}_seed_corpus.zip
+      - name: Display extracted files
+        run: ls -laR build-out/
+      - name: Run Fuzzer ${{ matrix.fuzzer }}
+        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+        with:
+          oss-fuzz-project-name: 'curl'
+          fuzz-seconds: 120
+          dry-run: false
+      - name: Upload Crash
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: artifacts
+          path: ./out/artifacts
