@@ -31,6 +31,8 @@ ZLIBDIR=/src/zlib
 OPENSSLDIR=/src/openssl
 NGHTTPDIR=/src/nghttp2
 
+echo "BUILD_ROOT: $BUILD_ROOT"
+echo "SRC: ${SRC:-undefined}"
 echo "CC: $CC"
 echo "CXX: $CXX"
 echo "LIB_FUZZING_ENGINE: $LIB_FUZZING_ENGINE"
