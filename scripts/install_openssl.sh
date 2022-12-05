@@ -16,7 +16,9 @@ fi
 if [[ ${ARCHITECTURE} == "i386" ]]
 then
     ARCH_PROG="setarch i386"
-    EC_FLAG=""
+
+    # Disabled as per https://github.com/google/oss-fuzz/blob/master/projects/openssl/build.sh
+    EC_FLAG="no-threads"
 else
     ARCH_PROG=""
     EC_FLAG="enable-ec_nistp_64_gcc_128"
