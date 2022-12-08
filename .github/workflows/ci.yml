@@ -26,6 +26,7 @@ jobs:
       with:
         oss-fuzz-project-name: 'curl'
         dry-run: false
+        keep-unaffected-fuzz-targets: true
 
     # Archive the fuzzer output (which maintains permissions)
     - name: Create fuzz tar
