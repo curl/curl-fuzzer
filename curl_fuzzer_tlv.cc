@@ -144,9 +144,12 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       }
 
       tmp = fuzz_tlv_to_string(tlv);
+      if (tmp == NULL) {
+        // keep on despite allocation failure
+        break;
+      }
       new_list = curl_slist_append(fuzz->header_list, tmp);
       if (new_list == NULL) {
-        // keep on despite allocation failure
         break;
       }
       fuzz->header_list = new_list;
@@ -155,6 +158,10 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
 
     case TLV_TYPE_MAIL_RECIPIENT:
       tmp = fuzz_tlv_to_string(tlv);
+      if (tmp == NULL) {
+        // keep on despite allocation failure
+        break;
+      }
       new_list = curl_slist_append(fuzz->mail_recipients_list, tmp);
       if (new_list != NULL) {
         fuzz->mail_recipients_list = new_list;
