@@ -270,6 +270,9 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv)
     struct curl_httppost *last = NULL;
 
     fuzz->post_body = fuzz_tlv_to_string(tlv);
+    if (fuzz->post_body == NULL) {
+      return;
+    }
 
     /* This is just one of several possible entrypoints to
      * the HTTPPOST API. see https://curl.se/libcurl/c/curl_formadd.html
