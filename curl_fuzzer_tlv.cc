@@ -100,6 +100,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
   int rc;
   char *tmp = NULL;
   uint32_t tmp_u32;
+  curl_slist *new_list;
 
   switch(tlv->type) {
     /* The pointers in response TLVs will always be valid as long as the fuzz
@@ -143,14 +144,28 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       }
 
       tmp = fuzz_tlv_to_string(tlv);
-      fuzz->header_list = curl_slist_append(fuzz->header_list, tmp);
+      if (tmp == NULL) {
+        // keep on despite allocation failure
+        break;
+      }
+      new_list = curl_slist_append(fuzz->header_list, tmp);
+      if (new_list == NULL) {
+        break;
+      }
+      fuzz->header_list = new_list;
       fuzz->header_list_count++;
       break;
 
     case TLV_TYPE_MAIL_RECIPIENT:
       tmp = fuzz_tlv_to_string(tlv);
-      fuzz->mail_recipients_list =
-                            curl_slist_append(fuzz->mail_recipients_list, tmp);
+      if (tmp == NULL) {
+        // keep on despite allocation failure
+        break;
+      }
+      new_list = curl_slist_append(fuzz->mail_recipients_list, tmp);
+      if (new_list != NULL) {
+        fuzz->mail_recipients_list = new_list;
+      }
       break;
 
     case TLV_TYPE_MIME_PART:
@@ -255,6 +270,9 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv)
     struct curl_httppost *last = NULL;
 
     fuzz->post_body = fuzz_tlv_to_string(tlv);
+    if (fuzz->post_body == NULL) {
+      return;
+    }
 
     /* This is just one of several possible entrypoints to
      * the HTTPPOST API. see https://curl.se/libcurl/c/curl_formadd.html
