@@ -157,6 +157,12 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       break;
 
     case TLV_TYPE_MAIL_RECIPIENT:
+      /* Limit the number of headers that can be added to a message to prevent
+         timeouts. */
+      if(fuzz->header_list_count >= TLV_MAX_NUM_CURLOPT_HEADER) {
+        rc = 255;
+        goto EXIT_LABEL;
+      }
       tmp = fuzz_tlv_to_string(tlv);
       if (tmp == NULL) {
         // keep on despite allocation failure
