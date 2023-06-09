@@ -171,6 +171,7 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       new_list = curl_slist_append(fuzz->mail_recipients_list, tmp);
       if (new_list != NULL) {
         fuzz->mail_recipients_list = new_list;
+        fuzz->header_list_count++;
       }
       break;
 
