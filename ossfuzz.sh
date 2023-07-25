@@ -30,6 +30,7 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 ZLIBDIR=/src/zlib
 OPENSSLDIR=/src/openssl
 NGHTTPDIR=/src/nghttp2
+GDBDIR=/src/gdb
 
 echo "BUILD_ROOT: $BUILD_ROOT"
 echo "SRC: ${SRC:-undefined}"
@@ -45,6 +46,15 @@ export MAKEFLAGS+="-j$(nproc)"
 
 # Make an install directory
 export INSTALLDIR=/src/curl_install
+
+# If necessary (i.e. this is inside the ossfuzz shell environment and
+# you've set the environment variable) then download and install GDB.
+# This installs to the default configure location.
+if [[ ${INSTALLGDB:-} == "yes" ]]
+then
+  # Install GDB
+  ${SCRIPTDIR}/handle_x.sh gdb ${GDBDIR} system || exit 1
+fi
 
 # Install zlib
 ${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1

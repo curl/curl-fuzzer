@@ -8,6 +8,7 @@ apt-get install -y make \
                    autoconf \
                    automake \
                    libtool \
+                   libgmp-dev \
                    libssl-dev \
                    zlib1g-dev \
                    pkg-config \
