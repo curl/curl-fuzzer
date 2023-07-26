@@ -32,6 +32,14 @@ OPENSSLDIR=/src/openssl
 NGHTTPDIR=/src/nghttp2
 GDBDIR=/src/gdb
 
+# Check for GDB-specific behaviour by checking for the GDBMODE flag.
+# - Compile with -O0 so that DEBUGASSERTs can be debugged in gdb.
+if [[ -n ${GDBMODE:-} ]]
+then
+  export CFLAGS="$CFLAGS -O0"
+  export CXXFLAGS="$CXXFLAGS -O0"
+fi
+
 echo "BUILD_ROOT: $BUILD_ROOT"
 echo "SRC: ${SRC:-undefined}"
 echo "CC: $CC"
@@ -47,13 +55,16 @@ export MAKEFLAGS+="-j$(nproc)"
 # Make an install directory
 export INSTALLDIR=/src/curl_install
 
-# If necessary (i.e. this is inside the ossfuzz shell environment and
-# you've set the environment variable) then download and install GDB.
-# This installs to the default configure location.
-if [[ ${INSTALLGDB:-} == "yes" ]]
+# Check for GDB-specific behaviour by checking for the GDBMODE flag.
+# - Compile and installing GDB if necessary.
+if [[ -n ${GDBMODE:-} ]]
 then
-  # Install GDB
-  ${SCRIPTDIR}/handle_x.sh gdb ${GDBDIR} system || exit 1
+  if ! type gdb 2>/dev/null
+  then
+    # If gdb isn't found, then download and install GDB.
+    # This installs to the default configure location.
+    ${SCRIPTDIR}/handle_x.sh gdb ${GDBDIR} system || exit 1
+  fi
 fi
 
 # Install zlib
