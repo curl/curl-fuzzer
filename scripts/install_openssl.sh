@@ -37,6 +37,7 @@ pushd ${SRCDIR}
 
 # Build the library.
 ${ARCH_PROG} ./config --prefix=${INSTALLDIR} \
+                      --libdir=lib \
                       --debug \
                       enable-fuzz-libfuzzer \
                       --with-fuzzer-lib=/usr/lib/libFuzzingEngine \
