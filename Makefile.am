@@ -42,6 +42,7 @@ FUZZPROGS = curl_fuzzer \
  curl_fuzzer_gopher \
  curl_fuzzer_http \
  curl_fuzzer_https \
+ curl_fuzzer_http3 \
  curl_fuzzer_imap \
  curl_fuzzer_ldap \
  curl_fuzzer_mqtt \
@@ -89,6 +90,9 @@ curl_fuzzer_http_LDADD = $(COMMON_LDADD)
 curl_fuzzer_https_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_https_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_HTTPS
 curl_fuzzer_https_LDADD = $(COMMON_LDADD)
+curl_fuzzer_http3_SOURCES = $(COMMON_SOURCES)
+curl_fuzzer_http3_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_HTTP3 -DFUZZ_PROTOCOLS_HTTPS
+curl_fuzzer_http3_LDADD = $(COMMON_LDADD)
 curl_fuzzer_imap_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_imap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_IMAP
 curl_fuzzer_imap_LDADD = $(COMMON_LDADD)

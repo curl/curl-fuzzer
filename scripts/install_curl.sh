@@ -47,7 +47,8 @@ pushd ${SRCDIR}
 
 # Build the library.
 ./buildconf
-./configure --prefix=${INSTALLDIR} \
+./configure PKG_CONFIG_PATH=${INSTALLDIR}/lib/pkgconfig \
+            --prefix=${INSTALLDIR} \
             --disable-shared \
             --enable-debug \
             --enable-maintainer-mode \
@@ -55,6 +56,9 @@ pushd ${SRCDIR}
             --enable-ipv6 \
             --enable-websockets \
             --with-random=/dev/null \
+            --with-openssl \
+            --with-nghttp3 \
+            --with-ngtcp2 \
             ${SSLOPTION} \
             ${NGHTTPOPTION} \
             ${CODE_COVERAGE_OPTION}
