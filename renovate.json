@@ -12,6 +12,17 @@
       ],
       "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}",
       "extractVersionTemplate": "{{#if extractVersion}}{{{extractVersion}}}{{else}}^v?(?<version>.+)${{/if}}"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^scripts/VERSIONS$"],
+      "matchStrings": [
+        "OPENSSL_VERSION=(?<currentValue>.*)\\s"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "openssl/openssl",
+      "versioningTemplate": "regex:^openssl-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+      "registryUrlTemplate": "https://github.com"
     }
   ]
 }
