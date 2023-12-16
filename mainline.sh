@@ -17,14 +17,16 @@ INSTALLDIR=/tmp/curl_install
 # Parse the options.
 OPTIND=1
 
-while getopts "c:n:o:" opt
+while getopts "c:n:o:t:" opt
 do
   case "$opt" in
     c) CURLDIR=$OPTARG
        ;;
-    n) NGHTTPDIR=$OPTARG
+    n) NGHTTP2DIR=$OPTARG
        ;;
     o) OPENSSLDIR=$OPTARG
+       ;;
+    t) NGTCP2DIR=$OPTARG
        ;;
   esac
 done
