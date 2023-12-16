@@ -24,5 +24,14 @@
       "versioningTemplate": "regex:^openssl-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
       "registryUrlTemplate": "https://github.com"
     }
+  ],
+  "packageRules": [
+    {
+      "matchSourceUrls": [
+        "https://github.com/actions/download-artifact",
+        "https://github.com/actions/upload-artifact"
+      ],
+      "groupName": "GitHub Actions: artifact"
+    }
   ]
 }
