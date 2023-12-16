@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# renovate: datasource=github-tags depName=openssl/openssl extractVersion=^openssl-(?<version>.+)$ registryUrl=https://github.com
+# renovate: datasource=github-tags depName=openssl/openssl versioning=regex:^openssl-(?<major>\\d+)(\\.(?<minor>\\d+))?(\\.(?<patch>\\d+))? registryUrl=https://github.com
 OPENSSL_VERSION=openssl-3.2.0
 
 # renovate: datasource=github-tags depName=nghttp2/nghttp2 versioning=semver registryUrl=https://github.com
