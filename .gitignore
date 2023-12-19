@@ -26,6 +26,8 @@ m4/
 Makefile
 Makefile.in
 missing
+/curl_fuzzer_bufq
+/curl_fuzzer_bufq_seed_corpus.zip
 /curl_fuzzer_dict
 /curl_fuzzer_dict_seed_corpus.zip
 /curl_fuzzer_file
