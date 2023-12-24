@@ -35,6 +35,7 @@
 #define TLV_MAX_CHUNK_SIZE (16 * 1024)
 #define TLV_MAX_CHUNKS_QTY (1 * 1024)
 #define TLV_MAX_MAX_SPARE (1 * 1024)
+#define TLV_MAX_RW_SIZE (TLV_MAX_CHUNKS_QTY * TLV_MAX_CHUNK_SIZE)
 
 typedef struct fuzz_data_bufq FUZZ_DATA;
 

@@ -94,7 +94,7 @@ ADD_OP:
         goto EXIT_LABEL;
       }
       tmp_u32 = to_u32(tlv->value);
-      FCHECK(tmp_u32 <= TLV_MAX_CHUNKS_QTY * TLV_MAX_CHUNK_SIZE);
+      FCHECK(tmp_u32 <= TLV_MAX_RW_SIZE);
       tmp_op = (OPERATION*) malloc(sizeof(*tmp_op));
       if (tmp_op == NULL) {
         // keep on despite allocation failure

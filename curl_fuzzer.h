@@ -262,7 +262,7 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
 int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
 int fuzz_handle_transfer(FUZZ_DATA *fuzz);
-int fuzz_handle_bufq(FUZZ_DATA *fuzz);
+int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf);
 int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sockman);
 int fuzz_select(int nfds,
                 fd_set *readfds,

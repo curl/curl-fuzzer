@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <curl/curl.h>
 extern "C" {
@@ -36,6 +37,37 @@ extern "C" {
 #include "curl_fuzzer.h"
 
 /**
+ * Allocate template buffer.  This buffer is precomputed for performance and
+ * used as a cyclic pattern when reading and writing. It can be useful to
+ * detect unexpected data shifting or corruption. The buffer is marked
+ * read-only so it cannot be written by mistake.
+ */
+static unsigned char *allocate_template_buffer(void)
+{
+  size_t sz = TLV_MAX_RW_SIZE + 256;
+  unsigned char *buf = (unsigned char *)mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+  assert(buf != (unsigned char *)-1);
+
+  /* Fill in with a cyclic pattern of 0, 1, ..., 255, 0, ... */
+  unsigned char next_byte = 0;
+  for (size_t i = 0; i < sz; i++) {
+    buf[i] = next_byte++;
+  }
+
+  int err = mprotect(buf, sz, PROT_READ);
+  assert(err == 0);
+  return buf;
+}
+
+/*
+ * Compute a pointer to a read-only buffer with our pattern, knowing that the
+ * first byte to appear is next_byte.
+ */
+static unsigned char *compute_buffer(unsigned char next_byte, unsigned char *buf) {
+  return buf + next_byte;
+}
+
+/**
  * Fuzzing entry point. This function is passed a buffer containing a test
  * case.  This test case should drive the cURL API into making a series of
  * BUFQ operations.
@@ -44,6 +76,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
   int rc = 0;
   int tlv_rc;
+  static unsigned char *template_buf = allocate_template_buffer();
   FUZZ_DATA fuzz;
   TLV tlv;
 
@@ -86,7 +119,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   FCHECK(!fuzz.use_pool || fuzz.max_spare > 0);
 
   /* Run the operations */
-  fuzz_handle_bufq(&fuzz);
+  fuzz_handle_bufq(&fuzz, template_buf);
 
 EXIT_LABEL:
 
@@ -161,24 +194,10 @@ void fuzz_free(void **ptr)
   *ptr = NULL;
 }
 
-unsigned char fill_buffer(unsigned char next_byte, unsigned char *buf, size_t length) {
-  size_t i;
-  for (i = 0; i+3 < length; i+=4, next_byte+=4) {
-    buf[i] = next_byte;
-    buf[i+1] = next_byte + 1;
-    buf[i+2] = next_byte + 2;
-    buf[i+3] = next_byte + 3;
-  }
-  for (; i < length; i++) {
-    buf[i] = next_byte++;
-  }
-  return next_byte;
-}
-
 /**
  * Function for handling the operations
  */
-int fuzz_handle_bufq(FUZZ_DATA *fuzz)
+int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf)
 {
   struct bufq q;
   struct bufc_pool pool;
@@ -200,23 +219,26 @@ int fuzz_handle_bufq(FUZZ_DATA *fuzz)
   unsigned char next_byte_write = 0;
   for(OPERATION *op = fuzz->operation_list; op != NULL; op = op->next) {
     CURLcode err = CURLE_OK;
-    unsigned char *buf = (unsigned char *)malloc(op->size * sizeof(*buf));
+
+    assert(Curl_bufq_is_empty(&q) == !buffer_bytes);
+    assert(Curl_bufq_len(&q) == buffer_bytes);
   
     switch (op->type) {
       case OP_TYPE_READ: {
         FV_PRINTF(fuzz, "OP: read, size %u\n", op->size);
+        unsigned char *buf = (unsigned char *)malloc(op->size * sizeof(*buf));
         ssize_t read = Curl_bufq_read(&q, buf, op->size, &err);
         if (read != -1) {
           FV_PRINTF(fuzz, "OP: read, success, read %zd, expect begins with %x\n", read, next_byte_read);
           buffer_bytes -= read;
           assert(buffer_bytes >= 0);
-          unsigned char *compare = (unsigned char *)malloc(read * sizeof(*buf));
-          next_byte_read = fill_buffer(next_byte_read, compare, read);
+          unsigned char *compare = compute_buffer(next_byte_read, template_buf);
+          next_byte_read += read;
           assert(memcmp(buf, compare, read) == 0);
-          free(compare);
         } else {
           FV_PRINTF(fuzz, "OP: read, error\n");
         }
+        free(buf);
         break;
       }
 
@@ -232,7 +254,7 @@ int fuzz_handle_bufq(FUZZ_DATA *fuzz)
       case OP_TYPE_WRITE:
       default: {
         FV_PRINTF(fuzz, "OP: write, size %u, begins with %x\n", op->size, next_byte_write);
-        fill_buffer(next_byte_write, buf, op->size);
+        unsigned char *buf = compute_buffer(next_byte_write, template_buf);
         ssize_t written = Curl_bufq_write(&q, buf, op->size, &err);
         if (written != -1) {
           FV_PRINTF(fuzz, "OP: write, success, written %zd\n", written);
@@ -245,8 +267,6 @@ int fuzz_handle_bufq(FUZZ_DATA *fuzz)
         break;
       }
     }
-
-    free(buf);
   }
 
   Curl_bufq_free(&q);
