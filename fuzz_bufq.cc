@@ -174,9 +174,12 @@ struct writer_cb_ctx {
   unsigned char next_byte_read;
 };
 
+/**
+ * Consume and verify up to read_len from a BUFQ via callback for Curl_bufq_pass.
+ */
 ssize_t bufq_writer_cb(void *writer_ctx,
-                         const unsigned char *buf, size_t len,
-                         CURLcode *err)
+                       const unsigned char *buf, size_t len,
+                       CURLcode *err)
 {
   struct writer_cb_ctx *ctx = (struct writer_cb_ctx *)writer_ctx;
 
@@ -197,13 +200,15 @@ ssize_t bufq_writer_cb(void *writer_ctx,
   return sz;
 }
 
-
 struct reader_cb_ctx {
   FUZZ_DATA *fuzz;
   ssize_t write_len;
   unsigned char next_byte_write;
 };
 
+/**
+ * Write up to write_len to a BUFQ via callback for Curl_bufq_slurp/sipn.
+ */
 static ssize_t bufq_reader_cb(void *reader_ctx,
                               unsigned char *buf, size_t len,
                               CURLcode *err)

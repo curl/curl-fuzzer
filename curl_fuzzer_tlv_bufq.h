@@ -23,40 +23,51 @@
 /**
  * TLV types.
  */
-#define TLV_TYPE_MAX_CHUNKS   1
-#define TLV_TYPE_CHUNK_SIZE   2
-#define TLV_TYPE_USE_POOL   3
-#define TLV_TYPE_READ_SIZE   4
-#define TLV_TYPE_WRITE_SIZE   5
-#define TLV_TYPE_SKIP_SIZE   6
-#define TLV_TYPE_MAX_SPARE 7
-#define TLV_TYPE_NO_SPARE 8
-#define TLV_TYPE_RESET 9
-#define TLV_TYPE_PEEK 10
-#define TLV_TYPE_PEEK_AT 11
-#define TLV_TYPE_SIPN 12
-#define TLV_TYPE_SLURP 13
-#define TLV_TYPE_PASS 14
+#define TLV_TYPE_MAX_CHUNKS     1
+#define TLV_TYPE_CHUNK_SIZE     2
+#define TLV_TYPE_USE_POOL       3
+#define TLV_TYPE_READ_SIZE      4
+#define TLV_TYPE_WRITE_SIZE     5
+#define TLV_TYPE_SKIP_SIZE      6
+#define TLV_TYPE_MAX_SPARE      7
+#define TLV_TYPE_NO_SPARE       8
+#define TLV_TYPE_RESET          9
+#define TLV_TYPE_PEEK           10
+#define TLV_TYPE_PEEK_AT        11
+#define TLV_TYPE_SIPN           12
+#define TLV_TYPE_SLURP          13
+#define TLV_TYPE_PASS           14
 
-#define TLV_MAX_CHUNK_SIZE (16 * 1024)
-#define TLV_MAX_CHUNKS_QTY (1 * 1024)
-#define TLV_MAX_MAX_SPARE (1 * 1024)
-#define TLV_MAX_RW_SIZE (TLV_MAX_CHUNKS_QTY * TLV_MAX_CHUNK_SIZE)
+/**
+ * Limits for fields
+ */
+#define TLV_MAX_CHUNK_SIZE      (16 * 1024)
+#define TLV_MAX_CHUNKS_QTY      (1 * 1024)
+#define TLV_MAX_MAX_SPARE       (1 * 1024)
+#define TLV_MAX_RW_SIZE         (TLV_MAX_CHUNKS_QTY * TLV_MAX_CHUNK_SIZE)
 
 typedef struct fuzz_data_bufq FUZZ_DATA;
 
-#define OP_TYPE_WRITE 0
-#define OP_TYPE_READ 1
-#define OP_TYPE_SKIP 2
-#define OP_TYPE_RESET 3
-#define OP_TYPE_PEEK 4
-#define OP_TYPE_PEEK_AT 5
-#define OP_TYPE_SIPN 6
-#define OP_TYPE_SLURP 7
-#define OP_TYPE_PASS 8
+/**
+ * Operation identifiers
+ */
+#define OP_TYPE_WRITE           0
+#define OP_TYPE_READ            1
+#define OP_TYPE_SKIP            2
+#define OP_TYPE_RESET           3
+#define OP_TYPE_PEEK            4
+#define OP_TYPE_PEEK_AT         5
+#define OP_TYPE_SIPN            6
+#define OP_TYPE_SLURP           7
+#define OP_TYPE_PASS            8
 
 typedef struct fuzz_bufq_operation {
+  /* Operation identifier */
   unsigned int type;
+
+  /* Operation size (if applicable) */
   unsigned int size;
+
+  /* Next operation or NULL if last one */
   struct fuzz_bufq_operation *next;
 } OPERATION;
