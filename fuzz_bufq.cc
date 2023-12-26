@@ -118,8 +118,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   FCHECK(fuzz.chunk_size > 0);
   FCHECK(!fuzz.use_pool || fuzz.max_spare > 0);
 
+  /* Add our template buffer */
+  fuzz.template_buf = template_buf;
+
   /* Run the operations */
-  fuzz_handle_bufq(&fuzz, template_buf);
+  fuzz_handle_bufq(&fuzz);
 
 EXIT_LABEL:
 
@@ -127,26 +130,6 @@ EXIT_LABEL:
 
   /* This function must always return 0. Non-zero codes are reserved. */
   return 0;
-}
-
-/**
- * Utility function to convert 4 bytes to a u32 predictably.
- */
-uint32_t to_u32(const uint8_t b[4])
-{
-  uint32_t u;
-  u = (b[0] << 24) + (b[1] << 16) + (b[2] << 8) + b[3];
-  return u;
-}
-
-/**
- * Utility function to convert 2 bytes to a u16 predictably.
- */
-uint16_t to_u16(const uint8_t b[2])
-{
-  uint16_t u;
-  u = (b[0] << 8) + b[1];
-  return u;
 }
 
 /**
@@ -185,19 +168,69 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
   }
 }
 
-/**
- * If a pointer has been allocated, free that pointer.
- */
-void fuzz_free(void **ptr)
+struct writer_cb_ctx {
+  FUZZ_DATA *fuzz;
+  ssize_t read_len;
+  unsigned char next_byte_read;
+};
+
+ssize_t bufq_writer_cb(void *writer_ctx,
+                         const unsigned char *buf, size_t len,
+                         CURLcode *err)
 {
-  free(*ptr);
-  *ptr = NULL;
+  struct writer_cb_ctx *ctx = (struct writer_cb_ctx *)writer_ctx;
+
+  if (ctx->read_len <= 0) {
+    *err = CURLE_AGAIN;
+    return -1;
+  }
+
+  FV_PRINTF(ctx->fuzz, "Writer CB: %zu space available, %zu pending\n", len, ctx->read_len);
+
+  size_t sz = len > ctx->read_len ? ctx->read_len : len;
+
+  unsigned char *compare = compute_buffer(ctx->next_byte_read, ctx->fuzz->template_buf);
+  assert(memcmp(buf, compare, sz) == 0);
+  ctx->next_byte_read += sz;
+  ctx->read_len -= sz;
+
+  return sz;
+}
+
+
+struct reader_cb_ctx {
+  FUZZ_DATA *fuzz;
+  ssize_t write_len;
+  unsigned char next_byte_write;
+};
+
+static ssize_t bufq_reader_cb(void *reader_ctx,
+                              unsigned char *buf, size_t len,
+                              CURLcode *err)
+{
+  struct reader_cb_ctx *ctx = (struct reader_cb_ctx *)reader_ctx;
+
+  if (ctx->write_len <= 0) {
+    *err = CURLE_AGAIN;
+    return -1;
+  }
+
+  FV_PRINTF(ctx->fuzz, "Reader CB: %zu space available, %zu pending\n", len, ctx->write_len);
+
+  size_t sz = len > ctx->write_len ? ctx->write_len : len;
+
+  unsigned char *compare = compute_buffer(ctx->next_byte_write, ctx->fuzz->template_buf);
+  memcpy(buf, compare, sz);
+  ctx->next_byte_write += sz;
+  ctx->write_len -= sz;
+
+  return sz;
 }
 
 /**
  * Function for handling the operations
  */
-int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf)
+int fuzz_handle_bufq(FUZZ_DATA *fuzz)
 {
   struct bufq q;
   struct bufc_pool pool;
@@ -224,6 +257,42 @@ int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf)
     assert(Curl_bufq_len(&q) == buffer_bytes);
   
     switch (op->type) {
+      case OP_TYPE_RESET: {
+        FV_PRINTF(fuzz, "OP: reset\n");
+        Curl_bufq_reset(&q);
+        buffer_bytes = 0;
+        next_byte_read = next_byte_write;
+        break;
+      }
+
+      case OP_TYPE_PEEK: {
+        FV_PRINTF(fuzz, "OP: peek\n");
+        const unsigned char *pbuf;
+        size_t plen;
+        bool avail = Curl_bufq_peek(&q, &pbuf, &plen);
+        if (avail) {
+          unsigned char *compare = compute_buffer(next_byte_read, fuzz->template_buf);
+          assert(memcmp(pbuf, compare, plen) == 0);
+        } else {
+          FV_PRINTF(fuzz, "OP: peek, error\n");
+        }
+        break;
+      }
+
+      case OP_TYPE_PEEK_AT: {
+        FV_PRINTF(fuzz, "OP: peek at %u\n", op->size);
+        const unsigned char *pbuf;
+        size_t plen;
+        bool avail = Curl_bufq_peek_at(&q, op->size, &pbuf, &plen);
+        if (avail) {
+          unsigned char *compare = compute_buffer(next_byte_read + op->size, fuzz->template_buf);
+          assert(memcmp(pbuf, compare, plen) == 0);
+        } else {
+          FV_PRINTF(fuzz, "OP: peek at, error\n");
+        }
+        break;
+      }
+
       case OP_TYPE_READ: {
         FV_PRINTF(fuzz, "OP: read, size %u\n", op->size);
         unsigned char *buf = (unsigned char *)malloc(op->size * sizeof(*buf));
@@ -232,13 +301,62 @@ int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf)
           FV_PRINTF(fuzz, "OP: read, success, read %zd, expect begins with %x\n", read, next_byte_read);
           buffer_bytes -= read;
           assert(buffer_bytes >= 0);
-          unsigned char *compare = compute_buffer(next_byte_read, template_buf);
+          unsigned char *compare = compute_buffer(next_byte_read, fuzz->template_buf);
           next_byte_read += read;
           assert(memcmp(buf, compare, read) == 0);
         } else {
           FV_PRINTF(fuzz, "OP: read, error\n");
         }
         free(buf);
+        break;
+      }
+
+      case OP_TYPE_SLURP: {
+        FV_PRINTF(fuzz, "OP: slurp, size %u\n", op->size);
+        struct reader_cb_ctx ctx = { .fuzz = fuzz, .write_len = op->size, .next_byte_write = next_byte_write };
+        ssize_t write = Curl_bufq_slurp(&q, bufq_reader_cb, &ctx, &err);
+        if (write != -1) {
+          FV_PRINTF(fuzz, "OP: slurp, success, wrote %zd, expect begins with %x\n", write, ctx.next_byte_write);
+          buffer_bytes += write;
+        } else {
+          FV_PRINTF(fuzz, "OP: slurp, error\n");
+          /* in case of -1, it may still have wrote something, adjust for that */
+          buffer_bytes += (op->size - ctx.write_len);
+        }
+        assert(buffer_bytes <= fuzz->chunk_size * fuzz->max_chunks);
+        next_byte_write = ctx.next_byte_write;
+        break;
+      }
+
+      case OP_TYPE_SIPN: {
+        FV_PRINTF(fuzz, "OP: sipn, size %u\n", op->size);
+        struct reader_cb_ctx ctx = { .fuzz = fuzz, .write_len = op->size, .next_byte_write = next_byte_write };
+        ssize_t write = Curl_bufq_sipn(&q, op->size, bufq_reader_cb, &ctx, &err);
+        if (write != -1) {
+          FV_PRINTF(fuzz, "OP: sipn, success, wrote %zd, expect begins with %x\n", write, ctx.next_byte_write);
+          buffer_bytes += write;
+          assert(buffer_bytes <= fuzz->chunk_size * fuzz->max_chunks);
+          next_byte_write = ctx.next_byte_write;
+        } else {
+          FV_PRINTF(fuzz, "OP: sipn, error\n");
+        }
+        break;
+      }
+
+      case OP_TYPE_PASS: {
+        FV_PRINTF(fuzz, "OP: pass, size %u\n", op->size);
+        struct writer_cb_ctx ctx = { .fuzz = fuzz, .read_len = op->size, .next_byte_read = next_byte_read };
+        ssize_t read = Curl_bufq_pass(&q, bufq_writer_cb, &ctx, &err);
+        if (read != -1) {
+          FV_PRINTF(fuzz, "OP: pass, success, read %zd, expect begins with %x\n", read, ctx.next_byte_read);
+          buffer_bytes -= read;
+        } else {
+          FV_PRINTF(fuzz, "OP: pass, error\n");
+          /* in case of -1, it may still have read something, adjust for that */
+          buffer_bytes -= (op->size - ctx.read_len);
+        }
+        assert(buffer_bytes >= 0);
+        next_byte_read = ctx.next_byte_read;
         break;
       }
 
@@ -254,7 +372,7 @@ int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf)
       case OP_TYPE_WRITE:
       default: {
         FV_PRINTF(fuzz, "OP: write, size %u, begins with %x\n", op->size, next_byte_write);
-        unsigned char *buf = compute_buffer(next_byte_write, template_buf);
+        unsigned char *buf = compute_buffer(next_byte_write, fuzz->template_buf);
         ssize_t written = Curl_bufq_write(&q, buf, op->size, &err);
         if (written != -1) {
           FV_PRINTF(fuzz, "OP: write, success, written %zd\n", written);

@@ -215,19 +215,29 @@ struct fuzz_data_bufq
   /* Verbose mode. */
   int verbose;
   
+  /* BUFQ max_chunks parameter */
   int max_chunks;
 
+  /* BUFQ chunk_size parameter */
   int chunk_size;
 
+  /* Should the run use a pool? */
   int use_pool;
 
-  int operation_count;
-
+  /* BUFQ max_spare parameter */
   int max_spare;
   
+  /* Should spares be enabled? */
   int no_spare;
 
+  /* How many operations to execute */
+  int operation_count;
+
+  /* List of operations */
   struct fuzz_bufq_operation *operation_list;
+
+  /* Template buffer for writes / read checks */
+  unsigned char *template_buf;
 };
 
 /* Function prototypes */
@@ -262,7 +272,7 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
 int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
 int fuzz_handle_transfer(FUZZ_DATA *fuzz);
-int fuzz_handle_bufq(FUZZ_DATA *fuzz, unsigned char *template_buf);
+int fuzz_handle_bufq(FUZZ_DATA *fuzz);
 int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sockman);
 int fuzz_select(int nfds,
                 fd_set *readfds,

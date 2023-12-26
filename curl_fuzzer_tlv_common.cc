@@ -25,6 +25,26 @@
 #include "curl_fuzzer.h"
 
 /**
+ * Utility function to convert 4 bytes to a u32 predictably.
+ */
+uint32_t to_u32(const uint8_t b[4])
+{
+  uint32_t u;
+  u = (b[0] << 24) + (b[1] << 16) + (b[2] << 8) + b[3];
+  return u;
+}
+
+/**
+ * Utility function to convert 2 bytes to a u16 predictably.
+ */
+uint16_t to_u16(const uint8_t b[2])
+{
+  uint16_t u;
+  u = (b[0] << 8) + b[1];
+  return u;
+}
+
+/**
  * TLV access function - gets the first TLV from a data stream.
  */
 int fuzz_get_first_tlv(FUZZ_DATA *fuzz,

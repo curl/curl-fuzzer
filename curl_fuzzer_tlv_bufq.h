@@ -31,6 +31,12 @@
 #define TLV_TYPE_SKIP_SIZE   6
 #define TLV_TYPE_MAX_SPARE 7
 #define TLV_TYPE_NO_SPARE 8
+#define TLV_TYPE_RESET 9
+#define TLV_TYPE_PEEK 10
+#define TLV_TYPE_PEEK_AT 11
+#define TLV_TYPE_SIPN 12
+#define TLV_TYPE_SLURP 13
+#define TLV_TYPE_PASS 14
 
 #define TLV_MAX_CHUNK_SIZE (16 * 1024)
 #define TLV_MAX_CHUNKS_QTY (1 * 1024)
@@ -42,6 +48,12 @@ typedef struct fuzz_data_bufq FUZZ_DATA;
 #define OP_TYPE_WRITE 0
 #define OP_TYPE_READ 1
 #define OP_TYPE_SKIP 2
+#define OP_TYPE_RESET 3
+#define OP_TYPE_PEEK 4
+#define OP_TYPE_PEEK_AT 5
+#define OP_TYPE_SIPN 6
+#define OP_TYPE_SLURP 7
+#define OP_TYPE_PASS 8
 
 typedef struct fuzz_bufq_operation {
   unsigned int type;

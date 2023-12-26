@@ -36,50 +36,67 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
 
   switch(tlv->type) {
     case TLV_TYPE_MAX_CHUNKS:
+      FCHECK(tlv->length == 4);
       FCHECK(fuzz->max_chunks == 0);
-      if(tlv->length != 4) {
-        rc = 255;
-        goto EXIT_LABEL;
-      }
       tmp_u32 = to_u32(tlv->value);
       FCHECK(tmp_u32 > 0 && tmp_u32 < TLV_MAX_CHUNKS_QTY);
       fuzz->max_chunks = tmp_u32;
       break;
     
     case TLV_TYPE_CHUNK_SIZE:
+      FCHECK(tlv->length == 4);
       FCHECK(fuzz->chunk_size == 0);
-      if(tlv->length != 4) {
-        rc = 255;
-        goto EXIT_LABEL;
-      }
       tmp_u32 = to_u32(tlv->value);
       FCHECK(tmp_u32 > 0 && tmp_u32 < TLV_MAX_CHUNK_SIZE);
       fuzz->chunk_size = tmp_u32;
       break;
 
     case TLV_TYPE_MAX_SPARE:
+      FCHECK(tlv->length == 4);
       FCHECK(fuzz->max_spare == 0);
-      if(tlv->length != 4) {
-        rc = 255;
-        goto EXIT_LABEL;
-      }
       tmp_u32 = to_u32(tlv->value);
       FCHECK(tmp_u32 > 0 && tmp_u32 < TLV_MAX_MAX_SPARE);
       fuzz->max_spare = tmp_u32;
       break;
 
     case TLV_TYPE_USE_POOL:
+      FCHECK(tlv->length == 0);
       FCHECK(fuzz->use_pool == 0);
       fuzz->use_pool = 1;
       break;
 
     case TLV_TYPE_NO_SPARE:
+      FCHECK(tlv->length == 0);
       FCHECK(fuzz->no_spare == 0);
       fuzz->no_spare = 1;
       break;
 
+    case TLV_TYPE_RESET:
+      tmp_op_type = OP_TYPE_RESET;
+      goto ADD_OP_UNSIZED;
+
+    case TLV_TYPE_PEEK:
+      tmp_op_type = OP_TYPE_PEEK;
+      goto ADD_OP_UNSIZED;
+
     case TLV_TYPE_READ_SIZE:
       tmp_op_type = OP_TYPE_READ;
+      goto ADD_OP;
+
+    case TLV_TYPE_PEEK_AT:
+      tmp_op_type = OP_TYPE_PEEK_AT;
+      goto ADD_OP;
+
+    case TLV_TYPE_SLURP:
+      tmp_op_type = OP_TYPE_SLURP;
+      goto ADD_OP;
+
+    case TLV_TYPE_SIPN:
+      tmp_op_type = OP_TYPE_SIPN;
+      goto ADD_OP;
+
+    case TLV_TYPE_PASS:
+      tmp_op_type = OP_TYPE_PASS;
       goto ADD_OP;
 
     case TLV_TYPE_SKIP_SIZE:
@@ -89,12 +106,13 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     case TLV_TYPE_WRITE_SIZE:
       tmp_op_type = OP_TYPE_WRITE;
 ADD_OP:
-      if(tlv->length != 4) {
-        rc = 255;
-        goto EXIT_LABEL;
-      }
+      FCHECK(tlv->length == 4);
       tmp_u32 = to_u32(tlv->value);
       FCHECK(tmp_u32 <= TLV_MAX_RW_SIZE);
+      goto ADD_OP_COMMON;
+ADD_OP_UNSIZED:
+      FCHECK(tlv->length == 0);
+ADD_OP_COMMON:
       tmp_op = (OPERATION*) malloc(sizeof(*tmp_op));
       if (tmp_op == NULL) {
         // keep on despite allocation failure
