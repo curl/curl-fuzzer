@@ -29,7 +29,9 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 ZLIBDIR=/src/zlib
 OPENSSLDIR=/src/openssl
-NGHTTPDIR=/src/nghttp2
+NGHTTP2DIR=/src/nghttp2
+NGHTTP3DIR=/src/nghttp3
+NGTCP2DIR=/src/ngtcp2
 GDBDIR=/src/gdb
 
 # Check for GDB-specific behaviour by checking for the GDBMODE flag.
@@ -74,13 +76,20 @@ ${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1
 # affect (see 16697, 17624)
 if [[ ${SANITIZER} != "memory" ]]
 then
-    # Install openssl
+    # Install openssl_quic (need openssl_quic, nghttp3, and ngtcp2 for HTTP3 support)
     export OPENSSLFLAGS="-fno-sanitize=alignment"
-    ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+    ${SCRIPTDIR}/handle_x.sh openssl_quic ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+
+    # HTTP3 requires SSL, so we also install it here
+    # Install nghttp3
+    ${SCRIPTDIR}/handle_x.sh nghttp3 ${NGHTTP3DIR} ${INSTALLDIR} || exit 1
+
+    # Install ngtcp2
+    ${SCRIPTDIR}/handle_x.sh ngtcp2 ${NGTCP2DIR} ${INSTALLDIR} || exit 1
 fi
 
 # Install nghttp2
-${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTP2DIR} ${INSTALLDIR} || exit 1
 
 # Compile curl
 ${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}
