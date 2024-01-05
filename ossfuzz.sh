@@ -55,7 +55,7 @@ echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 export MAKEFLAGS+="-j$(nproc)"
 
 # Make an install directory
-export INSTALLDIR=/src/curl_install
+export INSTALLDIRTOP=/src/curl_install
 
 # Check for GDB-specific behaviour by checking for the GDBMODE flag.
 # - Compile and installing GDB if necessary.
@@ -69,33 +69,40 @@ then
   fi
 fi
 
-# Install zlib
-${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1
+for tls_lib in openssl openssl_quic; do
+   INSTALLDIR="$INSTALLDIRTOP/$tls_lib"
+   mkdir -p "$INSTALLDIR"
 
-# For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
-# affect (see 16697, 17624)
-if [[ ${SANITIZER} != "memory" ]]
-then
-    # Install openssl_quic (need openssl_quic, nghttp3, and ngtcp2 for HTTP3 support)
-    export OPENSSLFLAGS="-fno-sanitize=alignment"
-    ${SCRIPTDIR}/handle_x.sh openssl_quic ${OPENSSLDIR} ${INSTALLDIR} || exit 1
+  # Install zlib
+  ${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1
 
-    # HTTP3 requires SSL, so we also install it here
-    # Install nghttp3
-    ${SCRIPTDIR}/handle_x.sh nghttp3 ${NGHTTP3DIR} ${INSTALLDIR} || exit 1
+  # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
+  # affect (see 16697, 17624)
+  if [[ ${SANITIZER} != "memory" ]]
+  then
+      # Install openssl_quic (need openssl_quic, nghttp3, and ngtcp2 for HTTP3 support)
+      export OPENSSLFLAGS="-fno-sanitize=alignment"
+      ${SCRIPTDIR}/handle_x.sh ${tls_lib} ${OPENSSLDIR}/${tls_lib} ${INSTALLDIR} || exit 1
 
-    # Install ngtcp2
-    ${SCRIPTDIR}/handle_x.sh ngtcp2 ${NGTCP2DIR} ${INSTALLDIR} || exit 1
-fi
+      if [[ "$tls_lib" == "openssl_quic" ]]
+      then
+        # Install nghttp3
+        ${SCRIPTDIR}/handle_x.sh nghttp3 ${NGHTTP3DIR} ${INSTALLDIR} || exit 1
 
-# Install nghttp2
-${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTP2DIR} ${INSTALLDIR} || exit 1
+        # Install ngtcp2
+        ${SCRIPTDIR}/handle_x.sh ngtcp2 ${NGTCP2DIR} ${INSTALLDIR} || exit 1
+      fi
+  fi
 
-# Compile curl
-${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}
+  # Install nghttp2
+  ${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTP2DIR} ${INSTALLDIR} || exit 1
+
+  # Compile curl
+  ${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}
+done
 
 # Build the fuzzers.
-${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIR}
+${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIRTOP}
 make zip
 
 # Copy the fuzzers over.

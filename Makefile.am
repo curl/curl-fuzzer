@@ -25,7 +25,7 @@ ACLOCAL_AMFLAGS = -I m4
 @CODE_COVERAGE_RULES@
 
 # Include debug symbols by default as recommended by libfuzzer.
-AM_CXXFLAGS = -g -I@INSTALLDIR@/include -I@INSTALLDIR@/utfuzzer
+AM_CXXFLAGS = -g
 
 LIBS = -lpthread -lm
 
@@ -60,8 +60,10 @@ FUZZPROGS = curl_fuzzer \
 FUZZLIBS = libstandaloneengine.a
 
 COMMON_SOURCES = curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc
-COMMON_FLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
-COMMON_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
+COMMON_FLAGS = -I@INSTALLDIR@/openssl/include -I@INSTALLDIR@/openssl/utfuzzer $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
+COMMON_LDADD = @INSTALLDIR@/openssl/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
+HTTP3_FLAGS = -I@INSTALLDIR@/openssl_quic/include -I@INSTALLDIR@/openssl_quic/utfuzzer $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
+HTTP3_LDADD = @INSTALLDIR@/openssl_quic/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
 
 libstandaloneengine_a_SOURCES = standalone_fuzz_target_runner.cc
 libstandaloneengine_a_CXXFLAGS = $(AM_CXXFLAGS)
@@ -91,8 +93,8 @@ curl_fuzzer_https_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_https_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_HTTPS
 curl_fuzzer_https_LDADD = $(COMMON_LDADD)
 curl_fuzzer_http3_SOURCES = $(COMMON_SOURCES)
-curl_fuzzer_http3_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_HTTP3 -DFUZZ_PROTOCOLS_HTTPS
-curl_fuzzer_http3_LDADD = $(COMMON_LDADD)
+curl_fuzzer_http3_CXXFLAGS = $(HTTP3_FLAGS) -DFUZZ_PROTOCOLS_HTTP3 -DFUZZ_PROTOCOLS_HTTPS
+curl_fuzzer_http3_LDADD = $(HTTP3_LDADD)
 curl_fuzzer_imap_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_imap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_IMAP
 curl_fuzzer_imap_LDADD = $(COMMON_LDADD)

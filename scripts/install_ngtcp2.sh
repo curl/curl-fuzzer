@@ -20,7 +20,6 @@ autoreconf -fi
             --prefix=${INSTALLDIR} \
             --disable-shared \
             --enable-static \
-            --disable-threads \
             --enable-lib-only \
             --with-openssl \
             
