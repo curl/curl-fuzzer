@@ -36,7 +36,11 @@ LIBS = -lpthread -lm
 LIB_FUZZING_ENGINE ?= libstandaloneengine.a
 
 FUZZPROGS = curl_fuzzer \
+ curl_fuzzer_altsvc \
+ curl_fuzzer_base64 \
  curl_fuzzer_dict \
+ curl_fuzzer_doh \
+ curl_fuzzer_escape \
  curl_fuzzer_file \
  curl_fuzzer_ftp \
  curl_fuzzer_gopher \
@@ -45,6 +49,7 @@ FUZZPROGS = curl_fuzzer \
  curl_fuzzer_imap \
  curl_fuzzer_ldap \
  curl_fuzzer_mqtt \
+ curl_fuzzer_parsedate \
  curl_fuzzer_pop3 \
  curl_fuzzer_rtmp \
  curl_fuzzer_rtsp \
@@ -134,6 +139,26 @@ fuzz_url_LDADD = $(COMMON_LDADD)
 curl_fuzzer_fnmatch_SOURCES = fuzz_fnmatch.cc
 curl_fuzzer_fnmatch_CXXFLAGS = $(COMMON_FLAGS)
 curl_fuzzer_fnmatch_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_altsvc_SOURCES = fuzz_altsvc.cc
+curl_fuzzer_altsvc_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_altsvc_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_base64_SOURCES = fuzz_base64.cc
+curl_fuzzer_base64_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_base64_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_doh_SOURCES = fuzz_doh.cc
+curl_fuzzer_doh_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_doh_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_escape_SOURCES = fuzz_escape.cc
+curl_fuzzer_escape_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_escape_LDADD = $(COMMON_LDADD)
+
+curl_fuzzer_parsedate_SOURCES = fuzz_parsedate.cc
+curl_fuzzer_parsedate_CXXFLAGS = $(COMMON_FLAGS) -I$(CURLDIR)
+curl_fuzzer_parsedate_LDADD = $(COMMON_LDADD)
 
 # Create the seed corpora zip files.
 zip:
