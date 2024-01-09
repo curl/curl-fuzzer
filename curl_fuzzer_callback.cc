@@ -69,7 +69,14 @@ curl_socket_t fuzz_open_socket(void *ptr,
             sman->index,
             sman->index);
 
-  if(socketpair(AF_UNIX, SOCK_STREAM, 0, fds)) {
+
+  #ifdef FUZZ_PROTOCOLS_HTTP3
+    const int socket_type = SOCK_DGRAM;
+  #else
+    const int socket_type = SOCK_STREAM;
+  #endif
+
+  if(socketpair(AF_UNIX, socket_type, 0, fds)) {
     /* Failed to create a pair of sockets. */
     return CURL_SOCKET_BAD;
   }

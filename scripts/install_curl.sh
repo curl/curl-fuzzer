@@ -38,16 +38,31 @@ fi
 
 if [[ -f ${INSTALLDIR}/lib/libnghttp2.a ]]
 then
-  NGHTTPOPTION=--with-nghttp2=${INSTALLDIR}
+  NGHTTP2OPTION=--with-nghttp2=${INSTALLDIR}
 else
-  NGHTTPOPTION=--without-nghttp2
+  NGHTTP2OPTION=--without-nghttp2
+fi
+
+if [[ -f ${INSTALLDIR}/lib/libnghttp3.a ]]
+then
+  NGHTTP3OPTION=--with-nghttp3=${INSTALLDIR}
+else
+  NGHTTP3OPTION=--without-nghttp3
+fi
+
+if [[ -f ${INSTALLDIR}/lib/libngtcp2.a ]]
+then
+  NGTCP2OPTION=--with-ngtcp2=${INSTALLDIR}
+else
+  NGTCP2OPTION=--without-ngtcp2
 fi
 
 pushd ${SRCDIR}
 
 # Build the library.
 ./buildconf
-./configure --prefix=${INSTALLDIR} \
+./configure PKG_CONFIG_PATH=${INSTALLDIR}/lib/pkgconfig \
+            --prefix=${INSTALLDIR} \
             --disable-shared \
             --enable-debug \
             --enable-maintainer-mode \
@@ -57,7 +72,9 @@ pushd ${SRCDIR}
             --without-libpsl \
             --with-random=/dev/null \
             ${SSLOPTION} \
-            ${NGHTTPOPTION} \
+            ${NGHTTP2OPTION} \
+            ${NGHTTP3OPTION} \
+            ${NGTCP2OPTION} \
             ${CODE_COVERAGE_OPTION}
 
 make V=1

@@ -207,8 +207,10 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
   /* Set the hsts header cache filepath so that it can be fuzzed. */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_HSTS, FUZZ_HSTS_HEADER_CACHE_PATH));
 
+#ifndef FUZZ_PROTOCOLS_HTTPS
   /* Set the Certificate Revocation List file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CRLFILE, FUZZ_CRL_FILE_PATH));
+#endif
 
   /* Set the .netrc file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_NETRC_FILE, FUZZ_NETRC_FILE_PATH));
@@ -570,6 +572,16 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #endif
 
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
+
+  #ifdef FUZZ_PROTOCOLS_HTTP3
+    /* If we are fuzzing HTTP3, then we must be fuzzing the HTTPS protocol */
+    #ifndef FUZZ_PROTOCOLS_HTTPS
+      rc = 255;
+      goto EXIT_LABEL;
+    #endif
+    
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_3ONLY));
+  #endif 
 
 EXIT_LABEL:
 

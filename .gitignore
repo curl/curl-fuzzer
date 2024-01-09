@@ -40,6 +40,8 @@ missing
 /curl_fuzzer_http_seed_corpus.zip
 /curl_fuzzer_https
 /curl_fuzzer_https_seed_corpus.zip
+/curl_fuzzer_http3
+/curl_fuzzer_http3_seed_corpus.zip
 /curl_fuzzer_imap
 /curl_fuzzer_imap_seed_corpus.zip
 /curl_fuzzer_ldap
@@ -62,3 +64,7 @@ missing
 /curl_fuzzer_smtp_seed_corpus.zip
 /curl_fuzzer_tftp
 /curl_fuzzer_tftp_seed_corpus.zip
+/curl_fuzzer_ws
+/curl_fuzzer_ws_seed_corpus.zip
+/fuzz_url
+/fuzz_url.zip
