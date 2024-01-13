@@ -54,6 +54,7 @@ pushd ${SRCDIR}
             --disable-symbol-hiding \
             --enable-ipv6 \
             --enable-websockets \
+            --without-libpsl \
             --with-random=/dev/null \
             ${SSLOPTION} \
             ${NGHTTPOPTION} \
