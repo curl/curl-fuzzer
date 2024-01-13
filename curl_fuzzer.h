@@ -23,11 +23,61 @@
 #include <curl/curl.h>
 #include "testinput.h"
 
-#ifdef TLV_ENUM_BUFQ
-#include "curl_fuzzer_tlv_bufq.h"
-#else
-#include "curl_fuzzer_tlv_main.h"
-#endif
+/**
+ * TLV types.
+ */
+#define TLV_TYPE_URL                    	1
+#define TLV_TYPE_RESPONSE0              	2
+#define TLV_TYPE_USERNAME               	3
+#define TLV_TYPE_PASSWORD               	4
+#define TLV_TYPE_POSTFIELDS             	5
+#define TLV_TYPE_HEADER                 	6
+#define TLV_TYPE_COOKIE                 	7
+#define TLV_TYPE_UPLOAD1                	8
+#define TLV_TYPE_RANGE                  	9
+#define TLV_TYPE_CUSTOMREQUEST          	10
+#define TLV_TYPE_MAIL_RECIPIENT         	11
+#define TLV_TYPE_MAIL_FROM              	12
+#define TLV_TYPE_MIME_PART              	13
+#define TLV_TYPE_MIME_PART_NAME         	14
+#define TLV_TYPE_MIME_PART_DATA         	15
+#define TLV_TYPE_HTTPAUTH               	16
+#define TLV_TYPE_RESPONSE1              	17
+#define TLV_TYPE_RESPONSE2              	18
+#define TLV_TYPE_RESPONSE3              	19
+#define TLV_TYPE_RESPONSE4              	20
+#define TLV_TYPE_RESPONSE5              	21
+#define TLV_TYPE_RESPONSE6              	22
+#define TLV_TYPE_RESPONSE7              	23
+#define TLV_TYPE_RESPONSE8              	24
+#define TLV_TYPE_RESPONSE9              	25
+#define TLV_TYPE_RESPONSE10             	26
+#define TLV_TYPE_OPTHEADER              	27
+#define TLV_TYPE_NOBODY                 	28
+#define TLV_TYPE_FOLLOWLOCATION         	29
+#define TLV_TYPE_ACCEPTENCODING         	30
+#define TLV_TYPE_SECOND_RESPONSE0       	31
+#define TLV_TYPE_SECOND_RESPONSE1       	32
+#define TLV_TYPE_WILDCARDMATCH          	33
+#define TLV_TYPE_RTSP_REQUEST           	34
+#define TLV_TYPE_RTSP_SESSION_ID        	35
+#define TLV_TYPE_RTSP_STREAM_URI        	36
+#define TLV_TYPE_RTSP_TRANSPORT         	37
+#define TLV_TYPE_RTSP_CLIENT_CSEQ       	38
+#define TLV_TYPE_MAIL_AUTH              	39
+#define TLV_TYPE_HTTP_VERSION           	40
+#define TLV_TYPE_DOH_URL             	   	41
+#define TLV_TYPE_LOGIN_OPTIONS			42
+#define TLV_TYPE_XOAUTH2_BEARER			43
+#define TLV_TYPE_USERPWD			44
+#define TLV_TYPE_USERAGENT			45
+#define TLV_TYPE_NETRC				46
+#define TLV_TYPE_SSH_HOST_PUBLIC_KEY_SHA256	47
+#define TLV_TYPE_POST				48
+#define TLV_TYPE_WS_OPTIONS			49
+#define TLV_TYPE_CONNECT_ONLY			50
+#define TLV_TYPE_HSTS				51
+#define TLV_TYPE_HTTPPOSTBODY			52
 
 /**
  * TLV function return codes.
@@ -149,9 +199,9 @@ typedef struct fuzz_socket_manager
 } FUZZ_SOCKET_MANAGER;
 
 /**
- * Data local to a fuzzing run on the main fuzzer
+ * Data local to a fuzzing run.
  */
-struct fuzz_data_main
+typedef struct fuzz_data
 {
   /* CURL easy object */
   CURL *easy;
@@ -202,43 +252,7 @@ struct fuzz_data_main
   /* Verbose mode. */
   int verbose;
 
-};
-
-/**
- * Data local to a fuzzing run on the BUFQ fuzzer
- */
-struct fuzz_data_bufq
-{
-  /* Parser state */
-  FUZZ_PARSE_STATE state;
-
-  /* Verbose mode. */
-  int verbose;
-  
-  /* BUFQ max_chunks parameter */
-  int max_chunks;
-
-  /* BUFQ chunk_size parameter */
-  int chunk_size;
-
-  /* Should the run use a pool? */
-  int use_pool;
-
-  /* BUFQ max_spare parameter */
-  int max_spare;
-  
-  /* Should spares be enabled? */
-  int no_spare;
-
-  /* How many operations to execute */
-  int operation_count;
-
-  /* List of operations */
-  struct fuzz_bufq_operation *operation_list;
-
-  /* Template buffer for writes / read checks */
-  unsigned char *template_buf;
-};
+} FUZZ_DATA;
 
 /* Function prototypes */
 uint32_t to_u32(const uint8_t b[4]);
@@ -272,7 +286,6 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv);
 int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part);
 int fuzz_parse_mime_tlv(curl_mimepart *part, TLV *tlv);
 int fuzz_handle_transfer(FUZZ_DATA *fuzz);
-int fuzz_handle_bufq(FUZZ_DATA *fuzz);
 int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sockman);
 int fuzz_select(int nfds,
                 fd_set *readfds,

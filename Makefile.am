@@ -59,7 +59,7 @@ FUZZPROGS = curl_fuzzer \
 
 FUZZLIBS = libstandaloneengine.a
 
-COMMON_SOURCES = curl_fuzzer.cc curl_fuzzer_tlv_main.cc curl_fuzzer_tlv_common.cc curl_fuzzer_callback.cc
+COMMON_SOURCES = curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc
 COMMON_FLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
 COMMON_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
 
@@ -137,8 +137,8 @@ curl_fuzzer_fnmatch_CXXFLAGS = $(COMMON_FLAGS)
 curl_fuzzer_fnmatch_LDADD = $(COMMON_LDADD)
 
 # BUFQ fuzzer
-curl_fuzzer_bufq_SOURCES = fuzz_bufq.cc curl_fuzzer_tlv_bufq.cc curl_fuzzer_tlv_common.cc
-curl_fuzzer_bufq_CXXFLAGS = $(COMMON_FLAGS) -DTLV_ENUM_BUFQ
+curl_fuzzer_bufq_SOURCES = fuzz_bufq.cc
+curl_fuzzer_bufq_CXXFLAGS = $(COMMON_FLAGS)
 curl_fuzzer_bufq_LDADD = $(COMMON_LDADD)
 
 # Create the seed corpora zip files.
