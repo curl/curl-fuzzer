@@ -53,11 +53,10 @@ FUZZPROGS = curl_fuzzer \
  fuzz_url
 
 # need external libs:
-# curl_fuzzer_ldap \
-# curl_fuzzer_rtmp \
-# curl_fuzzer_scp \
-# curl_fuzzer_sftp \
-
+# curl_fuzzer_ldap
+# curl_fuzzer_rtmp
+# curl_fuzzer_scp
+# curl_fuzzer_sftp
 
 FUZZLIBS = libstandaloneengine.a
 
