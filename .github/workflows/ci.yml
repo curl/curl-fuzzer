@@ -34,7 +34,7 @@ jobs:
 
     # Upload the fuzzer output
     - name: Archive fuzz tar
-      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3
+      uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6 # v4
       with:
         name: fuzz_tar
         path: fuzz.tar
@@ -62,7 +62,7 @@ jobs:
           - curl_fuzzer
           - fuzz_url
     steps:
-      - uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      - uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 # v4
         with:
           name: fuzz_tar
       - name: Unpack fuzzer ${{ matrix.fuzzer }}
@@ -76,7 +76,7 @@ jobs:
           fuzz-seconds: 120
           dry-run: false
       - name: Upload Crash
-        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6 # v4
         if: failure()
         with:
           name: artifacts
