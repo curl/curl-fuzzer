@@ -511,8 +511,8 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
   /* Do not allow telnet currently as it accepts input from stdin. */
   allowed_protocols =
     "dict,file,ftp,ftps,gopher,gophers,http,https,imap,imaps,"
-    "ldap,ldaps,mqtt,pop3,pop3s,rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts,"
-    "rtsp,scp,sftp,smb,smbs,smtp,smtps,tftp";
+    "mqtt,pop3,pop3s,"
+    "rtsp,smb,smbs,smtp,smtps,tftp";
 #endif
 #ifdef FUZZ_PROTOCOLS_DICT
   allowed_protocols = "dict";

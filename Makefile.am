@@ -44,18 +44,20 @@ FUZZPROGS = curl_fuzzer \
  curl_fuzzer_http \
  curl_fuzzer_https \
  curl_fuzzer_imap \
- curl_fuzzer_ldap \
  curl_fuzzer_mqtt \
  curl_fuzzer_pop3 \
- curl_fuzzer_rtmp \
  curl_fuzzer_rtsp \
- curl_fuzzer_scp \
- curl_fuzzer_sftp \
  curl_fuzzer_smb \
  curl_fuzzer_smtp \
  curl_fuzzer_ws \
  curl_fuzzer_tftp \
  fuzz_url
+
+# need external libs:
+# curl_fuzzer_ldap
+# curl_fuzzer_rtmp
+# curl_fuzzer_scp
+# curl_fuzzer_sftp
 
 FUZZLIBS = libstandaloneengine.a
 
@@ -93,27 +95,15 @@ curl_fuzzer_https_LDADD = $(COMMON_LDADD)
 curl_fuzzer_imap_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_imap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_IMAP
 curl_fuzzer_imap_LDADD = $(COMMON_LDADD)
-curl_fuzzer_ldap_SOURCES = $(COMMON_SOURCES)
-curl_fuzzer_ldap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_LDAP
-curl_fuzzer_ldap_LDADD = $(COMMON_LDADD)
 curl_fuzzer_mqtt_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_mqtt_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_MQTT
 curl_fuzzer_mqtt_LDADD = $(COMMON_LDADD)
 curl_fuzzer_pop3_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_pop3_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_POP3
 curl_fuzzer_pop3_LDADD = $(COMMON_LDADD)
-curl_fuzzer_rtmp_SOURCES = $(COMMON_SOURCES)
-curl_fuzzer_rtmp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_RTMP
-curl_fuzzer_rtmp_LDADD = $(COMMON_LDADD)
 curl_fuzzer_rtsp_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_rtsp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_RTSP
 curl_fuzzer_rtsp_LDADD = $(COMMON_LDADD)
-curl_fuzzer_scp_SOURCES = $(COMMON_SOURCES)
-curl_fuzzer_scp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SCP
-curl_fuzzer_scp_LDADD = $(COMMON_LDADD)
-curl_fuzzer_sftp_SOURCES = $(COMMON_SOURCES)
-curl_fuzzer_sftp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SFTP
-curl_fuzzer_sftp_LDADD = $(COMMON_LDADD)
 curl_fuzzer_smb_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_smb_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SMB
 curl_fuzzer_smb_LDADD = $(COMMON_LDADD)
@@ -126,6 +116,19 @@ curl_fuzzer_tftp_LDADD = $(COMMON_LDADD)
 curl_fuzzer_ws_SOURCES = $(COMMON_SOURCES)
 curl_fuzzer_ws_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_WS
 curl_fuzzer_ws_LDADD = $(COMMON_LDADD)
+
+#curl_fuzzer_rtmp_SOURCES = $(COMMON_SOURCES)
+#curl_fuzzer_rtmp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_RTMP
+#curl_fuzzer_rtmp_LDADD = $(COMMON_LDADD)
+#curl_fuzzer_ldap_SOURCES = $(COMMON_SOURCES)
+#curl_fuzzer_ldap_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_LDAP
+#curl_fuzzer_ldap_LDADD = $(COMMON_LDADD)
+#curl_fuzzer_scp_SOURCES = $(COMMON_SOURCES)
+#curl_fuzzer_scp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SCP
+#curl_fuzzer_scp_LDADD = $(COMMON_LDADD)
+#curl_fuzzer_sftp_SOURCES = $(COMMON_SOURCES)
+#curl_fuzzer_sftp_CXXFLAGS = $(COMMON_FLAGS) -DFUZZ_PROTOCOLS_SFTP
+#curl_fuzzer_sftp_LDADD = $(COMMON_LDADD)
 
 fuzz_url_SOURCES = fuzz_url.cc
 fuzz_url_CXXFLAGS = $(COMMON_FLAGS)
