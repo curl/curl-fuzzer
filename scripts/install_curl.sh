@@ -69,5 +69,7 @@ mkdir -p ${UTFUZZDIR}
 
 # Copy header files.
 cp -v lib/curl_fnmatch.h ${UTFUZZDIR}
+cp -v lib/bufq.h ${UTFUZZDIR}
+touch ${UTFUZZDIR}/curl_setup.h
 
 popd
