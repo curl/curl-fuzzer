@@ -21,7 +21,8 @@
       ],
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "openssl/openssl",
-      "versioningTemplate": "regex:^openssl-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^openssl-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
       "registryUrlTemplate": "https://github.com"
     }
   ],
