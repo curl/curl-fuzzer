@@ -228,7 +228,7 @@ size_t fuzz_write_callback(void *contents,
 
   if(fuzz->written_data > MAXIMUM_WRITE_LENGTH) {
     FV_PRINTF(fuzz,
-              "FUZZ: Exceeded maximum write length (%lu) \n",
+              "FUZZ: Exceeded maximum write length (%zu) \n",
               fuzz->written_data);
     total = 0;
   }

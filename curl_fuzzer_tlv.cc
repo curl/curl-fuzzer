@@ -80,8 +80,8 @@ int fuzz_get_tlv_comn(FUZZ_DATA *fuzz,
   check_length += tlv->length;
 
   uint64_t remaining_len = fuzz->state.data_len;
-  FV_PRINTF(fuzz, "Check length of data: %lu \n", check_length);
-  FV_PRINTF(fuzz, "Remaining length of data: %lu \n", remaining_len);
+  FV_PRINTF(fuzz, "Check length of data: %" PRIu64 " \n", check_length);
+  FV_PRINTF(fuzz, "Remaining length of data: %" PRIu64 " \n", remaining_len);
 
   /* Sanity check that the TLV length is ok. */
   if(check_length > remaining_len) {
