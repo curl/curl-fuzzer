@@ -1,0 +1,8 @@
+- hosts: all
+  tasks:
+    - name: Run job
+      shell: ./{{ curl_script | default(curl_test) }}.sh
+      args:
+        chdir: "{{ zuul.project.src_dir }}"
+      environment:
+        TRAVIS_BRANCH: "{{ zuul.branch }}"
