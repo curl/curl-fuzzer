@@ -9,22 +9,8 @@
       "customType": "regex",
       "fileMatch": ["^scripts/VERSIONS$"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?( extractVersion=(?<extractVersion>.+?))?( registryUrl=(?<registryUrl>.*?))?\\s.*?_VERSION=(?<currentValue>.*)\\s"
-      ],
-      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}",
-      "extractVersionTemplate": "{{#if extractVersion}}{{{extractVersion}}}{{else}}^v?(?<version>.+)${{/if}}"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["^scripts/VERSIONS$"],
-      "matchStrings": [
-        "OPENSSL_VERSION=(?<currentValue>.*)\\s"
-      ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "openssl/openssl",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^openssl-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
-      "registryUrlTemplate": "https://github.com"
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION=(?<currentValue>.*)\\s"
+      ]
     }
   ],
   "packageRules": [
@@ -34,6 +20,11 @@
         "https://github.com/actions/upload-artifact"
       ],
       "groupName": "GitHub Actions: artifact"
+    },
+    {
+      "matchManagers": ["regex"],
+      "matchPackageNames": ["openssl/openssl"],
+      "extractVersion": "^openssl-(?<version>.*)$"
     }
   ]
 }
