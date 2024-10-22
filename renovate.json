@@ -7,7 +7,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^scripts/VERSIONS$"],
+      "fileMatch": [
+        "^scripts/VERSIONS$"
+      ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION=(?<currentValue>.*)\\s"
       ]
@@ -22,8 +24,12 @@
       "groupName": "GitHub Actions: artifact"
     },
     {
-      "matchManagers": ["regex"],
-      "matchPackageNames": ["openssl/openssl"],
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "openssl/openssl"
+      ],
       "extractVersion": "^openssl-(?<version>.*)$"
     }
   ]
