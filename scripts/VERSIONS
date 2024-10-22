@@ -4,4 +4,4 @@
 OPENSSL_VERSION=3.2.0
 
 # renovate: datasource=github-tags depName=nghttp2/nghttp2
-NGHTTP2_VERSION=1.63.0
+NGHTTP2_VERSION=1.64.0
