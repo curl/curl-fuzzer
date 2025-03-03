@@ -512,6 +512,10 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
   allowed_protocols =
     "dict,file,ftp,ftps,gopher,gophers,http,https,imap,imaps,"
     "mqtt,pop3,pop3s,"
+    "ldap,ldaps,"
+    "rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts,"
+    "scp,"
+    "sftp,"
     "rtsp,smb,smbs,smtp,smtps,tftp";
 #endif
 #ifdef FUZZ_PROTOCOLS_DICT
