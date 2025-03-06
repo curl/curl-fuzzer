@@ -46,7 +46,7 @@ fi
 pushd ${SRCDIR}
 
 # Build the library.
-./buildconf
+autoreconf -fi
 ./configure --prefix=${INSTALLDIR} \
             --disable-shared \
             --enable-debug \
