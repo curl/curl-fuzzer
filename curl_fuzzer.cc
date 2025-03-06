@@ -516,7 +516,8 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
     "rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts,"
     "scp,"
     "sftp,"
-    "rtsp,smb,smbs,smtp,smtps,tftp";
+    "rtsp,smb,smbs,smtp,smtps,tftp,"
+    "ws,wss";
 #endif
 #ifdef FUZZ_PROTOCOLS_DICT
   allowed_protocols = "dict";
