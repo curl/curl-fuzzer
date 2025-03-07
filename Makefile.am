@@ -144,6 +144,8 @@ curl_fuzzer_bufq_SOURCES = fuzz_bufq.cc
 curl_fuzzer_bufq_CXXFLAGS = $(COMMON_FLAGS)
 curl_fuzzer_bufq_LDADD = $(COMMON_LDADD)
 
+all: $(FUZZLIBS) $(FUZZPROGS)
+
 # Create the seed corpora zip files.
 zip:
 	BUILD_ROOT=$(PWD) scripts/create_zip.sh
