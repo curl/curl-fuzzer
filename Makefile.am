@@ -62,7 +62,8 @@ FUZZPROGS = curl_fuzzer \
 FUZZLIBS = libstandaloneengine.a
 
 COMMON_SOURCES = curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc
-COMMON_FLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS)
+COMMON_FLAGS = $(AM_CXXFLAGS) $(CODE_COVERAGE_CXXFLAGS) -DCURL_DISABLE_DEPRECATION
+
 COMMON_LDADD = @INSTALLDIR@/lib/libcurl.la $(LIB_FUZZING_ENGINE) $(CODE_COVERAGE_LIBS)
 
 libstandaloneengine_a_SOURCES = standalone_fuzz_target_runner.cc
