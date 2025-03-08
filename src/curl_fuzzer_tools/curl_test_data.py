@@ -24,38 +24,35 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-import os
 import re
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 
-REPLY_DATA = re.compile("<reply>\s*<data>(.*?)</data>", re.MULTILINE | re.DOTALL)
+REPLY_DATA = re.compile(r"<reply>\s*<data>(.*?)</data>", re.MULTILINE | re.DOTALL)
 
 
 class TestData(object):
-    def __init__(self, data_folder):
+    """Class for extracting test data from the curl test data folder"""
+
+    def __init__(self, data_folder: Path) -> None:
+        """Create a TestData object"""
         self.data_folder = data_folder
 
-    def get_test_data(self, test_number):
+    def get_test_data(self, test_number: int) -> str:
+        """Get the test data for a given test number"""
         # Create the test file name
-        filename = os.path.join(self.data_folder,
-                                "test{0}".format(test_number))
+        filename = self.data_folder / f"test{test_number}"
 
         log.debug("Parsing file %s", filename)
 
-        with open(filename, "rb") as f:
-            contents = f.read().decode("utf-8")
+        with open(filename, "r", encoding="utf-8") as f:
+            contents = f.read()
 
         m = REPLY_DATA.search(contents)
         if not m:
-            raise Exception("Couldn't find a <reply><data> section")
+            raise ValueError("Couldn't find a <reply><data> section")
 
         # Left-strip the data so we don't get a newline before our data.
         return m.group(1).lstrip()
-
-
-if __name__ == '__main__':
-    td = TestData("./data")
-    data = td.get_test_data(1)
-    print(data)

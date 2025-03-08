@@ -68,3 +68,4 @@ missing
 # Python
 .venv/
 __pycache__/
+logs/

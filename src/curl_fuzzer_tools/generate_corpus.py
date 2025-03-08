@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 #
-# Simple script which generates corpus files.
+"""Simple script which generates corpus files."""
 
 import argparse
 import logging
-import os
 import sys
+from pathlib import Path
 
+from curl_fuzzer_tools import common_logging
 from curl_fuzzer_tools.corpus import TLVEncoder
 from curl_fuzzer_tools.corpus_curl_opt_http_auth import CurlOptHttpAuth
 from curl_fuzzer_tools.curl_test_data import TestData
@@ -14,139 +15,123 @@ from curl_fuzzer_tools.curl_test_data import TestData
 log = logging.getLogger(__name__)
 
 
-def generate_corpus(options):
-    sys.path.append(options.curl_test_dir)
+def generate_corpus(args: argparse.Namespace) -> None:
+    """Generate a corpus file from the given arguments."""
+    curl_test_dir = Path(args.curl_test_dir)
+    if not curl_test_dir.exists():
+        raise FileNotFoundError(
+            f"curl test directory {args.curl_test_dir} does not exist"
+        )
 
-    td = TestData(os.path.join(options.curl_test_dir, "data"))
+    sys.path.append(args.curl_test_dir)
 
-    with open(options.output, "wb") as f:
+    td = TestData(curl_test_dir / "data")
+
+    with open(args.output, "wb") as f:
         enc = TLVEncoder(f, td)
 
         # Write the URL to the file.
-        enc.write_string(enc.TYPE_URL, options.url)
+        enc.write_string(enc.TYPE_URL, args.url)
 
         # Write any responses to the file.
+        enc.maybe_write_response(enc.TYPE_RSP0, args.rsp0, args.rsp0file, args.rsp0test)
+        enc.maybe_write_response(enc.TYPE_RSP1, args.rsp1, args.rsp1file, args.rsp1test)
+        enc.maybe_write_response(enc.TYPE_RSP2, args.rsp2, args.rsp2file, args.rsp2test)
+        enc.maybe_write_response(enc.TYPE_RSP3, args.rsp3, args.rsp3file, args.rsp3test)
+        enc.maybe_write_response(enc.TYPE_RSP4, args.rsp4, args.rsp4file, args.rsp4test)
+        enc.maybe_write_response(enc.TYPE_RSP5, args.rsp5, args.rsp5file, args.rsp5test)
+        enc.maybe_write_response(enc.TYPE_RSP6, args.rsp6, args.rsp6file, args.rsp6test)
+        enc.maybe_write_response(enc.TYPE_RSP7, args.rsp7, args.rsp7file, args.rsp7test)
+        enc.maybe_write_response(enc.TYPE_RSP8, args.rsp8, args.rsp8file, args.rsp8test)
+        enc.maybe_write_response(enc.TYPE_RSP9, args.rsp9, args.rsp9file, args.rsp9test)
         enc.maybe_write_response(
-            enc.TYPE_RSP0, options.rsp0, options.rsp0file, options.rsp0test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP1, options.rsp1, options.rsp1file, options.rsp1test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP2, options.rsp2, options.rsp2file, options.rsp2test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP3, options.rsp3, options.rsp3file, options.rsp3test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP4, options.rsp4, options.rsp4file, options.rsp4test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP5, options.rsp5, options.rsp5file, options.rsp5test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP6, options.rsp6, options.rsp6file, options.rsp6test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP7, options.rsp7, options.rsp7file, options.rsp7test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP8, options.rsp8, options.rsp8file, options.rsp8test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP9, options.rsp9, options.rsp9file, options.rsp9test
-        )
-        enc.maybe_write_response(
-            enc.TYPE_RSP10, options.rsp10, options.rsp10file, options.rsp10test
+            enc.TYPE_RSP10, args.rsp10, args.rsp10file, args.rsp10test
         )
 
         # Write any second socket responses to the file.
         enc.maybe_write_response(
-            enc.TYPE_SECRSP0, options.secrsp0, options.secrsp0file, options.secrsp0test
+            enc.TYPE_SECRSP0, args.secrsp0, args.secrsp0file, args.secrsp0test
         )
         enc.maybe_write_response(
-            enc.TYPE_SECRSP1, options.secrsp1, options.secrsp1file, options.secrsp1test
+            enc.TYPE_SECRSP1, args.secrsp1, args.secrsp1file, args.secrsp1test
         )
 
         # Write other options to file.
-        enc.maybe_write_string(enc.TYPE_USERNAME, options.username)
-        enc.maybe_write_string(enc.TYPE_PASSWORD, options.password)
-        enc.maybe_write_string(enc.TYPE_POSTFIELDS, options.postfields)
-        enc.maybe_write_string(enc.TYPE_HTTPPOSTBODY, options.postbody)
-        enc.maybe_write_string(enc.TYPE_COOKIE, options.cookie)
-        enc.maybe_write_string(enc.TYPE_RANGE, options.range)
-        enc.maybe_write_string(enc.TYPE_CUSTOMREQUEST, options.customrequest)
-        enc.maybe_write_string(enc.TYPE_MAIL_FROM, options.mailfrom)
-        enc.maybe_write_string(enc.TYPE_ACCEPT_ENCODING, options.acceptencoding)
-        enc.maybe_write_string(enc.TYPE_RTSP_SESSION_ID, options.rtspsessionid)
-        enc.maybe_write_string(enc.TYPE_RTSP_STREAM_URI, options.rtspstreamuri)
-        enc.maybe_write_string(enc.TYPE_RTSP_TRANSPORT, options.rtsptransport)
-        enc.maybe_write_string(enc.TYPE_MAIL_AUTH, options.mailauth)
-        enc.maybe_write_string(enc.TYPE_LOGIN_OPTIONS, options.loginoptions)
-        enc.maybe_write_string(enc.TYPE_XOAUTH2_BEARER, options.bearertoken)
-        enc.maybe_write_string(enc.TYPE_USERPWD, options.user_and_pass)
-        enc.maybe_write_string(enc.TYPE_USERAGENT, options.useragent)
-        enc.maybe_write_string(
-            enc.TYPE_SSH_HOST_PUBLIC_KEY_SHA256, options.hostpksha256
-        )
-        enc.maybe_write_string(enc.TYPE_HSTS, options.hsts)
+        enc.maybe_write_string(enc.TYPE_USERNAME, args.username)
+        enc.maybe_write_string(enc.TYPE_PASSWORD, args.password)
+        enc.maybe_write_string(enc.TYPE_POSTFIELDS, args.postfields)
+        enc.maybe_write_string(enc.TYPE_HTTPPOSTBODY, args.postbody)
+        enc.maybe_write_string(enc.TYPE_COOKIE, args.cookie)
+        enc.maybe_write_string(enc.TYPE_RANGE, args.range)
+        enc.maybe_write_string(enc.TYPE_CUSTOMREQUEST, args.customrequest)
+        enc.maybe_write_string(enc.TYPE_MAIL_FROM, args.mailfrom)
+        enc.maybe_write_string(enc.TYPE_ACCEPT_ENCODING, args.acceptencoding)
+        enc.maybe_write_string(enc.TYPE_RTSP_SESSION_ID, args.rtspsessionid)
+        enc.maybe_write_string(enc.TYPE_RTSP_STREAM_URI, args.rtspstreamuri)
+        enc.maybe_write_string(enc.TYPE_RTSP_TRANSPORT, args.rtsptransport)
+        enc.maybe_write_string(enc.TYPE_MAIL_AUTH, args.mailauth)
+        enc.maybe_write_string(enc.TYPE_LOGIN_OPTIONS, args.loginoptions)
+        enc.maybe_write_string(enc.TYPE_XOAUTH2_BEARER, args.bearertoken)
+        enc.maybe_write_string(enc.TYPE_USERPWD, args.user_and_pass)
+        enc.maybe_write_string(enc.TYPE_USERAGENT, args.useragent)
+        enc.maybe_write_string(enc.TYPE_SSH_HOST_PUBLIC_KEY_SHA256, args.hostpksha256)
+        enc.maybe_write_string(enc.TYPE_HSTS, args.hsts)
 
-        enc.maybe_write_u32(enc.TYPE_OPTHEADER, options.optheader)
-        enc.maybe_write_u32(enc.TYPE_NOBODY, options.nobody)
-        enc.maybe_write_u32(enc.TYPE_FOLLOWLOCATION, options.followlocation)
-        enc.maybe_write_u32(enc.TYPE_WILDCARDMATCH, options.wildcardmatch)
-        enc.maybe_write_u32(enc.TYPE_RTSP_REQUEST, options.rtsprequest)
-        enc.maybe_write_u32(enc.TYPE_RTSP_CLIENT_CSEQ, options.rtspclientcseq)
-        enc.maybe_write_u32(enc.TYPE_HTTP_VERSION, options.httpversion)
-        enc.maybe_write_u32(enc.TYPE_NETRC, options.netrclevel)
-        enc.maybe_write_u32(enc.TYPE_CONNECT_ONLY, options.connectonly)
+        enc.maybe_write_u32(enc.TYPE_OPTHEADER, args.optheader)
+        enc.maybe_write_u32(enc.TYPE_NOBODY, args.nobody)
+        enc.maybe_write_u32(enc.TYPE_FOLLOWLOCATION, args.followlocation)
+        enc.maybe_write_u32(enc.TYPE_WILDCARDMATCH, args.wildcardmatch)
+        enc.maybe_write_u32(enc.TYPE_RTSP_REQUEST, args.rtsprequest)
+        enc.maybe_write_u32(enc.TYPE_RTSP_CLIENT_CSEQ, args.rtspclientcseq)
+        enc.maybe_write_u32(enc.TYPE_HTTP_VERSION, args.httpversion)
+        enc.maybe_write_u32(enc.TYPE_NETRC, args.netrclevel)
+        enc.maybe_write_u32(enc.TYPE_CONNECT_ONLY, args.connectonly)
 
-        if options.httpauth:
+        if args.httpauth:
             # translate a string HTTP auth name to an unsigned long bitmask
             # value in the format CURLOPT_HTTPAUTH expects
             log.debug(
-                f"Mapping provided CURLOPT_HTTPAUTH='{options.httpauth}' "
-                f"to {CurlOptHttpAuth[options.httpauth].value}L (ulong)"
+                f"Mapping provided CURLOPT_HTTPAUTH='{args.httpauth}' "
+                f"to {CurlOptHttpAuth[args.httpauth].value}L (ulong)"
             )
-            http_auth_value = CurlOptHttpAuth[options.httpauth].value
+            http_auth_value = CurlOptHttpAuth[args.httpauth].value
             enc.maybe_write_u32(enc.TYPE_HTTPAUTH, http_auth_value)
 
-        if options.wsoptions:
+        if args.wsoptions:
             # can only be 1 or unset currently.
-            # https://curl.se/libcurl/c/CURLOPT_WS_OPTIONS.html
+            # https://curl.se/libcurl/c/CURLOPT_WS_args.html
             enc.write_u32(enc.TYPE_WS_OPTIONS, 1)
 
-        if options.post:
+        if args.post:
             # can only be set to 1 or unset
             # https://curl.se/libcurl/c/CURLOPT_POST.html
             enc.write_u32(enc.TYPE_POST, 1)
 
         # Write the first upload to the file.
-        if options.upload1:
-            enc.write_bytes(enc.TYPE_UPLOAD1, options.upload1.encode("utf-8"))
-        elif options.upload1file:
-            with open(options.upload1file, "rb") as g:
+        if args.upload1:
+            enc.write_bytes(enc.TYPE_UPLOAD1, args.upload1.encode("utf-8"))
+        elif args.upload1file:
+            with open(args.upload1file, "rb") as g:
                 enc.write_bytes(enc.TYPE_UPLOAD1, g.read())
 
         # Write an array of headers to the file.
-        if options.header:
-            for header in options.header:
+        if args.header:
+            for header in args.header:
                 enc.write_string(enc.TYPE_HEADER, header)
 
         # Write an array of headers to the file.
-        if options.mailrecipient:
-            for mailrecipient in options.mailrecipient:
+        if args.mailrecipient:
+            for mailrecipient in args.mailrecipient:
                 enc.write_string(enc.TYPE_MAIL_RECIPIENT, mailrecipient)
 
         # Write an array of mimeparts to the file.
-        if options.mimepart:
-            for mimepart in options.mimepart:
+        if args.mimepart:
+            for mimepart in args.mimepart:
                 enc.write_mimepart(mimepart)
 
-    return ScriptRC.SUCCESS
 
-
-def get_options():
+def main() -> None:
+    """Main function"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--url", required=True)
@@ -202,50 +187,17 @@ def get_options():
         group.add_argument("--secrsp{0}file".format(ii))
         group.add_argument("--secrsp{0}test".format(ii), type=int)
 
-    return parser.parse_args()
-
-
-def setup_logging():
-    """
-    Set up logging from the command line options
-    """
-    root_logger = logging.getLogger()
-    formatter = logging.Formatter("%(asctime)s %(levelname)-5.5s %(message)s")
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setFormatter(formatter)
-    stdout_handler.setLevel(logging.DEBUG)
-    root_logger.addHandler(stdout_handler)
-    root_logger.setLevel(logging.DEBUG)
-
-
-class ScriptRC(object):
-    """Enum for script return codes"""
-
-    SUCCESS = 0
-    FAILURE = 1
-    EXCEPTION = 2
-
-
-class ScriptException(Exception):
-    pass
-
-
-def main():
-    # Get the options from the user.
-    options = get_options()
-
-    setup_logging()
+    args = parser.parse_args()
 
     # Run main script.
-    try:
-        rc = generate_corpus(options)
-    except Exception as e:
-        log.exception(e)
-        rc = ScriptRC.EXCEPTION
+    generate_corpus(args)
 
-    log.info("Returning %d", rc)
-    return rc
+
+def run() -> None:
+    """Set up common logging and run the main function."""
+    common_logging(__name__, __file__)
+    main()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    run()
