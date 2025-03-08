@@ -1,0 +1,6 @@
+[flake8]
+ignore =
+    D400
+    D401
+    E203
+max-line-length = 88

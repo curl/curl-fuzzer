@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 #
-# Script which converts corpus files to pcap files.
+"""Script which converts corpus files to pcap files."""
 
 import argparse
 import logging
-import sys
+from pathlib import Path
+from typing import Dict
 
 from scapy.all import wrpcap
 from scapy.layers.inet import IP, TCP
+from scapy.packet import Raw
 
-from curl_fuzzer_tools.corpus import BaseType, TLVDecoder
+from curl_fuzzer_tools.corpus import BaseType, TLVContents, TLVDecoder
+from curl_fuzzer_tools.logger import common_logging
 
 log = logging.getLogger(__name__)
 
@@ -32,10 +35,15 @@ RESPONSES = [
 ]
 
 
-def corpus_to_pcap(options):
-    response_tlvs = {}
+def corpus_to_pcap(args: argparse.Namespace) -> None:
+    """Convert the given corpus file to a pcap file."""
+    response_tlvs: Dict[int, TLVContents] = {}
 
-    with open(options.input, "rb") as f:
+    input_file = Path(args.input)
+    if not input_file.exists():
+        raise FileNotFoundError(f"Input file {args.input} does not exist")
+
+    with open(input_file, "rb") as f:
         dec = TLVDecoder(f.read())
         for tlv in dec:
             if tlv.type in RESPONSES:
@@ -50,67 +58,37 @@ def corpus_to_pcap(options):
         if rsp in response_tlvs:
             tlv = response_tlvs[rsp]
 
-            # By default generate a packet with source port 80. This hints at HTTP; in future we can be smart and
-            # pick a port that'll influence Wireshark. But for now, you can just Decode As.. in Wireshark to get
+            # By default generate a packet with source port 80. This hints at HTTP;
+            # in future we can be smart and pick a port that'll influence Wireshark.
+            # But for now, you can just Decode As.. in Wireshark to get
             # whatever protocol you want.
-            pkt = IP() / TCP(sport=80, flags="SA") / tlv.data
+            pkt = IP() / TCP(sport=80, flags="SA") / Raw(tlv.data)
+
             log.debug("Converted %s to packet: %s", tlv.TYPEMAP[rsp], pkt)
             response_packets.append(pkt)
 
-    log.debug("Writing %d packets to %s", len(response_packets), options.output)
-    wrpcap(options.output, response_packets)
+    output_file = str(args.output)
 
-    return ScriptRC.SUCCESS
+    log.info("Writing %d packets to %s", len(response_packets), output_file)
+    wrpcap(output_file, response_packets)
 
 
-def get_options():
+def main() -> None:
+    """Main function"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
-    return parser.parse_args()
-
-
-def setup_logging():
-    """
-    Set up logging from the command line options
-    """
-    root_logger = logging.getLogger()
-    formatter = logging.Formatter("%(asctime)s %(levelname)-5.5s %(message)s")
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setFormatter(formatter)
-    stdout_handler.setLevel(logging.DEBUG)
-    root_logger.addHandler(stdout_handler)
-    root_logger.setLevel(logging.DEBUG)
-
-
-class ScriptRC(object):
-    """Enum for script return codes"""
-
-    SUCCESS = 0
-    FAILURE = 1
-    EXCEPTION = 2
-
-
-class ScriptException(Exception):
-    pass
-
-
-def main():
-    # Get the options from the user.
-    options = get_options()
-
-    setup_logging()
+    args = parser.parse_args()
 
     # Run main script.
-    try:
-        rc = corpus_to_pcap(options)
-    except Exception as e:
-        log.exception(e)
-        rc = ScriptRC.EXCEPTION
+    corpus_to_pcap(args)
 
-    log.info("Returning %d", rc)
-    return rc
+
+def run() -> None:
+    """Set up common logging and run the main function."""
+    common_logging(__name__, __file__)
+    main()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    run()
