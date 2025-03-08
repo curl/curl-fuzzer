@@ -21,11 +21,11 @@
 #
 """Module for extracting test data from the test data folder"""
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import logging
 import os
 import re
-import logging
 
 log = logging.getLogger(__name__)
 

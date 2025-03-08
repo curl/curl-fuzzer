@@ -5,13 +5,15 @@
 import argparse
 import logging
 import sys
-import corpus
+
+from curl_fuzzer_tools.corpus import TLVDecoder
+
 log = logging.getLogger(__name__)
 
 
 def read_corpus(options):
     with open(options.input, "rb") as f:
-        dec = corpus.TLVDecoder(f.read())
+        dec = TLVDecoder(f.read())
         for tlv in dec:
             print(tlv)
 
@@ -39,6 +41,7 @@ def setup_logging():
 
 class ScriptRC(object):
     """Enum for script return codes"""
+
     SUCCESS = 0
     FAILURE = 1
     EXCEPTION = 2
@@ -65,5 +68,5 @@ def main():
     return rc
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
