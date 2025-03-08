@@ -53,15 +53,18 @@ Check out [REPRODUCING.md](REPRODUCING.md) for more detailed instructions.
 ## What's in this testcase?
 
 To look at the contents of a testcase, run
-```
-python read_corpus.py --input <path/to/file>
+```shell
+poetry run read_corpus <path/to/file>
 ```
 This will print out a list of contents inside the file.
 
 ## I want to generate a new testcase
 
-To generate a new testcase, run `python generate_corpus.py` with appropriate
-options.
+To generate a new testcase, run
+```shell
+poetry run generate_corpus
+```
+with appropriate options.
 
 # I want to enhance the fuzzer!
 
