@@ -3,6 +3,7 @@
 # Common corpus functions
 import logging
 import struct
+
 log = logging.getLogger(__name__)
 
 

@@ -4,6 +4,7 @@
 
 from enum import Enum
 
+
 class CurlOptHttpAuth(Enum):
     #define CURLAUTH_NONE         ((unsigned long)0)
     CURLAUTH_NONE = 0

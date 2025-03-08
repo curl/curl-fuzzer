@@ -6,40 +6,67 @@ import argparse
 import logging
 import os
 import sys
-import corpus
-from corpus_curl_opt_http_auth import CurlOptHttpAuth
+
+from curl_fuzzer_tools.corpus import TLVEncoder
+from curl_fuzzer_tools.corpus_curl_opt_http_auth import CurlOptHttpAuth
+from curl_fuzzer_tools.curl_test_data import TestData
+
 log = logging.getLogger(__name__)
 
 
 def generate_corpus(options):
     sys.path.append(options.curl_test_dir)
-    import curl_test_data
 
-    td = curl_test_data.TestData(os.path.join(options.curl_test_dir,
-                                              "data"))
+    td = TestData(os.path.join(options.curl_test_dir, "data"))
 
     with open(options.output, "wb") as f:
-        enc = corpus.TLVEncoder(f, td)
+        enc = TLVEncoder(f, td)
 
         # Write the URL to the file.
         enc.write_string(enc.TYPE_URL, options.url)
 
         # Write any responses to the file.
-        enc.maybe_write_response(enc.TYPE_RSP0, options.rsp0, options.rsp0file, options.rsp0test)
-        enc.maybe_write_response(enc.TYPE_RSP1, options.rsp1, options.rsp1file, options.rsp1test)
-        enc.maybe_write_response(enc.TYPE_RSP2, options.rsp2, options.rsp2file, options.rsp2test)
-        enc.maybe_write_response(enc.TYPE_RSP3, options.rsp3, options.rsp3file, options.rsp3test)
-        enc.maybe_write_response(enc.TYPE_RSP4, options.rsp4, options.rsp4file, options.rsp4test)
-        enc.maybe_write_response(enc.TYPE_RSP5, options.rsp5, options.rsp5file, options.rsp5test)
-        enc.maybe_write_response(enc.TYPE_RSP6, options.rsp6, options.rsp6file, options.rsp6test)
-        enc.maybe_write_response(enc.TYPE_RSP7, options.rsp7, options.rsp7file, options.rsp7test)
-        enc.maybe_write_response(enc.TYPE_RSP8, options.rsp8, options.rsp8file, options.rsp8test)
-        enc.maybe_write_response(enc.TYPE_RSP9, options.rsp9, options.rsp9file, options.rsp9test)
-        enc.maybe_write_response(enc.TYPE_RSP10, options.rsp10, options.rsp10file, options.rsp10test)
+        enc.maybe_write_response(
+            enc.TYPE_RSP0, options.rsp0, options.rsp0file, options.rsp0test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP1, options.rsp1, options.rsp1file, options.rsp1test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP2, options.rsp2, options.rsp2file, options.rsp2test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP3, options.rsp3, options.rsp3file, options.rsp3test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP4, options.rsp4, options.rsp4file, options.rsp4test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP5, options.rsp5, options.rsp5file, options.rsp5test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP6, options.rsp6, options.rsp6file, options.rsp6test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP7, options.rsp7, options.rsp7file, options.rsp7test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP8, options.rsp8, options.rsp8file, options.rsp8test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP9, options.rsp9, options.rsp9file, options.rsp9test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_RSP10, options.rsp10, options.rsp10file, options.rsp10test
+        )
 
         # Write any second socket responses to the file.
-        enc.maybe_write_response(enc.TYPE_SECRSP0, options.secrsp0, options.secrsp0file, options.secrsp0test)
-        enc.maybe_write_response(enc.TYPE_SECRSP1, options.secrsp1, options.secrsp1file, options.secrsp1test)
+        enc.maybe_write_response(
+            enc.TYPE_SECRSP0, options.secrsp0, options.secrsp0file, options.secrsp0test
+        )
+        enc.maybe_write_response(
+            enc.TYPE_SECRSP1, options.secrsp1, options.secrsp1file, options.secrsp1test
+        )
 
         # Write other options to file.
         enc.maybe_write_string(enc.TYPE_USERNAME, options.username)
@@ -59,7 +86,9 @@ def generate_corpus(options):
         enc.maybe_write_string(enc.TYPE_XOAUTH2_BEARER, options.bearertoken)
         enc.maybe_write_string(enc.TYPE_USERPWD, options.user_and_pass)
         enc.maybe_write_string(enc.TYPE_USERAGENT, options.useragent)
-        enc.maybe_write_string(enc.TYPE_SSH_HOST_PUBLIC_KEY_SHA256, options.hostpksha256)
+        enc.maybe_write_string(
+            enc.TYPE_SSH_HOST_PUBLIC_KEY_SHA256, options.hostpksha256
+        )
         enc.maybe_write_string(enc.TYPE_HSTS, options.hsts)
 
         enc.maybe_write_u32(enc.TYPE_OPTHEADER, options.optheader)
@@ -75,8 +104,10 @@ def generate_corpus(options):
         if options.httpauth:
             # translate a string HTTP auth name to an unsigned long bitmask
             # value in the format CURLOPT_HTTPAUTH expects
-            log.debug(f"Mapping provided CURLOPT_HTTPAUTH='{options.httpauth}' "
-                f"to {CurlOptHttpAuth[options.httpauth].value}L (ulong)")
+            log.debug(
+                f"Mapping provided CURLOPT_HTTPAUTH='{options.httpauth}' "
+                f"to {CurlOptHttpAuth[options.httpauth].value}L (ulong)"
+            )
             http_auth_value = CurlOptHttpAuth[options.httpauth].value
             enc.maybe_write_u32(enc.TYPE_HTTPAUTH, http_auth_value)
 
@@ -150,9 +181,9 @@ def get_options():
     parser.add_argument("--useragent", type=str)
     parser.add_argument("--netrclevel", type=int)
     parser.add_argument("--hostpksha256", type=str)
-    parser.add_argument("--wsoptions", action='store_true')
+    parser.add_argument("--wsoptions", action="store_true")
     parser.add_argument("--connectonly", type=int)
-    parser.add_argument("--post", action='store_true')
+    parser.add_argument("--post", action="store_true")
     parser.add_argument("--hsts")
 
     upload1 = parser.add_mutually_exclusive_group()
@@ -189,6 +220,7 @@ def setup_logging():
 
 class ScriptRC(object):
     """Enum for script return codes"""
+
     SUCCESS = 0
     FAILURE = 1
     EXCEPTION = 2
@@ -215,5 +247,5 @@ def main():
     return rc
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
