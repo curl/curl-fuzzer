@@ -24,7 +24,7 @@ export INSTALLDIR=$1
 [[ -d ${INSTALLDIR} ]] || exit 1
 
 # Build the fuzzers.
-${BUILD_ROOT}/buildconf || exit 2
+autoreconf -fi || exit 2
 ${BUILD_ROOT}/configure ${CODE_COVERAGE_OPTION} || exit 3
 make || exit 4
 make check || exit 5
