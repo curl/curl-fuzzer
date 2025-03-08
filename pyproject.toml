@@ -2,32 +2,25 @@
 name = "curl-fuzzer-tools"
 version = "0.1.0"
 description = "Tooling for the curl-fuzzer repository"
-authors = [
+maintainers = [
     {name = "Max Dymond",email = "cmeister2@gmail.com"}
 ]
 readme = "README.md"
-requires-python = "^3.9"
+requires-python = ">=3.9,<4"
 dependencies = [
     "scapy (>=2.6.1,<3.0.0)"
 ]
-
+license = { file = "LICENSE" }
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
-black = "^25.1.0"
-flake8 = "^7.1.2"
 mypy = "^1.15.0"
-flake8-isort = "^6.1.2"
-flake8-black = "^0.3.6"
-flake8-docstrings = "^1.7.0"
+ruff = "^0.9.10"
 
-[tool.isort]
-profile = "black"
-
-[tool.poetry.scripts]
+[project.scripts]
 read_corpus = "curl_fuzzer_tools.read_corpus:run"
 generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
@@ -36,3 +29,42 @@ corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 warn_unused_configs = true
 disallow_untyped_defs = true
 warn_return_any = true
+
+[tool.ruff]
+exclude = [
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".git"
+]
+
+# Match black
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.9
+target-version = "py39"
+
+[tool.ruff.lint]
+extend-select = [
+    "D"   # pydocstyle
+]
+
+ignore = [
+    "D400",
+    "D401",
+    "D415"
+]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
