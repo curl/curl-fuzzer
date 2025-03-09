@@ -50,11 +50,22 @@ The public corpus links for each target should be accessible here:
 
 Check out [REPRODUCING.md](REPRODUCING.md) for more detailed instructions.
 
+## How do I install the Python tooling?
+
+- Create a virtual environment using your favourite method.
+  - For example:
+    ```shell
+    python3 -m venv .venv
+    ```
+- Within that virtual environment, from the root directory of this repository, install the tooling with `pip install .`
+
+Alternatively you can use Poetry to run tools directly, using `poetry run <tool>`.
+
 ## What's in this testcase?
 
 To look at the contents of a testcase, run
 ```shell
-poetry run read_corpus <path/to/file>
+read_corpus <path/to/file>
 ```
 This will print out a list of contents inside the file.
 
@@ -62,9 +73,9 @@ This will print out a list of contents inside the file.
 
 To generate a new testcase, run
 ```shell
-poetry run generate_corpus
+generate_corpus
 ```
-with appropriate options.
+with appropriate options - pass `--help` for all options.
 
 # I want to enhance the fuzzer!
 
