@@ -572,6 +572,7 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #endif
 #ifdef FUZZ_PROTOCOLS_WS
   allowed_protocols = "ws,wss";
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_ONLY, 2L));
 #endif
 
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
