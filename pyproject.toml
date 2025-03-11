@@ -2,15 +2,10 @@
 name = "curl-fuzzer-tools"
 version = "0.1.0"
 description = "Tooling for the curl-fuzzer repository"
-maintainers = [
-    {name = "Max Dymond",email = "cmeister2@gmail.com"}
-]
-readme = "README.md"
 requires-python = ">=3.9,<4"
-dependencies = [
-    "scapy (>=2.6.1,<3.0.0)"
-]
+readme = "README.md"
 license = { file = "LICENSE" }
+maintainers = [{ name = "Max Dymond", email = "cmeister2@gmail.com" }]
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -27,19 +22,22 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.group.dev.dependencies]
-mypy = "1.15.0"
-ruff = "0.9.10"
+dependencies = ["scapy (>=2.6.1,<3.0.0)"]
 
 [project.scripts]
 read_corpus = "curl_fuzzer_tools.read_corpus:run"
 generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "mypy==1.15.0",
+    "ruff==0.9.10",
+]
 
 [tool.mypy]
 warn_unused_configs = true

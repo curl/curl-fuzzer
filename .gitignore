@@ -69,3 +69,4 @@ missing
 .venv/
 __pycache__/
 logs/
+*.egg-info/
