@@ -57,9 +57,20 @@ Check out [REPRODUCING.md](REPRODUCING.md) for more detailed instructions.
     ```shell
     python3 -m venv .venv
     ```
-- Within that virtual environment, from the root directory of this repository, install the tooling with `pip install .`
-
-Alternatively you can use Poetry to run tools directly, using `poetry run <tool>`.
+- Within that virtual environment, from the root directory of this repository, install the tooling with
+  ```shell
+  pip install .
+  ```
+- Alternatively you can use `uv`; either
+  ```shell
+  uv sync
+  uv pip install -e .
+  ```
+  to sync your environment, or
+  ```shell
+  uv run <tool>
+  ```
+  directly.
 
 ## What's in this testcase?
 
