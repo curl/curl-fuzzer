@@ -571,7 +571,8 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
   allowed_protocols = "tftp";
 #endif
 #ifdef FUZZ_PROTOCOLS_WS
-  allowed_protocols = "ws,wss";
+  // http is required by websockets
+  allowed_protocols = "http,ws,wss";
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_ONLY, 2L));
 #endif
 
