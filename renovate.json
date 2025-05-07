@@ -7,8 +7,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": [
-        "^scripts/VERSIONS$"
+      "managerFilePatterns": [
+        "/^scripts/VERSIONS$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION=(?<currentValue>.*)\\s"
