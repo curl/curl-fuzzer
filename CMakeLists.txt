@@ -175,9 +175,14 @@ else()
     set(GDB_DEP "")
 endif()
 
-# Group dependencies into a single target
+# Group non-curl dependencies into a single target
 add_custom_target(deps
-    DEPENDS zlib_external ${OPENSSL_DEP} nghttp2_external ${GDB_DEP}
+    DEPENDS
+        zlib_external
+        ${OPENSSL_DEP}
+        nghttp2_external
+        zstd_external
+        ${GDB_DEP}
 )
 
 # Now for the main dependencies!
