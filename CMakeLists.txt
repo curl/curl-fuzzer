@@ -236,6 +236,10 @@ add_dependencies(curl_external nghttp2_external ${OPENSSL_DEP} zlib_external)
 
 # Now it's time for the main targets!
 #
+# Read environment variables for compiler flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} $ENV{CFLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $ENV{CXXFLAGS}")
+
 # Paths to curl install (adjust as needed)
 set(CURL_INCLUDE_DIRS
     ${CURL_INSTALL_DIR}/include
@@ -265,7 +269,7 @@ endif()
 
 # Common sources and flags
 set(COMMON_SOURCES curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc)
-set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${LIB_FUZZING_ENGINE_FLAG})
+set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION)
 set(COMMON_LINK_LIBS
     ${CURL_LIB_DIR}/libcurl.a
     ${NGHTTP2_STATIC_LIB}
@@ -275,6 +279,7 @@ set(COMMON_LINK_LIBS
     pthread
     m
 )
+set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
 
 # Helper macro to define a fuzzer target
 macro(add_curl_fuzzer name proto)
@@ -282,6 +287,7 @@ macro(add_curl_fuzzer name proto)
     target_compile_options(${name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${proto})
     target_include_directories(${name} PRIVATE ${CURL_INCLUDE_DIRS})
     target_link_libraries(${name} PRIVATE ${COMMON_LINK_LIBS} ${LIB_FUZZING_ENGINE})
+    target_link_options(${name} PRIVATE ${COMMON_LINK_OPTIONS})
 endmacro()
 
 # Main fuzzer (all protocols)
@@ -289,6 +295,7 @@ add_executable(curl_fuzzer ${COMMON_SOURCES})
 target_compile_options(curl_fuzzer PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_ALL)
 target_include_directories(curl_fuzzer PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(curl_fuzzer PRIVATE ${COMMON_LINK_LIBS} ${LIB_FUZZING_ENGINE})
+target_link_options(curl_fuzzer PRIVATE ${COMMON_LINK_OPTIONS})
 
 # Protocol-specific fuzzers
 add_curl_fuzzer(curl_fuzzer_dict      DICT)
@@ -311,18 +318,21 @@ add_executable(curl_fuzzer_bufq fuzz_bufq.cc)
 target_compile_options(curl_fuzzer_bufq PRIVATE ${COMMON_FLAGS})
 target_include_directories(curl_fuzzer_bufq PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_OPTIONS})
 
 # URL fuzzer
 add_executable(fuzz_url fuzz_url.cc)
 target_compile_options(fuzz_url PRIVATE ${COMMON_FLAGS})
 target_include_directories(fuzz_url PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(fuzz_url PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(fuzz_url PRIVATE ${COMMON_LINK_OPTIONS})
 
 # Unit test fuzzer
 add_executable(curl_fuzzer_fnmatch fuzz_fnmatch.cc)
 target_compile_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_FLAGS})
 target_include_directories(curl_fuzzer_fnmatch PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_OPTIONS})
 
 # Add dependencies so fuzzers build after curl
 add_dependencies(curl_fuzzer curl_external)
