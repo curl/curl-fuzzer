@@ -8,9 +8,21 @@
 set -ex
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
+# Work out if we need to install with sudo or not.
+if [[ $(id -u) -eq 0 ]]
+then
+    # We are root, so we can install without sudo.
+    echo "Running as root, no sudo required."
+    export SUDO=""
+else
+    # We are not root, so we need to use sudo.
+    echo "Running as non-root, using sudo."
+    export SUDO="sudo"
+fi
+
 # Download dependencies for oss-fuzz
-apt-get update
-apt-get install -y make \
+$SUDO apt-get update
+$SUDO apt-get install -y make \
                    autoconf \
                    automake \
                    libtool \
