@@ -8,19 +8,10 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^scripts/VERSIONS$/"
+        "CMakeLists.txt"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION=(?<currentValue>.*)\\s"
-      ]
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^scripts/CMakeLists$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\s"
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
       ]
     }
   ],
