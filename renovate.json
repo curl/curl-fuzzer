@@ -13,6 +13,15 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION=(?<currentValue>.*)\\s"
       ]
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/CMakeLists$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\s"
+      ]
     }
   ],
   "packageRules": [

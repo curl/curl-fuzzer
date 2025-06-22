@@ -3,25 +3,16 @@
 set -ex
 
 # Save off the current folder as the build root.
-export BUILD_ROOT=$PWD
+export BUILD_ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 SCRIPTDIR=${BUILD_ROOT}/scripts
-
-CURLDIR=/tmp/curl
-OPENSSLDIR=/tmp/openssl
-NGHTTPDIR=/tmp/nghttp2
-INSTALLDIR=/tmp/curl_install
 
 # Parse the options.
 OPTIND=1
 
-while getopts "c:n:o:" opt
+while getopts "c:" opt
 do
   case "$opt" in
-    c) CURLDIR=$OPTARG
-       ;;
-    n) NGHTTPDIR=$OPTARG
-       ;;
-    o) OPENSSLDIR=$OPTARG
+    c) export CURL_SOURCE_DIR=$OPTARG
        ;;
   esac
 done
@@ -36,14 +27,4 @@ export CXXFLAGS="-fsanitize=address,fuzzer-no-link -stdlib=libstdc++ $FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 export OPENSSLFLAGS="-fno-sanitize=alignment -lstdc++"
 
-# Install openssl
-${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
-
-# Install nghttp2
-${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
-
-# Install curl after all other dependencies
-${SCRIPTDIR}/handle_x.sh curl ${CURLDIR} ${INSTALLDIR} || exit 1
-
-# Compile and test the fuzzers.
-${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIR} || exit 1
+${SCRIPTDIR}/compile_target.sh fuzz
