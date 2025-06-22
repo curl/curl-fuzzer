@@ -26,6 +26,7 @@ set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
 if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
+    message(STATUS "Building OpenSSL as a dependency")
     # Install openssl
     #
     # renovate: datasource=github-tags depName=openssl/openssl
@@ -92,6 +93,7 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     set(OPENSSL_DEP openssl_external)
     set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 else()
+    message(STATUS "Not building OpenSSL")
     set(NGHTTP2_OPENSSL_OPTION --without-openssl)
     set(OPENSSL_DEP "")
     set(OPENSSL_STATIC_LIB "")
@@ -198,6 +200,7 @@ set(CURL_POST_INSTALL_COMMAND
 # If there is, use it. Otherwise, download the latest version.
 #
 if (DEFINED ENV{CURL_SOURCE_DIR})
+    message(STATUS "Building curl from source directory: $ENV{CURL_SOURCE_DIR}")
     ExternalProject_Add(
         curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
@@ -209,6 +212,7 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
     )
 else()
     set(CURL_VERSION 8.14.1)
+    message(STATUS "Building curl from downloaded source, version ${CURL_VERSION}")
     # The URL needs dots replaced with underscores for curl's release naming convention.
     string(REPLACE "." "_" CURL_VERSION_UNDERSCORE ${CURL_VERSION})
     set(CURL_URL https://github.com/curl/curl/releases/download/curl-${CURL_VERSION_UNDERSCORE}/curl-${CURL_VERSION}.tar.gz)
