@@ -23,6 +23,26 @@ ExternalProject_Add(
 )
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
+# Install zstd
+#
+# renovate: datasource=github-tags depName=facebook/zstd
+set(ZSTD_VERSION 1.5.6)
+set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz)
+set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
+
+ExternalProject_Add(
+    zstd_external
+    URL ${ZSTD_URL}
+    PREFIX ${CMAKE_BINARY_DIR}/zstd
+    SOURCE_SUBDIR build/cmake
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) install
+    BUILD_IN_SOURCE 0
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
+
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
 if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
@@ -113,6 +133,7 @@ set(NGHTTP2_CONFIGURE_COMMAND
                 --enable-static
                 --disable-threads
                 --enable-lib-only
+                --with-zlib=${ZLIB_INSTALL_DIR}
                 ${NGHTTP2_OPENSSL_OPTION}
 )
 
@@ -171,7 +192,6 @@ else()
     set(CURL_SSL_OPTION "--without-ssl")
 endif()
 
-set(CURL_NGHTTP2_OPTION "--with-nghttp2=${NGHTTP2_INSTALL_DIR}")
 set(CURL_CONFIGURE_COMMAND
     autoreconf -fi &&
     ./configure
@@ -186,7 +206,9 @@ set(CURL_CONFIGURE_COMMAND
         --without-libpsl
         --with-random=/dev/null
         ${CURL_SSL_OPTION}
-        ${CURL_NGHTTP2_OPTION}
+        --with-zlib=${ZLIB_INSTALL_DIR}
+        --with-nghttp2=${NGHTTP2_INSTALL_DIR}
+        --with-zstd=${ZSTD_INSTALL_DIR}
 )
 
 set(CURL_POST_INSTALL_COMMAND
@@ -232,7 +254,7 @@ endif()
 set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
 
 # Add dependencies for curl
-add_dependencies(curl_external nghttp2_external ${OPENSSL_DEP} zlib_external)
+add_dependencies(curl_external nghttp2_external ${OPENSSL_DEP} zlib_external zstd_external)
 
 # Now it's time for the main targets!
 #
@@ -276,6 +298,7 @@ set(COMMON_LINK_LIBS
     ${NGHTTP2_STATIC_LIB}
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
+    ${ZSTD_STATIC_LIB}
     ${LIB_FUZZING_ENGINE}
     pthread
     m
