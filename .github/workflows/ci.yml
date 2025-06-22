@@ -82,3 +82,17 @@ jobs:
         with:
           name: artifacts
           path: ./out/artifacts
+
+  Mainline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+          ./scripts/ossfuzzdeps.sh
+      - name: Compile mainline
+        run: |
+          ./mainline.sh
