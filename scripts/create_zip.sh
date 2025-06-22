@@ -2,10 +2,10 @@
 
 set -ex
 
-# Exit if the build root has not been defined.
-[[ -d ${BUILD_ROOT} ]] || exit 1
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 
-. ${BUILD_ROOT}/scripts/fuzz_targets
+. ${SCRIPTDIR}/fuzz_targets
 
 for TARGET in ${FUZZ_TARGETS}
 do

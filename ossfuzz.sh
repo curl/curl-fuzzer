@@ -27,18 +27,7 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 . ${SCRIPTDIR}/fuzz_targets
 
-ZLIBDIR=/src/zlib
-OPENSSLDIR=/src/openssl
-NGHTTPDIR=/src/nghttp2
 GDBDIR=/src/gdb
-
-# Check for GDB-specific behaviour by checking for the GDBMODE flag.
-# - Compile with -O0 so that DEBUGASSERTs can be debugged in gdb.
-if [[ -n ${GDBMODE:-} ]]
-then
-  export CFLAGS="$CFLAGS -O0"
-  export CXXFLAGS="$CXXFLAGS -O0"
-fi
 
 echo "BUILD_ROOT: $BUILD_ROOT"
 echo "SRC: ${SRC:-undefined}"
@@ -52,42 +41,14 @@ echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 
 export MAKEFLAGS+="-j$(nproc)"
 
-# Make an install directory
-export INSTALLDIR=/src/curl_install
+# Set the CURL_SOURCE_DIR for the build.
+export CURL_SOURCE_DIR=/src/curl
 
-# Check for GDB-specific behaviour by checking for the GDBMODE flag.
-# - Compile and installing GDB if necessary.
-if [[ -n ${GDBMODE:-} ]]
-then
-  if ! type gdb 2>/dev/null
-  then
-    # If gdb isn't found, then download and install GDB.
-    # This installs to the default configure location.
-    ${SCRIPTDIR}/handle_x.sh gdb ${GDBDIR} system || exit 1
-  fi
-fi
+# Compile the fuzzers.
+${SCRIPTDIR}/compile_target.sh fuzz
 
-# Install zlib
-${SCRIPTDIR}/handle_x.sh zlib ${ZLIBDIR} ${INSTALLDIR} || exit 1
-
-# For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
-# affect (see 16697, 17624)
-if [[ ${SANITIZER} != "memory" ]]
-then
-    # Install openssl
-    export OPENSSLFLAGS="-fno-sanitize=alignment"
-    ${SCRIPTDIR}/handle_x.sh openssl ${OPENSSLDIR} ${INSTALLDIR} || exit 1
-fi
-
-# Install nghttp2
-${SCRIPTDIR}/handle_x.sh nghttp2 ${NGHTTPDIR} ${INSTALLDIR} || exit 1
-
-# Compile curl
-${SCRIPTDIR}/install_curl.sh /src/curl ${INSTALLDIR}
-
-# Build the fuzzers.
-${SCRIPTDIR}/compile_fuzzer.sh ${INSTALLDIR}
-make zip
+# Zip up the seed corpus.
+scripts/create_zip.sh
 
 # Copy the fuzzers over.
 for TARGET in $FUZZ_TARGETS

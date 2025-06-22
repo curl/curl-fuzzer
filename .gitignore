@@ -6,6 +6,7 @@
 .idea/
 aclocal.m4*
 autom4te.cache/
+build/
 buildconf.tmp*
 compile
 config.guess
