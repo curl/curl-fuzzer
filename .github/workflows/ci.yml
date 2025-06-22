@@ -95,3 +95,15 @@ jobs:
       - name: Compile mainline
         run: |
           ./mainline.sh
+
+  just_dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+      - name: Compile deps target
+        run: ./scripts/compile_target.sh deps
