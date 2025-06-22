@@ -84,6 +84,12 @@ jobs:
           path: ./out/artifacts
 
   Mainline:
+    strategy:
+      matrix:
+        sanitizer:
+          - address
+          - memory
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -95,6 +101,9 @@ jobs:
       - name: Compile mainline
         run: |
           ./mainline.sh
+        env:
+          # test with different "sanitizers"
+          SANITIZER: ${{ matrix.sanitizer }}
 
   just_dependencies:
     runs-on: ubuntu-latest
