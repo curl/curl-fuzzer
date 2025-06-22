@@ -241,16 +241,27 @@ set(CURL_LIB_DIR ${CURL_INSTALL_DIR}/lib)
 
 # Fuzzing engine
 if (DEFINED ENV{LIB_FUZZING_ENGINE})
-    set(LIB_FUZZING_ENGINE $ENV{LIB_FUZZING_ENGINE})
+    # Check to see if ENV{LIB_FUZZING_ENGINE} is a file. If so, use it directly.
+    # Otherwise, assume it's a flag to the compiler.
+    if (EXISTS $ENV{LIB_FUZZING_ENGINE})
+        message(STATUS "Using LIB_FUZZING_ENGINE file: $ENV{LIB_FUZZING_ENGINE}")
+        set(LIB_FUZZING_ENGINE $ENV{LIB_FUZZING_ENGINE})
+        set(LIB_FUZZING_ENGINE_FLAG "")
+    else()
+        message(STATUS "Using LIB_FUZZING_ENGINE as a compiler flag: $ENV{LIB_FUZZING_ENGINE}")
+        set(LIB_FUZZING_ENGINE_FLAG $ENV{LIB_FUZZING_ENGINE})
+    endif()
+
 else()
     add_library(standaloneengine STATIC standalone_fuzz_target_runner.cc)
     set_target_properties(standaloneengine PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(LIB_FUZZING_ENGINE ${CMAKE_BINARY_DIR}/libstandaloneengine.a)
+    set(LIB_FUZZING_ENGINE_FLAG "")
 endif()
 
 # Common sources and flags
 set(COMMON_SOURCES curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc)
-set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION)
+set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${LIB_FUZZING_ENGINE_FLAG})
 set(COMMON_LINK_LIBS
     ${CURL_LIB_DIR}/libcurl.a
     ${NGHTTP2_STATIC_LIB}
