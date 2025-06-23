@@ -26,7 +26,7 @@ set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 # Install zstd
 #
 # renovate: datasource=github-tags depName=facebook/zstd
-set(ZSTD_VERSION 1.5.6)
+set(ZSTD_VERSION 1.5.7)
 set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz)
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
 
