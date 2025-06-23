@@ -153,6 +153,26 @@ set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 # Ensure zlib and openssl are built before nghttp2
 add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
 
+# Install libidn2
+#
+# renovate: datasource=github-tags depName=libidn/libidn2
+set(LIBIDN2_VERSION 2.3.8)
+set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
+set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
+
+ExternalProject_Add(
+    libidn2_external
+    URL ${LIBIDN2_URL}
+    PREFIX ${CMAKE_BINARY_DIR}/libidn2
+    SOURCE_SUBDIR .
+    CONFIGURE_COMMAND ./configure --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) install
+    BUILD_IN_SOURCE 1
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
+
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
 set(GDB_URL https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz)
@@ -214,6 +234,7 @@ set(CURL_CONFIGURE_COMMAND
         --with-zlib=${ZLIB_INSTALL_DIR}
         --with-nghttp2=${NGHTTP2_INSTALL_DIR}
         --with-zstd=${ZSTD_INSTALL_DIR}
+        --with-libidn2=${LIBIDN2_INSTALL_DIR}
 )
 
 set(CURL_POST_INSTALL_COMMAND
@@ -259,7 +280,12 @@ endif()
 set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
 
 # Add dependencies for curl
-add_dependencies(curl_external nghttp2_external ${OPENSSL_DEP} zlib_external zstd_external)
+add_dependencies(curl_external
+                 nghttp2_external
+                 ${OPENSSL_DEP}
+                 zlib_external
+                 zstd_external
+                 libidn2_external)
 
 # Now it's time for the main targets!
 #
@@ -304,6 +330,7 @@ set(COMMON_LINK_LIBS
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
     ${ZSTD_STATIC_LIB}
+    ${LIBIDN2_STATIC_LIB}
     ${LIB_FUZZING_ENGINE}
     pthread
     m
