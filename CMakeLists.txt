@@ -77,6 +77,8 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         -DPEDANTIC
         -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         no-shared
+        no-docs
+        no-tests
         ${OPENSSL_ASM_FLAG}
         enable-tls1_3
         enable-rc5
@@ -173,6 +175,33 @@ ExternalProject_Add(
 )
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
+# Install librtmp only if using OpenSSL
+if (TARGET openssl_external)
+    set(LIBRTMP_URL git://git.ffmpeg.org/rtmpdump)
+    set(LIBRTMP_INSTALL_DIR ${CMAKE_BINARY_DIR}/librtmp-install)
+
+    ExternalProject_Add(
+        librtmp_external
+        GIT_REPOSITORY ${LIBRTMP_URL}
+        GIT_SHALLOW 1
+        PREFIX ${CMAKE_BINARY_DIR}/librtmp
+        SOURCE_SUBDIR librtmp
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND ${CMAKE_SOURCE_DIR}/scripts/build_rtmp.sh <SOURCE_DIR> ${LIBRTMP_INSTALL_DIR} ${OPENSSL_INSTALL_DIR} ${ZLIB_INSTALL_DIR}
+        INSTALL_COMMAND $(MAKE) prefix=${LIBRTMP_INSTALL_DIR} SHARED= install
+        BUILD_IN_SOURCE 1
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    set(LIBRTMP_STATIC_LIB ${LIBRTMP_INSTALL_DIR}/lib/librtmp.a)
+    set(LIBRTMP_DEP librtmp_external)
+    set(CURL_LIBRTMP_OPTION --with-librtmp=${LIBRTMP_INSTALL_DIR})
+else()
+    message(STATUS "Not building librtmp as OpenSSL is not enabled")
+    set(LIBRTMP_STATIC_LIB "")
+    set(LIBRTMP_DEP "")
+    set(CURL_LIBRTMP_OPTION --without-librtmp)
+endif()
+
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
 set(GDB_URL https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz)
@@ -203,6 +232,7 @@ add_custom_target(deps
         nghttp2_external
         zstd_external
         libidn2_external
+        ${LIBRTMP_DEP}
         ${GDB_DEP}
 )
 
@@ -236,6 +266,7 @@ set(CURL_CONFIGURE_COMMAND
         --with-nghttp2=${NGHTTP2_INSTALL_DIR}
         --with-zstd=${ZSTD_INSTALL_DIR}
         --with-libidn2=${LIBIDN2_INSTALL_DIR}
+        ${CURL_LIBRTMP_OPTION}
 )
 
 set(CURL_POST_INSTALL_COMMAND
@@ -260,6 +291,8 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
         BUILD_IN_SOURCE 1
     )
 else()
+    # Use the tag from curl-container as it's semver and reasonably up to date.
+    # renovate: datasource=github-tags depName=curl/curl-container
     set(CURL_VERSION 8.14.1)
     message(STATUS "Building curl from downloaded source, version ${CURL_VERSION}")
     # The URL needs dots replaced with underscores for curl's release naming convention.
@@ -285,6 +318,7 @@ set(CURL_DEPS
     zlib_external
     zstd_external
     libidn2_external
+    ${LIBRTMP_DEP}
 )
 
 # Add dependencies for curl
@@ -330,6 +364,7 @@ set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION)
 set(COMMON_LINK_LIBS
     ${CURL_LIB_DIR}/libcurl.a
     ${NGHTTP2_STATIC_LIB}
+    ${LIBRTMP_STATIC_LIB}
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
     ${ZSTD_STATIC_LIB}
@@ -364,35 +399,27 @@ add_curl_fuzzer(curl_fuzzer_https     HTTPS)
 add_curl_fuzzer(curl_fuzzer_imap      IMAP)
 add_curl_fuzzer(curl_fuzzer_mqtt      MQTT)
 add_curl_fuzzer(curl_fuzzer_pop3      POP3)
+add_curl_fuzzer(curl_fuzzer_rtmp      RTMP)
 add_curl_fuzzer(curl_fuzzer_rtsp      RTSP)
 add_curl_fuzzer(curl_fuzzer_smb       SMB)
 add_curl_fuzzer(curl_fuzzer_smtp      SMTP)
 add_curl_fuzzer(curl_fuzzer_tftp      TFTP)
 add_curl_fuzzer(curl_fuzzer_ws        WS)
 
-# BUFQ fuzzer
-add_executable(curl_fuzzer_bufq fuzz_bufq.cc)
-target_compile_options(curl_fuzzer_bufq PRIVATE ${COMMON_FLAGS})
-target_include_directories(curl_fuzzer_bufq PRIVATE ${CURL_INCLUDE_DIRS})
-target_link_libraries(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_LIBS})
-target_link_options(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_OPTIONS})
-add_dependencies(curl_fuzzer_bufq ${FUZZ_DEPS})
+# Helper macro to define a fuzzer target with source files
+macro(add_curl_fuzzer_sources name sources)
+    add_executable(${name} ${sources})
+    target_compile_options(${name} PRIVATE ${COMMON_FLAGS})
+    target_include_directories(${name} PRIVATE ${CURL_INCLUDE_DIRS})
+    target_link_libraries(${name} PRIVATE ${COMMON_LINK_LIBS})
+    target_link_options(${name} PRIVATE ${COMMON_LINK_OPTIONS})
+    add_dependencies(${name} ${FUZZ_DEPS})
+endmacro()
 
-# URL fuzzer
-add_executable(fuzz_url fuzz_url.cc)
-target_compile_options(fuzz_url PRIVATE ${COMMON_FLAGS})
-target_include_directories(fuzz_url PRIVATE ${CURL_INCLUDE_DIRS})
-target_link_libraries(fuzz_url PRIVATE ${COMMON_LINK_LIBS})
-target_link_options(fuzz_url PRIVATE ${COMMON_LINK_OPTIONS})
-add_dependencies(fuzz_url ${FUZZ_DEPS})
-
-# Unit test fuzzer
-add_executable(curl_fuzzer_fnmatch fuzz_fnmatch.cc)
-target_compile_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_FLAGS})
-target_include_directories(curl_fuzzer_fnmatch PRIVATE ${CURL_INCLUDE_DIRS})
-target_link_libraries(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_LIBS})
-target_link_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_OPTIONS})
-add_dependencies(curl_fuzzer_fnmatch ${FUZZ_DEPS})
+# Add single file fuzzers
+add_curl_fuzzer_sources(curl_fuzzer_bufq fuzz_bufq.cc)
+add_curl_fuzzer_sources(fuzz_url fuzz_url.cc)
+add_curl_fuzzer_sources(curl_fuzzer_fnmatch fuzz_fnmatch.cc)
 
 # Create a custom target for all fuzzers
 add_custom_target(fuzz
@@ -407,6 +434,7 @@ add_custom_target(fuzz
         curl_fuzzer_imap
         curl_fuzzer_mqtt
         curl_fuzzer_pop3
+        curl_fuzzer_rtmp
         curl_fuzzer_rtsp
         curl_fuzzer_smb
         curl_fuzzer_smtp
