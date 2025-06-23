@@ -28,6 +28,7 @@ dependencies = ["scapy (>=2.6.1,<3.0.0)"]
 read_corpus = "curl_fuzzer_tools.read_corpus:run"
 generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
+generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
 
 [build-system]
 requires = ["setuptools>=61.0"]
