@@ -279,14 +279,16 @@ else()
 endif()
 
 set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
+set(CURL_DEPS
+    nghttp2_external
+    ${OPENSSL_DEP}
+    zlib_external
+    zstd_external
+    libidn2_external
+)
 
 # Add dependencies for curl
-add_dependencies(curl_external
-                 nghttp2_external
-                 ${OPENSSL_DEP}
-                 zlib_external
-                 zstd_external
-                 libidn2_external)
+add_dependencies(curl_external ${CURL_DEPS})
 
 # Now it's time for the main targets!
 #
@@ -338,23 +340,21 @@ set(COMMON_LINK_LIBS
 )
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
 
+# Ensure that curl and its dependencies are built before the fuzzers
+set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
+
 # Helper macro to define a fuzzer target
 macro(add_curl_fuzzer name proto)
     add_executable(${name} ${COMMON_SOURCES})
     target_compile_options(${name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${proto})
     target_include_directories(${name} PRIVATE ${CURL_INCLUDE_DIRS})
-    target_link_libraries(${name} PRIVATE ${COMMON_LINK_LIBS} ${LIB_FUZZING_ENGINE})
+    target_link_libraries(${name} PRIVATE ${COMMON_LINK_LIBS})
     target_link_options(${name} PRIVATE ${COMMON_LINK_OPTIONS})
+    add_dependencies(${name} ${FUZZ_DEPS})
 endmacro()
 
-# Main fuzzer (all protocols)
-add_executable(curl_fuzzer ${COMMON_SOURCES})
-target_compile_options(curl_fuzzer PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_ALL)
-target_include_directories(curl_fuzzer PRIVATE ${CURL_INCLUDE_DIRS})
-target_link_libraries(curl_fuzzer PRIVATE ${COMMON_LINK_LIBS} ${LIB_FUZZING_ENGINE})
-target_link_options(curl_fuzzer PRIVATE ${COMMON_LINK_OPTIONS})
-
-# Protocol-specific fuzzers
+# Main fuzzer and protocol-specific fuzzers
+add_curl_fuzzer(curl_fuzzer           ALL)
 add_curl_fuzzer(curl_fuzzer_dict      DICT)
 add_curl_fuzzer(curl_fuzzer_file      FILE)
 add_curl_fuzzer(curl_fuzzer_ftp       FTP)
@@ -376,6 +376,7 @@ target_compile_options(curl_fuzzer_bufq PRIVATE ${COMMON_FLAGS})
 target_include_directories(curl_fuzzer_bufq PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(curl_fuzzer_bufq ${FUZZ_DEPS})
 
 # URL fuzzer
 add_executable(fuzz_url fuzz_url.cc)
@@ -383,6 +384,7 @@ target_compile_options(fuzz_url PRIVATE ${COMMON_FLAGS})
 target_include_directories(fuzz_url PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(fuzz_url PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(fuzz_url PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(fuzz_url ${FUZZ_DEPS})
 
 # Unit test fuzzer
 add_executable(curl_fuzzer_fnmatch fuzz_fnmatch.cc)
@@ -390,25 +392,6 @@ target_compile_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_FLAGS})
 target_include_directories(curl_fuzzer_fnmatch PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_OPTIONS})
-
-set(FUZZ_DEPS curl_external ${LIB_FUZZING_ENGINE_DEP} zlib_external nghttp2_external ${OPENSSL_DEP})
-add_dependencies(curl_fuzzer ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_dict ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_file ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_ftp ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_gopher ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_http ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_https ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_imap ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_mqtt ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_pop3 ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_rtsp ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_smb ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_smtp ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_tftp ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_ws ${FUZZ_DEPS})
-add_dependencies(curl_fuzzer_bufq ${FUZZ_DEPS})
-add_dependencies(fuzz_url ${FUZZ_DEPS})
 add_dependencies(curl_fuzzer_fnmatch ${FUZZ_DEPS})
 
 # Create a custom target for all fuzzers
