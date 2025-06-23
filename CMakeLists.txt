@@ -202,6 +202,7 @@ add_custom_target(deps
         ${OPENSSL_DEP}
         nghttp2_external
         zstd_external
+        libidn2_external
         ${GDB_DEP}
 )
 
