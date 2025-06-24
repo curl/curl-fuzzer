@@ -32,6 +32,3 @@ $SUDO apt-get install -y make \
                    pkg-config \
                    wget \
                    cmake
-
-# Compile and install the dependencies as well.
-${SCRIPTDIR}/compile_target.sh deps
