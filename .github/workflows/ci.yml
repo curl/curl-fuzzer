@@ -119,3 +119,15 @@ jobs:
           sudo apt-get install -y cmake clang
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
+
+  # Ensure that the repository can be built for i386
+  Testi386:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Build Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'curl'
+        dry-run: false
+        keep-unaffected-fuzz-targets: true
+        architecture: 'i386'

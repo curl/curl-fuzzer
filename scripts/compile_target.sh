@@ -46,6 +46,13 @@ echo "CFLAGS: ${CFLAGS:-undefined}"
 echo "CXXFLAGS: ${CXXFLAGS:-undefined}"
 echo "ARCHITECTURE: ${ARCHITECTURE:-undefined}"
 
+if [[ "${ARCHITECTURE:-}" == "i386" ]]
+then
+    CMAKE_VERBOSE_FLAG="-v"
+else
+    CMAKE_VERBOSE_FLAG=""
+fi
+
 export MAKEFLAGS+="-j$(nproc)"
 
 # Create a build directory for the dependencies.
@@ -55,5 +62,5 @@ mkdir -p ${BUILD_DIR}
 # Compile the dependencies.
 pushd ${BUILD_DIR}
 cmake ${CMAKE_GDB_FLAG} ..
-cmake --build . --target ${TARGET}
+cmake --build . --target ${TARGET} ${CMAKE_VERBOSE_FLAG}
 popd
