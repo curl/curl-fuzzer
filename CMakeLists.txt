@@ -56,10 +56,12 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/openssl/src/openssl_external)
 
     # Architecture and sanitizer logic
-    set(OPENSSL_ARCH_PROG "")
+    set(OPENSSL_ARCH_TARGET "")
+    set(OPENSSL_ARCH_FLAG "")
     set(OPENSSL_EC_FLAG "enable-ec_nistp_64_gcc_128")
     if(DEFINED ENV{ARCHITECTURE} AND "$ENV{ARCHITECTURE}" STREQUAL "i386")
-        set(OPENSSL_ARCH_PROG "setarch i386")
+        set(OPENSSL_ARCH_TARGET "linux-generic32")
+        set(OPENSSL_ARCH_FLAG "386")
         set(OPENSSL_EC_FLAG "no-threads")
     endif()
 
@@ -70,14 +72,17 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
 
     # Compose the config command
     set(OPENSSL_CONFIGURE_COMMAND
-        ${OPENSSL_ARCH_PROG} ./config
+        ./Configure
+        ${OPENSSL_ARCH_TARGET}
         --prefix=${OPENSSL_INSTALL_DIR}
         --libdir=lib
         --debug
         -DPEDANTIC
         -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         no-shared
+        no-tests
         ${OPENSSL_ASM_FLAG}
+        ${OPENSSL_ARCH_FLAG}
         enable-tls1_3
         enable-rc5
         enable-md2
