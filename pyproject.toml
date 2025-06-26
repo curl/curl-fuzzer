@@ -37,7 +37,7 @@ build-backend = "setuptools.build_meta"
 [dependency-groups]
 dev = [
     "mypy==1.16.1",
-    "ruff==0.12.0",
+    "ruff==0.12.1",
 ]
 
 [tool.mypy]
