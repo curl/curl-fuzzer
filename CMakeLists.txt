@@ -265,14 +265,12 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
         BUILD_IN_SOURCE 1
     )
 else()
-    set(CURL_VERSION 8.14.1)
-    message(STATUS "Building curl from downloaded source, version ${CURL_VERSION}")
-    # The URL needs dots replaced with underscores for curl's release naming convention.
-    string(REPLACE "." "_" CURL_VERSION_UNDERSCORE ${CURL_VERSION})
-    set(CURL_URL https://github.com/curl/curl/releases/download/curl-${CURL_VERSION_UNDERSCORE}/curl-${CURL_VERSION}.tar.gz)
+    message(STATUS "Building curl from git master")
+    set(CURL_URL "https://github.com/curl/curl")
     ExternalProject_Add(
         curl_external
-        URL ${CURL_URL}
+        GIT_REPOSITORY ${CURL_URL}
+        GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
         CONFIGURE_COMMAND ${CURL_CONFIGURE_COMMAND}
         BUILD_COMMAND $(MAKE)
