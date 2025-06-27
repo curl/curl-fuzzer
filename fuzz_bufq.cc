@@ -268,7 +268,7 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
         FV_PRINTF(verbose, "OP: pass, size %zd\n", op_size);
         struct writer_cb_ctx ctx = { .verbose = verbose, .template_buf = template_buf, .read_len = op_size, .next_byte_read = next_byte_read };
         size_t nread;
-        CURLCode result = Curl_bufq_pass(&q, bufq_writer_cb, &ctx, &nread);
+        CURLcode result = Curl_bufq_pass(&q, bufq_writer_cb, &ctx, &nread);
         if (!result) {
           FV_PRINTF(verbose, "OP: pass, success, read %zu, expect begins with %x\n", nread, ctx.next_byte_read);
           buffer_bytes -= nread;
