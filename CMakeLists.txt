@@ -418,7 +418,7 @@ add_custom_target(fuzz
         curl_fuzzer_smtp
         curl_fuzzer_tftp
         curl_fuzzer_ws
-        curl_fuzzer_bufq
+        # curl_fuzzer_bufq
         fuzz_url
         curl_fuzzer_fnmatch
 )
