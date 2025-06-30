@@ -69,67 +69,65 @@ static unsigned char *compute_buffer(unsigned char next_byte, unsigned char *buf
 struct writer_cb_ctx {
   bool verbose;
   unsigned char *template_buf;
-  ssize_t read_len;
+  size_t read_len;
   unsigned char next_byte_read;
 };
 
 /**
  * Consume and verify up to read_len from a BUFQ via callback for Curl_bufq_pass.
  */
-ssize_t bufq_writer_cb(void *writer_ctx,
+CURLcode bufq_writer_cb(void *writer_ctx,
                        const unsigned char *buf, size_t len,
-                       CURLcode *err)
+                       size_t *pnwritten)
 {
   struct writer_cb_ctx *ctx = (struct writer_cb_ctx *)writer_ctx;
 
-  if (ctx->read_len <= 0) {
-    *err = CURLE_AGAIN;
-    return -1;
-  }
+  *pnwritten = 0;
+  if (ctx->read_len <= 0)
+    return CURLE_AGAIN;
 
   FV_PRINTF(ctx->verbose, "Writer CB: %zu space available, %zu pending\n", len, ctx->read_len);
 
-  size_t sz = len > ctx->read_len ? ctx->read_len : len;
+  *pnwritten = len > ctx->read_len ? ctx->read_len : len;
 
   unsigned char *compare = compute_buffer(ctx->next_byte_read, ctx->template_buf);
-  assert(memcmp(buf, compare, sz) == 0);
-  ctx->next_byte_read += sz;
-  ctx->read_len -= sz;
+  assert(memcmp(buf, compare, *pnwritten) == 0);
+  ctx->next_byte_read += *pnwritten;
+  ctx->read_len -= *pnwritten;
 
-  return sz;
+  return CURLE_OK;
 }
 
 struct reader_cb_ctx {
   bool verbose;
   unsigned char *template_buf;
-  ssize_t write_len;
+  size_t write_len;
   unsigned char next_byte_write;
 };
 
 /**
  * Write up to write_len to a BUFQ via callback for Curl_bufq_slurp/sipn.
  */
-static ssize_t bufq_reader_cb(void *reader_ctx,
+static CURLcode bufq_reader_cb(void *reader_ctx,
                               unsigned char *buf, size_t len,
-                              CURLcode *err)
+                              size_t *pnread)
 {
   struct reader_cb_ctx *ctx = (struct reader_cb_ctx *)reader_ctx;
 
-  if (ctx->write_len <= 0) {
-    *err = CURLE_AGAIN;
-    return -1;
-  }
+  *pnread = 0;
+  if (ctx->write_len <= 0)
+    return CURLE_AGAIN;
 
   FV_PRINTF(ctx->verbose, "Reader CB: %zu space available, %zu pending\n", len, ctx->write_len);
 
-  size_t sz = len > ctx->write_len ? ctx->write_len : len;
+  *pnread = len > ctx->write_len ? ctx->write_len : len;
 
   unsigned char *compare = compute_buffer(ctx->next_byte_write, ctx->template_buf);
-  memcpy(buf, compare, sz);
-  ctx->next_byte_write += sz;
-  ctx->write_len -= sz;
+  memcpy(buf, compare, *pnread);
+  ctx->next_byte_write += *pnread;
+  ctx->write_len -= *pnread;
 
-  return sz;
+  return CURLE_OK;
 }
 
 /**
@@ -161,7 +159,7 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
     Curl_bufq_init(&q, chunk_size, max_chunks);
   }
 
-  ssize_t buffer_bytes = 0;
+  size_t buffer_bytes = 0;
   unsigned char next_byte_read = 0;
   unsigned char next_byte_write = 0;
   while (fuzz->remaining_bytes() > 0) {
@@ -213,9 +211,10 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
         size_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
         FV_PRINTF(verbose, "OP: read, size %zu\n", op_size);
         unsigned char *buf = (unsigned char *)malloc(op_size * sizeof(*buf));
-        ssize_t read = Curl_bufq_read(&q, buf, op_size, &err);
-        if (read != -1) {
-          FV_PRINTF(verbose, "OP: read, success, read %zd, expect begins with %x\n", read, next_byte_read);
+        size_t read;
+        CURLcode result = Curl_bufq_read(&q, buf, op_size, &read);
+        if (!result) {
+          FV_PRINTF(verbose, "OP: read, success, read %zu, expect begins with %x\n", read, next_byte_read);
           buffer_bytes -= read;
           assert(buffer_bytes >= 0);
           unsigned char *compare = compute_buffer(next_byte_read, template_buf);
@@ -229,12 +228,13 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
       }
 
       case OP_TYPE_SLURP: {
-        ssize_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
+        size_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
         FV_PRINTF(verbose, "OP: slurp, size %zd\n", op_size);
         struct reader_cb_ctx ctx = { .verbose = verbose, .template_buf = template_buf, .write_len = op_size, .next_byte_write = next_byte_write };
-        ssize_t write = Curl_bufq_slurp(&q, bufq_reader_cb, &ctx, &err);
-        if (write != -1) {
-          FV_PRINTF(verbose, "OP: slurp, success, wrote %zd, expect begins with %x\n", write, ctx.next_byte_write);
+        size_t write;
+        CURLcode result = Curl_bufq_slurp(&q, bufq_reader_cb, &ctx, &write);
+        if (!result) {
+          FV_PRINTF(verbose, "OP: slurp, success, wrote %zu, expect begins with %x\n", write, ctx.next_byte_write);
           buffer_bytes += write;
         } else {
           FV_PRINTF(verbose, "OP: slurp, error\n");
@@ -247,12 +247,13 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
       }
 
       case OP_TYPE_SIPN: {
-        ssize_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
+        size_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
         FV_PRINTF(verbose, "OP: sipn, size %zd\n", op_size);
         struct reader_cb_ctx ctx = { .verbose = verbose, .template_buf = template_buf, .write_len = op_size, .next_byte_write = next_byte_write };
-        ssize_t write = Curl_bufq_sipn(&q, op_size, bufq_reader_cb, &ctx, &err);
-        if (write != -1) {
-          FV_PRINTF(verbose, "OP: sipn, success, wrote %zd, expect begins with %x\n", write, ctx.next_byte_write);
+        size_t write;
+        CURLcode result = Curl_bufq_sipn(&q, op_size, bufq_reader_cb, &ctx, &write);
+        if (!result) {
+          FV_PRINTF(verbose, "OP: sipn, success, wrote %zu, expect begins with %x\n", write, ctx.next_byte_write);
           buffer_bytes += write;
           assert(buffer_bytes <= chunk_size * max_chunks);
           next_byte_write = ctx.next_byte_write;
@@ -263,13 +264,14 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
       }
 
       case OP_TYPE_PASS: {
-        ssize_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
+        size_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
         FV_PRINTF(verbose, "OP: pass, size %zd\n", op_size);
         struct writer_cb_ctx ctx = { .verbose = verbose, .template_buf = template_buf, .read_len = op_size, .next_byte_read = next_byte_read };
-        ssize_t read = Curl_bufq_pass(&q, bufq_writer_cb, &ctx, &err);
-        if (read != -1) {
-          FV_PRINTF(verbose, "OP: pass, success, read %zd, expect begins with %x\n", read, ctx.next_byte_read);
-          buffer_bytes -= read;
+        size_t nread;
+        CURLcode result = Curl_bufq_pass(&q, bufq_writer_cb, &ctx, &nread);
+        if (!result) {
+          FV_PRINTF(verbose, "OP: pass, success, read %zu, expect begins with %x\n", nread, ctx.next_byte_read);
+          buffer_bytes -= nread;
         } else {
           FV_PRINTF(verbose, "OP: pass, error\n");
           /* in case of -1, it may still have read something, adjust for that */
@@ -284,7 +286,7 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
         size_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
         FV_PRINTF(verbose, "OP: skip, size %zu\n", op_size);
         Curl_bufq_skip(&q, op_size);
-        ssize_t old_buffer_bytes = buffer_bytes;
+        size_t old_buffer_bytes = buffer_bytes;
         buffer_bytes = old_buffer_bytes > op_size ? old_buffer_bytes - op_size : 0;
         next_byte_read += old_buffer_bytes > op_size ? op_size : old_buffer_bytes;
         break;
@@ -294,9 +296,10 @@ int fuzz_handle_bufq(FuzzedDataProvider *fuzz)
         size_t op_size = fuzz->ConsumeIntegralInRange(0, FUZZ_MAX_RW_SIZE);
         FV_PRINTF(verbose, "OP: write, size %zu, begins with %x\n", op_size, next_byte_write);
         unsigned char *buf = compute_buffer(next_byte_write, template_buf);
-        ssize_t written = Curl_bufq_write(&q, buf, op_size, &err);
-        if (written != -1) {
-          FV_PRINTF(verbose, "OP: write, success, written %zd\n", written);
+        size_t written;
+        CURLcode result = Curl_bufq_write(&q, buf, op_size, &written);
+        if (!result) {
+          FV_PRINTF(verbose, "OP: write, success, written %zu\n", written);
           next_byte_write += written;
           buffer_bytes += written;
           assert(buffer_bytes <= chunk_size * max_chunks);
