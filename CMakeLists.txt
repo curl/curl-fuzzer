@@ -200,6 +200,31 @@ else()
     set(GDB_DEP "")
 endif()
 
+# Install OpenLDAP
+set(OPENLDAP_VERSION 2.6.10)
+set(OPENLDAP_URL https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
+set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
+
+ExternalProject_Add(
+    openldap_external
+    URL ${OPENLDAP_URL}
+    PREFIX ${CMAKE_BINARY_DIR}/openldap
+    SOURCE_SUBDIR .
+    CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) install
+    BUILD_IN_SOURCE 1
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
+set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
+
+if (TARGET openssl_external)
+    add_dependencies(openldap_external openssl_external)
+else()
+    message(STATUS "Not building OpenLDAP with OpenSSL")
+endif()
+
 # Group non-curl dependencies into a single target
 add_custom_target(deps
     DEPENDS
@@ -209,6 +234,7 @@ add_custom_target(deps
         zstd_external
         libidn2_external
         ${GDB_DEP}
+        openldap_external
 )
 
 # Now for the main dependencies!
@@ -241,6 +267,9 @@ set(CURL_CONFIGURE_COMMAND
         --with-nghttp2=${NGHTTP2_INSTALL_DIR}
         --with-zstd=${ZSTD_INSTALL_DIR}
         --with-libidn2=${LIBIDN2_INSTALL_DIR}
+        --with-ldap=${OPENLDAP_INSTALL_DIR}
+        --with-ldap-lib=ldap
+        --with-lber-lib=lber
 )
 
 set(CURL_POST_INSTALL_COMMAND
@@ -288,6 +317,7 @@ set(CURL_DEPS
     zlib_external
     zstd_external
     libidn2_external
+    openldap_external
 )
 
 # Add dependencies for curl
@@ -337,6 +367,8 @@ set(COMMON_LINK_LIBS
     ${ZLIB_STATIC_LIB}
     ${ZSTD_STATIC_LIB}
     ${LIBIDN2_STATIC_LIB}
+    ${OPENLDAP_STATIC_LIB_LDAP}
+    ${OPENLDAP_STATIC_LIB_LBER}
     ${LIB_FUZZING_ENGINE}
     pthread
     m
@@ -365,6 +397,7 @@ add_curl_fuzzer(curl_fuzzer_gopher    GOPHER)
 add_curl_fuzzer(curl_fuzzer_http      HTTP)
 add_curl_fuzzer(curl_fuzzer_https     HTTPS)
 add_curl_fuzzer(curl_fuzzer_imap      IMAP)
+add_curl_fuzzer(curl_fuzzer_ldap      LDAP)
 add_curl_fuzzer(curl_fuzzer_mqtt      MQTT)
 add_curl_fuzzer(curl_fuzzer_pop3      POP3)
 add_curl_fuzzer(curl_fuzzer_rtsp      RTSP)
@@ -408,6 +441,7 @@ add_custom_target(fuzz
         curl_fuzzer_http
         curl_fuzzer_https
         curl_fuzzer_imap
+        curl_fuzzer_ldap
         curl_fuzzer_mqtt
         curl_fuzzer_pop3
         curl_fuzzer_rtsp
