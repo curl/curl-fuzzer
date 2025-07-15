@@ -8,11 +8,14 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 
 # Parse the options.
 OPTIND=1
+TARGET=fuzz
 
-while getopts "c:" opt
+while getopts "c:t:" opt
 do
   case "$opt" in
     c) export CURL_SOURCE_DIR=$OPTARG
+       ;;
+    t) TARGET=$OPTARG
        ;;
   esac
 done
@@ -27,4 +30,4 @@ export CXXFLAGS="-fsanitize=address,fuzzer-no-link -stdlib=libstdc++ $FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 export OPENSSLFLAGS="-fno-sanitize=alignment -lstdc++"
 
-${SCRIPTDIR}/compile_target.sh fuzz
+${SCRIPTDIR}/compile_target.sh ${TARGET}
