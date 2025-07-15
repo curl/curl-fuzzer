@@ -31,4 +31,5 @@ $SUDO apt-get install -y make \
                    zlib1g-dev \
                    pkg-config \
                    wget \
-                   cmake
+                   cmake \
+                   groff-base
