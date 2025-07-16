@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer/test1326
+file_size: 62
+tlvs:
+- length: 23
+  type: URL
+  type_id_v1: 1
+  value: telnet://127.0.0.1:8990
+- length: 27
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e312032303020737773636c6f73650a0a6d6f6f0a

@@ -1,0 +1,15 @@
+corpus_file: corpora/curl_fuzzer_http/test_invalid_prior_http2
+file_size: 55
+tlvs:
+- length: 16
+  type: URL
+  type_id_v1: 1
+  value: http://127.0.0.1
+- length: 17
+  type: RESPONSE0
+  type_id_v1: 2
+  value: this is not valid
+- length: 4
+  type: HTTP_VERSION
+  type_id_v1: 40
+  value: 5

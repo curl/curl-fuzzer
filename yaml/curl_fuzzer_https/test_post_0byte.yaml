@@ -1,0 +1,43 @@
+corpus_file: corpora/curl_fuzzer_https/test_post_0byte
+file_size: 369
+tlvs:
+- length: 31
+  type: URL
+  type_id_v1: 1
+  value: https://0xff.localdomain/upload
+- length: 25
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e312031303020436f6e74696e75650d0a0d0a
+- length: 125
+  type: RESPONSE1
+  type_id_v1: 17
+  value: 485454502f312e312034313520556e737570706f72746564204d6564696120547970650d0a436f6e6e656374696f6e3a20436c6f73650d0a436f6e74656e742d547970653a202a2f2a0d0a436f6e74656e742d4c656e6774683a203238390d0a582d4672616d652d4f7074696f6e733a2053414d454f524947494e0d0a
+- length: 4
+  type: NOBODY
+  type_id_v1: 28
+  value: 0
+- length: 4
+  type: CONNECT_ONLY
+  type_id_v1: 50
+  value: 1
+- length: 17
+  type: HEADER
+  type_id_v1: 6
+  value: 'Content-Length: 0'
+- length: 31
+  type: HEADER
+  type_id_v1: 6
+  value: 'Transfer-Encoding: gzip,chunked'
+- length: 22
+  type: HEADER
+  type_id_v1: 6
+  value: 'Content-Encoding: gzip'
+- length: 30
+  type: HEADER
+  type_id_v1: 6
+  value: 'Content-Type: application/gzip'
+- length: 20
+  type: HEADER
+  type_id_v1: 6
+  value: 'Expect: 100-continue'

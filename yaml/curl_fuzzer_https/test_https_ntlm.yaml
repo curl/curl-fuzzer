@@ -1,0 +1,19 @@
+corpus_file: corpora/curl_fuzzer_https/test_https_ntlm
+file_size: 131
+tlvs:
+- length: 51
+  type: URL
+  type_id_v1: 1
+  value: https://whattheheckisntlm.example.com/Endpoint.wsdl
+- length: 4
+  type: HTTPAUTH
+  type_id_v1: 16
+  value: 8
+- length: 22
+  type: HEADER
+  type_id_v1: 6
+  value: 'Connection: Keep-Alive'
+- length: 30
+  type: HEADER
+  type_id_v1: 6
+  value: 'Content-Type: application/json'

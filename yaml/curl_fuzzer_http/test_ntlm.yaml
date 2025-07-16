@@ -1,0 +1,35 @@
+corpus_file: corpora/curl_fuzzer_http/test_ntlm
+file_size: 679
+tlvs:
+- length: 76
+  type: URL
+  type_id_v1: 1
+  value: http://localhost.localdomain:86/DynamicsNAV80/WS/nasr/Page/Delivery/Incident
+- length: 12
+  type: USERNAME
+  type_id_v1: 3
+  value: 'DOMAIN\user:'
+- length: 4
+  type: NETRC
+  type_id_v1: 46
+  value: 2
+- length: 4
+  type: HTTPAUTH
+  type_id_v1: 16
+  value: 8
+- length: 394
+  type: UPLOAD1
+  type_id_v1: 8
+  value: <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"xmlns:hel="http://schemas.datacontract.org/2004/07/Helpline.Activities.IncidentRecordScope"xmlns:tem="http://localhost.localdomain/"><SOAP-ENV:Header/><SOAP-ENV:Body><tem:StartIncidentByWS><tem:ctx/><tem:data><hel:strSubject>TEST</hel:strSubject></tem:data></tem:StartIncidentByWS></SOAP-ENV:Body></SOAP-ENV:Envelope>
+- length: 37
+  type: HEADER
+  type_id_v1: 6
+  value: 'Content-Type: text/xml; charset=utf-8'
+- length: 29
+  type: HEADER
+  type_id_v1: 6
+  value: 'Origin: http://127.0.0.1:9999'
+- length: 75
+  type: HEADER
+  type_id_v1: 6
+  value: 'SOAPAction: http://localhost.localdomain/IncidentMgmtWFWS/StartIncidentByWS'
