@@ -8,11 +8,11 @@ tlvs:
 - length: 6
   type: RESPONSE1
   type_id_v1: 17
-  value: '123456'
+  value: 'xyz456'
 - length: 6
   type: RESPONSE2
   type_id_v1: 18
-  value: '123456'
+  value: 'xyz456'
 - length: 9
   type: USERNAME
   type_id_v1: 3
@@ -20,4 +20,4 @@ tlvs:
 - length: 6
   type: PASSWORD
   type_id_v1: 4
-  value: '123456'
+  value: 'xyz456'

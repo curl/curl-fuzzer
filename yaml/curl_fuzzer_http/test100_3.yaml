@@ -44,7 +44,7 @@ tlvs:
 - length: 10
   type: SECOND_RESPONSE0
   type_id_v1: 31
-  value: '1234567890'
+  value: xyz4567890
 - length: 9
   type: SECOND_RESPONSE1
   type_id_v1: 32
