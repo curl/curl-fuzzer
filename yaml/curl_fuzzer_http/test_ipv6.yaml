@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer_http/test_ipv6
+file_size: 135
+tlvs:
+- length: 33
+  type: URL
+  type_id_v1: 1
+  value: http://[::ffff:c0a8:101]/file.txt
+- length: 39
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3120323030204f4b090d0a436f6e6e656374696f6e3a20436c6f73650d0a0d0a
+- length: 4
+  type: USERNAME
+  type_id_v1: 3
+  value: user
+- length: 4
+  type: PASSWORD
+  type_id_v1: 4
+  value: pass
+- length: 25
+  type: HEADER
+  type_id_v1: 6
+  value: 'Accept-Encoding: identity'

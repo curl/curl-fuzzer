@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_http/test1201
+file_size: 146
+tlvs:
+- length: 48
+  type: URL
+  type_id_v1: 1
+  value: gopher://127.0.0.1:9009/1/selector/SELECTOR/1201
+- length: 86
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 694d656e7520726573756c747309096572726f722e686f737409310d0a3053656c6563746f72202f73656c6563746f722f53454c4543544f52092f626172096261722e666f6f2e696e76616c69640937300d0a2e0d0a

@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer_http/test_alt_svc_with_ma
+file_size: 223
+tlvs:
+- length: 25
+  type: URL
+  type_id_v1: 1
+  value: http://server.example.com
+- length: 115
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3120323030204f4b0d0a486f73743a207365727665722e6578616d706c652e636f6d0d0a416c742d5376633a2068323d22616c742e6578616d706c652e636f6d3a343433222c2068323d223a343433220d0a436f6e6e656374696f6e3a204b6565702d416c6976650d0a0d0a
+- length: 26
+  type: HEADER
+  type_id_v1: 6
+  value: 'Origin: http://example.com'
+- length: 13
+  type: HEADER
+  type_id_v1: 6
+  value: 582d466f6f2d333a2062610972
+- length: 14
+  type: HEADER
+  type_id_v1: 6
+  value: 'Cookie: __m=-1'

@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_smtp/test_wrongproto
+file_size: 33
+tlvs:
+- length: 27
+  type: URL
+  type_id_v1: 1
+  value: thisisnotaproto://127.0.0.1

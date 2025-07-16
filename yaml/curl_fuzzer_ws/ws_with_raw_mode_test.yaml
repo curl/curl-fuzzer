@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_ws/ws_with_raw_mode_test
+file_size: 55
+tlvs:
+- length: 39
+  type: URL
+  type_id_v1: 1
+  value: ws://foo.bar.localdomain/this/is/a/path
+- length: 4
+  type: WS_OPTIONS
+  type_id_v1: 49
+  value: 1

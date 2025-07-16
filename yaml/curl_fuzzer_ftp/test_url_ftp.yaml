@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_ftp/test_url_ftp
+file_size: 21
+tlvs:
+- length: 15
+  type: URL
+  type_id_v1: 1
+  value: ftp://127.0.0.1

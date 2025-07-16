@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer_ldap/test_url_fullldap
+file_size: 119
+tlvs:
+- length: 62
+  type: URL
+  type_id_v1: 1
+  value: ldap://localhost:1389/dc=example,dc=com?homephone?sub?cn=*cm2*
+- length: 6
+  type: RESPONSE1
+  type_id_v1: 17
+  value: '123456'
+- length: 6
+  type: RESPONSE2
+  type_id_v1: 18
+  value: '123456'
+- length: 9
+  type: USERNAME
+  type_id_v1: 3
+  value: cn=dirman
+- length: 6
+  type: PASSWORD
+  type_id_v1: 4
+  value: '123456'
