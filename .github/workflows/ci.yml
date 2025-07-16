@@ -34,6 +34,24 @@ jobs:
           . ./scripts/fuzz_targets
           uv run generate_matrix | tee $GITHUB_OUTPUT
 
+  GenerateCorpus:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: curl/curl-fuzzer
+      - name: Install uv
+        uses: astral-sh/setup-uv@bd01e18f51369d5a26f1651c3cb451d3417e3bba # v6
+      - name: Create corpus
+        run: |
+          uv run yaml_to_corpus --corpus-dir corpora/ yaml/
+      - name: Upload corpus
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: corpus
+          path: corpora/
+
   BuildFuzzers:
     runs-on: ubuntu-latest
     steps:
@@ -57,7 +75,7 @@ jobs:
         path: fuzz.tar
 
   RunFuzzers:
-    needs: [ BuildFuzzers, DetermineMatrix ]
+    needs: [ BuildFuzzers, DetermineMatrix, GenerateCorpus ]
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.DetermineMatrix.outputs.matrix) }}
@@ -69,6 +87,13 @@ jobs:
         run: tar xvf fuzz.tar build-out/${{ matrix.fuzzer }} build-out/${{ matrix.fuzzer }}_seed_corpus.zip
       - name: Display extracted files
         run: ls -laR build-out/
+        # Download the corpora directory to the root of the repository
+      - name: Download corpus
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: corpus
+      - name: Show corpus
+        run: ls -laR corpora/
       - name: Run Fuzzer ${{ matrix.fuzzer }}
         uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
         with:
