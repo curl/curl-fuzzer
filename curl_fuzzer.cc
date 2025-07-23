@@ -27,9 +27,7 @@
 #include <curl/curl.h>
 #include "curl_fuzzer.h"
 
-extern "C" {
 #include "nallocinc.c"
-}
 
 /**
  * Fuzzing entry point. This function is passed a buffer containing a test
