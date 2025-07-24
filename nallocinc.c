@@ -22,6 +22,19 @@
  SOFTWARE.
 */
 
+/* Nalloc fuzz : framework to make allocations and IO fail while fuzzing */
+
+/* Environment variables to control nalloc fuzz behavior :
+ * NALLOC_VERBOSE: set it to log failed allocations with their stacktraces
+ * NALLOC_FREQ: set it to control how frequently allocations fail
+ *  value 0 disables nalloc (no allocations fail)
+ *  value 1..31 : allocations fail always (1) or very rarely (31 -> 1 / 2^31)
+ *  value 32 : allocations fail at a random rate between 5 and 20 for each run
+ */
+
+#ifndef NALLOC_INC_C_
+#define NALLOC_INC_C_
+
 #if defined(__clang__) && defined(__has_feature)
 #if __has_feature(address_sanitizer)
 #define NALLOC_ASAN 1
@@ -31,12 +44,9 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef NALLOC_LIBBACKTRACE
-#include "libbacktrace/backtrace.h"
-#endif
-#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -95,75 +105,26 @@ uint32_t nalloc_runs = 0;
 
 // Nalloc fuzz parameters
 uint32_t nalloc_bitmask = 0xFF;
+bool nalloc_random_bitmask = true;
 uint32_t nalloc_magic = 0x294cee63;
 bool nalloc_verbose = false;
+const char * nalloc_prefix = "";
+uint32_t nalloc_prefix_len = 0;
 
 #ifdef NALLOC_ASAN
 extern void __sanitizer_print_stack_trace(void);
+extern void __sanitizer_symbolize_pc(void * pc, const char *fmt,
+                                     char *out_buf, size_t out_buf_size);
 #endif
 
-#ifdef NALLOC_LIBBACKTRACE
-#define BACKTRACE_OK 0
-#define BACKTRACE_LIMIT 1
-#define BACKTRACE_EXCLUDE 2
+#define NALLOC_PREFIX_MAX 1024
 
-void *nalloc_backtrace_state;
-
-struct nalloc_backtrace_data {
-  size_t index;
-  size_t max;
-};
-
-void nalloc_error_callback_create(void *data, const char *msg, int errnum) {
-  fprintf(stderr, "%s", msg);
-  if (errnum > 0) {
-    fprintf(stderr, ": %s", strerror(errnum));
+void nalloc_restrict_file_prefix(const char *prefix) {
+  if (nalloc_prefix_len < NALLOC_PREFIX_MAX) {
+    nalloc_prefix = prefix;
+    nalloc_prefix_len = (uint32_t)strlen(prefix);
   }
-  fprintf(stderr, "\n");
 }
-
-static void nalloc_backtrace_error_donothing(void *vdata, const char *msg,
-                                             int errnum) {
-  // do nothing
-}
-
-static int nalloc_backtrace_cb_exclude(void *vdata, uintptr_t pc,
-                                       const char *filename, int lineno,
-                                       const char *function) {
-  struct backtrace_data *data = (struct backtrace_data *)vdata;
-  if (data->index > data->max) {
-    return BACKTRACE_LIMIT;
-  }
-  data->index++;
-  if (filename == NULL) {
-    if (data->index == data->max) {
-      return BACKTRACE_EXCLUDE;
-    }
-    return BACKTRACE_OK;
-  }
-  if (function != NULL &&
-      (strncmp(function, "__interceptor", strlen("__interceptor")) == 0 ||
-       strncmp(function, "___interceptor", strlen("___interceptor")) == 0 ||
-       strncmp(function, "__sanitizer", strlen("__sanitizer")) == 0)) {
-    return BACKTRACE_EXCLUDE;
-  }
-  return BACKTRACE_OK;
-}
-
-static int nalloc_backtrace_cb_print(void *vdata, uintptr_t pc,
-                                     const char *filename, int lineno,
-                                     const char *function) {
-  struct backtrace_data *data = (struct backtrace_data *)vdata;
-  if (data->index >= data->max) {
-    return BACKTRACE_LIMIT;
-  }
-  data->index++;
-  fprintf(stderr, "#%zu 0x%lx in %s %s:%d\n", data->index, pc, function,
-          filename, lineno);
-  return BACKTRACE_OK;
-}
-
-#endif
 
 // Generic init, using env variables to get parameters
 void nalloc_init(const char *prog) {
@@ -176,23 +137,25 @@ void nalloc_init(const char *prog) {
     int shift = atoi(bitmask);
     if (shift > 0 && shift < 31) {
       nalloc_bitmask = 1 << shift;
+      nalloc_random_bitmask = false;
+    } else if (shift == 0) {
+      nalloc_random_bitmask = false;
+      nalloc_bitmask = 0;
     }
-  }
-
-  char *magic = getenv("NALLOC_MAGIC");
-  if (magic) {
-    nalloc_magic = (uint32_t)strtol(magic, NULL, 0);
+  } else if (prog == NULL || strstr(prog, "nalloc") == NULL) {
+    nalloc_random_bitmask = false;
+    nalloc_bitmask = 0;
+    return;
   }
 
   char *verbose = getenv("NALLOC_VERBOSE");
   if (verbose) {
     nalloc_verbose = true;
   }
-
-#ifdef NALLOC_LIBBACKTRACE
-  nalloc_backtrace_state =
-      backtrace_create_state(prog, 1, nalloc_error_callback_create, NULL);
-#endif
+  char *rfp = getenv("NALLOC_RESTRICT_FILE_PREFIX");
+  if (rfp) {
+    nalloc_restrict_file_prefix(rfp);
+  }
 }
 
 // add one byte to the CRC
@@ -204,8 +167,17 @@ static inline void nalloc_random_update(uint8_t b) {
 
 // Start the failure injections, using a buffer as seed
 static int nalloc_start(const uint8_t *data, size_t size) {
+  if (nalloc_random_bitmask) {
+    if (nalloc_random_state & 0x10) {
+      nalloc_bitmask = 0xFFFFFFFF;
+    } else {
+      nalloc_bitmask = 1 << (5 + (nalloc_random_state & 0xF));
+    }
+  } else if (nalloc_bitmask == 0) {
+    // nalloc disabled
+    return 0;
+  }
   nalloc_random_state = 0;
-  nalloc_runs++;
   for (size_t i = 0; i < size; i++) {
     nalloc_random_update(data[i]);
   }
@@ -213,37 +185,32 @@ static int nalloc_start(const uint8_t *data, size_t size) {
     __sync_fetch_and_sub(&nalloc_running, 1);
     return 0;
   }
+  nalloc_runs++;
   return 1;
 }
+
+#define nalloc_return_address() __builtin_return_address(1)
 
 // Stop the failure injections
 static void nalloc_end() { __sync_fetch_and_sub(&nalloc_running, 1); }
 
-static bool nalloc_backtrace_exclude(size_t size, const char *op) {
-#ifdef NALLOC_LIBBACKTRACE
-  struct backtrace_data data;
-  data.index = 0;
-  data.max = 6;
-
-  int r = backtrace_full(nalloc_backtrace_state, 0, nalloc_backtrace_cb_exclude,
-                         nalloc_backtrace_error_donothing, &data);
-  if (r == BACKTRACE_EXCLUDE) {
-    return true;
+__attribute__((noinline))
+static bool nalloc_backtrace_exclude(size_t size, const char *op, void *pc) {
+#ifdef NALLOC_ASAN
+  if (nalloc_prefix_len > 0) {
+    char data[NALLOC_PREFIX_MAX];
+    __sanitizer_symbolize_pc(pc, "%s", data, sizeof(data)-1);
+    for (size_t i = 0; i < nalloc_prefix_len; i++) {
+      if (data[i] != nalloc_prefix[i]) {
+        return true;
+      }
+    }
   }
 #endif
-
   if (nalloc_verbose) {
     fprintf(stderr, "failed %s(%zu) \n", op, size);
 #ifdef NALLOC_ASAN
     __sanitizer_print_stack_trace();
-#endif
-#ifdef NALLOC_LIBBACKTRACE
-    struct backtrace_data data;
-    data.index = 0;
-    data.max = 64;
-
-    backtrace_full(nalloc_backtrace_state, 0, nalloc_backtrace_cb_print,
-                   nalloc_backtrace_error_donothing, &data);
 #endif
   }
 
@@ -271,7 +238,8 @@ static bool nalloc_fail(size_t size, const char *op) {
     }
   }
   if (((nalloc_random_state ^ nalloc_magic) & nalloc_bitmask) == 0) {
-    if (nalloc_backtrace_exclude(size, op)) {
+    void *pc = nalloc_return_address();
+    if (nalloc_backtrace_exclude(size, op, pc)) {
       __sync_fetch_and_sub(&nalloc_running, 1);
       return false;
     }
@@ -391,6 +359,8 @@ void *reallocarray(void *ptr, size_t nmemb, size_t size) {
   return nalloc_reallocarray(ptr, nmemb, size);
 }
 
-#ifdef __cplusplus // extern "C" {
-}
+#ifdef __cplusplus
+}  // extern "C" {
 #endif
+
+#endif  // NALLOC_INC_C_

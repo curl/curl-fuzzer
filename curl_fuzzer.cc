@@ -52,6 +52,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   }
 
   nalloc_init(NULL);
+  nalloc_restrict_file_prefix("/src/curl/");
   /* Try to initialize the fuzz data */
   FTRY(fuzz_initialize_fuzz_data(&fuzz, data, size));
 
