@@ -53,14 +53,18 @@ else
     CMAKE_VERBOSE_FLAG=""
 fi
 
-export MAKEFLAGS+="-j$(nproc)"
+export MAKEFLAGS; MAKEFLAGS+=" -s -j$(($(nproc) + 0))"
+echo "MAKEFLAGS: ${MAKEFLAGS}"
 
 # Create a build directory for the dependencies.
 BUILD_DIR=${BUILD_ROOT}/build
 mkdir -p ${BUILD_DIR}
 
+options=''
+command -v ninja >/dev/null 2>&1 && options+=' -G Ninja'
+
 # Compile the dependencies.
 pushd ${BUILD_DIR}
-cmake ${CMAKE_GDB_FLAG} ..
+cmake ${CMAKE_GDB_FLAG} .. ${options}
 cmake --build . --target ${TARGET} ${CMAKE_VERBOSE_FLAG}
 popd

@@ -1,27 +1,32 @@
 cmake_minimum_required(VERSION 3.11)
 project(curl_fuzzer_deps)
 
+if(NOT "$ENV{MAKE}" STREQUAL "")
+  set(MAKE "$ENV{MAKE}")
+else()
+  set(MAKE "make")
+endif()
+
 include(ExternalProject)
 
 # Install zlib
 #
 # renovate: datasource=github-tags depName=madler/zlib
 set(ZLIB_VERSION 1.3.1)
-set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz)
+set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
+set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
 ExternalProject_Add(
     zlib_external
     URL ${ZLIB_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zlib
-    SOURCE_SUBDIR .
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --static --prefix=${ZLIB_INSTALL_DIR}
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) install
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    DOWNLOAD_NO_PROGRESS 1
 )
-set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
 # Install zstd
 #
@@ -29,19 +34,18 @@ set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 set(ZSTD_VERSION 1.5.7)
 set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz)
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
+set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
 ExternalProject_Add(
     zstd_external
     URL ${ZSTD_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zstd
     SOURCE_SUBDIR build/cmake
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) install
-    BUILD_IN_SOURCE 0
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
+    BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    DOWNLOAD_NO_PROGRESS 1
 )
-set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
@@ -54,6 +58,7 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     set(OPENSSL_URL https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/openssl-install)
     set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/openssl/src/openssl_external)
+    set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 
     # Architecture and sanitizer logic
     set(OPENSSL_ARCH_TARGET "")
@@ -81,6 +86,8 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         no-shared
         no-tests
+        no-apps
+        no-makedepend
         ${OPENSSL_ASM_FLAG}
         ${OPENSSL_ARCH_FLAG}
         enable-tls1_3
@@ -100,26 +107,25 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         openssl_external
         URL ${OPENSSL_URL}
         PREFIX ${CMAKE_BINARY_DIR}/openssl
-        SOURCE_SUBDIR .
         CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND $(MAKE) install_sw
+        INSTALL_COMMAND ${MAKE} install_sw
         BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${OPENSSL_STATIC_LIB}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
     )
 
     # Build zlib before openssl
     add_dependencies(openssl_external zlib_external)
 
     # Set the OpenSSL option for nghttp2
-    set(NGHTTP2_OPENSSL_OPTION --with-openssl=${OPENSSL_INSTALL_DIR})
+    set(NGHTTP2_OPENSSL_OPTION -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
 
     # Set the dependency option for openssl
     set(OPENSSL_DEP openssl_external)
-    set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 else()
     message(STATUS "Not building OpenSSL")
-    set(NGHTTP2_OPENSSL_OPTION --without-openssl)
+    set(NGHTTP2_OPENSSL_OPTION -DOPENSSL_INCLUDE_DIR=)
     set(OPENSSL_DEP "")
     set(OPENSSL_STATIC_LIB "")
 endif()
@@ -128,32 +134,20 @@ endif()
 #
 # renovate: datasource=github-tags depName=nghttp2/nghttp2
 set(NGHTTP2_VERSION 1.66.0)
-set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.gz)
+set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz)
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
-
-set(NGHTTP2_CONFIGURE_COMMAND
-    autoreconf -i &&
-    ./configure --prefix=${NGHTTP2_INSTALL_DIR}
-                --disable-shared
-                --enable-static
-                --disable-threads
-                --enable-lib-only
-                --with-zlib=${ZLIB_INSTALL_DIR}
-                ${NGHTTP2_OPENSSL_OPTION}
-)
+set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
 ExternalProject_Add(
     nghttp2_external
     URL ${NGHTTP2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/nghttp2
-    SOURCE_SUBDIR .
-    CONFIGURE_COMMAND ${NGHTTP2_CONFIGURE_COMMAND}
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) install
-    BUILD_IN_SOURCE 1
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
+    BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    DOWNLOAD_NO_PROGRESS 1
 )
-set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
 # Ensure zlib and openssl are built before nghttp2
 add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
@@ -164,19 +158,18 @@ add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
 set(LIBIDN2_VERSION 2.3.8)
 set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
+set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
 ExternalProject_Add(
     libidn2_external
     URL ${LIBIDN2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/libidn2
-    SOURCE_SUBDIR .
-    CONFIGURE_COMMAND ./configure --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) install
+    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static --disable-doc
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    DOWNLOAD_NO_PROGRESS 1
 )
-set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
@@ -189,10 +182,7 @@ if(BUILD_GDB)
         gdb_external
         URL ${GDB_URL}
         PREFIX ${CMAKE_BINARY_DIR}/gdb
-        SOURCE_SUBDIR .
-        CONFIGURE_COMMAND ./configure --prefix=${GDB_INSTALL_DIR}
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND $(MAKE) install
+        CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
         BUILD_IN_SOURCE 1
     )
     set(GDB_DEP gdb_external)
@@ -204,20 +194,19 @@ endif()
 set(OPENLDAP_VERSION 2.6.10)
 set(OPENLDAP_URL https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
 set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
+set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
+set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
 ExternalProject_Add(
     openldap_external
     URL ${OPENLDAP_URL}
     PREFIX ${CMAKE_BINARY_DIR}/openldap
-    SOURCE_SUBDIR .
     CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) install
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    DOWNLOAD_NO_PROGRESS 1
 )
-set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
-set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
 if (TARGET openssl_external)
     add_dependencies(openldap_external openssl_external)
@@ -244,32 +233,30 @@ set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
 
 # Determine SSL and nghttp2 options
 if(TARGET openssl_external)
-    set(CURL_SSL_OPTION "--with-ssl=${OPENSSL_INSTALL_DIR}")
+    set(CURL_SSL_OPTION -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
 else()
-    set(CURL_SSL_OPTION "--without-ssl")
+    set(CURL_SSL_OPTION -DCURL_USE_OPENSSL=OFF)
 endif()
 
-set(CURL_CONFIGURE_COMMAND
-    autoreconf -fi &&
-    ./configure
-        --prefix=${CURL_INSTALL_DIR}
-        --disable-shared
-        --enable-debug
-        --enable-maintainer-mode
-        --disable-symbol-hiding
-        --disable-docs
-        --enable-ipv6
-        --enable-websockets
-        --without-libpsl
-        --with-random=/dev/null
-        ${CURL_SSL_OPTION}
-        --with-zlib=${ZLIB_INSTALL_DIR}
-        --with-nghttp2=${NGHTTP2_INSTALL_DIR}
-        --with-zstd=${ZSTD_INSTALL_DIR}
-        --with-libidn2=${LIBIDN2_INSTALL_DIR}
-        --with-ldap=${OPENLDAP_INSTALL_DIR}
-        --with-ldap-lib=ldap
-        --with-lber-lib=lber
+set(CURL_CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
+    -DBUILD_SHARED_LIBS=OFF
+    -DENABLE_DEBUG=ON
+    -DCURL_HIDDEN_SYMBOLS=OFF
+    -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
+    -DCURL_USE_LIBPSL=OFF
+    ${CURL_SSL_OPTION}
+    -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+    -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
+    -DNGHTTP2_INCLUDE_DIR=${NGHTTP2_INSTALL_DIR}/include
+    -DNGHTTP2_LIBRARY=${NGHTTP2_STATIC_LIB}
+    -DZSTD_INCLUDE_DIR=${ZSTD_INSTALL_DIR}/include
+    -DZSTD_LIBRARY=${ZSTD_STATIC_LIB}
+    -DLIBIDN2_INCLUDE_DIR=${LIBIDN2_INSTALL_DIR}/include
+    -DLIBIDN2_LIBRARY=${LIBIDN2_STATIC_LIB}
+    -DLDAP_INCLUDE_DIR=${OPENLDAP_INSTALL_DIR}/include
+    -DLDAP_LIBRARY=${OPENLDAP_STATIC_LIB_LDAP}
+    -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
 
 set(CURL_POST_INSTALL_COMMAND
@@ -287,11 +274,10 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
     ExternalProject_Add(
         curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
-        CONFIGURE_COMMAND ${CURL_CONFIGURE_COMMAND}
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND $(MAKE) install
+        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
         ${CURL_POST_INSTALL_COMMAND}
-        BUILD_IN_SOURCE 1
+        CMAKE_ARGS ${CURL_CMAKE_ARGS}
+        BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
 else()
     message(STATUS "Building curl from git master")
@@ -301,12 +287,10 @@ else()
         GIT_REPOSITORY ${CURL_URL}
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
-        CONFIGURE_COMMAND ${CURL_CONFIGURE_COMMAND}
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND $(MAKE) install
+        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
         ${CURL_POST_INSTALL_COMMAND}
-        BUILD_IN_SOURCE 1
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        CMAKE_ARGS ${CURL_CMAKE_ARGS}
+        BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
 endif()
 

@@ -33,8 +33,5 @@ $SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
                    pkg-config \
                    wget \
                    cmake \
-                   ninja-build
-
-# for openldap to avoid installing groff-base
-$SUDO touch /usr/bin/soelim
-$SUDO chmod +x /usr/bin/soelim
+                   ninja-build \
+                   groff-base

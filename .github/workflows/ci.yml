@@ -97,14 +97,15 @@ jobs:
           repository: curl/curl-fuzzer
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile mainline
-        run: |
-          ./mainline.sh
         env:
           # test with different "sanitizers"
           SANITIZER: ${{ matrix.sanitizer }}
+        run: ./mainline.sh
 
   just_dependencies:
     runs-on: ubuntu-latest
@@ -115,8 +116,10 @@ jobs:
           repository: curl/curl-fuzzer
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
 

@@ -30,16 +30,7 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 GDBDIR=/src/gdb
 
 echo "BUILD_ROOT: $BUILD_ROOT"
-echo "SRC: ${SRC:-undefined}"
-echo "CC: $CC"
-echo "CXX: $CXX"
-echo "LIB_FUZZING_ENGINE: $LIB_FUZZING_ENGINE"
-echo "CFLAGS: $CFLAGS"
-echo "CXXFLAGS: $CXXFLAGS"
-echo "ARCHITECTURE: $ARCHITECTURE"
 echo "FUZZ_TARGETS: $FUZZ_TARGETS"
-
-export MAKEFLAGS+="-j$(nproc)"
 
 # Set the CURL_SOURCE_DIR for the build.
 export CURL_SOURCE_DIR=/src/curl
