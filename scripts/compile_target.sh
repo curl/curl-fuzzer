@@ -59,6 +59,8 @@ export MAKEFLAGS+='-j5'
 BUILD_DIR=${BUILD_ROOT}/build
 mkdir -p ${BUILD_DIR}
 
+apt-get --option Dpkg::Use-Pty=0 --yes install --no-install-suggests --no-install-recommends ninja-build
+
 # Compile the dependencies.
 pushd ${BUILD_DIR}
 cmake ${CMAKE_GDB_FLAG} .. -G Ninja
