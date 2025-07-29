@@ -53,7 +53,7 @@ else
     CMAKE_VERBOSE_FLAG=""
 fi
 
-export MAKEFLAGS+="-j$(nproc)"
+export MAKEFLAGS+='-j5'
 
 # Create a build directory for the dependencies.
 BUILD_DIR=${BUILD_ROOT}/build
@@ -61,6 +61,6 @@ mkdir -p ${BUILD_DIR}
 
 # Compile the dependencies.
 pushd ${BUILD_DIR}
-cmake ${CMAKE_GDB_FLAG} ..
+cmake ${CMAKE_GDB_FLAG} .. -G Ninja
 cmake --build . --target ${TARGET} ${CMAKE_VERBOSE_FLAG}
 popd
