@@ -35,7 +35,7 @@ ExternalProject_Add(
     URL ${ZSTD_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zstd
     SOURCE_SUBDIR build/cmake
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND $(MAKE) install
     BUILD_IN_SOURCE 0
@@ -81,6 +81,8 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         no-shared
         no-tests
+        no-apps
+        no-makedepend
         ${OPENSSL_ASM_FLAG}
         ${OPENSSL_ARCH_FLAG}
         enable-tls1_3
@@ -133,7 +135,8 @@ set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
 
 set(NGHTTP2_CONFIGURE_COMMAND
     autoreconf -i &&
-    ./configure --prefix=${NGHTTP2_INSTALL_DIR}
+    ./configure --disable-dependency-tracking
+                --prefix=${NGHTTP2_INSTALL_DIR}
                 --disable-shared
                 --enable-static
                 --disable-threads
@@ -170,7 +173,7 @@ ExternalProject_Add(
     URL ${LIBIDN2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/libidn2
     SOURCE_SUBDIR .
-    CONFIGURE_COMMAND ./configure --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
+    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static --disable-doc
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND $(MAKE) install
     BUILD_IN_SOURCE 1
@@ -190,7 +193,7 @@ if(BUILD_GDB)
         URL ${GDB_URL}
         PREFIX ${CMAKE_BINARY_DIR}/gdb
         SOURCE_SUBDIR .
-        CONFIGURE_COMMAND ./configure --prefix=${GDB_INSTALL_DIR}
+        CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
         BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND $(MAKE) install
         BUILD_IN_SOURCE 1
@@ -210,7 +213,7 @@ ExternalProject_Add(
     URL ${OPENLDAP_URL}
     PREFIX ${CMAKE_BINARY_DIR}/openldap
     SOURCE_SUBDIR .
-    CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
+    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND $(MAKE) install
     BUILD_IN_SOURCE 1
@@ -252,6 +255,7 @@ endif()
 set(CURL_CONFIGURE_COMMAND
     autoreconf -fi &&
     ./configure
+        --disable-dependency-tracking
         --prefix=${CURL_INSTALL_DIR}
         --disable-shared
         --enable-debug
@@ -259,7 +263,6 @@ set(CURL_CONFIGURE_COMMAND
         --disable-symbol-hiding
         --disable-docs
         --enable-ipv6
-        --enable-websockets
         --without-libpsl
         --with-random=/dev/null
         ${CURL_SSL_OPTION}
