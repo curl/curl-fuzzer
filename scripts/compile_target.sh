@@ -53,7 +53,8 @@ else
     CMAKE_VERBOSE_FLAG=""
 fi
 
-export MAKEFLAGS+='-j5'
+export MAKEFLAGS; MAKEFLAGS+="-j$(($(nproc) + 1))"
+echo "MAKEFLAGS: ${MAKEFLAGS}"
 
 # Create a build directory for the dependencies.
 BUILD_DIR=${BUILD_ROOT}/build
