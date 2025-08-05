@@ -100,11 +100,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-suggests --no-install-recommends cmake clang
       - name: Compile mainline
-        run: |
-          ./mainline.sh
         env:
           # test with different "sanitizers"
           SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          ./mainline.sh
 
   just_dependencies:
     runs-on: ubuntu-latest
