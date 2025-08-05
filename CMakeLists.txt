@@ -123,14 +123,14 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     add_dependencies(openssl_external zlib_external)
 
     # Set the OpenSSL option for nghttp2
-    set(NGHTTP2_OPENSSL_OPTION --with-openssl=${OPENSSL_INSTALL_DIR})
+    set(NGHTTP2_OPENSSL_OPTION -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
 
     # Set the dependency option for openssl
     set(OPENSSL_DEP openssl_external)
     set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 else()
     message(STATUS "Not building OpenSSL")
-    set(NGHTTP2_OPENSSL_OPTION --without-openssl)
+    set(NGHTTP2_OPENSSL_OPTION -DOPENSSL_INCLUDE_DIR=)
     set(OPENSSL_DEP "")
     set(OPENSSL_STATIC_LIB "")
 endif()
@@ -142,24 +142,15 @@ set(NGHTTP2_VERSION 1.66.0)
 set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz)
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
 
-set(NGHTTP2_CONFIGURE_COMMAND
-    autoreconf -i &&
-    ./configure --disable-dependency-tracking
-                --prefix=${NGHTTP2_INSTALL_DIR}
-                --disable-shared
-                --enable-static
-                --disable-threads
-                --enable-lib-only
-                --with-zlib=${ZLIB_INSTALL_DIR}
-                ${NGHTTP2_OPENSSL_OPTION}
-)
-
 ExternalProject_Add(
     nghttp2_external
     URL ${NGHTTP2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/nghttp2
     SOURCE_SUBDIR .
-    CONFIGURE_COMMAND ${NGHTTP2_CONFIGURE_COMMAND}
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF
+      -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+      -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
+      ${NGHTTP2_OPENSSL_OPTION}
     BUILD_COMMAND ${MAKE}
     INSTALL_COMMAND ${MAKE} install
     BUILD_IN_SOURCE 1
