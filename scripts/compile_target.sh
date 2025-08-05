@@ -60,7 +60,7 @@ BUILD_DIR=${BUILD_ROOT}/build
 mkdir -p ${BUILD_DIR}
 
 options=''
-command -v ninja >/dev/null 2>&1 && options+=' -G Ninja'
+#command -v ninja >/dev/null 2>&1 && options+=' -G Ninja'
 
 # Compile the dependencies.
 pushd ${BUILD_DIR}
