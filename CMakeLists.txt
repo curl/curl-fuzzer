@@ -287,6 +287,7 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
         INSTALL_COMMAND ${MAKE} install
         ${CURL_POST_INSTALL_COMMAND}
         BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
 else()
     message(STATUS "Building curl from git master")
@@ -300,6 +301,7 @@ else()
         INSTALL_COMMAND ${MAKE} install
         ${CURL_POST_INSTALL_COMMAND}
         BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
