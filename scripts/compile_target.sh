@@ -61,6 +61,6 @@ mkdir -p ${BUILD_DIR}
 
 # Compile the dependencies.
 pushd ${BUILD_DIR}
-cmake ${CMAKE_GDB_FLAG} ..  # -G Ninja
+cmake ${CMAKE_GDB_FLAG} ..
 cmake --build . --target ${TARGET} ${CMAKE_VERBOSE_FLAG}
 popd
