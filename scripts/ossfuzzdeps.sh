@@ -31,7 +31,6 @@ $SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
                    libssl-dev \
                    zlib1g-dev \
                    pkg-config \
-                   wget \
                    cmake \
                    ninja-build
 
