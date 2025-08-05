@@ -98,7 +98,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang ninja-build
+          sudo apt-get install -y cmake clang
       - name: Compile mainline
         env:
           # test with different "sanitizers"
@@ -116,7 +116,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang ninja-build
+          sudo apt-get install -y cmake clang
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
 
