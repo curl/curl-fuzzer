@@ -15,6 +15,7 @@ include(ExternalProject)
 set(ZLIB_VERSION 1.3.1)
 set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
+set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
 ExternalProject_Add(
     zlib_external
@@ -24,10 +25,10 @@ ExternalProject_Add(
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --static --prefix=${ZLIB_INSTALL_DIR}
     INSTALL_COMMAND ${MAKE} install
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
 )
-set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
 # Install zstd
 #
@@ -35,6 +36,7 @@ set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 set(ZSTD_VERSION 1.5.7)
 set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz)
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
+set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
 ExternalProject_Add(
     zstd_external
@@ -44,10 +46,10 @@ ExternalProject_Add(
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
     INSTALL_COMMAND ${MAKE} install
     BUILD_IN_SOURCE 0
+    BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
 )
-set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
@@ -60,6 +62,7 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     set(OPENSSL_URL https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/openssl-install)
     set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/openssl/src/openssl_external)
+    set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 
     # Architecture and sanitizer logic
     set(OPENSSL_ARCH_TARGET "")
@@ -112,6 +115,7 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
         INSTALL_COMMAND ${MAKE} install_sw
         BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${OPENSSL_STATIC_LIB}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
@@ -124,7 +128,6 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
 
     # Set the dependency option for openssl
     set(OPENSSL_DEP openssl_external)
-    set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 else()
     message(STATUS "Not building OpenSSL")
     set(NGHTTP2_OPENSSL_OPTION -DOPENSSL_INCLUDE_DIR=)
@@ -138,6 +141,7 @@ endif()
 set(NGHTTP2_VERSION 1.66.0)
 set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz)
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
+set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
 ExternalProject_Add(
     nghttp2_external
@@ -147,10 +151,10 @@ ExternalProject_Add(
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF ${NGHTTP2_OPENSSL_OPTION}
     INSTALL_COMMAND ${MAKE} install
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
 )
-set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
 # Ensure zlib and openssl are built before nghttp2
 add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
@@ -161,6 +165,7 @@ add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
 set(LIBIDN2_VERSION 2.3.8)
 set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
+set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
 ExternalProject_Add(
     libidn2_external
@@ -170,10 +175,10 @@ ExternalProject_Add(
     CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static --disable-doc
     INSTALL_COMMAND ${MAKE} install
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
 )
-set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
@@ -200,6 +205,8 @@ endif()
 set(OPENLDAP_VERSION 2.6.10)
 set(OPENLDAP_URL https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
 set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
+set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
+set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
 ExternalProject_Add(
     openldap_external
@@ -209,11 +216,10 @@ ExternalProject_Add(
     CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
     INSTALL_COMMAND ${MAKE} install
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
 )
-set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
-set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
 if (TARGET openssl_external)
     add_dependencies(openldap_external openssl_external)
