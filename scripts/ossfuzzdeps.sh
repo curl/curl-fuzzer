@@ -21,8 +21,9 @@ else
 fi
 
 # Download dependencies for oss-fuzz
-$SUDO apt-get update
-$SUDO apt-get install -y make \
+$SUDO apt-get -o Dpkg::Use-Pty=0 update
+$SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
+                   make \
                    autoconf \
                    automake \
                    libtool \
@@ -32,4 +33,8 @@ $SUDO apt-get install -y make \
                    pkg-config \
                    wget \
                    cmake \
-                   groff-base
+                   ninja-build
+
+# for openldap to avoid installing groff-base
+$SUDO touch /usr/bin/soelim
+$SUDO chmod +x /usr/bin/soelim
