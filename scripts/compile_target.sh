@@ -54,7 +54,6 @@ else
 fi
 
 export MAKEFLAGS="-j$(($(nproc) + 0))"
-MAKEFLAGS='-j4-j4'
 echo "MAKEFLAGS: ${MAKEFLAGS}"
 
 # Create a build directory for the dependencies.
