@@ -97,6 +97,7 @@ jobs:
           repository: curl/curl-fuzzer
       - name: Install Dependencies
         run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get -o Dpkg::Use-Pty=0 update
           sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile mainline
@@ -115,6 +116,7 @@ jobs:
           repository: curl/curl-fuzzer
       - name: Install Dependencies
         run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get -o Dpkg::Use-Pty=0 update
           sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile deps target
