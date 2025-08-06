@@ -22,7 +22,6 @@ fi
 
 # Download dependencies for oss-fuzz
 $SUDO apt-get -o Dpkg::Use-Pty=0 update
-$SUDO rm -f /var/lib/man-db/auto-update
 $SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
                    make \
                    autoconf \
