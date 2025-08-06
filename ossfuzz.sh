@@ -39,9 +39,6 @@ echo "CXXFLAGS: $CXXFLAGS"
 echo "ARCHITECTURE: $ARCHITECTURE"
 echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 
-export MAKEFLAGS+="-j$(($(nproc) + 1))"
-echo "MAKEFLAGS: ${MAKEFLAGS}"
-
 # Set the CURL_SOURCE_DIR for the build.
 export CURL_SOURCE_DIR=/src/curl
 
