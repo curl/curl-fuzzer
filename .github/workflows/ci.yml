@@ -97,8 +97,8 @@ jobs:
           repository: curl/curl-fuzzer
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang ninja-build
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile mainline
         env:
           # test with different "sanitizers"
@@ -115,8 +115,8 @@ jobs:
           repository: curl/curl-fuzzer
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang ninja-build
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
 
