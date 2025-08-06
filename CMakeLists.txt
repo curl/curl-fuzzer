@@ -239,41 +239,39 @@ add_custom_target(deps
 # Compile and install curl.
 set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
 
-# Determine SSL and nghttp2 options
-if(TARGET openssl_external)
-    set(CURL_SSL_OPTION "--with-ssl=${OPENSSL_INSTALL_DIR}")
-else()
-    set(CURL_SSL_OPTION "--without-ssl")
-endif()
-
-set(CURL_CONFIGURE_COMMAND
-    autoreconf -fi &&
-    ./configure
-        --disable-dependency-tracking
-        --prefix=${CURL_INSTALL_DIR}
-        --disable-shared
-        --enable-debug
-        --enable-maintainer-mode
-        --disable-symbol-hiding
-        --disable-docs
-        --enable-ipv6
-        --without-libpsl
-        --with-random=/dev/null
-        ${CURL_SSL_OPTION}
-        --with-zlib=${ZLIB_INSTALL_DIR}
-        --with-nghttp2=${NGHTTP2_INSTALL_DIR}
-        --with-zstd=${ZSTD_INSTALL_DIR}
-        --with-libidn2=${LIBIDN2_INSTALL_DIR}
-        --with-ldap=${OPENLDAP_INSTALL_DIR}
-        --with-ldap-lib=ldap
-        --with-lber-lib=lber
-)
-
 set(CURL_POST_INSTALL_COMMAND
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
     COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/curl_fnmatch.h ${CURL_INSTALL_DIR}/utfuzzer/
     COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
     COMMAND ${CMAKE_COMMAND} -E touch ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
+)
+
+# Determine SSL and nghttp2 options
+if(TARGET openssl_external)
+    set(CURL_SSL_OPTION -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
+else()
+    set(CURL_SSL_OPTION -DCURL_USE_OPENSSL=OFF)
+endif()
+
+set(CURL_CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
+    -DBUILD_SHARED_LIBS=OFF
+    -DENABLE_DEBUG=ON
+    -CURL_HIDDEN_SYMBOLS=OFF
+    -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
+    -DCURL_USE_LIBPSL=OFF
+    ${CURL_SSL_OPTION}
+    -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+    -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
+    -DNGHTTP2_INCLUDE_DIR=${NGHTTP2_INSTALL_DIR}/include
+    -DNGHTTP2_LIBRARY=${NGHTTP2_STATIC_LIB}
+    -DZSTD_INCLUDE_DIR=${ZSTD_INSTALL_DIR}/include
+    -DZSTD_LIBRARY=${ZSTD_STATIC_LIB}
+    -DLIBIDN2_INCLUDE_DIR=${LIBIDN2_INSTALL_DIR}/include
+    -DLIBIDN2_LIBRARY=${LIBIDN2_STATIC_LIB}
+    -DLDAP_INCLUDE_DIR=${OPENLDAP_INSTALL_DIR}/include
+    -DLDAP_LIBRARY=${OPENLDAP_STATIC_LIB_LDAP}
+    -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
 
 # Conditionally check to see if there's a source directory or not.
@@ -284,7 +282,7 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
     ExternalProject_Add(
         curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
-        CONFIGURE_COMMAND ${CURL_CONFIGURE_COMMAND}
+        CMAKE_ARGS ${CURL_CMAKE_ARGS}
         ${CURL_POST_INSTALL_COMMAND}
         BUILD_IN_SOURCE 1
         BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
@@ -297,7 +295,7 @@ else()
         GIT_REPOSITORY ${CURL_URL}
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
-        CONFIGURE_COMMAND ${CURL_CONFIGURE_COMMAND}
+        CMAKE_ARGS ${CURL_CMAKE_ARGS}
         ${CURL_POST_INSTALL_COMMAND}
         BUILD_IN_SOURCE 1
         BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
