@@ -21,7 +21,6 @@ ExternalProject_Add(
     zlib_external
     URL ${ZLIB_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zlib
-    SOURCE_SUBDIR .
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --static --prefix=${ZLIB_INSTALL_DIR}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
@@ -109,7 +108,6 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         openssl_external
         URL ${OPENSSL_URL}
         PREFIX ${CMAKE_BINARY_DIR}/openssl
-        SOURCE_SUBDIR .
         CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
         INSTALL_COMMAND ${MAKE} install_sw
         BUILD_IN_SOURCE 1
@@ -145,7 +143,6 @@ ExternalProject_Add(
     nghttp2_external
     URL ${NGHTTP2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/nghttp2
-    SOURCE_SUBDIR .
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
         -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
     BUILD_IN_SOURCE 1
@@ -169,7 +166,6 @@ ExternalProject_Add(
     libidn2_external
     URL ${LIBIDN2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/libidn2
-    SOURCE_SUBDIR .
     CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static --disable-doc
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
@@ -188,7 +184,6 @@ if(BUILD_GDB)
         gdb_external
         URL ${GDB_URL}
         PREFIX ${CMAKE_BINARY_DIR}/gdb
-        SOURCE_SUBDIR .
         CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
         BUILD_IN_SOURCE 1
     )
@@ -208,7 +203,6 @@ ExternalProject_Add(
     openldap_external
     URL ${OPENLDAP_URL}
     PREFIX ${CMAKE_BINARY_DIR}/openldap
-    SOURCE_SUBDIR .
     CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
@@ -295,7 +289,6 @@ else()
         GIT_REPOSITORY ${CURL_URL}
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
-        SOURCE_SUBDIR .
         CMAKE_ARGS ${CURL_CMAKE_ARGS}
         ${CURL_POST_INSTALL_COMMAND}
         BUILD_IN_SOURCE 1
