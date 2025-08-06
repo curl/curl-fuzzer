@@ -105,8 +105,7 @@ jobs:
         env:
           # test with different "sanitizers"
           SANITIZER: ${{ matrix.sanitizer }}
-        run: |
-          MAKE=/usr/bin/gmake ./mainline.sh
+        run: ./mainline.sh
 
   just_dependencies:
     runs-on: ubuntu-latest
@@ -122,7 +121,7 @@ jobs:
           sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
       - name: Compile deps target
-        run: MAKE=/usr/bin/gmake ./scripts/compile_target.sh deps
+        run: ./scripts/compile_target.sh deps
 
   # Ensure that the repository can be built for i386
   Testi386:
