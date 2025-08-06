@@ -231,13 +231,6 @@ add_custom_target(deps
 # Compile and install curl.
 set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
 
-set(CURL_POST_INSTALL_COMMAND
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/curl_fnmatch.h ${CURL_INSTALL_DIR}/utfuzzer/
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
-    COMMAND ${CMAKE_COMMAND} -E touch ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
-)
-
 # Determine SSL and nghttp2 options
 if(TARGET openssl_external)
     set(CURL_SSL_OPTION -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
@@ -266,6 +259,13 @@ set(CURL_CMAKE_ARGS
     -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
 
+set(CURL_POST_INSTALL_COMMAND
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/curl_fnmatch.h ${CURL_INSTALL_DIR}/utfuzzer/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
+    COMMAND ${CMAKE_COMMAND} -E touch ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
+)
+
 # Conditionally check to see if there's a source directory or not.
 # If there is, use it. Otherwise, download the latest version.
 #
@@ -274,8 +274,9 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
     ExternalProject_Add(
         curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
-        CMAKE_ARGS ${CURL_CMAKE_ARGS}
+        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
         ${CURL_POST_INSTALL_COMMAND}
+        CMAKE_ARGS ${CURL_CMAKE_ARGS}
         BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
 else()
@@ -286,8 +287,9 @@ else()
         GIT_REPOSITORY ${CURL_URL}
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
-        CMAKE_ARGS ${CURL_CMAKE_ARGS}
+        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
         ${CURL_POST_INSTALL_COMMAND}
+        CMAKE_ARGS ${CURL_CMAKE_ARGS}
         BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
 endif()
