@@ -201,7 +201,7 @@ ExternalProject_Add(
     openldap_external
     URL ${OPENLDAP_URL}
     PREFIX ${CMAKE_BINARY_DIR}/openldap
-    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
+    CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
