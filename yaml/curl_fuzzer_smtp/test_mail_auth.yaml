@@ -1,0 +1,47 @@
+corpus_file: corpora/curl_fuzzer_smtp/test_mail_auth
+file_size: 260
+tlvs:
+- length: 25
+  type: URL
+  type_id_v1: 1
+  value: smtp://127.0.0.1:9005/900
+- length: 35
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 32323020736d74702e6578616d706c652e636f6d2045534d545020506f73746669780a
+- length: 18
+  type: RESPONSE1
+  type_id_v1: 17
+  value: 3235302053495a452031343638303036340a
+- length: 7
+  type: RESPONSE2
+  type_id_v1: 18
+  value: 323530204f6b0a
+- length: 7
+  type: RESPONSE3
+  type_id_v1: 19
+  value: 323530204f6b0a
+- length: 7
+  type: RESPONSE4
+  type_id_v1: 20
+  value: 333534204f6b0a
+- length: 6
+  type: RESPONSE5
+  type_id_v1: 21
+  value: 250 Ok
+- length: 18
+  type: MAIL_FROM
+  type_id_v1: 12
+  value: sender@example.com
+- length: 15
+  type: MAIL_AUTH
+  type_id_v1: 39
+  value: whatever@secret
+- length: 35
+  type: UPLOAD1
+  type_id_v1: 8
+  value: 46726f6d3a20646966666572656e740a546f3a20616e6f746865720a0a626f64790a0a
+- length: 21
+  type: MAIL_RECIPIENT
+  type_id_v1: 11
+  value: recipient@example.com

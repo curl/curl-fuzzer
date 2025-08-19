@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer_https/test_altsvc_with_cache
+file_size: 164
+tlvs:
+- length: 30
+  type: URL
+  type_id_v1: 1
+  value: https://0x7F000001?foobar.json
+- length: 14
+  type: RESPONSE0
+  type_id_v1: 2
+  value: HTTPS/2 200 OK
+- length: 28
+  type: HEADER
+  type_id_v1: 6
+  value: 'Alt-Svc: h3-25=":4430"; ma=0'
+- length: 22
+  type: HEADER
+  type_id_v1: 6
+  value: 'Connection: Keep-Alive'
+- length: 40
+  type: HEADER
+  type_id_v1: 6
+  value: 'Authorization: Basic aaaaaaaaaaaaaaaaaaa'

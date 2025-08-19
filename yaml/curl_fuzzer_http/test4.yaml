@@ -1,0 +1,47 @@
+corpus_file: corpora/curl_fuzzer_http/test4
+file_size: 336
+tlvs:
+- length: 23
+  type: URL
+  type_id_v1: 1
+  value: http://127.0.0.1:8990/4
+- length: 130
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3120323030204f4b0a446174653a205468752c203039204e6f7620323031302031343a34393a303020474d540a5365727665723a20746573742d7365727665722f66616b6520737773636c6f73650a436f6e74656e742d547970653a20746578742f68746d6c0a46756e6e792d686561643a207965737965730a0a
+- length: 18
+  type: HEADER
+  type_id_v1: 6
+  value: 'extra-header: here'
+- length: 16
+  type: HEADER
+  type_id_v1: 6
+  value: 'Accept: replaced'
+- length: 16
+  type: HEADER
+  type_id_v1: 6
+  value: X-Custom-Header;
+- length: 12
+  type: HEADER
+  type_id_v1: 6
+  value: 'X-Test: foo;'
+- length: 7
+  type: HEADER
+  type_id_v1: 6
+  value: 'X-Test:'
+- length: 13
+  type: HEADER
+  type_id_v1: 6
+  value: 'X-Test2: foo;'
+- length: 10
+  type: HEADER
+  type_id_v1: 6
+  value: 'X-Test3:  '
+- length: 10
+  type: HEADER
+  type_id_v1: 6
+  value: 'X-Test4;  '
+- length: 15
+  type: HEADER
+  type_id_v1: 6
+  value: X-Test5;ignored

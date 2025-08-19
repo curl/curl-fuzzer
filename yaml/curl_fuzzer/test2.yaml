@@ -1,0 +1,19 @@
+corpus_file: corpora/curl_fuzzer/test2
+file_size: 182
+tlvs:
+- length: 21
+  type: URL
+  type_id_v1: 1
+  value: http://127.0.0.1:80/2
+- length: 129
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3120323030204f4b0a446174653a205468752c203039204e6f7620323031302031343a34393a303020474d540a5365727665723a20746573742d7365727665722f66616b6520737773636c6f73650a436f6e74656e742d547970653a20746578742f68746d6c0a46756e6e792d686561643a207965737965730a
+- length: 4
+  type: USERNAME
+  type_id_v1: 3
+  value: fake
+- length: 4
+  type: PASSWORD
+  type_id_v1: 4
+  value: user

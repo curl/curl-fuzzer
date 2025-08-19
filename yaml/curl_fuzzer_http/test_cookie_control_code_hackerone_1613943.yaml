@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer_http/test_cookie_control_code_hackerone_1613943
+file_size: 146
+tlvs:
+- length: 36
+  type: URL
+  type_id_v1: 1
+  value: http://example.com:8080/chat?a=b&c=d
+- length: 24
+  type: HEADER
+  type_id_v1: 6
+  value: 'Host: server.example.com'
+- length: 17
+  type: HEADER
+  type_id_v1: 6
+  value: 'Connection: Close'
+- length: 26
+  type: HEADER
+  type_id_v1: 6
+  value: 'Origin: http://example.com'
+- length: 13
+  type: HEADER
+  type_id_v1: 6
+  value: 'Cookie: a=b\f'

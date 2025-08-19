@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_http/test271
+file_size: 74
+tlvs:
+- length: 26
+  type: URL
+  type_id_v1: 1
+  value: tftp://127.0.0.1:8997//271
+- length: 36
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 61206368756e6b206f660a646174610a72657475726e65640a20746f20636c69656e740a

@@ -1,0 +1,31 @@
+corpus_file: corpora/curl_fuzzer/test100_2
+file_size: 128
+tlvs:
+- length: 30
+  type: URL
+  type_id_v1: 1
+  value: ftp://127.0.0.1:8992/test-100/
+- length: 11
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 3232302048656c6c6f210a
+- length: 9
+  type: RESPONSE1
+  type_id_v1: 17
+  value: 32303020537572650a
+- length: 9
+  type: RESPONSE2
+  type_id_v1: 18
+  value: 32303020537572650a
+- length: 9
+  type: RESPONSE3
+  type_id_v1: 19
+  value: 32303020537572650a
+- length: 9
+  type: RESPONSE4
+  type_id_v1: 20
+  value: 34303020537572650a
+- length: 9
+  type: RESPONSE5
+  type_id_v1: 21
+  value: 32303020537572650a

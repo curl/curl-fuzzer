@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_https/test_url
+file_size: 23
+tlvs:
+- length: 17
+  type: URL
+  type_id_v1: 1
+  value: https://127.0.0.1

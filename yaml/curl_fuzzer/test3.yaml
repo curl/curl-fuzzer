@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer/test3
+file_size: 242
+tlvs:
+- length: 23
+  type: URL
+  type_id_v1: 1
+  value: http://127.0.0.1:8990/3
+- length: 144
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3020323030204f4b0d0a5365727665723a20746573742d7365727665722f66616b650d0a436f6e74656e742d547970653a20746578742f68746d6c0d0a436f6e74656e742d4c656e6774683a20300d0a0d0a746869732069732064617461206576656e2074686f75676820436f6e74656e742d4c656e6774682069732073657420746f207a65726f0a
+- length: 4
+  type: USERNAME
+  type_id_v1: 3
+  value: fake
+- length: 4
+  type: PASSWORD
+  type_id_v1: 4
+  value: user
+- length: 37
+  type: POSTFIELDS
+  type_id_v1: 5
+  value: fooo=mooo&pooo=clue&doo=%20%20%20++++
