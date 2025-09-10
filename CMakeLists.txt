@@ -13,7 +13,8 @@ include(ExternalProject)
 #
 # renovate: datasource=github-tags depName=madler/zlib
 set(ZLIB_VERSION 1.3.1)
-set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
+set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz
+             https://github.com/madler/zlib/releases/download/v{ver}/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
@@ -55,7 +56,7 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     #
     # renovate: datasource=github-tags depName=openssl/openssl
     set(OPENSSL_VERSION 3.5.2)
-    set(OPENSSL_URL https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz)
+    set(OPENSSL_URL https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/openssl-install)
     set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/openssl/src/openssl_external)
     set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
