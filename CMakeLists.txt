@@ -13,7 +13,8 @@ include(ExternalProject)
 #
 # renovate: datasource=github-tags depName=madler/zlib
 set(ZLIB_VERSION 1.3.1)
-set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
+set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz
+             https://github.com/madler/zlib/releases/download/v{ver}/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
