@@ -157,7 +157,8 @@ add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
 #
 # renovate: datasource=github-tags depName=libidn/libidn2
 set(LIBIDN2_VERSION 2.3.8)
-set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
+set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
+                https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
@@ -174,7 +175,8 @@ ExternalProject_Add(
 
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
-set(GDB_URL https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz)
+set(GDB_URL https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz
+            https://ftpmirror.gnu.org/gdb/gdb-${GDB_VERSION}.tar.gz)
 set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/gdb-install)
 
 option(BUILD_GDB "Build GDB as an external project" OFF)
