@@ -134,7 +134,7 @@ endif()
 # Install nghttp2
 #
 # renovate: datasource=github-tags depName=nghttp2/nghttp2
-set(NGHTTP2_VERSION 1.66.0)
+set(NGHTTP2_VERSION 1.67.1)
 set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz)
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
 set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
