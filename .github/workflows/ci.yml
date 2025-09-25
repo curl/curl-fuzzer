@@ -32,6 +32,7 @@ jobs:
         id: set-matrix
         run: |
           . ./scripts/fuzz_targets
+          cd src/curl_fuzzer_tools
           python3 -m generate_matrix | tee $GITHUB_OUTPUT
 
   BuildFuzzers:
