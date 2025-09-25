@@ -1,0 +1,27 @@
+corpus_file: corpora/curl_fuzzer_https/test_simple_httppost
+file_size: 157
+tlvs:
+- length: 33
+  type: URL
+  type_id_v1: 1
+  value: https://[::1]/upload/a/thing/here
+- length: 20
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3120323030204f4b0a0d0a0d0a
+- length: 24
+  type: HTTPPOSTBODY
+  type_id_v1: 52
+  value: '{ a: b, bar: -1, 3: 2L }'
+- length: 4
+  type: NOBODY
+  type_id_v1: 28
+  value: 0
+- length: 23
+  type: HEADER
+  type_id_v1: 6
+  value: 'Content-Type: text/json'
+- length: 17
+  type: HEADER
+  type_id_v1: 6
+  value: 'Connection: Close'

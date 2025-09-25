@@ -22,13 +22,18 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-dependencies = ["scapy (>=2.6.1,<3.0.0)"]
+dependencies = [
+    "pyyaml>=6.0.2",
+    "scapy (>=2.6.1,<3.0.0)",
+]
 
 [project.scripts]
 read_corpus = "curl_fuzzer_tools.read_corpus:run"
 generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
+corpus_to_yaml = "curl_fuzzer_tools.corpus_to_yaml:run"
+yaml_to_corpus = "curl_fuzzer_tools.yaml_to_corpus:run"
 
 [build-system]
 requires = ["setuptools>=61.0"]

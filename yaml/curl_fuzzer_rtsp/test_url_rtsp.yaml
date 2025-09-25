@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_rtsp/test_url_rtsp
+file_size: 22
+tlvs:
+- length: 16
+  type: URL
+  type_id_v1: 1
+  value: rtsp://127.0.0.1

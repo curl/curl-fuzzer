@@ -1,0 +1,23 @@
+corpus_file: corpora/curl_fuzzer_pop3/test_oauthed_pop3
+file_size: 228
+tlvs:
+- length: 60
+  type: URL
+  type_id_v1: 1
+  value: pop3s://localhost.localdomain:9991/wow/a/path/1/;MAILINDEX=1
+- length: 70
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 46726f6d3a206d6540736f6d6577686572650d0a546f3a2066616b65406e6f77686572650d0a0d0a626f64790d0a0d0a2d2d0d0a09796f7572732073696e636572656c790d0a
+- length: 4
+  type: USERNAME
+  type_id_v1: 3
+  value: user
+- length: 16
+  type: LOGIN_OPTIONS
+  type_id_v1: 42
+  value: AUTH=OAUTHBEARER
+- length: 48
+  type: XOAUTH2_BEARER
+  type_id_v1: 43
+  value: 610941414141414141414141414141414141414141414141414141414141414141414141414141414141414141313d3d

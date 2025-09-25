@@ -1,0 +1,19 @@
+corpus_file: corpora/curl_fuzzer_http/test_http_with_hsts_tlv
+file_size: 207
+tlvs:
+- length: 17
+  type: URL
+  type_id_v1: 1
+  value: http://google.com
+- length: 146
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f312e3120323030204f4b0d0a5365727665723a20666f6f0d0a436f6e74656e742d547970653a20746578742f706c61696e0d0a5374726963742d5472616e73706f72742d53656375726974793a206d61782d6167653d36333037323030303b20696e636c756465537562446f6d61696e733b0d0a436f6e74656e742d4c656e6774683a20340d0a0d0a626f6479
+- length: 16
+  type: LOGIN_OPTIONS
+  type_id_v1: 42
+  value: /tmp/hsts.foobar
+- length: 4
+  type: XOAUTH2_BEARER
+  type_id_v1: 43
+  value: 3
