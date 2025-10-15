@@ -196,7 +196,7 @@ endif()
 # Install OpenLDAP
 set(OPENLDAP_VERSION 2.6.10)
 set(OPENLDAP_URL https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz
-                 https://mirror.koddos.net/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
+                 https://mirror.lyrahosting.com/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
 set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
 set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
 set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
