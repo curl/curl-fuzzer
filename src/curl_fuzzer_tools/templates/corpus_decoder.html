@@ -135,6 +135,11 @@
             word-break: break-word;
         }
 
+        /* Subtle styling for visualization glyphs (interpunct, NUL, etc.) */
+        .viz-char {
+            opacity: 0.3;
+        }
+
         .label {
             display: inline-flex;
             align-items: center;
@@ -454,7 +459,8 @@
         const decoder = new TextDecoder("utf-8", { fatal: false });
         const MAX_PREVIEW = 512;
         const MAX_HEX_BYTES = 256;
-        const INTERPUNCT = "\u00B7";
+        const INTERPUNCT = "\u00B7"; // · (space/whitespace visualizer)
+        const NULL_SYMBOL = "\u2300"; // ⌀ (lighter null marker)
 
         const elements = {
             fileInput: document.getElementById("corpus-input"),
@@ -482,24 +488,42 @@
         }
 
         function sanitizeString(bytes) {
+            // Return safe HTML with visualization glyphs wrapped in a span for reduced opacity.
             if (!bytes || !bytes.length) {
                 return "";
             }
             try {
                 const truncated = bytes.length > MAX_PREVIEW ? bytes.slice(0, MAX_PREVIEW) : bytes;
                 const decoded = decoder.decode(truncated);
-                return visualizeWhitespace(decoded);
+                return renderVisibleHTML(decoded);
             } catch (err) {
                 console.debug("Failed to decode as UTF-8", err);
                 return "";
             }
         }
 
-        function visualizeWhitespace(text) {
-            if (!text) {
-                return "";
+        function escapeHTML(s) {
+            return s.replace(/[&<>"']/g, (ch) => (
+                ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '"' ? '&quot;' : '&#39;'
+            ));
+        }
+
+        function renderVisibleHTML(text) {
+            if (!text) return "";
+            // Build escaped HTML, substituting visualization spans for NULs and whitespace.
+            let out = "";
+            for (let i = 0; i < text.length; i += 1) {
+                const ch = text[i];
+                const code = text.charCodeAt(i);
+                if (code === 0x0000) {
+                    out += `<span class="viz-char" title="NUL (0x00)">${NULL_SYMBOL}</span>`;
+                } else if (ch === ' ' || ch === '\t' || ch === '\v' || ch === '\f' || ch === '\r' || ch === '\u00A0') {
+                    out += `<span class="viz-char" title="Whitespace">${INTERPUNCT}</span>`;
+                } else {
+                    out += escapeHTML(ch);
+                }
             }
-            return text.replace(/[\u00A0 \t\v\f\r]/g, INTERPUNCT);
+            return out;
         }
 
         function toHex(bytes) {
@@ -573,7 +597,7 @@
                 const previewCell = document.createElement("td");
                 previewCell.className = "mono";
                     previewCell.dataset.label = "Preview";
-                    previewCell.textContent = row.preview || "\u00a0";
+                    previewCell.innerHTML = row.preview || "\u00a0";
 
                 const hexCell = document.createElement("td");
                 hexCell.className = "mono";
