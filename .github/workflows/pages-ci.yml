@@ -29,5 +29,9 @@ jobs:
           pip install pytest pytest-playwright
           python -m playwright install
 
+      - name: Install Playwright system dependencies
+        run: |
+          playwright install-deps
+
       - name: Run Playwright browser test
         run: pytest tests/browser/test_corpus_decoder.py
