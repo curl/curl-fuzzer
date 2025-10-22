@@ -198,6 +198,10 @@
                 color: rgba(255, 255, 255, 0.7);
             }
 
+            .summary-item dt {
+                color: rgba(255, 255, 255, 0.7);
+            }
+
             .card {
                 background: rgba(25, 25, 25, 0.75);
                 border-color: rgba(255, 255, 255, 0.1);
@@ -351,6 +355,12 @@
                 align-items: flex-start;
             }
 
+            /* In preview/hex cells, render inline content normally to avoid one-span-per-line */
+            tbody tr td.mono {
+                display: block;
+                align-items: initial;
+            }
+
             tbody tr[data-entry] td:first-child {
                 display: none;
             }
@@ -379,6 +389,7 @@
             .mono {
                 white-space: pre-wrap;
                 word-break: break-word;
+                overflow-wrap: anywhere;
                 font-size: 0.9rem;
             }
         }
