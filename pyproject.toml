@@ -40,6 +40,10 @@ corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
 generate_decoder_html = "curl_fuzzer_tools.generate_decoder_html:run"
 
+
+[tool.setuptools.package-data]
+curl_fuzzer_tools = ["templates/*.html"]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
