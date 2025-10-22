@@ -124,6 +124,24 @@ jobs:
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
 
+  PythonTests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: curl/curl-fuzzer
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+      - name: Run TLV constants sync test
+        run: pytest tests/test_tlv_constants_sync.py
+
   # Ensure that the repository can be built for i386
   Testi386:
     runs-on: ubuntu-latest
