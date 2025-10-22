@@ -1,0 +1,33 @@
+name: Playwright browser test for corpus decoder
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[browser-tests]
+          pip install pytest pytest-playwright
+          python -m playwright install
+
+      - name: Run Playwright browser test
+        run: pytest tests/browser/test_corpus_decoder.py

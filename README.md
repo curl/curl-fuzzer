@@ -80,6 +80,34 @@ read_corpus <path/to/file>
 ```
 This will print out a list of contents inside the file.
 
+## I want an HTML decoder for corpus files
+
+Generate a standalone HTML page that can inspect TLV corpora directly in your browser:
+
+```shell
+python -m curl_fuzzer_tools.generate_decoder_html
+```
+
+By default the generator writes to `docs/corpus-decoder/index.html`. The page is entirely client-side; it never uploads the selected file. You can open the output straight from the filesystem, for example `file:///.../docs/corpus-decoder/index.html`.
+
+**View the latest published decoder:**
+
+[curl corpus decoder (GitHub Pages)](https://curl.github.io/curl-fuzzer/corpus-decoder/index.html)
+
+GitHub Pages is configured to deploy automatically from the `docs/` folder whenever the `main` branch is updated. Use the command above locally before pushing if you need to refresh the published site.
+
+### Optional browser smoke-test (Playwright)
+
+The Playwright regression test is opt-in so the default install stays light. If you want to run it:
+
+```shell
+pip install -e '.[browser-tests]'
+playwright install chromium
+pytest tests/browser/test_corpus_decoder.py
+```
+
+These commands exercise the generated HTML by uploading a sample TLV corpus in a headless Chromium run.
+
 ## I want to generate a new testcase
 
 To generate a new testcase, run

@@ -22,13 +22,23 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-dependencies = ["scapy (>=2.6.1,<3.0.0)"]
+dependencies = [
+    "scapy (>=2.6.1,<3.0.0)",
+    "jinja2 (>=3.1.0,<4.0.0)",
+]
+
+[project.optional-dependencies]
+browser-tests = [
+    "pytest>=8.3,<9",
+    "playwright>=1.46,<1.47",
+]
 
 [project.scripts]
 read_corpus = "curl_fuzzer_tools.read_corpus:run"
 generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
+generate_decoder_html = "curl_fuzzer_tools.generate_decoder_html:run"
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -38,6 +48,10 @@ build-backend = "setuptools.build_meta"
 dev = [
     "mypy==1.18.2",
     "ruff==0.14.1",
+]
+browser-tests = [
+    "pytest>=8.3,<9",
+    "playwright>=1.46,<1.47",
 ]
 
 [tool.mypy]

@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>curl corpus decoder</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.5;
+        }
+
+        body {
+            margin: 0 auto;
+            padding: 1.5rem;
+            max-width: 960px;
+            background: var(--page-bg, transparent);
+        }
+
+        header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+
+            tbody tr {
+                background: rgba(255, 255, 255, 0.03);
+                border-color: rgba(255, 255, 255, 0.08);
+            }
+            margin-bottom: 1.5rem;
+        }
+
+        header h1 {
+            font-size: clamp(1.8rem, 4vw, 2.6rem);
+            margin: 0;
+        }
+
+        header p {
+            margin: 0;
+            color: #666;
+        }
+
+        .card {
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-bottom: 1.5rem;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h2 {
+            margin-top: 0;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .dropzone {
+            border: 2px dashed rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            color: rgba(0, 0, 0, 0.6);
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .dropzone.dragover {
+            border-color: #0078d4;
+            background: rgba(0, 120, 212, 0.08);
+        }
+
+        button, label[for="corpus-input"] {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 999px;
+            padding: 0.6rem 1.2rem;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+
+        button.secondary {
+            background: rgba(0, 0, 0, 0.05);
+            color: inherit;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            border-radius: 10px;
+        }
+
+        th, td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.03);
+            position: sticky;
+            top: 0;
+        }
+
+        tbody tr:hover {
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        .mono {
+            font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.9rem;
+            word-break: break-word;
+        }
+
+        .label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            background: rgba(0, 120, 212, 0.12);
+            color: #004578;
+            font-size: 0.85rem;
+        }
+
+        .summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .summary-item {
+            min-width: 120px;
+        }
+
+        .summary-item dt {
+            margin: 0;
+            color: rgba(0, 0, 0, 0.6);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .summary-item dd {
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        footer {
+            margin-top: 3rem;
+            color: rgba(0, 0, 0, 0.6);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: inherit;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #111;
+                color: #f3f3f3;
+            }
+
+            header p,
+            .dropzone,
+            footer {
+                color: rgba(255, 255, 255, 0.7);
+            }
+
+            .card {
+                background: rgba(25, 25, 25, 0.75);
+                border-color: rgba(255, 255, 255, 0.1);
+                box-shadow: none;
+            }
+
+            th {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            tbody tr:hover {
+                background: rgba(255, 255, 255, 0.04);
+            }
+
+            .label {
+                background: rgba(0, 120, 212, 0.25);
+                color: #9cd4ff;
+            }
+        }
+
+        @media (prefers-color-scheme: dark) and (max-width: 640px) {
+            tbody tr {
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.18);
+                box-shadow: none;
+            }
+
+            tbody tr:hover {
+                background: rgba(255, 255, 255, 0.12);
+            }
+
+            tbody tr[data-entry]::before {
+                color: rgba(255, 255, 255, 0.75);
+                background: rgba(255, 255, 255, 0.18);
+            }
+
+            tbody tr td::before {
+                color: rgba(255, 255, 255, 0.65);
+            }
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 1rem;
+            }
+
+            header {
+                gap: 0.5rem;
+            }
+
+            header p {
+                font-size: 0.95rem;
+            }
+
+            .card {
+                padding: 1rem;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            label[for="corpus-input"],
+            button {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .dropzone {
+                padding: 1.5rem 1.25rem;
+                font-size: 0.95rem;
+            }
+
+            .summary {
+                flex-direction: column;
+            }
+
+            .table-wrapper {
+                overflow-x: visible;
+            }
+
+            table {
+                font-size: 0.95rem;
+            }
+
+            table,
+            thead,
+            tbody,
+            th,
+            td,
+            tr {
+                display: block;
+            }
+
+            thead {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                border: 0;
+            }
+
+            tbody {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            tbody tr {
+                position: relative;
+                background: rgba(0, 0, 0, 0.03);
+                border: 1px solid rgba(0, 0, 0, 0.07);
+                border-radius: 12px;
+                padding: 1.2rem 1rem 1rem;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }
+
+            tbody tr:hover {
+                background: rgba(0, 0, 0, 0.045);
+            }
+
+            tbody tr[data-entry]::before {
+                content: "#" attr(data-entry);
+                position: absolute;
+                top: 0.75rem;
+                right: 1rem;
+                font-size: 0.75rem;
+                font-weight: 600;
+                letter-spacing: 0.08em;
+                color: rgba(0, 0, 0, 0.45);
+                background: rgba(0, 0, 0, 0.05);
+                border-radius: 999px;
+                padding: 0.15rem 0.6rem;
+            }
+
+            tbody tr td {
+                border: 0;
+                padding: 0;
+                margin-top: 0.55rem;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            tbody tr[data-entry] td:first-child {
+                display: none;
+            }
+
+            tbody tr[data-entry] td:nth-child(2) {
+                margin-top: 0;
+            }
+
+            tbody tr:not([data-entry]) td:first-child {
+                margin-top: 0;
+            }
+
+            tbody tr td:last-child {
+                margin-bottom: 0;
+            }
+
+            tbody tr td::before {
+                content: attr(data-label);
+                display: block;
+                font-size: 0.75rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: rgba(0, 0, 0, 0.55);
+                margin-bottom: 0.25rem;
+            }
+
+            .mono {
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>curl corpus decoder</h1>
+    <p>Use this page to inspect curl fuzzer corpus files locally in your browser. No files are uploaded. Generated: <span id="generated-at">{{ generated_at }}</span></p>
+    </header>
+
+    <main>
+        <section class="card" aria-labelledby="upload-header">
+            <h2 id="upload-header">Open a corpus file</h2>
+            <p>Select a file or drop it on the area below. Files stay on your device.</p>
+            <div class="actions">
+                <label for="corpus-input">Choose file</label>
+            </div>
+            <div class="dropzone" id="dropzone">Drop a corpus file here</div>
+            <input type="file" id="corpus-input" accept="*/*" />
+        </section>
+
+        <section class="card" aria-labelledby="table-header">
+            <h2 id="table-header">Decoded TLVs</h2>
+            <div class="table-wrapper">
+                <table aria-describedby="table-header">
+                    <thead>
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Length</th>
+                            <th scope="col">Preview</th>
+                            <th scope="col">Hex</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tlv-table-body">
+                        <tr>
+                            <td colspan="5">Open a corpus file to see decoded entries.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="summary-header">
+            <h2 id="summary-header">Summary</h2>
+            <dl class="summary" id="summary-list">
+                <div class="summary-item">
+                    <dt>File name</dt>
+                    <dd id="summary-name">-</dd>
+                </div>
+                <div class="summary-item">
+                    <dt>File size</dt>
+                    <dd id="summary-size">-</dd>
+                </div>
+                <div class="summary-item">
+                    <dt>TLVs parsed</dt>
+                    <dd id="summary-count">0</dd>
+                </div>
+                <div class="summary-item">
+                    <dt>Errors</dt>
+                    <dd id="summary-errors">0</dd>
+                </div>
+            </dl>
+            <div id="messages" role="status"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>curl corpus decoder — generated by curl-fuzzer tooling. <a href="https://github.com/curl/curl-fuzzer">Project repository</a>.</p>
+    </footer>
+
+    <script type="application/json" id="typemap-data">{{ typemap | tojson(indent=2) | replace('</', '<\\/') }}</script>
+    <script>
+        /* eslint-disable no-console */
+        const TYPEMAP = JSON.parse(document.getElementById("typemap-data").textContent);
+
+        const decoder = new TextDecoder("utf-8", { fatal: false });
+        const MAX_PREVIEW = 512;
+        const MAX_HEX_BYTES = 256;
+
+        const elements = {
+            fileInput: document.getElementById("corpus-input"),
+            dropzone: document.getElementById("dropzone"),
+            summaryName: document.getElementById("summary-name"),
+            summarySize: document.getElementById("summary-size"),
+            summaryCount: document.getElementById("summary-count"),
+            summaryErrors: document.getElementById("summary-errors"),
+            messages: document.getElementById("messages"),
+            tableBody: document.getElementById("tlv-table-body"),
+        };
+
+        function humanBytes(size) {
+            if (!Number.isFinite(size)) {
+                return "-";
+            }
+            const units = ["B", "KB", "MB", "GB", "TB"];
+            let idx = 0;
+            let value = size;
+            while (value >= 1024 && idx < units.length - 1) {
+                value /= 1024;
+                idx += 1;
+            }
+            return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+        }
+
+        function sanitizeString(bytes) {
+            if (!bytes || !bytes.length) {
+                return "";
+            }
+            try {
+                const truncated = bytes.length > MAX_PREVIEW ? bytes.slice(0, MAX_PREVIEW) : bytes;
+                const decoded = decoder.decode(truncated);
+                return decoded;
+            } catch (err) {
+                console.debug("Failed to decode as UTF-8", err);
+                return "";
+            }
+        }
+
+        function toHex(bytes) {
+            if (!bytes || !bytes.length) {
+                return "";
+            }
+            const truncated = bytes.length > MAX_HEX_BYTES ? bytes.slice(0, MAX_HEX_BYTES) : bytes;
+            const parts = Array.from(truncated, (value) => value.toString(16).padStart(2, "0"));
+            const hexString = parts.join(" ");
+            if (bytes.length > MAX_HEX_BYTES) {
+                return `${hexString} …`;
+            }
+            return hexString;
+        }
+
+        function updateSummary({ name, size, count, errors }) {
+            elements.summaryName.textContent = name ?? "-";
+            elements.summarySize.textContent = size ? humanBytes(size) : "-";
+            elements.summaryCount.textContent = count ?? 0;
+            elements.summaryErrors.textContent = errors ?? 0;
+        }
+
+        function displayMessage(message, variant = "info") {
+            elements.messages.innerHTML = "";
+            if (!message) {
+                return;
+            }
+            const div = document.createElement("div");
+            div.textContent = message;
+            div.className = `message message-${variant}`;
+            elements.messages.appendChild(div);
+        }
+
+        function typeLabel(type) {
+            const key = String(type);
+            const displayName = TYPEMAP[key] ?? "<unknown>";
+            const label = document.createElement("span");
+            label.className = "label";
+            label.textContent = `${displayName} (#${type})`;
+            return label;
+        }
+
+        function renderTable(rows) {
+            elements.tableBody.innerHTML = "";
+            if (!rows.length) {
+                const emptyRow = document.createElement("tr");
+                    const td = document.createElement("td");
+                    td.dataset.label = "Status";
+                    td.colSpan = 5;
+                    td.textContent = "No TLVs found in this file.";
+                emptyRow.appendChild(td);
+                elements.tableBody.appendChild(emptyRow);
+                return;
+            }
+            rows.forEach((row, index) => {
+                const tr = document.createElement("tr");
+                tr.dataset.entry = String(index + 1);
+
+                const indexCell = document.createElement("td");
+                    indexCell.dataset.label = "Entry";
+                    indexCell.textContent = index + 1;
+
+                const typeCell = document.createElement("td");
+                    typeCell.dataset.label = "Type";
+                    typeCell.appendChild(typeLabel(row.type));
+
+                const lengthCell = document.createElement("td");
+                    lengthCell.dataset.label = "Length";
+                    lengthCell.textContent = `${row.length}`;
+
+                const previewCell = document.createElement("td");
+                previewCell.className = "mono";
+                    previewCell.dataset.label = "Preview";
+                    previewCell.textContent = row.preview || "\u00a0";
+
+                const hexCell = document.createElement("td");
+                hexCell.className = "mono";
+                    hexCell.dataset.label = "Hex";
+                    hexCell.textContent = row.hex || "\u00a0";
+
+                tr.append(indexCell, typeCell, lengthCell, previewCell, hexCell);
+                elements.tableBody.appendChild(tr);
+            });
+        }
+
+        function parseCorpus(buffer) {
+            const view = new DataView(buffer);
+            const bytes = new Uint8Array(buffer);
+            const rows = [];
+            let pos = 0;
+            let errors = 0;
+
+            while (pos + 6 <= view.byteLength) {
+                const type = view.getUint16(pos, false);
+                const length = view.getUint32(pos + 2, false);
+                pos += 6;
+
+                if (pos + length > view.byteLength) {
+                    errors += 1;
+                    console.warn(`Incomplete TLV: expected ${length} bytes, have ${view.byteLength - pos}`);
+                    break;
+                }
+
+                const data = bytes.slice(pos, pos + length);
+                rows.push({
+                    type,
+                    length,
+                    preview: sanitizeString(data),
+                    hex: toHex(data),
+                });
+                pos += length;
+            }
+
+            if (pos < view.byteLength) {
+                errors += 1;
+                console.warn(`Trailing ${view.byteLength - pos} bytes after parsing TLVs.`);
+            }
+
+            return { rows, errors };
+        }
+
+        function handleBuffer(buffer, fileName = "(memory)") {
+            const { rows, errors } = parseCorpus(buffer);
+            updateSummary({
+                name: fileName,
+                size: buffer.byteLength,
+                count: rows.length,
+                errors,
+            });
+            displayMessage(errors ? `${errors} issues detected while parsing.` : `Decoded ${rows.length} TLVs successfully.`);
+            renderTable(rows);
+        }
+
+        function handleFile(file) {
+            if (!file) {
+                return;
+            }
+            const reader = new FileReader();
+            reader.addEventListener("load", (event) => {
+                const buffer = event.target?.result;
+                if (!(buffer instanceof ArrayBuffer)) {
+                    displayMessage("Unexpected file load result.", "error");
+                    return;
+                }
+                handleBuffer(buffer, file.name);
+            });
+            reader.addEventListener("error", () => {
+                displayMessage("Failed to read file.", "error");
+            });
+            reader.readAsArrayBuffer(file);
+        }
+
+        function setupDragAndDrop() {
+            const dz = elements.dropzone;
+            ["dragenter", "dragover"].forEach((eventName) => {
+                dz.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    dz.classList.add("dragover");
+                });
+            });
+
+            ["dragleave", "drop"].forEach((eventName) => {
+                dz.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    dz.classList.remove("dragover");
+                });
+            });
+
+            dz.addEventListener("drop", (event) => {
+                const files = event.dataTransfer?.files;
+                if (files && files.length) {
+                    handleFile(files[0]);
+                }
+            });
+        }
+
+        function setupFileInput() {
+            elements.fileInput.addEventListener("change", (event) => {
+                const files = event.target?.files;
+                if (files && files.length) {
+                    handleFile(files[0]);
+                }
+            });
+        }
+
+        function init() {
+            setupFileInput();
+            setupDragAndDrop();
+            displayMessage("Ready to decode corpus files.");
+        }
+
+        init();
+    </script>
+</body>
+</html>

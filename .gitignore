@@ -34,3 +34,6 @@ libstandaloneengine.a
 __pycache__/
 logs/
 *.egg-info/
+
+# Docs
+docs/
