@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_mqtt/test_dummy
+file_size: 38
+tlvs:
+- length: 21
+  type: URL
+  type_id_v1: 1
+  value: mqtt://127.0.0.1/test
+- length: 5
+  type: RESPONSE0
+  type_id_v1: 2
+  value: hello

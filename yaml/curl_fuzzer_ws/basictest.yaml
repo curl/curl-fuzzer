@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_ws/basictest
+file_size: 30
+tlvs:
+- length: 14
+  type: URL
+  type_id_v1: 1
+  value: ws://localhost
+- length: 4
+  type: RESPONSE0
+  type_id_v1: 2
+  value: test

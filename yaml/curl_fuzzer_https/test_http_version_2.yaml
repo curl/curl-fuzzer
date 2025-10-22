@@ -1,0 +1,28 @@
+corpus_file: corpora/curl_fuzzer_https/test_http_version_2
+file_size: 329
+tlvs:
+- length: 41
+  type: URL
+  type_id_v1: 1
+  value: https://localhost.localdomain?foobar.json
+- length: 43
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 485454502f322034303320466f7262696464656e0d0a436f6e6e656374696f6e3a20636c6f73650d0a0d0a
+- length: 143
+  type: USERAGENT
+  type_id_v1: 45
+  value: Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X) AppleWebKit/602.1.50
+    (KHTML, like Gecko) CriOS/56.0.2924.75 Mobile/14E5239e Safari/602.1
+- length: 4
+  type: HTTP_VERSION
+  type_id_v1: 40
+  value: 2
+- length: 40
+  type: HEADER
+  type_id_v1: 6
+  value: 'Authorization: Basic aaaaaaaaaaaaaaaaaaa'
+- length: 22
+  type: HEADER
+  type_id_v1: 6
+  value: 'Connection: Keep-Alive'

@@ -1,0 +1,15 @@
+corpus_file: corpora/curl_fuzzer/test_file_nobody
+file_size: 50
+tlvs:
+- length: 24
+  type: URL
+  type_id_v1: 1
+  value: file:///proc/self/status
+- length: 4
+  type: OPTHEADER
+  type_id_v1: 27
+  value: 1
+- length: 4
+  type: NOBODY
+  type_id_v1: 28
+  value: 1

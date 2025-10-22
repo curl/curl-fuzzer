@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_tftp/test_url_tftp
+file_size: 22
+tlvs:
+- length: 16
+  type: URL
+  type_id_v1: 1
+  value: tftp://127.0.0.1

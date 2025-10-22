@@ -1,0 +1,39 @@
+corpus_file: corpora/curl_fuzzer_imap/test_oauthed_imap
+file_size: 405
+tlvs:
+- length: 59
+  type: URL
+  type_id_v1: 1
+  value: imap://localhost.localdomain:9999/wow/a/path/1/;MAILINDEX=1
+- length: 28
+  type: RESPONSE0
+  type_id_v1: 2
+  value: '* OK IMAP4rev1 Service Ready'
+- length: 28
+  type: RESPONSE1
+  type_id_v1: 17
+  value: '* OK IMAP4rev1 Service Ready'
+- length: 51
+  type: RESPONSE2
+  type_id_v1: 18
+  value: 2a20383030204558495354530a41303032204f4b205b524541442d57524954455d2053454c45435420636f6d706c657465640a
+- length: 122
+  type: RESPONSE3
+  type_id_v1: 19
+  value: 2a20312046455443482028424f44595b544558545d207b36397d0d0a46726f6d3a206d6540736f6d6577686572650d0a546f3a2066616b65406e6f77686572650d0a0d0a626f64790d0a0d0a2d2d0a2020796f7572732073696e636572656c790a41303033204f4b20464554434820636f6d706c657465640d0a
+- length: 4
+  type: USERNAME
+  type_id_v1: 3
+  value: user
+- length: 6
+  type: PASSWORD
+  type_id_v1: 4
+  value: sekrit
+- length: 16
+  type: LOGIN_OPTIONS
+  type_id_v1: 42
+  value: AUTH=OAUTHBEARER
+- length: 37
+  type: XOAUTH2_BEARER
+  type_id_v1: 43
+  value: 61616161616161616161616161094141414141414141414141414141414141414141413d3d

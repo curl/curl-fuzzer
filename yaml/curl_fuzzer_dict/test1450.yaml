@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_dict/test1450
+file_size: 98
+tlvs:
+- length: 29
+  type: URL
+  type_id_v1: 1
+  value: dict://127.0.0.1:9016/d:basic
+- length: 57
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 3232302064696374736572766572203c786e6f6f7074696f6e733e203c6d73676964406d736769643e0a353532206e6f206d6174636865730a

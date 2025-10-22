@@ -1,0 +1,19 @@
+corpus_file: corpora/curl_fuzzer_pop3/test850
+file_size: 130
+tlvs:
+- length: 25
+  type: URL
+  type_id_v1: 1
+  value: pop3://127.0.0.1:9001/850
+- length: 71
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 46726f6d3a206d6540736f6d6577686572650d0a546f3a2066616b65406e6f77686572650d0a0d0a626f64790d0a0d0a2d2d0d0a2020796f7572732073696e636572656c790d0a
+- length: 4
+  type: USERNAME
+  type_id_v1: 3
+  value: user
+- length: 6
+  type: PASSWORD
+  type_id_v1: 4
+  value: secret

@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_bufq/maxchunks_5_chunksize_10
+file_size: 20
+tlvs:
+- length: 4
+  type: URL
+  type_id_v1: 1
+  value: 5
+- length: 4
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 10

@@ -1,0 +1,11 @@
+corpus_file: corpora/curl_fuzzer_https/test_hsts_response_to_ipv6
+file_size: 164
+tlvs:
+- length: 76
+  type: URL
+  type_id_v1: 1
+  value: https://[2001:db8:122:344:c0:2:2100::]:9090/filethings.json?oops=a&param=tru
+- length: 76
+  type: RESPONSE0
+  type_id_v1: 2
+  value: 48545450532f3220323030204f4b0d0a436f6e6e656374696f6e3a20436c6f73650d0a5374726963742d5472616e73706f72742d53656375726974793a206d61782d6167652036300d0a0d0a

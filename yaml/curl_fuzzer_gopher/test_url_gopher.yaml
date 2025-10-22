@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_gopher/test_url_gopher
+file_size: 24
+tlvs:
+- length: 18
+  type: URL
+  type_id_v1: 1
+  value: gopher://127.0.0.1

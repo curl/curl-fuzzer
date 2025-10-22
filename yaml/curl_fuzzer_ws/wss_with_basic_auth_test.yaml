@@ -1,0 +1,7 @@
+corpus_file: corpora/curl_fuzzer_ws/wss_with_basic_auth_test
+file_size: 67
+tlvs:
+- length: 61
+  type: URL
+  type_id_v1: 1
+  value: wss://username:password@chat.example.is/foo?bar=baz&boop=borp
