@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 browser-tests = [
     "pytest>=8.3,<9",
-    "playwright>=1.46,<1.47",
+    "playwright>=1.55,<1.56",
 ]
 
 [project.scripts]
@@ -55,7 +55,7 @@ dev = [
 ]
 browser-tests = [
     "pytest>=8.3,<9",
-    "playwright>=1.46,<1.47",
+    "playwright>=1.55,<1.56",
 ]
 
 [tool.mypy]
