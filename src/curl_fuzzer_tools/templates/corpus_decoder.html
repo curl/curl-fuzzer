@@ -234,6 +234,12 @@
             }
         }
 
+        @media (prefers-color-scheme: light) and (max-width: 640px) {
+            tbody tr td::before {
+                color: rgba(0, 0, 0, 0.55);
+            }
+        }
+
         @media (max-width: 640px) {
             body {
                 padding: 1rem;
@@ -362,7 +368,6 @@
                 font-size: 0.75rem;
                 letter-spacing: 0.08em;
                 text-transform: uppercase;
-                color: rgba(0, 0, 0, 0.55);
                 margin-bottom: 0.25rem;
             }
 
@@ -449,6 +454,7 @@
         const decoder = new TextDecoder("utf-8", { fatal: false });
         const MAX_PREVIEW = 512;
         const MAX_HEX_BYTES = 256;
+        const INTERPUNCT = "\u00B7";
 
         const elements = {
             fileInput: document.getElementById("corpus-input"),
@@ -482,11 +488,18 @@
             try {
                 const truncated = bytes.length > MAX_PREVIEW ? bytes.slice(0, MAX_PREVIEW) : bytes;
                 const decoded = decoder.decode(truncated);
-                return decoded;
+                return visualizeWhitespace(decoded);
             } catch (err) {
                 console.debug("Failed to decode as UTF-8", err);
                 return "";
             }
+        }
+
+        function visualizeWhitespace(text) {
+            if (!text) {
+                return "";
+            }
+            return text.replace(/[\u00A0 \t\v\f\r]/g, INTERPUNCT);
         }
 
         function toHex(bytes) {

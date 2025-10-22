@@ -29,12 +29,9 @@ def _expected_tlvs(corpus_path: Path) -> int:
     data = corpus_path.read_bytes()
     return sum(1 for _ in TLVDecoder(data))
 
-
-
-import sys
-
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
 def test_upload_repository_corpus(tmp_path: Path) -> None:
+    """Ensure the decoder UI handles uploading the repository corpus file."""
     html_path = tmp_path / "index.html"
     generate_html(html_path)
 
