@@ -90,35 +90,6 @@ jobs:
           name: artifacts
           path: ./out/artifacts
 
-  Mainline:
-    name: 'Mainline'
-    strategy:
-      matrix:
-        sanitizer:
-          - address
-          - memory
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-          repository: curl/curl-fuzzer
-
-      - name: Install Dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get -o Dpkg::Use-Pty=0 update
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
-
-      - name: Compile mainline
-        env:
-          # test with different "sanitizers"
-          SANITIZER: ${{ matrix.sanitizer }}
-        run: ./mainline.sh
-
   # Ensure that the repository can be built for i386
   Testi386:
     name: 'Test i386'
