@@ -10,6 +10,6 @@ BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 for TARGET in ${FUZZ_TARGETS}
 do
   pushd "${BUILD_ROOT}/corpora/${TARGET}"
-  zip ../../"${TARGET}_seed_corpus.zip" *
+  zip ../../"${TARGET}_seed_corpus.zip" ./*
   popd
 done
