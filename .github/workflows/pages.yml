@@ -13,6 +13,7 @@ permissions: {}
 
 jobs:
   build:
+    name: 'Build pages'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,6 +40,7 @@ jobs:
           path: docs
 
   deploy:
+    name: 'Deploy pages'
     needs: build
     runs-on: ubuntu-latest
     permissions:

@@ -11,6 +11,7 @@ permissions: {}
 
 jobs:
   test:
+    name: 'Test pages'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
