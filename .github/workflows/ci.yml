@@ -64,12 +64,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.DetermineMatrix.outputs.matrix) }}
+    env:
+      MATRIX_FUZZER: '${{ matrix.fuzzer }}'
     steps:
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: fuzz_tar
       - name: Unpack fuzzer ${{ matrix.fuzzer }}
-        run: tar xvf fuzz.tar build-out/${{ matrix.fuzzer }} build-out/${{ matrix.fuzzer }}_seed_corpus.zip
+        run: tar xvf fuzz.tar build-out/"${MATRIX_FUZZER}" build-out/"${MATRIX_FUZZER}"_seed_corpus.zip
       - name: Display extracted files
         run: ls -laR build-out/
       - name: Run Fuzzer ${{ matrix.fuzzer }}
