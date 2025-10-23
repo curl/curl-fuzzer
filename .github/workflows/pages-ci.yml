@@ -1,6 +1,6 @@
 name: Playwright browser test for corpus decoder
 
-on:
+'on':
   push:
     branches: [master]
   pull_request:
