@@ -32,25 +32,9 @@ jobs:
           sudo apt-get -o Dpkg::Use-Pty=0 update
           sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
+
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
-
-  PythonTests:
-    name: 'Python tests'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest
-
-      - name: Run TLV constants sync test
-        run: pytest tests/test_tlv_constants_sync.py
 
   Mainline:
     name: 'Mainline'
@@ -79,3 +63,20 @@ jobs:
           # test with different "sanitizers"
           SANITIZER: ${{ matrix.sanitizer }}
         run: ./mainline.sh
+
+  PythonTests:
+    name: 'Python tests'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Run TLV constants sync test
+        run: pytest tests/test_tlv_constants_sync.py
