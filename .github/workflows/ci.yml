@@ -20,6 +20,7 @@ permissions: {}
 
 jobs:
   DetermineMatrix:
+    name: 'Determine matrix'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -38,6 +39,7 @@ jobs:
           python3 -m generate_matrix | tee $GITHUB_OUTPUT
 
   BuildFuzzers:
+    name: 'Build fuzzers'
     runs-on: ubuntu-latest
     steps:
     # Use the CIFuzz job to test the repository.
@@ -60,6 +62,7 @@ jobs:
         path: fuzz.tar
 
   RunFuzzers:
+    name: 'Run fuzzers'
     needs: [ BuildFuzzers, DetermineMatrix ]
     runs-on: ubuntu-latest
     strategy:
@@ -88,6 +91,7 @@ jobs:
           path: ./out/artifacts
 
   Mainline:
+    name: 'Mainline'
     strategy:
       matrix:
         sanitizer:
@@ -115,6 +119,7 @@ jobs:
         run: ./mainline.sh
 
   just_dependencies:
+    name: 'Just dependencies'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -133,6 +138,7 @@ jobs:
         run: ./scripts/compile_target.sh deps
 
   PythonTests:
+    name: 'Python tests'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -156,6 +162,7 @@ jobs:
 
   # Ensure that the repository can be built for i386
   Testi386:
+    name: 'Test i386'
     runs-on: ubuntu-latest
     steps:
     - name: Build Fuzzers
