@@ -6,7 +6,6 @@
 # Use it to compile and install all the dependencies
 
 set -ex
-SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 # Work out if we need to install with sudo or not.
 if [[ $(id -u) -eq 0 ]]
