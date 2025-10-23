@@ -1,3 +1,5 @@
+# Workflow used by curl/curl
+
 name: CI
 
 'on':
