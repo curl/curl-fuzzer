@@ -17,25 +17,6 @@ concurrency:
 permissions: {}
 
 jobs:
-  just_dependencies:
-    name: 'Just dependencies'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-
-      - name: Install Dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get -o Dpkg::Use-Pty=0 update
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
-
-      - name: Compile deps target
-        run: ./scripts/compile_target.sh deps
-
   Mainline:
     name: 'Mainline'
     strategy:
@@ -63,6 +44,25 @@ jobs:
           # test with different "sanitizers"
           SANITIZER: ${{ matrix.sanitizer }}
         run: ./mainline.sh
+
+  just_dependencies:
+    name: 'Just dependencies'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
+
+      - name: Compile deps target
+        run: ./scripts/compile_target.sh deps
 
   PythonTests:
     name: 'Python tests'
