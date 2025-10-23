@@ -1,6 +1,6 @@
 name: Deploy decoder to GitHub Pages
 
-on:
+'on':
   push:
     branches: [master]
   workflow_dispatch:
