@@ -8,7 +8,7 @@ name: Deploy decoder to GitHub Pages
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: false  # zizmor: ignore[concurrency-limits]
 
 permissions: {}
 
