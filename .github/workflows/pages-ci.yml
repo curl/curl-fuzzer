@@ -2,9 +2,11 @@ name: Playwright browser test for corpus decoder
 
 'on':
   push:
-    branches: [master]
+    branches:
+      - master
   pull_request:
-    branches: [master]
+    branches:
+      - master
   workflow_dispatch:
 
 permissions: {}
