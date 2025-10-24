@@ -7,7 +7,7 @@ name: Deploy decoder to GitHub Pages
   workflow_dispatch:
 
 concurrency:
-  group: "pages"
+  group: ${{ github.workflow }}
   cancel-in-progress: false  # zizmor: ignore[concurrency-limits]
 
 permissions: {}
