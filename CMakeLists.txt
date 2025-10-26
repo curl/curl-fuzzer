@@ -50,7 +50,7 @@ ExternalProject_Add(
 
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
-if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
+if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
     message(STATUS "Building OpenSSL as a dependency")
     # Install openssl
     #
@@ -65,14 +65,14 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     set(OPENSSL_ARCH_TARGET "")
     set(OPENSSL_ARCH_FLAG "")
     set(OPENSSL_EC_FLAG "enable-ec_nistp_64_gcc_128")
-    if(DEFINED ENV{ARCHITECTURE} AND "$ENV{ARCHITECTURE}" STREQUAL "i386")
+    if("$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(OPENSSL_ARCH_TARGET "linux-generic32")
         set(OPENSSL_ARCH_FLAG "386")
         set(OPENSSL_EC_FLAG "no-threads")
     endif()
 
     set(OPENSSL_ASM_FLAG "")
-    if(DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory")
+    if("$ENV{SANITIZER}" STREQUAL "memory")
         set(OPENSSL_ASM_FLAG "no-asm")
     endif()
 
