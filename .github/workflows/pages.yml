@@ -21,15 +21,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          python-version: '3.12'
+
       - name: Install dependencies
-        run: |
-          python3 -m venv ~/venv
-          ~/venv/bin/pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[page-gen]'
+        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[page-gen]'
 
       - name: Generate decoder HTML
-        run: |
-          source ~/venv/bin/activate
-          python -m curl_fuzzer_tools.generate_decoder_html
+        run: python -m curl_fuzzer_tools.generate_decoder_html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
