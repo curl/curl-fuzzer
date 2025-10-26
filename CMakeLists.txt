@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.11)
 project(curl_fuzzer_deps)
 
 if(NOT "$ENV{MAKE}" STREQUAL "")
-  set(MAKE "$ENV{MAKE}")
+    set(MAKE "$ENV{MAKE}")
 else()
-  set(MAKE "make")
+    set(MAKE "make")
 endif()
 
 include(ExternalProject)
@@ -212,7 +212,7 @@ ExternalProject_Add(
     DOWNLOAD_NO_PROGRESS 1
 )
 
-if (TARGET openssl_external)
+if(TARGET openssl_external)
     add_dependencies(openldap_external openssl_external)
 else()
     message(STATUS "Not building OpenLDAP with OpenSSL")
@@ -273,7 +273,7 @@ set(CURL_POST_INSTALL_COMMAND
 # Conditionally check to see if there's a source directory or not.
 # If there is, use it. Otherwise, download the latest version.
 #
-if (DEFINED ENV{CURL_SOURCE_DIR})
+if(DEFINED ENV{CURL_SOURCE_DIR})
     message(STATUS "Building curl from source directory: $ENV{CURL_SOURCE_DIR}")
     ExternalProject_Add(
         curl_external
@@ -325,10 +325,10 @@ set(CURL_INCLUDE_DIRS
 set(CURL_LIB_DIR ${CURL_INSTALL_DIR}/lib)
 
 # Fuzzing engine
-if (DEFINED ENV{LIB_FUZZING_ENGINE})
+if(DEFINED ENV{LIB_FUZZING_ENGINE})
     # Check to see if ENV{LIB_FUZZING_ENGINE} is a file. If so, use it directly.
     # Otherwise, assume it's a flag to the compiler.
-    if (EXISTS $ENV{LIB_FUZZING_ENGINE})
+    if(EXISTS $ENV{LIB_FUZZING_ENGINE})
         message(STATUS "Using LIB_FUZZING_ENGINE file: $ENV{LIB_FUZZING_ENGINE}")
         set(LIB_FUZZING_ENGINE $ENV{LIB_FUZZING_ENGINE})
         set(LIB_FUZZING_ENGINE_FLAG "")
