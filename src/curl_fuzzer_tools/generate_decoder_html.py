@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Generate an interactive HTML page for decoding curl corpus files."""
 
 from __future__ import annotations
