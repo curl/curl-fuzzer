@@ -131,7 +131,7 @@ def generate_corpus(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    """Main function"""
+    """Begin main function"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--url", required=True)

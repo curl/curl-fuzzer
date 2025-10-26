@@ -9,7 +9,7 @@ import sys
 log = logging.getLogger(__name__)
 
 def main() -> None:
-    """Main function"""
+    """Begin main function"""
     # Get FUZZ_TARGETS from the environment
     fuzz_targets = os.getenv("FUZZ_TARGETS", "")
     log.info("Fuzz targets: %s", fuzz_targets)
