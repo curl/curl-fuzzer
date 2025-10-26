@@ -6,7 +6,7 @@
 #                            | (__| |_| |  _ <| |___
 #                             \___|\___/|_| \_\_____|
 #
-# Copyright (C) 2018-2021, Max Dymond, <cmeister2@gmail.com>, et al.
+# Copyright (C) Max Dymond, <cmeister2@gmail.com>, et al.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
