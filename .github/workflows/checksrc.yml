@@ -29,9 +29,6 @@ jobs:
 
       - name: 'install prereqs'
         run: |
-          echo '-------------------'
-          find /etc/apt/sources.list.d
-          echo '-------------------'
           /home/linuxbrew/.linuxbrew/bin/brew install zizmor
           pip install '.[ci-tests]'
 
