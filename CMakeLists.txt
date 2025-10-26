@@ -367,13 +367,13 @@ set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
 
 # Helper macro to define a fuzzer target
-macro(curl_add_fuzzer name proto)
-    add_executable(${name} ${COMMON_SOURCES})
-    target_compile_options(${name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${proto})
-    target_include_directories(${name} PRIVATE ${CURL_INCLUDE_DIRS})
-    target_link_libraries(${name} PRIVATE ${COMMON_LINK_LIBS})
-    target_link_options(${name} PRIVATE ${COMMON_LINK_OPTIONS})
-    add_dependencies(${name} ${FUZZ_DEPS})
+macro(curl_add_fuzzer _name _proto)
+    add_executable(${_name} ${COMMON_SOURCES})
+    target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto})
+    target_include_directories(${_name} PRIVATE ${CURL_INCLUDE_DIRS})
+    target_link_libraries(${_name} PRIVATE ${COMMON_LINK_LIBS})
+    target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
+    add_dependencies(${_name} ${FUZZ_DEPS})
 endmacro()
 
 # Main fuzzer and protocol-specific fuzzers
