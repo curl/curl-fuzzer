@@ -312,10 +312,6 @@ set(CURL_DEPS
 add_dependencies(curl_external ${CURL_DEPS})
 
 # Now it's time for the main targets!
-#
-# Read environment variables for compiler flags
-string(APPEND CMAKE_C_FLAGS " $ENV{CFLAGS}")
-string(APPEND CMAKE_CXX_FLAGS " $ENV{CXXFLAGS}")
 
 # Paths to curl install (adjust as needed)
 set(CURL_INCLUDE_DIRS
