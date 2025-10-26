@@ -65,7 +65,7 @@ def main() -> Path:
 
 
 def run() -> None:
-    """Wrapper to set up logging before running the tool."""
+    """Set up logging before running the tool."""
     common_logging(__name__, __file__)
     main()
 
