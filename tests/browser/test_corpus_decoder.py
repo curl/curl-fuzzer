@@ -63,7 +63,8 @@ def test_upload_repository_corpus(tmp_path: Path) -> None:
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
 @pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_accessibility_after_upload_in_light_and_dark(tmp_path: Path, scheme: Literal["light", "dark"]) -> None:
-    """Basic accessibility smoke: after upload, key elements are visible in both schemes.
+    """
+    Basic accessibility smoke: after upload, key elements are visible in both schemes.
 
     This test toggles prefers-color-scheme and checks that:
     - The dark/light CSS actually applies (by inspecting body background color in dark)
