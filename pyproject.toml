@@ -91,12 +91,6 @@ indent-width = 4
 target-version = "py39"
 
 [tool.ruff.lint]
-extend-select = [
-    "D"   # pydocstyle
-]
-
-ignore = [
-]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
