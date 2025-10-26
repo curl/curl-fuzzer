@@ -30,6 +30,7 @@ jobs:
       - name: 'install prereqs'
         run: |
           /home/linuxbrew/.linuxbrew/bin/brew install zizmor
+          pip install '.[ci-tests]'
 
       - name: 'zizmor GHA'
         env:
@@ -37,3 +38,9 @@ jobs:
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           zizmor --pedantic .github/workflows/*.yml
+
+      - name: 'ruff'
+        run: |
+          ruff --version
+          # shellcheck disable=SC2046
+          ruff check $(git ls-files '*.py')
