@@ -21,7 +21,7 @@ def read_corpus(corpus_file: Path) -> None:
 
 
 def main() -> None:
-    """Begin main function"""
+    """Begin main function."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "input",

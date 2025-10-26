@@ -19,7 +19,7 @@
 # This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
 # KIND, either express or implied.
 #
-"""Module for extracting test data from the test data folder"""
+"""Module for extracting test data from the test data folder."""
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -34,14 +34,14 @@ REPLY_DATA = re.compile(r"<reply>\s*<data>(.*?)</data>", re.MULTILINE | re.DOTAL
 
 
 class TestData(object):
-    """Class for extracting test data from the curl test data folder"""
+    """Class for extracting test data from the curl test data folder."""
 
     def __init__(self, data_folder: Path) -> None:
-        """Create a TestData object"""
+        """Create a TestData object."""
         self.data_folder = data_folder
 
     def get_test_data(self, test_number: int) -> str:
-        """Get the test data for a given test number"""
+        """Get the test data for a given test number."""
         # Create the test file name
         filename = self.data_folder / f"test{test_number}"
 

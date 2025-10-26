@@ -1,4 +1,4 @@
-"""Common corpus functions"""
+"""Common corpus functions."""
 
 import logging
 import struct
@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 class BaseType(object):
-    """Known TLV types"""
+    """Known TLV types."""
 
     TYPE_URL = 1
     TYPE_RSP0 = 2
@@ -484,41 +484,41 @@ class BaseType(object):
 
 
 class TLVEncoder(BaseType):
-    """Class for encoding TLVs"""
+    """Class for encoding TLVs."""
 
     def __init__(self, output: BinaryIO, test_data: TestData) -> None:
-        """Create a TLVEncoder object"""
+        """Create a TLVEncoder object."""
         self.output = output
         self.test_data = test_data
 
     def write_string(self, tlv_type: int, wstring: str) -> None:
-        """Write a string TLV to the output"""
+        """Write a string TLV to the output."""
         data = wstring.encode("utf-8")
         self.write_tlv(tlv_type, len(data), data)
 
     def write_u32(self, tlv_type: int, num: int) -> None:
-        """Write an unsigned 32-bit integer TLV to the output"""
+        """Write an unsigned 32-bit integer TLV to the output."""
         data = struct.pack("!L", num)
         self.write_tlv(tlv_type, len(data), data)
 
     def write_bytes(self, tlv_type: int, bytedata: bytes) -> None:
-        """Write a bytes TLV to the output"""
+        """Write a bytes TLV to the output."""
         self.write_tlv(tlv_type, len(bytedata), bytedata)
 
     def maybe_write_string(self, tlv_type: int, wstring: Optional[str]) -> None:
-        """Write a string TLV to the output if specified"""
+        """Write a string TLV to the output if specified."""
         if wstring is not None:
             self.write_string(tlv_type, wstring)
 
     def maybe_write_u32(self, tlv_type: int, num: Optional[int]) -> None:
-        """Write an unsigned 32-bit integer TLV to the output if specified"""
+        """Write an unsigned 32-bit integer TLV to the output if specified."""
         if num is not None:
             self.write_u32(tlv_type, num)
 
     def maybe_write_response(
         self, rsp_type: int, rsp: Optional[str], rsp_file: Optional[Path], rsp_test: int
     ) -> None:
-        """Write a response TLV to the output if specified"""
+        """Write a response TLV to the output if specified."""
         if rsp:
             self.write_bytes(rsp_type, rsp.encode("utf-8"))
         elif rsp_file:
@@ -529,7 +529,7 @@ class TLVEncoder(BaseType):
             self.write_bytes(rsp_type, wstring.encode("utf-8"))
 
     def write_mimepart(self, namevalue: str) -> None:
-        """Write a MIME part TLV to the output"""
+        """Write a MIME part TLV to the output."""
         (name, value) = namevalue.split(":", 1)
 
         # Create some mimepart TLVs for the name and value
@@ -550,7 +550,7 @@ class TLVEncoder(BaseType):
     def encode_tlv(
         self, tlv_type: int, tlv_length: int, tlv_data: Optional[bytes] = None
     ) -> bytes:
-        """Encode the Type, Length, and Value into a bytes array"""
+        """Encode the Type, Length, and Value into a bytes array."""
         log.debug(
             "Encoding TLV %r, length %d, data %r",
             self.TYPEMAP.get(tlv_type, "<unknown>"),
@@ -568,7 +568,7 @@ class TLVEncoder(BaseType):
     def write_tlv(
         self, tlv_type: int, tlv_length: int, tlv_data: Optional[bytes] = None
     ) -> None:
-        """Write an encoded TLV to the output as bytes"""
+        """Write an encoded TLV to the output as bytes."""
         log.debug(
             "Writing TLV %r, length %d, data %r",
             self.TYPEMAP.get(tlv_type, "<unknown>"),
@@ -581,13 +581,13 @@ class TLVEncoder(BaseType):
 
 
 class TLVContents(BaseType):
-    """Class for TLV contents"""
+    """Class for TLV contents."""
 
     TLV_DECODE_FMT = "!HL"
     TLV_DECODE_FMT_LEN = struct.calcsize(TLV_DECODE_FMT)
 
     def __init__(self, data: bytes) -> None:
-        """Create a TLVContents object"""
+        """Create a TLVContents object."""
         # Parse the data to populate the TLV fields
         (stype, slen) = struct.unpack(
             self.TLV_DECODE_FMT, data[0 : self.TLV_DECODE_FMT_LEN]
@@ -601,7 +601,7 @@ class TLVContents(BaseType):
         ]
 
     def __repr__(self) -> str:
-        """Return a string representation of the TLVContents object"""
+        """Return a string representation of the TLVContents object."""
         stype = self.TYPEMAP.get(self.type, "<unknown>")
         return (
             f"{self.__class__.__name__}(type={stype!r} ({self.type!r}), "
@@ -609,27 +609,27 @@ class TLVContents(BaseType):
         )
 
     def total_length(self) -> int:
-        """Return the total length of the TLV, including the header"""
+        """Return the total length of the TLV, including the header."""
         return self.TLV_DECODE_FMT_LEN + self.length
 
 
 class TLVDecoder(BaseType):
-    """Class for decoding TLVs"""
+    """Class for decoding TLVs."""
 
     def __init__(self, inputdata: bytes) -> None:
-        """Create a TLVDecoder object"""
+        """Create a TLVDecoder object."""
         self.inputdata = inputdata
         self.pos = 0
         self.tlv: Optional["TLVContents"] = None
 
     def __iter__(self) -> "TLVDecoder":
-        """Return an iterator for the TLVs"""
+        """Return an iterator for the TLVs."""
         self.pos = 0
         self.tlv = None
         return self
 
     def __next__(self) -> "TLVContents":
-        """Return the next TLV in the input data"""
+        """Return the next TLV in the input data."""
         if self.tlv:
             self.pos += self.tlv.total_length()
 

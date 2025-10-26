@@ -74,7 +74,7 @@ def corpus_to_pcap(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    """Begin main function"""
+    """Begin main function."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
