@@ -550,7 +550,7 @@ class TLVEncoder(BaseType):
     def encode_tlv(
         self, tlv_type: int, tlv_length: int, tlv_data: Optional[bytes] = None
     ) -> bytes:
-        """Encodes the Type, Length, and Value into a bytes array"""
+        """Encode the Type, Length, and Value into a bytes array"""
         log.debug(
             "Encoding TLV %r, length %d, data %r",
             self.TYPEMAP.get(tlv_type, "<unknown>"),
@@ -568,7 +568,7 @@ class TLVEncoder(BaseType):
     def write_tlv(
         self, tlv_type: int, tlv_length: int, tlv_data: Optional[bytes] = None
     ) -> None:
-        """Writes an encoded TLV to the output as bytes"""
+        """Write an encoded TLV to the output as bytes"""
         log.debug(
             "Writing TLV %r, length %d, data %r",
             self.TYPEMAP.get(tlv_type, "<unknown>"),
