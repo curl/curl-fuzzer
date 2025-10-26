@@ -30,7 +30,8 @@ jobs:
       - name: 'install prereqs'
         run: |
           /home/linuxbrew/.linuxbrew/bin/brew install zizmor
-          pip --disable-pip-version-check --no-input --no-cache-dir install '.[ci-tests]'
+          python3 -m venv ~/venv
+          ~/venv/bin/pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[ci-tests]'
 
       - name: 'zizmor GHA'
         env:
@@ -41,6 +42,7 @@ jobs:
 
       - name: 'ruff'
         run: |
+          source ~/venv/bin/activate
           ruff --version
           # shellcheck disable=SC2046
           ruff check $(git ls-files '*.py')
