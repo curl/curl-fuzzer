@@ -96,7 +96,6 @@ extend-select = [
 ]
 
 ignore = [
-    "D400",
 ]
 
 [tool.ruff.format]
