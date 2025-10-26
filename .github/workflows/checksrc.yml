@@ -27,14 +27,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
-        with:
-          python-version: '3.12'
-
       - name: 'install prereqs'
         run: |
           /home/linuxbrew/.linuxbrew/bin/brew install zizmor
-          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[ci-tests]'
+          python3 -m venv ~/venv
+          ~/venv/bin/pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[ci-tests]'
 
       - name: 'zizmor GHA'
         env:
@@ -45,6 +42,7 @@ jobs:
 
       - name: 'ruff'
         run: |
+          source ~/venv/bin/activate
           ruff --version
           # shellcheck disable=SC2046
           ruff check $(git ls-files '*.py')

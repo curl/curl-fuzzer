@@ -24,20 +24,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
-        with:
-          python-version: '3.12'
-
       - name: Install dependencies
         run: |
-          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[browser-tests]'
+          python3 -m venv ~/venv
+          ~/venv/bin/pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[browser-tests]'
+          source ~/venv/bin/activate
           python -m playwright install
 
       - name: Install Playwright system dependencies
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo rm -f /var/lib/man-db/auto-update
+          source ~/venv/bin/activate
           playwright install-deps
 
       - name: Run Playwright browser test
-        run: pytest tests/browser/test_corpus_decoder.py
+        run: |
+          source ~/venv/bin/activate
+          pytest tests/browser/test_corpus_decoder.py
