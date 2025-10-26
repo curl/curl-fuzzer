@@ -175,13 +175,13 @@ def main() -> None:
     upload1.add_argument("--upload1")
     upload1.add_argument("--upload1file")
 
-    for ii in range(0, 11):
+    for ii in range(11):
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--rsp{0}".format(ii))
         group.add_argument("--rsp{0}file".format(ii))
         group.add_argument("--rsp{0}test".format(ii), type=int)
 
-    for ii in range(0, 2):
+    for ii in range(2):
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--secrsp{0}".format(ii))
         group.add_argument("--secrsp{0}file".format(ii))
