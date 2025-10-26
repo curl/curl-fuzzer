@@ -68,7 +68,7 @@ jobs:
           persist-credentials: false
 
       - name: Install test dependencies
-        run: pip install '.[python-tests]'
+        run: pip --disable-pip-version-check --no-input --no-cache-dir install '.[python-tests]'
 
       - name: Run TLV constants sync test
         run: pytest tests/test_tlv_constants_sync.py

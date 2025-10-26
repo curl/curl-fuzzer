@@ -30,7 +30,7 @@ jobs:
       - name: 'install prereqs'
         run: |
           /home/linuxbrew/.linuxbrew/bin/brew install zizmor
-          pip install '.[ci-tests]'
+          pip --disable-pip-version-check --no-input --no-cache-dir install '.[ci-tests]'
 
       - name: 'zizmor GHA'
         env:

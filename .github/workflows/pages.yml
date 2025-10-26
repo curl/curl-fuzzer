@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
 
       - name: Install dependencies
-        run: pip install '.[page-gen]'
+        run: pip --disable-pip-version-check --no-input --no-cache-dir install '.[page-gen]'
 
       - name: Generate decoder HTML
         run: python -m curl_fuzzer_tools.generate_decoder_html

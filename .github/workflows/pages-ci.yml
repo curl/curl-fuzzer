@@ -26,7 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install '.[browser-tests]'
+          pip --disable-pip-version-check --no-input --no-cache-dir install '.[browser-tests]'
           python -m playwright install
 
       - name: Install Playwright system dependencies
