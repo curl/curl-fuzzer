@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This script is called from google/oss-fuzz:projects/curl/Dockerfile to install necessary
 # dependencies for building curl fuzz targets.

@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 #***************************************************************************
 #                                  _   _ ____  _
 #  Project                     ___| | | |  _ \| |
@@ -20,6 +20,8 @@
 # KIND, either express or implied.
 #
 ###########################################################################
+
+set -eu
 
 # Save off the current folder as the build root.
 export BUILD_ROOT=$PWD
