@@ -38,8 +38,7 @@ jobs:
 
       - name: Compile mainline
         env:
-          # test with different "sanitizers"
-          SANITIZER: ${{ matrix.sanitizer }}
+          SANITIZER: '${{ matrix.sanitizer }}'  # test with different "sanitizers"
         run: ./mainline.sh
 
   just_dependencies:
