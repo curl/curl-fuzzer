@@ -1,4 +1,4 @@
-"""Common logging functionality"""
+"""Common logging functionality."""
 
 import logging
 import sys

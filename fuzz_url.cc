@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2017 - 2022, Max Dymond, <cmeister2@gmail.com>, et al.
+ * Copyright (C) Max Dymond, <cmeister2@gmail.com>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -53,4 +53,3 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   /* This function must always return 0. Non-zero codes are reserved. */
   return 0;
 }
-

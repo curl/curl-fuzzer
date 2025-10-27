@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
@@ -11,7 +11,7 @@ then
 fi
 
 # Exit if the build root has not been defined.
-. ${SCRIPTDIR}/fuzz_targets
+. "${SCRIPTDIR}"/fuzz_targets
 
 if [[ ${DEBUG} == 1 ]]
 then
@@ -44,6 +44,7 @@ do
       PERCALL=100
     fi
 
-    find ${BUILD_ROOT}/corpora/${TARGET}/ ${EXTRA_CORPUS} -type f -print0 | xargs -0 -L${PERCALL} ${BUILD_ROOT}/build/${TARGET}
+    # shellcheck disable=SC2248
+    find "${BUILD_ROOT}/corpora/${TARGET}/" ${EXTRA_CORPUS} -type f -print0 | xargs -0 -L${PERCALL} "${BUILD_ROOT}/build/${TARGET}"
   fi
 done

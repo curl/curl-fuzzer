@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 #***************************************************************************
 #                                  _   _ ____  _
 #  Project                     ___| | | |  _ \| |
@@ -21,20 +21,22 @@
 #
 ###########################################################################
 
+set -eu
+
 TARGET=${1:-fuzz}
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-export BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
+export BUILD_ROOT; BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 
 # Check for GDB-specific behaviour by checking for the GDBMODE flag.
 # - Compile with -O0 so that DEBUGASSERTs can be debugged in gdb.
 if [[ -n ${GDBMODE:-} ]]
 then
-    [[ -n ${CFLAGS:-} ]] && export CFLAGS="${CFLAGS} -O0" || export CFLAGS="-O0"
-    [[ -n ${CXXFLAGS:-} ]] && export CXXFLAGS="${CXXFLAGS} -O0" || export CXXFLAGS="-O0"
-    CMAKE_GDB_FLAG="-DBUILD_GDB=ON"
+  export CFLAGS="${CFLAGS:-} -O0"
+  export CXXFLAGS="${CXXFLAGS:-} -O0"
+  CMAKE_GDB_FLAG="-DBUILD_GDB=ON"
 else
-    CMAKE_GDB_FLAG="-DBUILD_GDB=OFF"
+  CMAKE_GDB_FLAG="-DBUILD_GDB=OFF"
 fi
 
 echo "BUILD_ROOT: $BUILD_ROOT"
@@ -48,9 +50,9 @@ echo "ARCHITECTURE: ${ARCHITECTURE:-undefined}"
 
 if [[ "${ARCHITECTURE:-}" == "i386" ]]
 then
-    CMAKE_VERBOSE_FLAG="-v"
+  CMAKE_VERBOSE_FLAG="-v"
 else
-    CMAKE_VERBOSE_FLAG=""
+  CMAKE_VERBOSE_FLAG=""
 fi
 
 export MAKEFLAGS; MAKEFLAGS+=" -s -j$(($(nproc) + 0))"
@@ -58,13 +60,14 @@ echo "MAKEFLAGS: ${MAKEFLAGS}"
 
 # Create a build directory for the dependencies.
 BUILD_DIR=${BUILD_ROOT}/build
-mkdir -p ${BUILD_DIR}
+mkdir -p "${BUILD_DIR}"
 
 options=''
 command -v ninja >/dev/null 2>&1 && options+=' -G Ninja'
 
 # Compile the dependencies.
-pushd ${BUILD_DIR}
-cmake ${CMAKE_GDB_FLAG} .. ${options}
-cmake --build . --target ${TARGET} ${CMAKE_VERBOSE_FLAG}
+pushd "${BUILD_DIR}"
+# shellcheck disable=SC2086
+cmake "${CMAKE_GDB_FLAG}" .. ${options}
+cmake --build . --target "${TARGET}" ${CMAKE_VERBOSE_FLAG}
 popd

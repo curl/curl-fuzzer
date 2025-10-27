@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 """Simple script which generates corpus files."""
 
@@ -131,7 +131,7 @@ def generate_corpus(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    """Main function"""
+    """Begin main function."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--url", required=True)
@@ -175,13 +175,13 @@ def main() -> None:
     upload1.add_argument("--upload1")
     upload1.add_argument("--upload1file")
 
-    for ii in range(0, 11):
+    for ii in range(11):
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--rsp{0}".format(ii))
         group.add_argument("--rsp{0}file".format(ii))
         group.add_argument("--rsp{0}test".format(ii), type=int)
 
-    for ii in range(0, 2):
+    for ii in range(2):
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--secrsp{0}".format(ii))
         group.add_argument("--secrsp{0}file".format(ii))

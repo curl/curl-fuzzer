@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -ex
 
 # Save off the current folder as the build root.
-export BUILD_ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+export BUILD_ROOT; BUILD_ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 SCRIPTDIR=${BUILD_ROOT}/scripts
 
 # Parse the options.
@@ -30,4 +30,4 @@ export CXXFLAGS="-fsanitize=address,fuzzer-no-link -stdlib=libstdc++ $FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 export OPENSSLFLAGS="-fno-sanitize=alignment -lstdc++"
 
-${SCRIPTDIR}/compile_target.sh ${TARGET}
+"${SCRIPTDIR}"/compile_target.sh "${TARGET}"

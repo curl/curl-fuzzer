@@ -1,36 +1,42 @@
 name: Playwright browser test for corpus decoder
 
-on:
+'on':
   push:
-    branches: [master]
+    branches:
+      - master
   pull_request:
-    branches: [master]
+    branches:
+      - master
   workflow_dispatch:
 
-permissions:
-  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions: {}
 
 jobs:
   test:
+    name: 'Test pages'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-
-      - name: Set up Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          python-version: "3.12"
+          persist-credentials: false
+
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install .[browser-tests]
-          pip install pytest pytest-playwright
+          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[page-gen,browser-tests]'
           python -m playwright install
 
       - name: Install Playwright system dependencies
         run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo rm -f /var/lib/man-db/auto-update
           playwright install-deps
 
       - name: Run Playwright browser test

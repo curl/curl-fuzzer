@@ -1,4 +1,7 @@
+# Workflow used by curl/curl
+
 name: CI
+
 'on':
   push:
     branches:
@@ -20,14 +23,16 @@ permissions: {}
 
 jobs:
   DetermineMatrix:
+    name: 'Determine matrix'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
+          persist-credentials: false
           repository: curl/curl-fuzzer
+
       - name: Set matrix
         id: set-matrix
         run: |
@@ -36,29 +41,31 @@ jobs:
           python3 -m generate_matrix | tee $GITHUB_OUTPUT
 
   BuildFuzzers:
+    name: 'Build fuzzers'
     runs-on: ubuntu-latest
     steps:
-    # Use the CIFuzz job to test the repository.
-    - name: Build Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
-      with:
-        oss-fuzz-project-name: 'curl'
-        dry-run: false
-        keep-unaffected-fuzz-targets: true
+      # Use the CIFuzz job to test the repository.
+      - name: Build Fuzzers
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master  # zizmor: ignore[unpinned-uses]
+        with:
+          oss-fuzz-project-name: 'curl'
+          dry-run: false
+          keep-unaffected-fuzz-targets: true
 
-    # Archive the fuzzer output (which maintains permissions)
-    - name: Create fuzz tar
-      run: tar cvf fuzz.tar build-out/
+      # Archive the fuzzer output (which maintains permissions)
+      - name: Create fuzz tar
+        run: tar cvf fuzz.tar build-out/
 
-    # Upload the fuzzer output
-    - name: Archive fuzz tar
-      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-      with:
-        name: fuzz_tar
-        path: fuzz.tar
+      # Upload the fuzzer output
+      - name: Archive fuzz tar
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: fuzz_tar
+          path: fuzz.tar
 
   RunFuzzers:
-    needs: [ BuildFuzzers, DetermineMatrix ]
+    name: 'Run fuzzers'
+    needs: [BuildFuzzers, DetermineMatrix]
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.DetermineMatrix.outputs.matrix) }}
@@ -67,89 +74,33 @@ jobs:
         with:
           name: fuzz_tar
       - name: Unpack fuzzer ${{ matrix.fuzzer }}
-        run: tar xvf fuzz.tar build-out/${{ matrix.fuzzer }} build-out/${{ matrix.fuzzer }}_seed_corpus.zip
+        env:
+          MATRIX_FUZZER: '${{ matrix.fuzzer }}'
+        run: tar xvf fuzz.tar build-out/"${MATRIX_FUZZER}" build-out/"${MATRIX_FUZZER}"_seed_corpus.zip
       - name: Display extracted files
         run: ls -laR build-out/
       - name: Run Fuzzer ${{ matrix.fuzzer }}
-        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master  # zizmor: ignore[unpinned-uses]
         with:
           oss-fuzz-project-name: 'curl'
           fuzz-seconds: 120
           dry-run: false
       - name: Upload Crash
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        if: failure()
+        if: ${{ failure() }}
         with:
           name: artifacts
           path: ./out/artifacts
 
-  Mainline:
-    strategy:
-      matrix:
-        sanitizer:
-          - address
-          - memory
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          repository: curl/curl-fuzzer
-      - name: Install Dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get -o Dpkg::Use-Pty=0 update
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
-      - name: Compile mainline
-        env:
-          # test with different "sanitizers"
-          SANITIZER: ${{ matrix.sanitizer }}
-        run: ./mainline.sh
-
-  just_dependencies:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          repository: curl/curl-fuzzer
-      - name: Install Dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get -o Dpkg::Use-Pty=0 update
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
-      - name: Compile deps target
-        run: ./scripts/compile_target.sh deps
-
-  PythonTests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          repository: curl/curl-fuzzer
-      - name: Set up Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
-        with:
-          python-version: '3.12'
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest
-      - name: Run TLV constants sync test
-        run: pytest tests/test_tlv_constants_sync.py
-
   # Ensure that the repository can be built for i386
   Testi386:
+    name: 'Test i386'
     runs-on: ubuntu-latest
     steps:
-    - name: Build Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
-      with:
-        oss-fuzz-project-name: 'curl'
-        dry-run: false
-        keep-unaffected-fuzz-targets: true
-        architecture: 'i386'
+      - name: Build Fuzzers
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master  # zizmor: ignore[unpinned-uses]
+        with:
+          oss-fuzz-project-name: 'curl'
+          dry-run: false
+          keep-unaffected-fuzz-targets: true
+          architecture: 'i386'

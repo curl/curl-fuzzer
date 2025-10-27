@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a matrix of fuzzers for Github Actions"""
+"""Generate a matrix of fuzzers for Github Actions."""
 
 import json
 import logging
@@ -9,7 +9,7 @@ import sys
 log = logging.getLogger(__name__)
 
 def main() -> None:
-    """Main function"""
+    """Begin main function."""
     # Get FUZZ_TARGETS from the environment
     fuzz_targets = os.getenv("FUZZ_TARGETS", "")
     log.info("Fuzz targets: %s", fuzz_targets)
@@ -27,7 +27,7 @@ def main() -> None:
     print(f"matrix={json.dumps(output_data)}")
 
 def run() -> None:
-    """Run the main function"""
+    """Run the main function."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     main()
 

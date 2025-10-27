@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 """Script which converts corpus files to pcap files."""
 
@@ -74,7 +74,7 @@ def corpus_to_pcap(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    """Main function"""
+    """Begin main function."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)

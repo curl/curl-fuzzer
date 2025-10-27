@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.11)
 project(curl_fuzzer_deps)
 
 if(NOT "$ENV{MAKE}" STREQUAL "")
-  set(MAKE "$ENV{MAKE}")
+    set(MAKE "$ENV{MAKE}")
 else()
-  set(MAKE "make")
+    set(MAKE "make")
 endif()
 
 include(ExternalProject)
@@ -18,11 +18,10 @@ set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
-ExternalProject_Add(
-    zlib_external
+ExternalProject_Add(zlib_external
     URL ${ZLIB_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zlib
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure --static --prefix=${ZLIB_INSTALL_DIR}
+    CONFIGURE_COMMAND ./configure --static --prefix=${ZLIB_INSTALL_DIR}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -37,12 +36,12 @@ set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
 set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
-ExternalProject_Add(
-    zstd_external
+ExternalProject_Add(zstd_external
     URL ${ZSTD_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zstd
     SOURCE_SUBDIR build/cmake
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR} -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR}
+        -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
     BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
@@ -50,13 +49,14 @@ ExternalProject_Add(
 
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
-if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
+if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
     message(STATUS "Building OpenSSL as a dependency")
     # Install openssl
     #
     # renovate: datasource=github-tags depName=openssl/openssl
     set(OPENSSL_VERSION 3.6.0)
-    set(OPENSSL_URL https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
+    set(OPENSSL_URL
+        https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/openssl-install)
     set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/openssl/src/openssl_external)
     set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
@@ -65,14 +65,14 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
     set(OPENSSL_ARCH_TARGET "")
     set(OPENSSL_ARCH_FLAG "")
     set(OPENSSL_EC_FLAG "enable-ec_nistp_64_gcc_128")
-    if(DEFINED ENV{ARCHITECTURE} AND "$ENV{ARCHITECTURE}" STREQUAL "i386")
+    if("$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(OPENSSL_ARCH_TARGET "linux-generic32")
         set(OPENSSL_ARCH_FLAG "386")
         set(OPENSSL_EC_FLAG "no-threads")
     endif()
 
     set(OPENSSL_ASM_FLAG "")
-    if(DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory")
+    if("$ENV{SANITIZER}" STREQUAL "memory")
         set(OPENSSL_ASM_FLAG "no-asm")
     endif()
 
@@ -104,8 +104,7 @@ if(NOT (DEFINED ENV{SANITIZER} AND "$ENV{SANITIZER}" STREQUAL "memory"))
         $ENV{OPENSSLFLAGS}
     )
 
-    ExternalProject_Add(
-        openssl_external
+    ExternalProject_Add(openssl_external
         URL ${OPENSSL_URL}
         PREFIX ${CMAKE_BINARY_DIR}/openssl
         CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
@@ -139,12 +138,11 @@ set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
 set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
-ExternalProject_Add(
-    nghttp2_external
+ExternalProject_Add(nghttp2_external
     URL ${NGHTTP2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/nghttp2
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
+        -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
     BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     DOWNLOAD_NO_PROGRESS 1
@@ -162,11 +160,11 @@ set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
-ExternalProject_Add(
-    libidn2_external
+ExternalProject_Add(libidn2_external
     URL ${LIBIDN2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/libidn2
-    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static --disable-doc
+    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
+        --disable-doc
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -181,8 +179,7 @@ set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/gdb-install)
 
 option(BUILD_GDB "Build GDB as an external project" OFF)
 if(BUILD_GDB)
-    ExternalProject_Add(
-        gdb_external
+    ExternalProject_Add(gdb_external
         URL ${GDB_URL}
         PREFIX ${CMAKE_BINARY_DIR}/gdb
         CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
@@ -201,8 +198,7 @@ set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
 set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
 set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
-ExternalProject_Add(
-    openldap_external
+ExternalProject_Add(openldap_external
     URL ${OPENLDAP_URL}
     PREFIX ${CMAKE_BINARY_DIR}/openldap
     CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls --disable-slapd
@@ -212,7 +208,7 @@ ExternalProject_Add(
     DOWNLOAD_NO_PROGRESS 1
 )
 
-if (TARGET openssl_external)
+if(TARGET openssl_external)
     add_dependencies(openldap_external openssl_external)
 else()
     message(STATUS "Not building OpenLDAP with OpenSSL")
@@ -273,10 +269,9 @@ set(CURL_POST_INSTALL_COMMAND
 # Conditionally check to see if there's a source directory or not.
 # If there is, use it. Otherwise, download the latest version.
 #
-if (DEFINED ENV{CURL_SOURCE_DIR})
+if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
     message(STATUS "Building curl from source directory: $ENV{CURL_SOURCE_DIR}")
-    ExternalProject_Add(
-        curl_external
+    ExternalProject_Add(curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
         PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
         ${CURL_POST_INSTALL_COMMAND}
@@ -286,8 +281,7 @@ if (DEFINED ENV{CURL_SOURCE_DIR})
 else()
     message(STATUS "Building curl from git master")
     set(CURL_URL "https://github.com/curl/curl")
-    ExternalProject_Add(
-        curl_external
+    ExternalProject_Add(curl_external
         GIT_REPOSITORY ${CURL_URL}
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
@@ -312,10 +306,6 @@ set(CURL_DEPS
 add_dependencies(curl_external ${CURL_DEPS})
 
 # Now it's time for the main targets!
-#
-# Read environment variables for compiler flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} $ENV{CFLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $ENV{CXXFLAGS}")
 
 # Paths to curl install (adjust as needed)
 set(CURL_INCLUDE_DIRS
@@ -325,10 +315,10 @@ set(CURL_INCLUDE_DIRS
 set(CURL_LIB_DIR ${CURL_INSTALL_DIR}/lib)
 
 # Fuzzing engine
-if (DEFINED ENV{LIB_FUZZING_ENGINE})
+if(NOT "$ENV{LIB_FUZZING_ENGINE}" STREQUAL "")
     # Check to see if ENV{LIB_FUZZING_ENGINE} is a file. If so, use it directly.
     # Otherwise, assume it's a flag to the compiler.
-    if (EXISTS $ENV{LIB_FUZZING_ENGINE})
+    if(EXISTS "$ENV{LIB_FUZZING_ENGINE}")
         message(STATUS "Using LIB_FUZZING_ENGINE file: $ENV{LIB_FUZZING_ENGINE}")
         set(LIB_FUZZING_ENGINE $ENV{LIB_FUZZING_ENGINE})
         set(LIB_FUZZING_ENGINE_FLAG "")
@@ -367,32 +357,32 @@ set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
 
 # Helper macro to define a fuzzer target
-macro(add_curl_fuzzer name proto)
-    add_executable(${name} ${COMMON_SOURCES})
-    target_compile_options(${name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${proto})
-    target_include_directories(${name} PRIVATE ${CURL_INCLUDE_DIRS})
-    target_link_libraries(${name} PRIVATE ${COMMON_LINK_LIBS})
-    target_link_options(${name} PRIVATE ${COMMON_LINK_OPTIONS})
-    add_dependencies(${name} ${FUZZ_DEPS})
+macro(curl_add_fuzzer _name _proto)
+    add_executable(${_name} ${COMMON_SOURCES})
+    target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto})
+    target_include_directories(${_name} PRIVATE ${CURL_INCLUDE_DIRS})
+    target_link_libraries(${_name} PRIVATE ${COMMON_LINK_LIBS})
+    target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
+    add_dependencies(${_name} ${FUZZ_DEPS})
 endmacro()
 
 # Main fuzzer and protocol-specific fuzzers
-add_curl_fuzzer(curl_fuzzer           ALL)
-add_curl_fuzzer(curl_fuzzer_dict      DICT)
-add_curl_fuzzer(curl_fuzzer_file      FILE)
-add_curl_fuzzer(curl_fuzzer_ftp       FTP)
-add_curl_fuzzer(curl_fuzzer_gopher    GOPHER)
-add_curl_fuzzer(curl_fuzzer_http      HTTP)
-add_curl_fuzzer(curl_fuzzer_https     HTTPS)
-add_curl_fuzzer(curl_fuzzer_imap      IMAP)
-add_curl_fuzzer(curl_fuzzer_ldap      LDAP)
-add_curl_fuzzer(curl_fuzzer_mqtt      MQTT)
-add_curl_fuzzer(curl_fuzzer_pop3      POP3)
-add_curl_fuzzer(curl_fuzzer_rtsp      RTSP)
-add_curl_fuzzer(curl_fuzzer_smb       SMB)
-add_curl_fuzzer(curl_fuzzer_smtp      SMTP)
-add_curl_fuzzer(curl_fuzzer_tftp      TFTP)
-add_curl_fuzzer(curl_fuzzer_ws        WS)
+curl_add_fuzzer(curl_fuzzer           ALL)
+curl_add_fuzzer(curl_fuzzer_dict      DICT)
+curl_add_fuzzer(curl_fuzzer_file      FILE)
+curl_add_fuzzer(curl_fuzzer_ftp       FTP)
+curl_add_fuzzer(curl_fuzzer_gopher    GOPHER)
+curl_add_fuzzer(curl_fuzzer_http      HTTP)
+curl_add_fuzzer(curl_fuzzer_https     HTTPS)
+curl_add_fuzzer(curl_fuzzer_imap      IMAP)
+curl_add_fuzzer(curl_fuzzer_ldap      LDAP)
+curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
+curl_add_fuzzer(curl_fuzzer_pop3      POP3)
+curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
+curl_add_fuzzer(curl_fuzzer_smb       SMB)
+curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
+curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
+curl_add_fuzzer(curl_fuzzer_ws        WS)
 
 # BUFQ fuzzer
 add_executable(curl_fuzzer_bufq fuzz_bufq.cc)

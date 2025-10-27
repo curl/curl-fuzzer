@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Generate an interactive HTML page for decoding curl corpus files."""
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ def main() -> Path:
 
 
 def run() -> None:
-    """Wrapper to set up logging before running the tool."""
+    """Set up logging before running the tool."""
     common_logging(__name__, __file__)
     main()
 
