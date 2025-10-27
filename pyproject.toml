@@ -22,20 +22,17 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
+dependencies = [
+    "jinja2 (>=3.1.0,<4.0.0)",
+    "scapy (>=2.6.1,<3.0.0)",
+]
 
 [project.optional-dependencies]
-ci-tests = [
-    "ruff==0.14.2",
-]
-page-gen = [
-    "scapy>=2.6.1,<3.0.0",
-    "jinja2>=3.1.0,<4.0.0",
-]
 browser-tests = [
     "jinja2>=3.1.0,<4.0.0",
-    "pytest>=8.3,<9",
     "playwright>=1.55,<1.56",
     "pytest_playwright>=0.7.1,<0.8",
+    "pytest>=8.3,<9",
 ]
 python-tests = [
     "pytest>=8.3,<9",
@@ -58,18 +55,10 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "jinja2>=3.1.0,<4.0.0",
     "mypy==1.18.2",
     "ruff==0.14.2",
     "scapy>=2.6.1,<3.0.0",
-]
-page-gen = [
-    "jinja2>=3.1.0,<4.0.0",
-]
-browser-tests = [
-    "jinja2>=3.1.0,<4.0.0",
-    "pytest>=8.3,<9",
-    "playwright>=1.55,<1.56",
-    "pytest_playwright>=0.7.1,<0.8",
 ]
 
 [tool.mypy]

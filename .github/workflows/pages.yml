@@ -26,7 +26,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[page-gen]'
+        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
 
       - name: Generate decoder HTML
         run: python -m curl_fuzzer_tools.generate_decoder_html

@@ -30,7 +30,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[page-gen,browser-tests]'
+          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[browser-tests]'
           python -m playwright install
 
       - name: Install Playwright system dependencies
