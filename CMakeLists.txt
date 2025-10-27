@@ -18,8 +18,7 @@ set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
-ExternalProject_Add(
-    zlib_external
+ExternalProject_Add(zlib_external
     URL ${ZLIB_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zlib
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --static --prefix=${ZLIB_INSTALL_DIR}
@@ -37,8 +36,7 @@ set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
 set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
-ExternalProject_Add(
-    zstd_external
+ExternalProject_Add(zstd_external
     URL ${ZSTD_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zstd
     SOURCE_SUBDIR build/cmake
@@ -106,8 +104,7 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
         $ENV{OPENSSLFLAGS}
     )
 
-    ExternalProject_Add(
-        openssl_external
+    ExternalProject_Add(openssl_external
         URL ${OPENSSL_URL}
         PREFIX ${CMAKE_BINARY_DIR}/openssl
         CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
@@ -141,8 +138,7 @@ set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
 set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
-ExternalProject_Add(
-    nghttp2_external
+ExternalProject_Add(nghttp2_external
     URL ${NGHTTP2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/nghttp2
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
@@ -164,8 +160,7 @@ set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
-ExternalProject_Add(
-    libidn2_external
+ExternalProject_Add(libidn2_external
     URL ${LIBIDN2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/libidn2
     CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
@@ -184,8 +179,7 @@ set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/gdb-install)
 
 option(BUILD_GDB "Build GDB as an external project" OFF)
 if(BUILD_GDB)
-    ExternalProject_Add(
-        gdb_external
+    ExternalProject_Add(gdb_external
         URL ${GDB_URL}
         PREFIX ${CMAKE_BINARY_DIR}/gdb
         CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
@@ -204,8 +198,7 @@ set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
 set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
 set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
-ExternalProject_Add(
-    openldap_external
+ExternalProject_Add(openldap_external
     URL ${OPENLDAP_URL}
     PREFIX ${CMAKE_BINARY_DIR}/openldap
     CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls --disable-slapd
@@ -278,8 +271,7 @@ set(CURL_POST_INSTALL_COMMAND
 #
 if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
     message(STATUS "Building curl from source directory: $ENV{CURL_SOURCE_DIR}")
-    ExternalProject_Add(
-        curl_external
+    ExternalProject_Add(curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
         PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
         ${CURL_POST_INSTALL_COMMAND}
@@ -289,8 +281,7 @@ if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
 else()
     message(STATUS "Building curl from git master")
     set(CURL_URL "https://github.com/curl/curl")
-    ExternalProject_Add(
-        curl_external
+    ExternalProject_Add(curl_external
         GIT_REPOSITORY ${CURL_URL}
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
