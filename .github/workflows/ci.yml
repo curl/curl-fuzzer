@@ -52,6 +52,19 @@ jobs:
           dry-run: false
           keep-unaffected-fuzz-targets: true
 
+      - name: What is on the disk (pwd)
+        run: |
+          echo '---------------------'
+          pwd
+          find . -type d
+          echo '---------------------'
+
+      - name: What is on the disk (home)
+        run: |
+          echo '---------------------'
+          find ~ -type d
+          echo '---------------------'
+
       # Archive the fuzzer output (which maintains permissions)
       - name: Create fuzz tar
         run: tar cvf fuzz.tar build-out/
@@ -85,6 +98,20 @@ jobs:
           oss-fuzz-project-name: 'curl'
           fuzz-seconds: 120
           dry-run: false
+
+      - name: What is on the disk (pwd)
+        run: |
+          echo '---------------------'
+          pwd
+          find . -type d
+          echo '---------------------'
+
+      - name: What is on the disk (home)
+        run: |
+          echo '---------------------'
+          find ~ -type d
+          echo '---------------------'
+
       - name: Upload Crash
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         if: ${{ failure() }}
