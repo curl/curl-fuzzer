@@ -23,12 +23,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "jinja2 (>=3.1.0,<4.0.0)",
+    "jinja2>=3.1.0,<4.0.0",
 ]
 
 [project.optional-dependencies]
 browser-tests = [
-    "jinja2>=3.1.0,<4.0.0",
     "playwright>=1.55,<1.56",
     "pytest_playwright>=0.7.1,<0.8",
     "pytest>=8.3,<9",
