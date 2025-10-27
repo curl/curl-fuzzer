@@ -21,7 +21,7 @@ set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 ExternalProject_Add(zlib_external
     URL ${ZLIB_URL}
     PREFIX ${CMAKE_BINARY_DIR}/zlib
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure --static --prefix=${ZLIB_INSTALL_DIR}
+    CONFIGURE_COMMAND ./configure --static --prefix=${ZLIB_INSTALL_DIR}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
