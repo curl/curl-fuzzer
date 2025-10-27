@@ -53,4 +53,3 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   /* This function must always return 0. Non-zero codes are reserved. */
   return 0;
 }
-

@@ -462,10 +462,10 @@ void fuzz_setup_http_post(FUZZ_DATA *fuzz, TLV *tlv)
      * for lots of others which could be added here.
      */
     curl_formadd(&post, &last,
-		 CURLFORM_COPYNAME, FUZZ_HTTPPOST_NAME,
-		 CURLFORM_PTRCONTENTS, fuzz->post_body,
-		 CURLFORM_CONTENTLEN, (curl_off_t) strlen(fuzz->post_body),
-		 CURLFORM_END);
+                 CURLFORM_COPYNAME, FUZZ_HTTPPOST_NAME,
+                 CURLFORM_PTRCONTENTS, fuzz->post_body,
+                 CURLFORM_CONTENTLEN, (curl_off_t) strlen(fuzz->post_body),
+                 CURLFORM_END);
 
     fuzz->last_post_part = last;
     fuzz->httppost = post;

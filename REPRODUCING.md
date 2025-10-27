@@ -1,5 +1,5 @@
 # Reproducing OSS-Fuzz issues
-## Reproducible vs non-reproducible 
+## Reproducible vs non-reproducible
 OSS-Fuzz generates two kinds of issues; reproducible and non-reproducible. It _generally_ only raises issues for reproducible problems; that is, a testcase that can be passed to the relevant fuzzer which causes a crash. They are marked as such in the OSS-Fuzz dashboard.
 
 These instructions are for diagnosing reproducible problems.

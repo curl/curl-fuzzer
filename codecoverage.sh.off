@@ -23,7 +23,7 @@ INSTALLDIR=/tmp/curlcov_install
 # if there have been earlier mainline runs locally
 if [[ -d .deps/ && -f Makefile ]]
 then
-	make distclean
+  make distclean
 fi
 
 # Install openssl
