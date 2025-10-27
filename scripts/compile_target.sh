@@ -32,11 +32,11 @@ export BUILD_ROOT; BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 # - Compile with -O0 so that DEBUGASSERTs can be debugged in gdb.
 if [[ -n ${GDBMODE:-} ]]
 then
-    export CFLAGS="${CFLAGS:-} -O0"
-    export CXXFLAGS="${CXXFLAGS:-} -O0"
-    CMAKE_GDB_FLAG="-DBUILD_GDB=ON"
+  export CFLAGS="${CFLAGS:-} -O0"
+  export CXXFLAGS="${CXXFLAGS:-} -O0"
+  CMAKE_GDB_FLAG="-DBUILD_GDB=ON"
 else
-    CMAKE_GDB_FLAG="-DBUILD_GDB=OFF"
+  CMAKE_GDB_FLAG="-DBUILD_GDB=OFF"
 fi
 
 echo "BUILD_ROOT: $BUILD_ROOT"
@@ -50,9 +50,9 @@ echo "ARCHITECTURE: ${ARCHITECTURE:-undefined}"
 
 if [[ "${ARCHITECTURE:-}" == "i386" ]]
 then
-    CMAKE_VERBOSE_FLAG="-v"
+  CMAKE_VERBOSE_FLAG="-v"
 else
-    CMAKE_VERBOSE_FLAG=""
+  CMAKE_VERBOSE_FLAG=""
 fi
 
 export MAKEFLAGS; MAKEFLAGS+=" -s -j$(($(nproc) + 0))"
