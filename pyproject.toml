@@ -24,7 +24,6 @@ classifiers = [
 ]
 dependencies = [
     "jinja2 (>=3.1.0,<4.0.0)",
-    "scapy (>=2.6.1,<3.0.0)",
 ]
 
 [project.optional-dependencies]
