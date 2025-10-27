@@ -22,15 +22,15 @@ fi
 # Download dependencies for oss-fuzz
 $SUDO apt-get -o Dpkg::Use-Pty=0 update
 $SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
-                   make \
-                   autoconf \
-                   automake \
-                   libtool \
-                   libgmp-dev \
-                   libssl-dev \
-                   zlib1g-dev \
-                   pkg-config \
-                   wget \
-                   cmake \
-                   ninja-build \
-                   groff-base
+    make \
+    autoconf \
+    automake \
+    libtool \
+    libgmp-dev \
+    libssl-dev \
+    zlib1g-dev \
+    pkg-config \
+    wget \
+    cmake \
+    ninja-build \
+    groff-base
