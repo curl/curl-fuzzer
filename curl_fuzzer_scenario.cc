@@ -330,41 +330,47 @@ void DestroyScenarioState(void *ptr) {
 }
 
 long ProtoToLong(const curl::fuzzer::proto::SetOption &option) {
-  if(option.has_int32_value()) {
-    return static_cast<long>(option.int32_value());
+  switch(option.value_case()) {
+    case curl::fuzzer::proto::SetOption::kInt32Value:
+      return static_cast<long>(option.int32_value());
+    case curl::fuzzer::proto::SetOption::kUint32Value:
+      return static_cast<long>(option.uint32_value());
+    case curl::fuzzer::proto::SetOption::kInt64Value:
+      return static_cast<long>(option.int64_value());
+    case curl::fuzzer::proto::SetOption::kUint64Value:
+      return static_cast<long>(option.uint64_value());
+    case curl::fuzzer::proto::SetOption::kBoolValue:
+      return option.bool_value() ? 1L : 0L;
+    case curl::fuzzer::proto::SetOption::kDoubleValue:
+      return static_cast<long>(option.double_value());
+    case curl::fuzzer::proto::SetOption::kStringValue:
+    case curl::fuzzer::proto::SetOption::kBytesValue:
+    case curl::fuzzer::proto::SetOption::VALUE_NOT_SET:
+      return 0L;
+    default:
+      return 0L;
   }
-  if(option.has_uint32_value()) {
-    return static_cast<long>(option.uint32_value());
-  }
-  if(option.has_int64_value()) {
-    return static_cast<long>(option.int64_value());
-  }
-  if(option.has_uint64_value()) {
-    return static_cast<long>(option.uint64_value());
-  }
-  if(option.has_bool_value()) {
-    return option.bool_value() ? 1L : 0L;
-  }
-  if(option.has_double_value()) {
-    return static_cast<long>(option.double_value());
-  }
-  return 0L;
 }
 
 curl_off_t ProtoToOffT(const curl::fuzzer::proto::SetOption &option) {
-  if(option.has_uint64_value()) {
-    return static_cast<curl_off_t>(option.uint64_value());
+  switch(option.value_case()) {
+    case curl::fuzzer::proto::SetOption::kUint64Value:
+      return static_cast<curl_off_t>(option.uint64_value());
+    case curl::fuzzer::proto::SetOption::kInt64Value:
+      return static_cast<curl_off_t>(option.int64_value());
+    case curl::fuzzer::proto::SetOption::kUint32Value:
+      return static_cast<curl_off_t>(option.uint32_value());
+    case curl::fuzzer::proto::SetOption::kInt32Value:
+      return static_cast<curl_off_t>(option.int32_value());
+    case curl::fuzzer::proto::SetOption::kBoolValue:
+    case curl::fuzzer::proto::SetOption::kDoubleValue:
+    case curl::fuzzer::proto::SetOption::kStringValue:
+    case curl::fuzzer::proto::SetOption::kBytesValue:
+    case curl::fuzzer::proto::SetOption::VALUE_NOT_SET:
+      return static_cast<curl_off_t>(ProtoToLong(option));
+    default:
+      return static_cast<curl_off_t>(ProtoToLong(option));
   }
-  if(option.has_int64_value()) {
-    return static_cast<curl_off_t>(option.int64_value());
-  }
-  if(option.has_uint32_value()) {
-    return static_cast<curl_off_t>(option.uint32_value());
-  }
-  if(option.has_int32_value()) {
-    return static_cast<curl_off_t>(option.int32_value());
-  }
-  return static_cast<curl_off_t>(ProtoToLong(option));
 }
 
 int EnsureOptionUnset(FUZZ_DATA *fuzz, CURLoption opt, const OptionDescriptor *desc) {
@@ -426,23 +432,28 @@ int ApplySetOption(const curl::fuzzer::proto::SetOption &option,
     case OptionValueKind::kString: {
       const char *value = nullptr;
       std::string detail;
-      if(option.has_string_value()) {
-        detail = std::string("string ") + SummarizeText(option.string_value());
-        value = state->CopyString(option.string_value());
-      }
-      else if(option.has_bytes_value()) {
-        detail = std::string("bytes ") + SummarizeBinary(option.bytes_value());
-        auto view = state->CopyBytes(option.bytes_value());
-        if(view.second == 0 || view.first == nullptr) {
+      switch(option.value_case()) {
+        case curl::fuzzer::proto::SetOption::kStringValue: {
+          detail = std::string("string ") + SummarizeText(option.string_value());
+          value = state->CopyString(option.string_value());
+          break;
+        }
+        case curl::fuzzer::proto::SetOption::kBytesValue: {
+          detail = std::string("bytes ") + SummarizeBinary(option.bytes_value());
+          auto view = state->CopyBytes(option.bytes_value());
+          if(view.second == 0 || view.first == nullptr) {
+            value = state->CopyString("");
+          }
+          else {
+            value = state->CopyString(std::string_view(reinterpret_cast<const char *>(view.first), view.second));
+          }
+          break;
+        }
+        default: {
+          detail = "string <empty>";
           value = state->CopyString("");
+          break;
         }
-        else {
-          value = state->CopyString(std::string_view(reinterpret_cast<const char *>(view.first), view.second));
-        }
-      }
-      else {
-        detail = "string <empty>";
-        value = state->CopyString("");
       }
       rc = EnsureOptionUnset(fuzz, desc->curlopt, desc);
       if(rc != 0) {
@@ -497,11 +508,13 @@ int ApplySetOption(const curl::fuzzer::proto::SetOption &option,
       if(rc != 0) {
         return rc;
       }
-      long value = option.has_bool_value() ? (option.bool_value() ? 1L : 0L) : ProtoToLong(option);
+      const bool has_bool_value =
+        option.value_case() == curl::fuzzer::proto::SetOption::kBoolValue;
+      long value = has_bool_value ? (option.bool_value() ? 1L : 0L) : ProtoToLong(option);
       rc = ApplyLongOption(fuzz, desc, value);
       if(rc == 0 && fuzz->verbose) {
         std::string detail;
-        if(option.has_bool_value()) {
+        if(has_bool_value) {
           detail = std::string("bool=") + (option.bool_value() ? "true" : "false");
         }
         else {
