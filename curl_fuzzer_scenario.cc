@@ -49,6 +49,7 @@ const OptionDescriptor *LookupDescriptor(curl::fuzzer::proto::CurlOptionId id) {
   return nullptr;
 }
 
+// Human-readable label for logging; keeps prints decipherable instead of raw enums.
 const char *OptionScopeName(curl::fuzzer::proto::OptionScope scope) {
   switch(scope) {
     case curl::fuzzer::proto::OPTION_SCOPE_UNSPECIFIED:
@@ -68,6 +69,7 @@ const char *OptionScopeName(curl::fuzzer::proto::OptionScope scope) {
   return "unknown";
 }
 
+// Logs use textual names for transfer kinds so scenario traces stay readable.
 const char *TransferKindName(curl::fuzzer::proto::TransferKind kind) {
   switch(kind) {
     case curl::fuzzer::proto::TRANSFER_KIND_UNSPECIFIED:
@@ -85,6 +87,7 @@ const char *TransferKindName(curl::fuzzer::proto::TransferKind kind) {
   return "unknown";
 }
 
+// The fuzzer prints stage transitions; mapping the enum keeps diagnostics obvious.
 const char *ResponseStageName(curl::fuzzer::proto::ResponseStage stage) {
   switch(stage) {
     case curl::fuzzer::proto::RESPONSE_STAGE_UNSPECIFIED:
@@ -100,6 +103,7 @@ const char *ResponseStageName(curl::fuzzer::proto::ResponseStage stage) {
   return "unknown";
 }
 
+// Shutdown policies surface in verbose traces; stringifying the enum clarifies intent.
 const char *ShutdownPolicyName(curl::fuzzer::proto::ShutdownPolicy policy) {
   switch(policy) {
     case curl::fuzzer::proto::SHUTDOWN_POLICY_UNSPECIFIED:
@@ -157,6 +161,7 @@ std::string HexSnippet(std::string_view data, size_t max_len = 16) {
   return out;
 }
 
+// Helper summaries annotate verbose logging without dumping entire buffers.
 std::string SummarizeText(std::string_view data) {
   std::string summary = "len=" + std::to_string(data.size());
   summary.append(" text=\"");
@@ -165,6 +170,7 @@ std::string SummarizeText(std::string_view data) {
   return summary;
 }
 
+// Presents binary payloads in a compact mixed hex/text form for diagnostics.
 std::string SummarizeBinary(std::string_view data) {
   std::string summary = "len=" + std::to_string(data.size());
   if(!data.empty()) {
@@ -177,6 +183,7 @@ std::string SummarizeBinary(std::string_view data) {
   return summary;
 }
 
+// Encodes headers for trace logs so we can see what mutator just set.
 std::string SummarizeHeaderValue(const curl::fuzzer::proto::HeaderValue &value) {
   switch(value.value_case()) {
     case curl::fuzzer::proto::HeaderValue::kText:
@@ -189,6 +196,7 @@ std::string SummarizeHeaderValue(const curl::fuzzer::proto::HeaderValue &value) 
   }
 }
 
+// Distills response payloads plus hints to one log line for replay debugging.
 std::string SummarizeResponse(const curl::fuzzer::proto::Response &response) {
   std::string summary = SummarizeBinary(response.payload());
   if(response.has_hint()) {
@@ -214,6 +222,7 @@ std::string SummarizeResponse(const curl::fuzzer::proto::Response &response) {
   return summary;
 }
 
+// Breaks down MIME parts so verbose output shows the shape of each upload.
 std::string SummarizeMimePart(const curl::fuzzer::proto::MimePart &part) {
   std::string summary;
   if(!part.name().empty()) {
@@ -251,6 +260,7 @@ std::string SummarizeMimePart(const curl::fuzzer::proto::MimePart &part) {
   return summary;
 }
 
+// Similar to MIME summaries but tailored for classic form posts.
 std::string SummarizeFormField(const curl::fuzzer::proto::FormField &field) {
   std::string summary;
   summary.append("name=");
@@ -273,12 +283,14 @@ std::string SummarizeFormField(const curl::fuzzer::proto::FormField &field) {
   return summary;
 }
 
+// Owns scratch buffers that mirror proto data so libcurl can outlive the message.
 class ScenarioState {
  public:
   ScenarioState() = default;
   ScenarioState(const ScenarioState &) = delete;
   ScenarioState &operator=(const ScenarioState &) = delete;
 
+  // Curl expects zero-terminated strings that stay valid; copy them into owned storage.
   const char *CopyString(std::string_view sv) {
     auto owned = std::make_unique<char[]>(sv.size() + 1);
     std::memcpy(owned.get(), sv.data(), sv.size());
@@ -288,6 +300,7 @@ class ScenarioState {
     return ptr;
   }
 
+  // Binary blobs need stable backing memory for CURLFORM_PTRCONTENTS and similar paths.
   std::pair<const uint8_t *, size_t> CopyBytes(std::string_view sv) {
     byte_buffers_.emplace_back();
     auto &storage = byte_buffers_.back();
@@ -297,6 +310,7 @@ class ScenarioState {
     return {ptr, storage.size()};
   }
 
+  // Converts proto headers to the format curl_slist requires, owning the storage.
   int HeaderValueToCString(const curl::fuzzer::proto::HeaderValue &value,
                            const char **out) {
     switch(value.value_case()) {
@@ -325,10 +339,12 @@ class ScenarioState {
   std::vector<std::unique_ptr<char[]>> cstrings_;
 };
 
+// Passed into the fuzz harness so the lifetime of ScenarioState is reference counted.
 void DestroyScenarioState(void *ptr) {
   delete static_cast<ScenarioState *>(ptr);
 }
 
+// curl_easy_setopt "long" overload accepts several proto numeric types; normalize here.
 long ProtoToLong(const curl::fuzzer::proto::SetOption &option) {
   switch(option.value_case()) {
     case curl::fuzzer::proto::SetOption::kInt32Value:
@@ -352,6 +368,7 @@ long ProtoToLong(const curl::fuzzer::proto::SetOption &option) {
   }
 }
 
+// Some CURLOPTs expect curl_off_t; reuse ProtoToLong while preserving native width.
 curl_off_t ProtoToOffT(const curl::fuzzer::proto::SetOption &option) {
   switch(option.value_case()) {
     case curl::fuzzer::proto::SetOption::kUint64Value:
@@ -373,6 +390,7 @@ curl_off_t ProtoToOffT(const curl::fuzzer::proto::SetOption &option) {
   }
 }
 
+// Prevents conflicting mutations: once an option is set we refuse to overwrite it.
 int EnsureOptionUnset(FUZZ_DATA *fuzz, CURLoption opt, const OptionDescriptor *desc) {
   (void)desc;
   if(fuzz->options[opt % 1000] != 0) {
@@ -381,10 +399,12 @@ int EnsureOptionUnset(FUZZ_DATA *fuzz, CURLoption opt, const OptionDescriptor *d
   return 0;
 }
 
+// Tracks which curl options have been claimed, so EnsureOptionUnset can police reuse.
 void MarkOptionSet(FUZZ_DATA *fuzz, CURLoption opt) {
   fuzz->options[opt % 1000] = 1;
 }
 
+// Shared helpers wrap curl_easy_setopt calls and mark bookkeeping on success.
 int ApplyStringOption(FUZZ_DATA *fuzz,
                       const OptionDescriptor *desc,
                       const char *value) {
@@ -418,6 +438,8 @@ int ApplyOffOption(FUZZ_DATA *fuzz,
   return 0;
 }
 
+// Central dispatcher for option mutations: validates descriptor, enforces scope rules,
+// and copies data so curl references remain valid after the protobuf message is gone.
 int ApplySetOption(const curl::fuzzer::proto::SetOption &option,
                    ScenarioState *state,
                    FUZZ_DATA *fuzz) {
@@ -576,6 +598,7 @@ int ApplySetOption(const curl::fuzzer::proto::SetOption &option,
   }
 }
 
+// Adds a header to the easy handle: we store it in a curl_slist the harness will free.
 int ApplyHeader(const curl::fuzzer::proto::AddHeader &header,
                 ScenarioState *state,
                 FUZZ_DATA *fuzz) {
@@ -600,6 +623,7 @@ int ApplyHeader(const curl::fuzzer::proto::AddHeader &header,
   return 0;
 }
 
+// POP3/SMTP fuzzers need dynamic recipient lists; mirror header handling for mail APIs.
 int ApplyMailRecipient(const curl::fuzzer::proto::AddMailRecipient &recipient,
                        ScenarioState *state,
                        FUZZ_DATA *fuzz) {
@@ -624,6 +648,7 @@ int ApplyMailRecipient(const curl::fuzzer::proto::AddMailRecipient &recipient,
   return 0;
 }
 
+// Captures upload payloads in ScenarioState buffers and toggles CURLOPTs accordingly.
 int ApplyRegisterUpload(const curl::fuzzer::proto::RegisterUpload &upload,
                         ScenarioState *state,
                         FUZZ_DATA *fuzz) {
@@ -672,6 +697,7 @@ int ApplyRegisterUpload(const curl::fuzzer::proto::RegisterUpload &upload,
   return 0;
 }
 
+// Builds individual MIME parts while copying proto-managed storage into curl-owned form.
 int ApplyMimePart(const curl::fuzzer::proto::MimePart &part,
                   ScenarioState *state,
                   curl_mime *mime) {
@@ -730,6 +756,7 @@ int ApplyMimePart(const curl::fuzzer::proto::MimePart &part,
   return 0;
 }
 
+// Lazily allocates a curl_mime handle and appends each proto part for the active request.
 int ApplyConfigureMime(const curl::fuzzer::proto::ConfigureMime &config,
                        ScenarioState *state,
                        FUZZ_DATA *fuzz) {
@@ -757,11 +784,13 @@ int ApplyConfigureMime(const curl::fuzzer::proto::ConfigureMime &config,
   return 0;
 }
 
+// Recreates the legacy curl_httppost linked list for form submissions, stitching chains
+// together across multiple actions so later CURLOPT_HTTPPOST calls see all parts.
 int ApplyConfigureHttpPost(const curl::fuzzer::proto::ConfigureHttpPost &config,
                            ScenarioState *state,
                            FUZZ_DATA *fuzz) {
   struct curl_httppost *post = NULL;
-  struct curl_httppost *last = fuzz->httppost;
+  struct curl_httppost *last = NULL;
   size_t index = 0;
   for(const auto &field : config.fields()) {
     if(fuzz->verbose) {
@@ -799,20 +828,36 @@ int ApplyConfigureHttpPost(const curl::fuzzer::proto::ConfigureHttpPost &config,
         break;
     }
     if(form_rc != CURL_FORMADD_OK) {
+      if(post != NULL) {
+        curl_formfree(post);
+      }
       return 255;
     }
     ++index;
   }
+  if(post == NULL) {
+    return 0;
+  }
+
   if(fuzz->httppost == NULL) {
     fuzz->httppost = post;
   }
-  else if(post != NULL) {
-    fuzz->last_post_part->next = post;
+  else {
+    struct curl_httppost *tail = fuzz->last_post_part;
+    if(tail == NULL) {
+      tail = fuzz->httppost;
+      while(tail->next != NULL) {
+        tail = tail->next;
+      }
+    }
+    tail->next = post;
   }
+
   fuzz->last_post_part = last;
   return 0;
 }
 
+// Copies response payloads into ScenarioState buffers so socket managers can replay them.
 int ApplyResponse(const curl::fuzzer::proto::Response &response,
                   ScenarioState *state,
                   FUZZ_RESPONSE *dest) {
@@ -822,6 +867,8 @@ int ApplyResponse(const curl::fuzzer::proto::Response &response,
   return 0;
 }
 
+// Applies scripted server behaviour: each connection slot gets preset responses and
+// optional follow-up messages so the harness can emulate remote peers.
 int ApplyConnections(const google::protobuf::RepeatedPtrField<curl::fuzzer::proto::Connection> &connections,
                      ScenarioState *state,
                      FUZZ_DATA *fuzz) {
@@ -877,6 +924,8 @@ int ApplyConnections(const google::protobuf::RepeatedPtrField<curl::fuzzer::prot
   return 0;
 }
 
+// Allows actions to enqueue additional responses after the scenario starts executing,
+// modelling dynamically generated server data.
 int ApplyRegisterResponse(const curl::fuzzer::proto::RegisterResponse &registration,
                           ScenarioState *state,
                           FUZZ_DATA *fuzz) {
@@ -932,6 +981,7 @@ int ApplyRegisterResponse(const curl::fuzzer::proto::RegisterResponse &registrat
   return 0;
 }
 
+// Dispatches scenario actions in declaration order so state builds up deterministically.
 int ApplyAction(const curl::fuzzer::proto::Action &action,
                 ScenarioState *state,
                 FUZZ_DATA *fuzz) {
@@ -956,80 +1006,14 @@ int ApplyAction(const curl::fuzzer::proto::Action &action,
   }
 }
 
-int ApplyGlobalDefaults(const curl::fuzzer::proto::GlobalConfig &config,
-                        ScenarioState *state,
-                        FUZZ_DATA *fuzz) {
-  for(const auto &option : config.defaults()) {
-    int rc = ApplySetOption(option, state, fuzz);
-    if(rc != 0) {
-      return rc;
-    }
-  }
-  if(!config.allowed_protocols().empty()) {
-    std::string protocols;
-    for(size_t ii = 0; ii < static_cast<size_t>(config.allowed_protocols_size()); ++ii) {
-      if(ii > 0) {
-        protocols.append(",");
-      }
-      protocols.append(config.allowed_protocols(ii));
-    }
-    if(fuzz->verbose) {
-      FV_PRINTF(fuzz,
-                "SCENARIO: global allowed_protocols=%s\n",
-                protocols.c_str());
-    }
-    const char *value = state->CopyString(protocols);
-    CURLcode code = curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, value);
-    if(code != CURLE_OK) {
-      return static_cast<int>(code);
-    }
-  }
-  if(config.timeout_ms() != 0) {
-    if(fuzz->verbose) {
-      FV_PRINTF(fuzz,
-                "SCENARIO: global timeout_ms=%u\n",
-                config.timeout_ms());
-    }
-    CURLcode code =
-        curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS, static_cast<long>(config.timeout_ms()));
-    if(code != CURLE_OK) {
-      return static_cast<int>(code);
-    }
-  }
-  if(config.server_response_timeout_ms() != 0) {
-    if(fuzz->verbose) {
-      FV_PRINTF(fuzz,
-                "SCENARIO: global server_response_timeout_ms=%u\n",
-                config.server_response_timeout_ms());
-    }
-    CURLcode code = curl_easy_setopt(fuzz->easy,
-                                     CURLOPT_SERVER_RESPONSE_TIMEOUT,
-                                     static_cast<long>(config.server_response_timeout_ms()));
-    if(code != CURLE_OK) {
-      return static_cast<int>(code);
-    }
-  }
-  if(config.verbose()) {
-    if(fuzz->verbose) {
-      FV_PRINTF(fuzz, "SCENARIO: global enable_verbose\n");
-    }
-    CURLcode code = curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L);
-    if(code != CURLE_OK) {
-      return static_cast<int>(code);
-    }
-  }
-  return 0;
-}
-
 }  // namespace
 
+// Entry point from the fuzz harness: hydrate scenario state, run all actions, then wire
+// up scripted connections so the fuzzer sees a complete environment.
 int ApplyScenario(const curl::fuzzer::proto::Scenario &scenario,
                   FUZZ_DATA *fuzz) {
   auto state = std::make_unique<ScenarioState>();
-  int rc = ApplyGlobalDefaults(scenario.global(), state.get(), fuzz);
-  if(rc != 0) {
-    return rc;
-  }
+  int rc = 0;
   for(const auto &action : scenario.actions()) {
     rc = ApplyAction(action, state.get(), fuzz);
     if(rc != 0) {

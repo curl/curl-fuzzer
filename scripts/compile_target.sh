@@ -28,6 +28,9 @@ TARGET=${1:-fuzz}
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 export BUILD_ROOT; BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 
+# shellcheck source=stdlib_flag_utils.sh
+source "${SCRIPTDIR}/stdlib_flag_utils.sh"
+
 # Check for GDB-specific behaviour by checking for the GDBMODE flag.
 # - Compile with -O0 so that DEBUGASSERTs can be debugged in gdb.
 if [[ -n ${GDBMODE:-} ]]
@@ -38,6 +41,16 @@ then
 else
   CMAKE_GDB_FLAG="-DBUILD_GDB=OFF"
 fi
+
+# The OSS-Fuzz toolchain injects -stdlib=libc++, but several of our
+# dependencies (notably system protobuf) are built against libstdc++.
+# Mixing libstdc++ and libc++ results in unresolved symbols with
+# std::__1 types, so drop the explicit libc++ request and rely on the
+# default toolchain choice instead.
+strip_flag CXXFLAGS "-stdlib=libc++"
+strip_flag CFLAGS "-stdlib=libc++"
+
+ensure_libstdcxx_flag CXXFLAGS
 
 echo "BUILD_ROOT: $BUILD_ROOT"
 echo "SRC: ${SRC:-undefined}"

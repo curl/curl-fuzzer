@@ -30,6 +30,19 @@
 
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
 
+namespace {
+
+bool FuzzOptionIsSet(const FUZZ_DATA *fuzz, CURLoption opt)
+{
+  size_t idx = static_cast<size_t>(opt % 1000);
+  if(idx >= FUZZ_CURLOPT_TRACKER_SPACE) {
+    return false;
+  }
+  return fuzz->options[idx] != 0;
+}
+
+} // namespace
+
 DEFINE_BINARY_PROTO_FUZZER(const curl::fuzzer::proto::Scenario &scenario)
 {
   CurlFuzzerRunScenario(scenario);
@@ -54,6 +67,12 @@ int CurlFuzzerRunScenario(const curl::fuzzer::proto::Scenario &scenario)
     FV_PRINTF(&fuzz, "SCENARIO: ApplyScenario failed with rc=%d\n", rc);
     goto EXIT_LABEL;
   }
+
+  if(!FuzzOptionIsSet(&fuzz, CURLOPT_URL)) {
+    FV_PRINTF(&fuzz, "SCENARIO: skipping transfer due to missing CURLOPT_URL\n");
+    goto EXIT_LABEL;
+  }
+
   FV_PRINTF(&fuzz,
             "SCENARIO: successfully applied scenario, starting transfer\n");
 
@@ -282,6 +301,7 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
     curl_formfree(fuzz->httppost);
     fuzz->httppost = NULL;
   }
+  fuzz->last_post_part = NULL;
 
   // free after httppost and last_post_part.
   if (fuzz->post_body != NULL) {

@@ -7,18 +7,8 @@ package curl.fuzzer.proto;
 // between legacy TLV corpora and the structured representation.
 
 message Scenario {
-  GlobalConfig global = 1;
-  repeated Action actions = 2;
-  repeated Connection connections = 3;
-}
-
-// Global options and defaults that apply before individual actions run.
-message GlobalConfig {
-  repeated SetOption defaults = 1;
-  repeated string allowed_protocols = 2;
-  uint32 timeout_ms = 3;
-  uint32 server_response_timeout_ms = 4;
-  bool verbose = 5;
+  repeated Action actions = 1;
+  repeated Connection connections = 2;
 }
 
 message SetOption {
@@ -180,8 +170,6 @@ enum CurlOptionId {
   CURLOPT_CONNECTTIMEOUT_MS = 156;
   CURLOPT_CONNECT_ONLY = 141;
   CURLOPT_COOKIE = 10022;
-  CURLOPT_COOKIEFILE = 10031;
-  CURLOPT_COOKIEJAR = 10082;
   CURLOPT_COOKIELIST = 10135;
   CURLOPT_COOKIESESSION = 96;
   CURLOPT_CUSTOMREQUEST = 10036;
@@ -255,7 +243,6 @@ enum CurlOptionId {
   CURLOPT_MAXREDIRS = 68;
   CURLOPT_MAX_RECV_SPEED_LARGE = 30146;
   CURLOPT_MAX_SEND_SPEED_LARGE = 30145;
-  CURLOPT_MIMEPOST = 10269;
   CURLOPT_MIME_OPTIONS = 315;
   CURLOPT_NETRC = 51;
   CURLOPT_NEW_DIRECTORY_PERMS = 160;
