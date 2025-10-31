@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.11)
 project(curl_fuzzer_deps)
 
+set(Protobuf_USE_STATIC_LIBS ON CACHE BOOL "Link against static protobuf" FORCE)
+
 if(NOT "$ENV{MAKE}" STREQUAL "")
     set(MAKE "$ENV{MAKE}")
 else()
@@ -23,7 +25,7 @@ target_link_libraries(curl_fuzzer_proto PUBLIC ${PROTOBUF_LIBRARIES})
 # Install libprotobuf-mutator
 #
 # renovate: datasource=github-tags depName=google/libprotobuf-mutator
-set(LIB_PROTO_MUTATOR_TAG master)
+set(LIB_PROTO_MUTATOR_TAG v1.5)
 set(LIB_PROTO_MUTATOR_INSTALL_DIR ${CMAKE_BINARY_DIR}/libprotobuf-mutator-install)
 set(LIB_PROTO_MUTATOR_INCLUDE_DIR ${LIB_PROTO_MUTATOR_INSTALL_DIR}/include)
 set(LIB_PROTO_MUTATOR_STATIC_LIB ${LIB_PROTO_MUTATOR_INSTALL_DIR}/lib/libprotobuf-mutator.a)
@@ -40,6 +42,7 @@ ExternalProject_Add(libprotobuf_mutator_external
         -DLIB_PROTO_MUTATOR_WITH_LIBFUZZER=ON
         -DLIB_PROTO_MUTATOR_EXAMPLES=OFF
         -DLIB_PROTO_MUTATOR_TESTING=OFF
+        -DProtobuf_USE_STATIC_LIBS=ON
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     BUILD_BYPRODUCTS ${LIB_PROTO_MUTATOR_STATIC_LIB} ${LIB_PROTO_MUTATOR_FUZZER_LIB}
     INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install
@@ -397,6 +400,7 @@ set(COMMON_LINK_LIBS
     pthread
     m
 )
+list(APPEND COMMON_LINK_LIBS ${PROTOBUF_LIBRARIES})
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
 
 # Ensure that curl and its dependencies are built before the fuzzers
