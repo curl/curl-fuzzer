@@ -31,6 +31,12 @@ export BUILD_ROOT; BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 # shellcheck source=stdlib_flag_utils.sh
 source "${SCRIPTDIR}/stdlib_flag_utils.sh"
 
+# Install any 32-bit dependencies if building for 32-bit.
+if [[ "${ARCHITECTURE:-}" == "i386" ]]
+then
+  "${SCRIPTDIR}/32bitdeps.sh"
+fi
+
 # Check for GDB-specific behaviour by checking for the GDBMODE flag.
 # - Compile with -O0 so that DEBUGASSERTs can be debugged in gdb.
 if [[ -n ${GDBMODE:-} ]]
