@@ -1,0 +1,407 @@
+syntax = "proto3";
+
+package curl.fuzzer.proto;
+
+// Structured scenario description for the curl fuzzing harness. Mirrors the
+// design documented in SPEC.md and is intended for consumption by
+// libprotobuf-mutator powered fuzz targets as well as tooling that converts
+// between legacy TLV corpora and the structured representation.
+
+message Scenario {
+  GlobalConfig global = 1;
+  repeated Action actions = 2;
+  repeated Connection connections = 3;
+  repeated DataBlob blobs = 4;
+  Metadata metadata = 5;
+}
+
+// Global options and defaults that apply before individual actions run.
+message GlobalConfig {
+  repeated SetOption defaults = 1;
+  repeated string allowed_protocols = 2;
+  uint32 timeout_ms = 3;
+  uint32 server_response_timeout_ms = 4;
+  bool verbose = 5;
+}
+
+message SetOption {
+  CurlOptionId option_id = 1;
+  OptionScope scope = 2;
+  oneof value {
+    string string_value = 10;
+    BlobRef blob = 11;
+    int32 int32_value = 12;
+    uint32 uint32_value = 13;
+    int64 int64_value = 14;
+    uint64 uint64_value = 15;
+    bool bool_value = 16;
+    double double_value = 17;
+  }
+}
+
+// A single configuration step executed before the transfer starts.
+message Action {
+  oneof kind {
+    SetOption set_option = 1;
+    AddHeader add_header = 2;
+    AddMailRecipient add_mail_recipient = 3;
+    ConfigureMime configure_mime = 4;
+    ConfigureHttpPost configure_http_post = 5;
+    RegisterUpload register_upload = 6;
+    RegisterResponse register_response = 7;
+  }
+}
+
+message AddHeader {
+  HeaderValue value = 1;
+}
+
+message AddMailRecipient {
+  HeaderValue value = 1;
+}
+
+message ConfigureMime {
+  repeated MimePart parts = 1;
+}
+
+message ConfigureHttpPost {
+  repeated FormField fields = 1;
+}
+
+message RegisterUpload {
+  BlobRef payload = 1;
+  TransferKind kind = 2;
+  uint64 size_hint = 3;
+}
+
+message RegisterResponse {
+  uint32 connection_id = 1;  // Default: 0 (primary connection)
+  ResponseStage stage = 2;
+  Response response = 3;
+}
+
+// Target connection behaviour once libcurl connects.
+message Connection {
+  uint32 id = 1;  // 0 == primary, 1 == secondary, etc.
+  Response initial_response = 2;
+  repeated Response on_readable = 3;
+  ShutdownPolicy shutdown_policy = 4;
+  OptionalDelay idle_after_send = 5;
+}
+
+message Response {
+  BlobRef payload = 1;
+  ResponseHint hint = 2;
+  OptionalDelay delay_before = 3;
+}
+
+message ResponseHint {
+  bool chunked = 1;
+  bool websocket_frame = 2;
+  bool tls_record = 3;
+}
+
+message OptionalDelay {
+  uint32 milliseconds = 1;
+}
+
+// Canonical storage for reusable byte buffers.
+message DataBlob {
+  uint32 id = 1;
+  oneof payload {
+    bytes raw = 2;
+    string utf8 = 3;
+  }
+  uint32 max_mutation_size = 4;
+  repeated string tags = 5;
+}
+
+message BlobRef {
+  uint32 blob_id = 1;
+  optional uint32 offset = 2;
+  optional uint32 length = 3;
+}
+
+message Metadata {
+  string description = 1;
+  repeated string labels = 2;
+  map<string, string> annotations = 3;
+  repeated string provenance = 4;
+}
+
+message HeaderValue {
+  oneof value {
+    string text = 1;
+    BlobRef blob = 2;
+  }
+}
+
+message MimePart {
+  string name = 1;
+  oneof body {
+    BlobRef blob = 2;
+    string inline_data = 3;
+  }
+  string filename = 4;
+  string content_type = 5;
+  repeated HeaderValue headers = 6;
+}
+
+message FormField {
+  string name = 1;
+  oneof body {
+    BlobRef blob = 2;
+    string inline_data = 3;
+  }
+  string filename = 4;
+  string content_type = 5;
+}
+
+// Scope for options that support multiple namespaces (e.g. proxy vs easy).
+enum OptionScope {
+  OPTION_SCOPE_UNSPECIFIED = 0;
+  OPTION_SCOPE_DEFAULT = 1;
+  OPTION_SCOPE_PROXY = 2;
+  OPTION_SCOPE_DOH = 3;
+  OPTION_SCOPE_TLS = 4;
+}
+
+enum TransferKind {
+  TRANSFER_KIND_UNSPECIFIED = 0;
+  TRANSFER_KIND_UPLOAD = 1;
+  TRANSFER_KIND_POSTFIELDS = 2;
+  TRANSFER_KIND_SEND = 3;
+}
+
+enum ResponseStage {
+  RESPONSE_STAGE_UNSPECIFIED = 0;
+  RESPONSE_STAGE_ON_CONNECT = 1;
+  RESPONSE_STAGE_ON_READABLE = 2;
+}
+
+enum ShutdownPolicy {
+  SHUTDOWN_POLICY_UNSPECIFIED = 0;
+  SHUTDOWN_POLICY_HALF_CLOSE_AFTER_LAST_RESPONSE = 1;
+  SHUTDOWN_POLICY_KEEP_OPEN = 2;
+  SHUTDOWN_POLICY_CLOSE_IMMEDIATELY = 3;
+}
+
+// Mapping of structured options to libcurl option identifiers. The enum names
+// intentionally mirror libcurl's `CURLOPT_*` constants for readability.
+enum CurlOptionId {
+  CURL_OPTION_UNSPECIFIED = 0;
+  CURLOPT_ABSTRACT_UNIX_SOCKET = 1;
+  CURLOPT_ACCEPTTIMEOUT_MS = 2;
+  CURLOPT_ACCEPT_ENCODING = 3;
+  CURLOPT_ADDRESS_SCOPE = 4;
+  CURLOPT_ALTSVC_CTRL = 5;
+  CURLOPT_APPEND = 6;
+  CURLOPT_AUTOREFERER = 7;
+  CURLOPT_AWS_SIGV4 = 8;
+  CURLOPT_BUFFERSIZE = 9;
+  CURLOPT_CAINFO = 10;
+  CURLOPT_CAPATH = 11;
+  CURLOPT_CA_CACHE_TIMEOUT = 12;
+  CURLOPT_CERTINFO = 13;
+  CURLOPT_CONNECTTIMEOUT = 14;
+  CURLOPT_CONNECTTIMEOUT_MS = 15;
+  CURLOPT_CONNECT_ONLY = 16;
+  CURLOPT_COOKIE = 17;
+  CURLOPT_COOKIEFILE = 18;
+  CURLOPT_COOKIEJAR = 19;
+  CURLOPT_COOKIELIST = 20;
+  CURLOPT_COOKIESESSION = 21;
+  CURLOPT_CUSTOMREQUEST = 22;
+  CURLOPT_DEFAULT_PROTOCOL = 23;
+  CURLOPT_DIRLISTONLY = 24;
+  CURLOPT_DISALLOW_USERNAME_IN_URL = 25;
+  CURLOPT_DNS_CACHE_TIMEOUT = 26;
+  CURLOPT_DNS_INTERFACE = 27;
+  CURLOPT_DNS_LOCAL_IP4 = 28;
+  CURLOPT_DNS_LOCAL_IP6 = 29;
+  CURLOPT_DNS_SERVERS = 30;
+  CURLOPT_DNS_SHUFFLE_ADDRESSES = 31;
+  CURLOPT_DOH_SSL_VERIFYHOST = 32;
+  CURLOPT_DOH_SSL_VERIFYPEER = 33;
+  CURLOPT_DOH_SSL_VERIFYSTATUS = 34;
+  CURLOPT_DOH_URL = 35;
+  CURLOPT_ECH = 36;
+  CURLOPT_EXPECT_100_TIMEOUT_MS = 37;
+  CURLOPT_FAILONERROR = 38;
+  CURLOPT_FILETIME = 39;
+  CURLOPT_FOLLOWLOCATION = 40;
+  CURLOPT_FORBID_REUSE = 41;
+  CURLOPT_FRESH_CONNECT = 42;
+  CURLOPT_FTPPORT = 43;
+  CURLOPT_FTPSSLAUTH = 44;
+  CURLOPT_FTP_ACCOUNT = 45;
+  CURLOPT_FTP_ALTERNATIVE_TO_USER = 46;
+  CURLOPT_FTP_CREATE_MISSING_DIRS = 47;
+  CURLOPT_FTP_FILEMETHOD = 48;
+  CURLOPT_FTP_SKIP_PASV_IP = 49;
+  CURLOPT_FTP_SSL_CCC = 50;
+  CURLOPT_FTP_USE_EPRT = 51;
+  CURLOPT_FTP_USE_EPSV = 52;
+  CURLOPT_FTP_USE_PRET = 53;
+  CURLOPT_GSSAPI_DELEGATION = 54;
+  CURLOPT_HAPPY_EYEBALLS_TIMEOUT_MS = 55;
+  CURLOPT_HAPROXYPROTOCOL = 56;
+  CURLOPT_HAPROXY_CLIENT_IP = 57;
+  CURLOPT_HEADER = 58;
+  CURLOPT_HEADEROPT = 59;
+  CURLOPT_HSTS_CTRL = 60;
+  CURLOPT_HTTP09_ALLOWED = 61;
+  CURLOPT_HTTPAUTH = 62;
+  CURLOPT_HTTPGET = 63;
+  CURLOPT_HTTPPOST = 64;
+  CURLOPT_HTTPPROXYTUNNEL = 65;
+  CURLOPT_HTTP_CONTENT_DECODING = 66;
+  CURLOPT_HTTP_TRANSFER_DECODING = 67;
+  CURLOPT_HTTP_VERSION = 68;
+  CURLOPT_IGNORE_CONTENT_LENGTH = 69;
+  CURLOPT_INFILESIZE_LARGE = 70;
+  CURLOPT_INTERFACE = 71;
+  CURLOPT_IPRESOLVE = 72;
+  CURLOPT_ISSUERCERT = 73;
+  CURLOPT_KEEP_SENDING_ON_ERROR = 74;
+  CURLOPT_KEYPASSWD = 75;
+  CURLOPT_KRBLEVEL = 76;
+  CURLOPT_LOCALPORT = 77;
+  CURLOPT_LOCALPORTRANGE = 78;
+  CURLOPT_LOGIN_OPTIONS = 79;
+  CURLOPT_LOW_SPEED_LIMIT = 80;
+  CURLOPT_LOW_SPEED_TIME = 81;
+  CURLOPT_MAIL_AUTH = 82;
+  CURLOPT_MAIL_FROM = 83;
+  CURLOPT_MAIL_RCPT_ALLOWFAILS = 84;
+  CURLOPT_MAXAGE_CONN = 85;
+  CURLOPT_MAXCONNECTS = 86;
+  CURLOPT_MAXFILESIZE = 87;
+  CURLOPT_MAXFILESIZE_LARGE = 88;
+  CURLOPT_MAXLIFETIME_CONN = 89;
+  CURLOPT_MAXREDIRS = 90;
+  CURLOPT_MAX_RECV_SPEED_LARGE = 91;
+  CURLOPT_MAX_SEND_SPEED_LARGE = 92;
+  CURLOPT_MIMEPOST = 93;
+  CURLOPT_MIME_OPTIONS = 94;
+  CURLOPT_NETRC = 95;
+  CURLOPT_NEW_DIRECTORY_PERMS = 96;
+  CURLOPT_NEW_FILE_PERMS = 97;
+  CURLOPT_NOBODY = 98;
+  CURLOPT_NOPROGRESS = 99;
+  CURLOPT_NOPROXY = 100;
+  CURLOPT_NOSIGNAL = 101;
+  CURLOPT_PASSWORD = 102;
+  CURLOPT_PATH_AS_IS = 103;
+  CURLOPT_PINNEDPUBLICKEY = 104;
+  CURLOPT_PIPEWAIT = 105;
+  CURLOPT_PORT = 106;
+  CURLOPT_POST = 107;
+  CURLOPT_POSTFIELDS = 108;
+  CURLOPT_POSTFIELDSIZE = 109;
+  CURLOPT_POSTFIELDSIZE_LARGE = 110;
+  CURLOPT_POSTREDIR = 111;
+  CURLOPT_PRE_PROXY = 112;
+  CURLOPT_PROXY = 113;
+  CURLOPT_PROXYAUTH = 114;
+  CURLOPT_PROXYPASSWORD = 115;
+  CURLOPT_PROXYPORT = 116;
+  CURLOPT_PROXYTYPE = 117;
+  CURLOPT_PROXYUSERNAME = 118;
+  CURLOPT_PROXYUSERPWD = 119;
+  CURLOPT_PROXY_CAINFO = 120;
+  CURLOPT_PROXY_CAPATH = 121;
+  CURLOPT_PROXY_CRLFILE = 122;
+  CURLOPT_PROXY_ISSUERCERT = 123;
+  CURLOPT_PROXY_KEYPASSWD = 124;
+  CURLOPT_PROXY_PINNEDPUBLICKEY = 125;
+  CURLOPT_PROXY_SERVICE_NAME = 126;
+  CURLOPT_PROXY_SSLCERT = 127;
+  CURLOPT_PROXY_SSLCERTTYPE = 128;
+  CURLOPT_PROXY_SSLKEY = 129;
+  CURLOPT_PROXY_SSLKEYTYPE = 130;
+  CURLOPT_PROXY_SSLVERSION = 131;
+  CURLOPT_PROXY_SSL_CIPHER_LIST = 132;
+  CURLOPT_PROXY_SSL_OPTIONS = 133;
+  CURLOPT_PROXY_SSL_VERIFYHOST = 134;
+  CURLOPT_PROXY_SSL_VERIFYPEER = 135;
+  CURLOPT_PROXY_TLS13_CIPHERS = 136;
+  CURLOPT_PROXY_TLSAUTH_PASSWORD = 137;
+  CURLOPT_PROXY_TLSAUTH_TYPE = 138;
+  CURLOPT_PROXY_TLSAUTH_USERNAME = 139;
+  CURLOPT_PROXY_TRANSFER_MODE = 140;
+  CURLOPT_QUICK_EXIT = 141;
+  CURLOPT_RANGE = 142;
+  CURLOPT_REDIR_PROTOCOLS_STR = 143;
+  CURLOPT_REFERER = 144;
+  CURLOPT_REQUEST_TARGET = 145;
+  CURLOPT_RESUME_FROM = 146;
+  CURLOPT_RESUME_FROM_LARGE = 147;
+  CURLOPT_RTSP_CLIENT_CSEQ = 148;
+  CURLOPT_RTSP_REQUEST = 149;
+  CURLOPT_RTSP_SERVER_CSEQ = 150;
+  CURLOPT_RTSP_SESSION_ID = 151;
+  CURLOPT_RTSP_STREAM_URI = 152;
+  CURLOPT_RTSP_TRANSPORT = 153;
+  CURLOPT_SASL_AUTHZID = 154;
+  CURLOPT_SASL_IR = 155;
+  CURLOPT_SERVER_RESPONSE_TIMEOUT_MS = 156;
+  CURLOPT_SERVICE_NAME = 157;
+  CURLOPT_SOCKS5_AUTH = 158;
+  CURLOPT_SOCKS5_GSSAPI_NEC = 159;
+  CURLOPT_SSH_AUTH_TYPES = 160;
+  CURLOPT_SSH_COMPRESSION = 161;
+  CURLOPT_SSH_HOST_PUBLIC_KEY_MD5 = 162;
+  CURLOPT_SSH_HOST_PUBLIC_KEY_SHA256 = 163;
+  CURLOPT_SSH_KNOWNHOSTS = 164;
+  CURLOPT_SSH_PRIVATE_KEYFILE = 165;
+  CURLOPT_SSH_PUBLIC_KEYFILE = 166;
+  CURLOPT_SSLCERT = 167;
+  CURLOPT_SSLCERTTYPE = 168;
+  CURLOPT_SSLENGINE = 169;
+  CURLOPT_SSLENGINE_DEFAULT = 170;
+  CURLOPT_SSLKEY = 171;
+  CURLOPT_SSLKEYTYPE = 172;
+  CURLOPT_SSLVERSION = 173;
+  CURLOPT_SSL_CIPHER_LIST = 174;
+  CURLOPT_SSL_EC_CURVES = 175;
+  CURLOPT_SSL_ENABLE_ALPN = 176;
+  CURLOPT_SSL_FALSESTART = 177;
+  CURLOPT_SSL_OPTIONS = 178;
+  CURLOPT_SSL_SESSIONID_CACHE = 179;
+  CURLOPT_SSL_VERIFYHOST = 180;
+  CURLOPT_SSL_VERIFYPEER = 181;
+  CURLOPT_SSL_VERIFYSTATUS = 182;
+  CURLOPT_STREAM_WEIGHT = 183;
+  CURLOPT_SUPPRESS_CONNECT_HEADERS = 184;
+  CURLOPT_TCP_FASTOPEN = 185;
+  CURLOPT_TCP_KEEPALIVE = 186;
+  CURLOPT_TCP_KEEPCNT = 187;
+  CURLOPT_TCP_KEEPIDLE = 188;
+  CURLOPT_TCP_KEEPINTVL = 189;
+  CURLOPT_TCP_NODELAY = 190;
+  CURLOPT_TFTP_BLKSIZE = 191;
+  CURLOPT_TFTP_NO_OPTIONS = 192;
+  CURLOPT_TIMECONDITION = 193;
+  CURLOPT_TIMEVALUE = 194;
+  CURLOPT_TIMEVALUE_LARGE = 195;
+  CURLOPT_TLS13_CIPHERS = 196;
+  CURLOPT_TLSAUTH_PASSWORD = 197;
+  CURLOPT_TLSAUTH_TYPE = 198;
+  CURLOPT_TLSAUTH_USERNAME = 199;
+  CURLOPT_TRANSFERTEXT = 200;
+  CURLOPT_TRANSFER_ENCODING = 201;
+  CURLOPT_UNIX_SOCKET_PATH = 202;
+  CURLOPT_UNRESTRICTED_AUTH = 203;
+  CURLOPT_UPKEEP_INTERVAL_MS = 204;
+  CURLOPT_UPLOAD = 205;
+  CURLOPT_UPLOAD_BUFFERSIZE = 206;
+  CURLOPT_URL = 207;
+  CURLOPT_USERAGENT = 208;
+  CURLOPT_USERNAME = 209;
+  CURLOPT_USERPWD = 210;
+  CURLOPT_USE_SSL = 211;
+  CURLOPT_WILDCARDMATCH = 212;
+  CURLOPT_WS_OPTIONS = 213;
+  CURLOPT_XOAUTH2_BEARER = 214;
+}
