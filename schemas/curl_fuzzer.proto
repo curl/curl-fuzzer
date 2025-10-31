@@ -15,7 +15,7 @@ message SetOption {
   CurlOptionId option_id = 1;
   OptionScope scope = 2;
   oneof value {
-    string string_value = 10;
+    bytes string_value = 10;
     bytes bytes_value = 11;
     int32 int32_value = 12;
     uint32 uint32_value = 13;
@@ -94,30 +94,30 @@ message OptionalDelay {
 
 message HeaderValue {
   oneof value {
-    string text = 1;
+    bytes text = 1;
     bytes binary = 2;
   }
 }
 
 message MimePart {
-  string name = 1;
+  bytes name = 1;
   oneof body {
     bytes bytes_value = 2;
-    string inline_data = 3;
+    bytes inline_data = 3;
   }
-  string filename = 4;
-  string content_type = 5;
+  bytes filename = 4;
+  bytes content_type = 5;
   repeated HeaderValue headers = 6;
 }
 
 message FormField {
-  string name = 1;
+  bytes name = 1;
   oneof body {
     bytes bytes_value = 2;
-    string inline_data = 3;
+    bytes inline_data = 3;
   }
-  string filename = 4;
-  string content_type = 5;
+  bytes filename = 4;
+  bytes content_type = 5;
 }
 
 // Scope for options that support multiple namespaces (e.g. proxy vs easy).
