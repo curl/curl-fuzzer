@@ -1,0 +1,22 @@
+# source: corpora/curl_fuzzer_http/test13
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:8990/we/want/13"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_CUSTOMREQUEST
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "DELETE"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 Read you\r\nContent-Length: 29\r\nDeleted: suppose we got a header like this! ;-)\r\n\r\nblabla custom request result\n"
+  }
+}

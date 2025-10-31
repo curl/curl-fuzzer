@@ -1,0 +1,16 @@
+# source: corpora/curl_fuzzer_ws/ws_with_raw_mode_test
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "ws://foo.bar.localdomain/this/is/a/path"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_WS_OPTIONS
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 1
+  }
+}

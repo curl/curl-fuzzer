@@ -1,0 +1,25 @@
+# source: corpora/curl_fuzzer_http/test1011
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:12345"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_FOLLOWLOCATION
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 1
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 301 OK\r\nLocation: moo.html&testcase=/10110002\r\nDate: Thu, 09 Nov 2010 14:49:00 GMT\r\nSet-Cookie: firstcookie=want; path=/\r\nContent-Length: 0\r\n\r\n"
+  }
+  on_readable {
+    payload: "HTTP/1.1 200 OK swsclose\r\nLocation: this should be ignored\r\nDate: Thu, 09 Nov 2010 14:49:00 GMT\r\nConnection: close\r\n\r\nbody\r\n"
+  }
+}

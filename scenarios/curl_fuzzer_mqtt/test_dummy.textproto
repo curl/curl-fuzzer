@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_mqtt/test_dummy
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "mqtt://127.0.0.1/test"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "hello"
+  }
+}

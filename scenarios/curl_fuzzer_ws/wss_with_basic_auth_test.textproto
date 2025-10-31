@@ -1,0 +1,9 @@
+# source: corpora/curl_fuzzer_ws/wss_with_basic_auth_test
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "wss://username:password@chat.example.is/foo?bar=baz&boop=borp"
+  }
+}

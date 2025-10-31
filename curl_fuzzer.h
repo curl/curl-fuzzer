@@ -495,6 +495,7 @@ int CurlFuzzerRunScenario(const curl::fuzzer::proto::Scenario &scenario);
           int _func_rc = (FUNC);                                              \
           if (_func_rc)                                                       \
           {                                                                   \
+            fprintf(stderr, "FTRY failed: %s returned %d\n", #FUNC, _func_rc); \
             rc = _func_rc;                                                    \
             goto EXIT_LABEL;                                                  \
           }                                                                   \

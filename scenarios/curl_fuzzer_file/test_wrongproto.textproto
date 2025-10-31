@@ -1,0 +1,9 @@
+# source: corpora/curl_fuzzer_file/test_wrongproto
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "thisisnotaproto://127.0.0.1"
+  }
+}

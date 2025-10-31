@@ -1,0 +1,36 @@
+# source: corpora/curl_fuzzer/test3
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:8990/3"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "fake"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_PASSWORD
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "user"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_POSTFIELDS
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "fooo=mooo&pooo=clue&doo=%20%20%20++++"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.0 200 OK\r\nServer: test-server/fake\r\nContent-Type: text/html\r\nContent-Length: 0\r\n\r\nthis is data even though Content-Length is set to zero\n"
+  }
+}

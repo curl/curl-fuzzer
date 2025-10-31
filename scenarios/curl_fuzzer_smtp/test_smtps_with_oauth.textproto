@@ -1,0 +1,65 @@
+# source: corpora/curl_fuzzer_smtp/test_smtps_with_oauth
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "smtps://localhost.localdomain:9005"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_MAIL_FROM
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "sender@example.is"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_MAIL_AUTH
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "foo@secret"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_LOGIN_OPTIONS
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "AUTH=OAUTHBEARER"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_XOAUTH2_BEARER
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "abearertokenvalue!"
+  }
+}
+actions {
+  register_upload {
+    payload: "From: different\nTo: another\n\nbody\n\n"
+    kind: TRANSFER_KIND_UPLOAD
+    size_hint: 35
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "220 smtp.example.com ESMTP Postfix\n"
+  }
+  on_readable {
+    payload: "250 SIZE 14680064\n"
+  }
+  on_readable {
+    payload: "250 Ok\n"
+  }
+  on_readable {
+    payload: "250 Ok\n"
+  }
+  on_readable {
+    payload: "354 Ok\n"
+  }
+  on_readable {
+    payload: "250 Ok\n"
+  }
+}

@@ -30,7 +30,7 @@
 
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
 
-DEFINE_PROTO_FUZZER(const curl::fuzzer::proto::Scenario &scenario)
+DEFINE_BINARY_PROTO_FUZZER(const curl::fuzzer::proto::Scenario &scenario)
 {
   CurlFuzzerRunScenario(scenario);
 }
@@ -51,11 +51,18 @@ int CurlFuzzerRunScenario(const curl::fuzzer::proto::Scenario &scenario)
 
   rc = curl_fuzzer::ApplyScenario(scenario, &fuzz);
   if(rc != 0) {
+    FV_PRINTF(&fuzz, "SCENARIO: ApplyScenario failed with rc=%d\n", rc);
     goto EXIT_LABEL;
   }
+  FV_PRINTF(&fuzz,
+            "SCENARIO: successfully applied scenario, starting transfer\n");
 
   /* Set up the standard easy options. */
-  FTRY(fuzz_set_easy_options(&fuzz));
+  rc = fuzz_set_easy_options(&fuzz);
+  if(rc != 0) {
+    FV_PRINTF(&fuzz, "SCENARIO: fuzz_set_easy_options failed with rc=%d\n", rc);
+    goto EXIT_LABEL;
+  }
 
   /**
    * Add in more curl options that have been accumulated over the scenario
@@ -567,7 +574,7 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
   allowed_protocols = "http,ws,wss";
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_ONLY, 2L));
 #endif
-
+  FV_PRINTF(fuzz, "allowed_protocols=%s\n", allowed_protocols);
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
 
 EXIT_LABEL:

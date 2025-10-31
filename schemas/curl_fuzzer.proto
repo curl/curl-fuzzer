@@ -2,8 +2,7 @@ syntax = "proto3";
 
 package curl.fuzzer.proto;
 
-// Structured scenario description for the curl fuzzing harness. Mirrors the
-// design documented in SPEC.md and is intended for consumption by
+// Structured scenario description for the curl fuzzing harness. Intended for consumption by
 // libprotobuf-mutator powered fuzz targets as well as tooling that converts
 // between legacy TLV corpora and the structured representation.
 
@@ -11,8 +10,6 @@ message Scenario {
   GlobalConfig global = 1;
   repeated Action actions = 2;
   repeated Connection connections = 3;
-  repeated DataBlob blobs = 4;
-  Metadata metadata = 5;
 }
 
 // Global options and defaults that apply before individual actions run.
@@ -29,7 +26,7 @@ message SetOption {
   OptionScope scope = 2;
   oneof value {
     string string_value = 10;
-    BlobRef blob = 11;
+    bytes bytes_value = 11;
     int32 int32_value = 12;
     uint32 uint32_value = 13;
     int64 int64_value = 14;
@@ -69,7 +66,7 @@ message ConfigureHttpPost {
 }
 
 message RegisterUpload {
-  BlobRef payload = 1;
+  bytes payload = 1;
   TransferKind kind = 2;
   uint64 size_hint = 3;
 }
@@ -90,7 +87,7 @@ message Connection {
 }
 
 message Response {
-  BlobRef payload = 1;
+  bytes payload = 1;
   ResponseHint hint = 2;
   OptionalDelay delay_before = 3;
 }
@@ -105,41 +102,17 @@ message OptionalDelay {
   uint32 milliseconds = 1;
 }
 
-// Canonical storage for reusable byte buffers.
-message DataBlob {
-  uint32 id = 1;
-  oneof payload {
-    bytes raw = 2;
-    string utf8 = 3;
-  }
-  uint32 max_mutation_size = 4;
-  repeated string tags = 5;
-}
-
-message BlobRef {
-  uint32 blob_id = 1;
-  optional uint32 offset = 2;
-  optional uint32 length = 3;
-}
-
-message Metadata {
-  string description = 1;
-  repeated string labels = 2;
-  map<string, string> annotations = 3;
-  repeated string provenance = 4;
-}
-
 message HeaderValue {
   oneof value {
     string text = 1;
-    BlobRef blob = 2;
+    bytes binary = 2;
   }
 }
 
 message MimePart {
   string name = 1;
   oneof body {
-    BlobRef blob = 2;
+    bytes bytes_value = 2;
     string inline_data = 3;
   }
   string filename = 4;
@@ -150,7 +123,7 @@ message MimePart {
 message FormField {
   string name = 1;
   oneof body {
-    BlobRef blob = 2;
+    bytes bytes_value = 2;
     string inline_data = 3;
   }
   string filename = 4;

@@ -16,6 +16,22 @@ temporary directory instead.
 
 `./mainline.sh` is run regressibly by Github Actions.
 
+## Structure-aware fuzzing with libprotobuf-mutator
+
+Every `curl_fuzzer*` binary now links
+[libprotobuf-mutator](https://github.com/google/libprotobuf-mutator) directly.
+Build the usual targets and you automatically get structured `Scenario`
+generation:
+
+```shell
+cmake -S . -B build
+cmake --build build --target curl_fuzzer
+```
+
+The shared engine still understands legacy TLV corpora, but the libFuzzer
+entry-point feeds decoded `Scenario` protos into the same execution path, so
+crash reports remain comparable to the classic workflow.
+
 ## I want more information when running a testcase or multiple testcases
 
 Setting the `FUZZ_VERBOSE` environment variable turns on curl verbose logging.
@@ -79,6 +95,22 @@ To look at the contents of a testcase, run
 read_corpus <path/to/file>
 ```
 This will print out a list of contents inside the file.
+
+## I want to convert TLV corpora into structured scenarios
+
+Install the tooling (see above), then run the converter to mirror TLV corpus
+entries into Scenario `.textproto` files:
+
+```shell
+corpora_to_textproto --output scenarios/
+```
+
+By default the tool walks the `corpora/` tree and writes `*.textproto` files to
+`scenarios/`, preserving the directory structure. You can point `--output` to a
+different directory or pass one or more explicit corpus paths when you only
+want to convert selected inputs. The converter automatically skips corpora for
+the `curl_fuzzer_fnmatch`, `curl_fuzzer_bufq`, and `fuzz_url` harnesses because
+they do not use the structured Scenario pipeline.
 
 ## I want an HTML decoder for corpus files
 

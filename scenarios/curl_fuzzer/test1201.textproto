@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer/test1201
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "gopher://127.0.0.1:9009/1/selector/SELECTOR/1201"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "iMenu results\t\terror.host\t1\r\n0Selector /selector/SELECTOR\t/bar\tbar.foo.invalid\t70\r\n.\r\n"
+  }
+}

@@ -1,0 +1,30 @@
+# source: corpora/curl_fuzzer_https/test_https_ntlm
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "https://whattheheckisntlm.example.com/Endpoint.wsdl"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_HTTPAUTH
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 8
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Connection: Keep-Alive"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Content-Type: application/json"
+    }
+  }
+}

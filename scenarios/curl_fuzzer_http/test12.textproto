@@ -1,0 +1,22 @@
+# source: corpora/curl_fuzzer_http/test12
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:8990/we/want/12"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_RANGE
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "100-200"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 206 Partial Content\r\nDate: Mon, 13 Nov 2000 13:41:09 GMT\r\nServer: Apache/1.3.11 (Unix) PHP/3.0.14\r\nLast-Modified: Tue, 13 Jun 2000 12:10:00 GMT\r\nETag: \x2221025-dc7-39462498\x22\r\nAccept-Ranges: bytes\r\nContent-Length: 101\r\nContent-Range: bytes 100-200/3527\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n..partial data returned from the\nserver as a result of setting an explicit byte range\nin the request\n"
+  }
+}

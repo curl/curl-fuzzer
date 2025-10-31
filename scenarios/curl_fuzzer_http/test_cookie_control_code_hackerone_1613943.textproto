@@ -1,0 +1,37 @@
+# source: corpora/curl_fuzzer_http/test_cookie_control_code_hackerone_1613943
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://example.com:8080/chat?a=b&c=d"
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Host: server.example.com"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Connection: Close"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Origin: http://example.com"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Cookie: a=b\\f"
+    }
+  }
+}

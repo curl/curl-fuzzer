@@ -1,0 +1,52 @@
+# source: corpora/curl_fuzzer_imap/test_oauthed_imap
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "imap://localhost.localdomain:9999/wow/a/path/1/;MAILINDEX=1"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "user"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_PASSWORD
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "sekrit"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_LOGIN_OPTIONS
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "AUTH=OAUTHBEARER"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_XOAUTH2_BEARER
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "aaaaaaaaaaaaa\tAAAAAAAAAAAAAAAAAAAAA=="
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "* OK IMAP4rev1 Service Ready"
+  }
+  on_readable {
+    payload: "* OK IMAP4rev1 Service Ready"
+  }
+  on_readable {
+    payload: "* 800 EXISTS\nA002 OK [READ-WRITE] SELECT completed\n"
+  }
+  on_readable {
+    payload: "* 1 FETCH (BODY[TEXT] {69}\r\nFrom: me@somewhere\r\nTo: fake@nowhere\r\n\r\nbody\r\n\r\n--\n  yours sincerely\nA003 OK FETCH completed\r\n"
+  }
+}

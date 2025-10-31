@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_http/test_http_with_hsts
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://2130706433:8080/chat"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 307 Temporary Redirect\r\nStrict-Transport-Security: max-age=9001; includeSubDomains\r\nLocation: https://2130706433:8443/chat\r\nHost: http://2130706433:8080\r\nContent-Length: 0\r\nContent-Type: text/json\r\n\r\n{ isthisjson: kinda }"
+  }
+}

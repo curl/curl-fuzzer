@@ -1,0 +1,32 @@
+# source: corpora/curl_fuzzer_ldap/test_url_fullldap
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "ldap://localhost:1389/dc=example,dc=com?homephone?sub?cn=*cm2*"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "cn=dirman"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_PASSWORD
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "123456"
+  }
+}
+connections {
+  id: 0
+  on_readable {
+    payload: "123456"
+  }
+  on_readable {
+    payload: "123456"
+  }
+}

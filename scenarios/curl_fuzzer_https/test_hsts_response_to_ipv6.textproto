@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_https/test_hsts_response_to_ipv6
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "https://[2001:db8:122:344:c0:2:2100::]:9090/filethings.json?oops=a&param=tru"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTPS/2 200 OK\r\nConnection: Close\r\nStrict-Transport-Security: max-age 60\r\n\r\n"
+  }
+}

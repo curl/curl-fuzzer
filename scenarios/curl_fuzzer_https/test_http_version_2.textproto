@@ -1,0 +1,43 @@
+# source: corpora/curl_fuzzer_https/test_http_version_2
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "https://localhost.localdomain?foobar.json"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERAGENT
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X) AppleWebKit/602.1.50 (KHTML, like Gecko) CriOS/56.0.2924.75 Mobile/14E5239e Safari/602.1"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_HTTP_VERSION
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 2
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Authorization: Basic aaaaaaaaaaaaaaaaaaa"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Connection: Keep-Alive"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/2 403 Forbidden\r\nConnection: close\r\n\r\n"
+  }
+}

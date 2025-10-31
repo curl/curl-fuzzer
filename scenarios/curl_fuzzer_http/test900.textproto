@@ -1,0 +1,36 @@
+# source: corpora/curl_fuzzer_http/test900
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "smtp://127.0.0.1:9005/900"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_MAIL_FROM
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "sender@example.com"
+  }
+}
+actions {
+  register_upload {
+    payload: "From: different\nTo: another\n\nbody\n"
+    kind: TRANSFER_KIND_UPLOAD
+    size_hint: 34
+  }
+}
+actions {
+  add_mail_recipient {
+    value {
+      text: "recipient@example.com"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: " "
+  }
+}

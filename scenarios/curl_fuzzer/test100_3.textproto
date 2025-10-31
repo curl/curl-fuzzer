@@ -1,0 +1,48 @@
+# source: corpora/curl_fuzzer/test100_3
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "ftp://127.0.0.1:8992/test-100"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "220 Hello!\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "400 Sure\n"
+  }
+  on_readable {
+    payload: "227 Entering Passive Mode (213,229,112,130,216,4)\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "213 10\n"
+  }
+  on_readable {
+    payload: "125 Already open\n"
+  }
+  on_readable {
+    payload: "226 Sent everything\n"
+  }
+}
+connections {
+  id: 1
+  initial_response {
+    payload: "1234567890"
+  }
+  on_readable {
+    payload: "noworries"
+  }
+}

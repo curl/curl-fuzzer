@@ -1,0 +1,36 @@
+# source: corpora/curl_fuzzer_pop3/test_oauthed_pop3
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "pop3s://localhost.localdomain:9991/wow/a/path/1/;MAILINDEX=1"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "user"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_LOGIN_OPTIONS
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "AUTH=OAUTHBEARER"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_XOAUTH2_BEARER
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "a\tAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1=="
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "From: me@somewhere\r\nTo: fake@nowhere\r\n\r\nbody\r\n\r\n--\r\n\tyours sincerely\r\n"
+  }
+}

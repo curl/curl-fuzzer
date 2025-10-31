@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_http/test1450
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "dict://127.0.0.1:9016/d:basic"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "220 dictserver <xnooptions> <msgid@msgid>\n552 no matches\n"
+  }
+}

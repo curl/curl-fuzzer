@@ -1,0 +1,23 @@
+# source: corpora/curl_fuzzer_http/test39
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:8990/we/want/39"
+  }
+}
+actions {
+  configure_mime {
+    parts {
+      name: "name"
+      inline_data: "daniel"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 OK\r\nDate: Thu, 09 Nov 2010 14:49:00 GMT\r\nServer: test-server/fake\r\nContent-Length: 10\r\n\r\nblablabla\n"
+  }
+}

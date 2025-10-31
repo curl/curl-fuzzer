@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Regenerate option manifest artefacts from the supported CURLOPT list.
+"""
+Regenerate option manifest artefacts from the supported CURLOPT list.
 
 This script reads a plain-text list of supported CURLOPT identifiers, looks up
 metadata in curl.h to determine each option's numeric value and value kind, and
@@ -165,8 +166,9 @@ def rewrite_proto(entries: Iterable[CurlOption], proto_path: pathlib.Path) -> No
 
     indent = "  "
     enum_lines = [f"{indent}CURL_OPTION_UNSPECIFIED = 0;"]
-    for option in entries:
-        enum_lines.append(f"{indent}{option.name} = {option.curl_value};")
+    enum_lines.extend(
+        f"{indent}{option.name} = {option.curl_value};" for option in entries
+    )
     enum_body = "\n".join(enum_lines) + "\n"
 
     new_text = text[: brace_idx + 1] + "\n" + enum_body + text[closing_idx:]

@@ -1,0 +1,64 @@
+# source: corpora/curl_fuzzer_http/test_http_upgrade_to_ws
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://example.com:8080/chat?a=b&c=d"
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Host: server.example.com"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Upgrade: websocket"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Connection: Close"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Sec-WebSocket-Key: Aa01AAaAA1AaAa1900aAAa=="
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Sec-WebSocket-Protocol: chat, superchat"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Sec-WebSocket-Version: 13"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Origin: http://localhost.localdomain:80"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 101 SwitchingProtocols\r\nUpgrade:websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: AAAAAAAAAA0000000aaaaaaaaaa=\r\nSec-WebSocket-Protocol: chat\r\n\r\n"
+  }
+}
