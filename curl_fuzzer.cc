@@ -26,17 +26,32 @@
 #include <unistd.h>
 #include <curl/curl.h>
 #include "curl_fuzzer.h"
+#include "curl_fuzzer_scenario.h"
 
-/**
- * Fuzzing entry point. This function is passed a buffer containing a test
- * case.  This test case should drive the CURL API into making a request.
- */
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+#include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
+
+namespace {
+
+bool FuzzOptionIsSet(const FUZZ_DATA *fuzz, CURLoption opt)
+{
+  size_t idx = static_cast<size_t>(opt % 1000);
+  if(idx >= FUZZ_CURLOPT_TRACKER_SPACE) {
+    return false;
+  }
+  return fuzz->options[idx] != 0;
+}
+
+} // namespace
+
+DEFINE_BINARY_PROTO_FUZZER(const curl::fuzzer::proto::Scenario &scenario)
+{
+  CurlFuzzerRunScenario(scenario);
+}
+
+int CurlFuzzerRunScenario(const curl::fuzzer::proto::Scenario &scenario)
 {
   int rc = 0;
-  int tlv_rc;
   FUZZ_DATA fuzz;
-  TLV tlv;
 
   /* Ignore SIGPIPE errors. We'll handle the errors ourselves. */
   signal(SIGPIPE, SIG_IGN);
@@ -44,38 +59,33 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   /* Have to set all fields to zero before getting to the terminate function */
   memset(&fuzz, 0, sizeof(FUZZ_DATA));
 
-  if(size < sizeof(TLV_RAW)) {
-    /* Not enough data for a single TLV - don't continue */
-    goto EXIT_LABEL;
-  }
-
   /* Try to initialize the fuzz data */
-  FTRY(fuzz_initialize_fuzz_data(&fuzz, data, size));
+  FTRY(fuzz_initialize_fuzz_data(&fuzz));
 
-  for(tlv_rc = fuzz_get_first_tlv(&fuzz, &tlv);
-      tlv_rc == 0;
-      tlv_rc = fuzz_get_next_tlv(&fuzz, &tlv)) {
-
-    /* Have the TLV in hand. Parse the TLV. */
-    rc = fuzz_parse_tlv(&fuzz, &tlv);
-
-    if(rc != 0) {
-      /* Failed to parse the TLV. Can't continue. */
-      goto EXIT_LABEL;
-    }
-  }
-
-  if(tlv_rc != TLV_RC_NO_MORE_TLVS) {
-    /* A TLV call failed. Can't continue. */
+  rc = curl_fuzzer::ApplyScenario(scenario, &fuzz);
+  if(rc != 0) {
+    FV_PRINTF(&fuzz, "SCENARIO: ApplyScenario failed with rc=%d\n", rc);
     goto EXIT_LABEL;
   }
+
+  if(!FuzzOptionIsSet(&fuzz, CURLOPT_URL)) {
+    FV_PRINTF(&fuzz, "SCENARIO: skipping transfer due to missing CURLOPT_URL\n");
+    goto EXIT_LABEL;
+  }
+
+  FV_PRINTF(&fuzz,
+            "SCENARIO: successfully applied scenario, starting transfer\n");
 
   /* Set up the standard easy options. */
-  FTRY(fuzz_set_easy_options(&fuzz));
+  rc = fuzz_set_easy_options(&fuzz);
+  if(rc != 0) {
+    FV_PRINTF(&fuzz, "SCENARIO: fuzz_set_easy_options failed with rc=%d\n", rc);
+    goto EXIT_LABEL;
+  }
 
   /**
-   * Add in more curl options that have been accumulated over possibly
-   * multiple TLVs.
+   * Add in more curl options that have been accumulated over the scenario
+   * execution.
    */
   if(fuzz.header_list != NULL) {
     curl_easy_setopt(fuzz.easy, CURLOPT_HTTPHEADER, fuzz.header_list);
@@ -104,6 +114,7 @@ EXIT_LABEL:
   return 0;
 }
 
+
 /**
  * Utility function to convert 4 bytes to a u32 predictably.
  */
@@ -127,15 +138,15 @@ uint16_t to_u16(const uint8_t b[2])
 /**
  * Initialize the local fuzz data structure.
  */
-int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
-                              const uint8_t *data,
-                              size_t data_len)
+int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz)
 {
   int rc = 0;
   int ii;
 
   /* Initialize the fuzz data. */
   memset(fuzz, 0, sizeof(FUZZ_DATA));
+  fuzz->scenario_state = NULL;
+  fuzz->scenario_state_destructor = NULL;
 
   /* Create an easy handle. This will have all of the settings configured on
      it. */
@@ -143,8 +154,9 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
   FCHECK(fuzz->easy != NULL);
 
   /* Set up the state parser */
-  fuzz->state.data = data;
-  fuzz->state.data_len = data_len;
+  fuzz->state.data = NULL;
+  fuzz->state.data_len = 0;
+  fuzz->state.data_pos = 0;
 
   /* Set up the state of the server sockets. */
   for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
@@ -275,6 +287,12 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
     fuzz->easy = NULL;
   }
 
+  if(fuzz->scenario_state_destructor != NULL && fuzz->scenario_state != NULL) {
+    fuzz->scenario_state_destructor(fuzz->scenario_state);
+    fuzz->scenario_state = NULL;
+    fuzz->scenario_state_destructor = NULL;
+  }
+
   /* When you have passed the struct curl_httppost pointer to curl_easy_setopt
    * (using the CURLOPT_HTTPPOST option), you must not free the list until after
    *  you have called curl_easy_cleanup for the curl handle.
@@ -283,6 +301,7 @@ void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
     curl_formfree(fuzz->httppost);
     fuzz->httppost = NULL;
   }
+  fuzz->last_post_part = NULL;
 
   // free after httppost and last_post_part.
   if (fuzz->post_body != NULL) {
@@ -575,7 +594,7 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
   allowed_protocols = "http,ws,wss";
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_ONLY, 2L));
 #endif
-
+  FV_PRINTF(fuzz, "allowed_protocols=%s\n", allowed_protocols);
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
 
 EXIT_LABEL:

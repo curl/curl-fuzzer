@@ -1,0 +1,23 @@
+# source: corpora/curl_fuzzer/test_file_nobody
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "file:///proc/self/status"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_HEADER
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 1
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_NOBODY
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 1
+  }
+}

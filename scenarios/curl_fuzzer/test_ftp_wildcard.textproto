@@ -1,0 +1,52 @@
+# source: corpora/curl_fuzzer/test_ftp_wildcard
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "ftp://127.0.0.1:8992/test-list/*.html"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_WILDCARDMATCH
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 1
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "220 Hello!\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "400 Sure\n"
+  }
+  on_readable {
+    payload: "227 Entering Passive Mode (213,229,112,130,216,4)\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+  on_readable {
+    payload: "150 Success\r\n226 Everything sent\r\n"
+  }
+  on_readable {
+    payload: "200 Sure\n"
+  }
+}
+connections {
+  id: 1
+  initial_response {
+    payload: "total 20\r\ndrwxr-xr-x   8 98       98           512 Oct 22 13:06 .\r\ndrwxr-xr-x   8 98       98           512 Oct 22 13:06 ..\r\ndrwxr-xr-x   2 98       98           512 May  2  1996 .NeXT\r\n-r--r--r--   1 0        1             35 Jul 16  1996 README\r\nlrwxrwxrwx   1 0        1              7 Dec  9  1999 bin -> usr/bin\r\ndr-xr-xr-x   2 0        1            512 Oct  1  1997 dev\r\ndrwxrwxrwx   2 98       98           512 May 29 16:04 download.html\r\ndr-xr-xr-x   2 0        1            512 Nov 30  1995 etc\r\ndrwxrwxrwx   2 98       1            512 Oct 30 14:33 pub\r\ndr-xr-xr-x   5 0        1            512 Oct  1  1997 usr\r\n"
+  }
+}

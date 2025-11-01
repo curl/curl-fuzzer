@@ -1,0 +1,29 @@
+# source: corpora/curl_fuzzer_http/test2
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:80/2"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "fake"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_PASSWORD
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "user"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 OK\nDate: Thu, 09 Nov 2010 14:49:00 GMT\nServer: test-server/fake swsclose\nContent-Type: text/html\nFunny-head: yesyes\n"
+  }
+}

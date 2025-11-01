@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer/test5
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://127.0.0.1:8990/we/want/that/page/5#5"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 OK\nDate: Thu, 09 Nov 2010 14:49:00 GMT\nServer: test-server/fake swsclose\nContent-Type: text/html\nFunny-head: yesyes\n\n"
+  }
+}

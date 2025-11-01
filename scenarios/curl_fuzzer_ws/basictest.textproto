@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_ws/basictest
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "ws://localhost"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "test"
+  }
+}

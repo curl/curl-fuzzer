@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_http/test1326
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "telnet://127.0.0.1:8990"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 swsclose\n\nmoo\n"
+  }
+}

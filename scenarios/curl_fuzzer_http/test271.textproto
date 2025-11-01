@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_http/test271
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "tftp://127.0.0.1:8997//271"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "a chunk of\ndata\nreturned\n to client\n"
+  }
+}

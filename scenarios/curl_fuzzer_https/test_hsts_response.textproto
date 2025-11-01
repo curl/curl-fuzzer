@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer_https/test_hsts_response
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "https://0x7F000001?foobar.json"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTPS/2 302 Found\r\nConnection: Keep-Alive\r\nLocation: https://foo.co.uk:9999/bar?type=foobar.json\r\nStrict-Transport-Security: max-age 3600; includeSubdomains; persist"
+  }
+}

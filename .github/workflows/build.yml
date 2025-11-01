@@ -34,7 +34,8 @@ jobs:
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get -o Dpkg::Use-Pty=0 update
           sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y \
+            cmake clang ninja-build protobuf-compiler libprotobuf-dev
 
       - name: Compile mainline
         env:
@@ -54,7 +55,8 @@ jobs:
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get -o Dpkg::Use-Pty=0 update
           sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y \
+            cmake clang ninja-build protobuf-compiler libprotobuf-dev
 
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps

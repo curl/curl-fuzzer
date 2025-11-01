@@ -38,6 +38,9 @@ export CURL_SOURCE_DIR=/src/curl
 # Compile the fuzzers.
 "${SCRIPTDIR}"/compile_target.sh fuzz
 
+# Convert structured scenarios into binary corpora entries.
+"${SCRIPTDIR}"/compile_structured_corpora.sh
+
 # Zip up the seed corpus.
 scripts/create_zip.sh
 

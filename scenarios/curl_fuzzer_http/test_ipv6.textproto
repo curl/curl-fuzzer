@@ -1,0 +1,36 @@
+# source: corpora/curl_fuzzer_http/test_ipv6
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://[::ffff:c0a8:101]/file.txt"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "user"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_PASSWORD
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "pass"
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Accept-Encoding: identity"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 OK\t\r\nConnection: Close\r\n\r\n"
+  }
+}

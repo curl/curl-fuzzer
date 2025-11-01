@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.11)
 project(curl_fuzzer_deps)
 
+set(Protobuf_USE_STATIC_LIBS ON CACHE BOOL "Link against static protobuf" FORCE)
+
 if(NOT "$ENV{MAKE}" STREQUAL "")
     set(MAKE "$ENV{MAKE}")
 else()
@@ -8,6 +10,45 @@ else()
 endif()
 
 include(ExternalProject)
+find_package(Protobuf REQUIRED)
+
+set(CURL_FUZZER_PROTO ${CMAKE_CURRENT_SOURCE_DIR}/schemas/curl_fuzzer.proto)
+protobuf_generate_cpp(CURL_FUZZER_PROTO_SRCS CURL_FUZZER_PROTO_HDRS
+    ${CURL_FUZZER_PROTO})
+
+add_library(curl_fuzzer_proto STATIC ${CURL_FUZZER_PROTO_SRCS})
+target_include_directories(curl_fuzzer_proto PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${PROTOBUF_INCLUDE_DIRS})
+target_link_libraries(curl_fuzzer_proto PUBLIC ${PROTOBUF_LIBRARIES})
+
+# Install libprotobuf-mutator
+#
+# renovate: datasource=github-tags depName=google/libprotobuf-mutator
+set(LIB_PROTO_MUTATOR_TAG v1.5)
+set(LIB_PROTO_MUTATOR_INSTALL_DIR ${CMAKE_BINARY_DIR}/libprotobuf-mutator-install)
+set(LIB_PROTO_MUTATOR_INCLUDE_DIR ${LIB_PROTO_MUTATOR_INSTALL_DIR}/include)
+set(LIB_PROTO_MUTATOR_STATIC_LIB ${LIB_PROTO_MUTATOR_INSTALL_DIR}/lib/libprotobuf-mutator.a)
+set(LIB_PROTO_MUTATOR_FUZZER_LIB ${LIB_PROTO_MUTATOR_INSTALL_DIR}/lib/libprotobuf-mutator-libfuzzer.a)
+
+ExternalProject_Add(libprotobuf_mutator_external
+    GIT_REPOSITORY https://github.com/google/libprotobuf-mutator.git
+    GIT_TAG ${LIB_PROTO_MUTATOR_TAG}
+    PREFIX ${CMAKE_BINARY_DIR}/libprotobuf-mutator
+    CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIB_PROTO_MUTATOR_INSTALL_DIR}
+        -DBUILD_SHARED_LIBS=OFF
+        -DLIB_PROTO_MUTATOR_DOWNLOAD_PROTOBUF=OFF
+        -DLIB_PROTO_MUTATOR_WITH_LIBFUZZER=ON
+        -DLIB_PROTO_MUTATOR_EXAMPLES=OFF
+        -DLIB_PROTO_MUTATOR_TESTING=OFF
+        -DProtobuf_USE_STATIC_LIBS=ON
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    BUILD_BYPRODUCTS ${LIB_PROTO_MUTATOR_STATIC_LIB} ${LIB_PROTO_MUTATOR_FUZZER_LIB}
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    DOWNLOAD_NO_PROGRESS 1
+)
 
 # Install zlib
 #
@@ -223,7 +264,8 @@ add_custom_target(deps
         zstd_external
         libidn2_external
         ${GDB_DEP}
-        openldap_external
+    openldap_external
+    libprotobuf_mutator_external
 )
 
 # Now for the main dependencies!
@@ -336,7 +378,11 @@ else()
 endif()
 
 # Common sources and flags
-set(COMMON_SOURCES curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc)
+set(COMMON_SOURCES
+    curl_fuzzer.cc
+    curl_fuzzer_tlv.cc
+    curl_fuzzer_callback.cc
+    curl_fuzzer_scenario.cc)
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION)
 set(COMMON_LINK_LIBS
     ${CURL_LIB_DIR}/libcurl.a
@@ -348,19 +394,24 @@ set(COMMON_LINK_LIBS
     ${OPENLDAP_STATIC_LIB_LDAP}
     ${OPENLDAP_STATIC_LIB_LBER}
     ${LIB_FUZZING_ENGINE}
+    ${LIB_PROTO_MUTATOR_FUZZER_LIB}
+    ${LIB_PROTO_MUTATOR_STATIC_LIB}
+    curl_fuzzer_proto
     pthread
     m
 )
+list(APPEND COMMON_LINK_LIBS ${PROTOBUF_LIBRARIES})
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
+list(APPEND COMMON_LINK_OPTIONS -static-libstdc++ -static-libgcc)
 
 # Ensure that curl and its dependencies are built before the fuzzers
-set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
+set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP} curl_fuzzer_proto libprotobuf_mutator_external)
 
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
     add_executable(${_name} ${COMMON_SOURCES})
     target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto})
-    target_include_directories(${_name} PRIVATE ${CURL_INCLUDE_DIRS})
+    target_include_directories(${_name} PRIVATE ${CURL_INCLUDE_DIRS} ${LIB_PROTO_MUTATOR_INCLUDE_DIR} ${LIB_PROTO_MUTATOR_INCLUDE_DIR}/libprotobuf-mutator)
     target_link_libraries(${_name} PRIVATE ${COMMON_LINK_LIBS})
     target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
     add_dependencies(${_name} ${FUZZ_DEPS})
@@ -387,7 +438,7 @@ curl_add_fuzzer(curl_fuzzer_ws        WS)
 # BUFQ fuzzer
 add_executable(curl_fuzzer_bufq fuzz_bufq.cc)
 target_compile_options(curl_fuzzer_bufq PRIVATE ${COMMON_FLAGS})
-target_include_directories(curl_fuzzer_bufq PRIVATE ${CURL_INCLUDE_DIRS})
+target_include_directories(curl_fuzzer_bufq PRIVATE ${CURL_INCLUDE_DIRS} ${LIB_PROTO_MUTATOR_INCLUDE_DIR} ${LIB_PROTO_MUTATOR_INCLUDE_DIR}/libprotobuf-mutator)
 target_link_libraries(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(curl_fuzzer_bufq ${FUZZ_DEPS})

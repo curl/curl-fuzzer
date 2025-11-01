@@ -1,0 +1,36 @@
+# source: corpora/curl_fuzzer_http/test_alt_svc_with_ma
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://server.example.com"
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Origin: http://example.com"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "X-Foo-3: ba\tr"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Cookie: __m=-1"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 OK\r\nHost: server.example.com\r\nAlt-Svc: h2=\x22alt.example.com:443\x22, h2=\x22:443\x22\r\nConnection: Keep-Alive\r\n\r\n"
+  }
+}

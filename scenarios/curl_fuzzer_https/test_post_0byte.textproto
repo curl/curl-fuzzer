@@ -1,0 +1,67 @@
+# source: corpora/curl_fuzzer_https/test_post_0byte
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "https://0xff.localdomain/upload"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_NOBODY
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 0
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_CONNECT_ONLY
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 1
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Content-Length: 0"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Transfer-Encoding: gzip,chunked"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Content-Encoding: gzip"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Content-Type: application/gzip"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Expect: 100-continue"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 100 Continue\r\n\r\n"
+  }
+  on_readable {
+    payload: "HTTP/1.1 415 Unsupported Media Type\r\nConnection: Close\r\nContent-Type: */*\r\nContent-Length: 289\r\nX-Frame-Options: SAMEORIGIN\r\n"
+  }
+}

@@ -1,0 +1,22 @@
+# source: corpora/curl_fuzzer_rtsp/test_rtsp_client_cseq
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "rtsp://127.0.0.1:1234/567"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_RTSP_CLIENT_CSEQ
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 4294967295
+  }
+}
+connections {
+  id: 0
+  on_readable {
+    payload: "RTSP/1.0 200 OK\r\nServer: RTSPD/libcurl-test\r\nCSeq: 4294967295\r\nPublic: DESCRIBE, OPTIONS, SETUP, TEARDOWN, PLAY, PAUSE\r\nCurl-Private: swsclose\r\n"
+  }
+}

@@ -1,0 +1,65 @@
+# source: corpora/curl_fuzzer_http/test_ntlm_wb
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "http://localhost.localdomain:86/DynamicsNAV80/WS/nasr/Page/Delivery/Incident"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "DOMAIN\\user:"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_HTTP_VERSION
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 2
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_NETRC
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 2
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_HTTPAUTH
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 32
+  }
+}
+actions {
+  register_upload {
+    payload: "<SOAP-ENV:Envelope xmlns:SOAP-ENV=\x22http://schemas.xmlsoap.org/soap/envelope/\x22xmlns:hel=\x22http://schemas.datacontract.org/2004/07/Helpline.Activities.IncidentRecordScope\x22xmlns:tem=\x22http://localhost.localdomain/\x22><SOAP-ENV:Header/><SOAP-ENV:Body><tem:StartIncidentByWS><tem:ctx/><tem:data><hel:strSubject>TEST</hel:strSubject></tem:data></tem:StartIncidentByWS></SOAP-ENV:Body></SOAP-ENV:Envelope>"
+    kind: TRANSFER_KIND_UPLOAD
+    size_hint: 394
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Content-Type: text/xml; charset=utf-8"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Origin: http://127.0.0.1:9999"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "SOAPAction: http://localhost.localdomain/IncidentMgmtWFWS/StartIncidentByWS"
+    }
+  }
+}

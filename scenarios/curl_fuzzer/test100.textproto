@@ -1,0 +1,15 @@
+# source: corpora/curl_fuzzer/test100
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "ftp://127.0.0.1:8992/test-100/"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "total 20\r\ndrwxr-xr-x   8 98       98           512 Oct 22 13:06 .\r\ndrwxr-xr-x   8 98       98           512 Oct 22 13:06 ..\r\ndrwxr-xr-x   2 98       98           512 May  2  1996 curl-releases\r\n-r--r--r--   1 0        1             35 Jul 16  1996 README\r\nlrwxrwxrwx   1 0        1              7 Dec  9  1999 bin -> usr/bin\r\ndr-xr-xr-x   2 0        1            512 Oct  1  1997 dev\r\ndrwxrwxrwx   2 98       98           512 May 29 16:04 download.html\r\ndr-xr-xr-x   2 0        1            512 Nov 30  1995 etc\r\ndrwxrwxrwx   2 98       1            512 Oct 30 14:33 pub\r\ndr-xr-xr-x   5 0        1            512 Oct  1  1997 usr\r\n\r\n"
+  }
+}

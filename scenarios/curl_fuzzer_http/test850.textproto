@@ -1,0 +1,29 @@
+# source: corpora/curl_fuzzer_http/test850
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "pop3://127.0.0.1:9001/850"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_USERNAME
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "user"
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_PASSWORD
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "secret"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "From: me@somewhere\r\nTo: fake@nowhere\r\n\r\nbody\r\n\r\n--\r\n  yours sincerely\r\n"
+  }
+}

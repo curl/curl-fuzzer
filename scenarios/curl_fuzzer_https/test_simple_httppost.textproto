@@ -1,0 +1,44 @@
+# source: corpora/curl_fuzzer_https/test_simple_httppost
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "https://[::1]/upload/a/thing/here"
+  }
+}
+actions {
+  configure_http_post {
+    fields {
+      name: "test"
+      inline_data: "{ a: b, bar: -1, 3: 2L }"
+    }
+  }
+}
+actions {
+  set_option {
+    option_id: CURLOPT_NOBODY
+    scope: OPTION_SCOPE_DEFAULT
+    uint32_value: 0
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Content-Type: text/json"
+    }
+  }
+}
+actions {
+  add_header {
+    value {
+      text: "Connection: Close"
+    }
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "HTTP/1.1 200 OK\n\r\n\r\n"
+  }
+}

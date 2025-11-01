@@ -1,3 +1,6 @@
+#ifndef CURL_FUZZER_H
+#define CURL_FUZZER_H
+
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -22,6 +25,14 @@
 #include <inttypes.h>
 #include <curl/curl.h>
 #include "testinput.h"
+
+namespace curl {
+namespace fuzzer {
+namespace proto {
+class Scenario;
+}  // namespace proto
+}  // namespace fuzzer
+}  // namespace curl
 
 /**
  * TLV types.
@@ -433,14 +444,16 @@ typedef struct fuzz_data
   /* Verbose mode. */
   int verbose;
 
+  /* Optional structured scenario ownership hook. */
+  void *scenario_state;
+  void (*scenario_state_destructor)(void *state);
+
 } FUZZ_DATA;
 
 /* Function prototypes */
 uint32_t to_u32(const uint8_t b[4]);
 uint16_t to_u16(const uint8_t b[2]);
-int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
-                              const uint8_t *data,
-                              size_t data_len);
+int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz);
 int fuzz_set_easy_options(FUZZ_DATA *fuzz);
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz);
 void fuzz_free(void **ptr);
@@ -474,6 +487,7 @@ int fuzz_select(int nfds,
                 fd_set *exceptfds,
                 struct timeval *timeout);
 int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz);
+int CurlFuzzerRunScenario(const curl::fuzzer::proto::Scenario &scenario);
 
 /* Macros */
 #define FTRY(FUNC)                                                            \
@@ -481,6 +495,7 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz);
           int _func_rc = (FUNC);                                              \
           if (_func_rc)                                                       \
           {                                                                   \
+            fprintf(stderr, "FTRY failed: %s returned %d\n", #FUNC, _func_rc); \
             rc = _func_rc;                                                    \
             goto EXIT_LABEL;                                                  \
           }                                                                   \
@@ -532,3 +547,5 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz);
         }
 
 #define FUZZ_MAX(A, B) ((A) > (B) ? (A) : (B))
+
+#endif /* CURL_FUZZER_H */

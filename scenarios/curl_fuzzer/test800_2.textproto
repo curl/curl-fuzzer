@@ -1,0 +1,24 @@
+# source: corpora/curl_fuzzer/test800_2
+
+actions {
+  set_option {
+    option_id: CURLOPT_URL
+    scope: OPTION_SCOPE_DEFAULT
+    string_value: "imap://127.0.0.1:9003/800/;UID=1"
+  }
+}
+connections {
+  id: 0
+  initial_response {
+    payload: "* OK IMAP4rev1 Service Ready\n"
+  }
+  on_readable {
+    payload: "A001 IMAP4\n"
+  }
+  on_readable {
+    payload: "* 800 EXISTS\nA002 OK [READ-WRITE] SELECT completed\n"
+  }
+  on_readable {
+    payload: "* 1 FETCH (BODY[TEXT] {69}\r\nFrom: me@somewhere\r\nTo: fake@nowhere\r\n\r\nbody\r\n\r\n--\r\n  yours sincerely\r\n)\r\nA003 OK FETCH completed\r\n"
+  }
+}
