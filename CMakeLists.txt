@@ -402,6 +402,7 @@ set(COMMON_LINK_LIBS
 )
 list(APPEND COMMON_LINK_LIBS ${PROTOBUF_LIBRARIES})
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
+list(APPEND COMMON_LINK_OPTIONS -static-libstdc++ -static-libgcc)
 
 # Ensure that curl and its dependencies are built before the fuzzers
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP} curl_fuzzer_proto libprotobuf_mutator_external)
