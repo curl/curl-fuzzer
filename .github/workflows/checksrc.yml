@@ -46,11 +46,9 @@ jobs:
       - name: 'ruff'
         run: |
           ruff --version
-          # shellcheck disable=SC2046
-          ruff check $(git ls-files '*.py')
+          git ls-files '*.py' -z | xargs -0 -r ruff check --
 
       - name: 'mypy'
         run: |
           mypy --version
-          # shellcheck disable=SC2046
-          mypy $(git ls-files src | grep -E '\.py$')
+          git ls-files 'src/*.py' -z | xargs -0 -r mypy --
