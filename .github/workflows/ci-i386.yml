@@ -10,8 +10,6 @@ name: CI-i386
     branches:
       - master
       - main
-  # This makes the workflow callable by curl/curl
-  workflow_call: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
