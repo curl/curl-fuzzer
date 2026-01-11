@@ -33,7 +33,7 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/{azure-cli.sources,microsoft-prod.list,ondrej-ubuntu-php-noble.sources}
           sudo apt-get -o Dpkg::Use-Pty=0 update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
+          sudo apt-get -o Dpkg::Use-Pty=0 install cmake clang ninja-build
 
       - name: Compile mainline
         env:
@@ -52,7 +52,7 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/{azure-cli.sources,microsoft-prod.list,ondrej-ubuntu-php-noble.sources}
           sudo apt-get -o Dpkg::Use-Pty=0 update
-          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang ninja-build
+          sudo apt-get -o Dpkg::Use-Pty=0 install cmake clang ninja-build
 
       - name: Compile deps target
         run: ./scripts/compile_target.sh deps
