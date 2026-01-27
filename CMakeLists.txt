@@ -54,7 +54,7 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
     # Install openssl
     #
     # renovate: datasource=github-tags depName=openssl/openssl
-    set(OPENSSL_VERSION 3.6.0)
+    set(OPENSSL_VERSION 3.6.1)
     set(OPENSSL_URL
         https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/openssl-install)
