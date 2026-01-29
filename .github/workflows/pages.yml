@@ -15,7 +15,7 @@ permissions: {}
 jobs:
   build:
     name: 'Build pages'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -39,7 +39,7 @@ jobs:
   deploy:
     name: 'Deploy pages'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       pages: write     # To deploy to Pages
       id-token: write  # To verify the deployment originates from an appropriate source
