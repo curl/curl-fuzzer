@@ -27,6 +27,8 @@
 #include <curl/curl.h>
 #include "curl_fuzzer.h"
 
+#include "nallocinc.c"
+
 /**
  * Fuzzing entry point. This function is passed a buffer containing a test
  * case.  This test case should drive the CURL API into making a request.
@@ -49,6 +51,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     goto EXIT_LABEL;
   }
 
+  nalloc_init(NULL);
+  nalloc_restrict_file_prefix("/src/curl/");
   /* Try to initialize the fuzz data */
   FTRY(fuzz_initialize_fuzz_data(&fuzz, data, size));
 
@@ -93,8 +97,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     curl_easy_setopt(fuzz.easy, CURLOPT_HTTPPOST, fuzz.httppost);
   }
 
+  nalloc_start(data, size);
   /* Run the transfer. */
   fuzz_handle_transfer(&fuzz);
+  nalloc_end();
 
 EXIT_LABEL:
 
