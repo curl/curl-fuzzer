@@ -13,8 +13,8 @@ include(ExternalProject)
 #
 # renovate: datasource=github-tags depName=madler/zlib
 set(ZLIB_VERSION 1.3.1)
-set(ZLIB_URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz
-             https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.xz)
+set(ZLIB_URL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.xz
+             https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
@@ -155,8 +155,8 @@ add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
 #
 # renovate: datasource=github-tags depName=libidn/libidn2
 set(LIBIDN2_VERSION 2.3.8)
-set(LIBIDN2_URL https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
-                https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
+set(LIBIDN2_URL https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
+                https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
@@ -173,8 +173,8 @@ ExternalProject_Add(libidn2_external
 
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
-set(GDB_URL https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz
-            https://ftpmirror.gnu.org/gdb/gdb-${GDB_VERSION}.tar.gz)
+set(GDB_URL https://ftpmirror.gnu.org/gdb/gdb-${GDB_VERSION}.tar.gz
+            https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz)
 set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/gdb-install)
 
 option(BUILD_GDB "Build GDB as an external project" OFF)
