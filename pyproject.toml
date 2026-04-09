@@ -2,14 +2,13 @@
 name = "curl-fuzzer-tools"
 version = "0.1.0"
 description = "Tooling for the curl-fuzzer repository"
-requires-python = ">=3.9,<4"
+requires-python = ">=3.10,<4"
 readme = "README.md"
 license = { file = "LICENSE" }
 maintainers = [{ name = "Max Dymond", email = "cmeister2@gmail.com" }]
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
