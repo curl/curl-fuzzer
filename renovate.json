@@ -17,11 +17,16 @@
   ],
   "packageRules": [
     {
-      "matchSourceUrls": [
-        "https://github.com/actions/download-artifact",
-        "https://github.com/actions/upload-artifact"
+      "matchManagers": [
+        "github-actions"
       ],
-      "groupName": "GitHub Actions: artifact"
+      "groupName": "GitHub Actions"
+    },
+    {
+      "matchManagers": [
+        "pep621"
+      ],
+      "groupName": "Python dependencies"
     },
     {
       "matchManagers": [
