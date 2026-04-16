@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Playwright system dependencies
         run: |
-          sudo rm -f /etc/apt/sources.list.d/{azure-cli.sources,microsoft-prod.list,ondrej-ubuntu-php-noble.sources}
+          sudo rm -f /etc/apt/sources.list.d/{azure-cli.sources,docker.list,microsoft-prod.list}
           playwright install-deps
 
       - name: Run Playwright browser test
