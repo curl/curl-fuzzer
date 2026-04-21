@@ -22,13 +22,16 @@ def _example_corpus() -> Path:
     repo_root = _repo_root()
     candidate = repo_root / "corpora" / "curl_fuzzer" / "oss-fuzz-3327"
     if not candidate.exists():
-        pytest.skip(f"Example corpus file not present in repository checkout: {candidate}")
+        pytest.skip(
+            f"Example corpus file not present in repository checkout: {candidate}"
+        )
     return candidate
 
 
 def _expected_tlvs(corpus_path: Path) -> int:
     data = corpus_path.read_bytes()
     return sum(1 for _ in TLVDecoder(data))
+
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
 def test_upload_repository_corpus(tmp_path: Path) -> None:
@@ -62,7 +65,9 @@ def test_upload_repository_corpus(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
 @pytest.mark.parametrize("scheme", ["light", "dark"])
-def test_accessibility_after_upload_in_light_and_dark(tmp_path: Path, scheme: Literal["light", "dark"]) -> None:
+def test_accessibility_after_upload_in_light_and_dark(
+    tmp_path: Path, scheme: Literal["light", "dark"]
+) -> None:
     """
     Basic accessibility smoke: after upload, key elements are visible in both schemes.
 
@@ -168,6 +173,8 @@ def test_accessibility_after_upload_in_light_and_dark(tmp_path: Path, scheme: Li
         assert results and isinstance(results, dict)
         assert results.get("scanned", 0) > 0
         failed = results.get("failures", [])
-        assert not failed, f"Low contrast elements in {scheme} mode: {failed[:3]}{(' …' if len(failed) > 3 else '')}"
+        assert not failed, (
+            f"Low contrast elements in {scheme} mode: {failed[:3]}{(' …' if len(failed) > 3 else '')}"
+        )
 
         browser.close()

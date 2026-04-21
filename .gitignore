@@ -29,6 +29,9 @@ libstandaloneengine.a
 /curl_fuzzer_tftp
 *_seed_corpus.zip
 
+# Generated at build time from scenarios/curl_fuzzer_proto/*.textproto
+/corpora/curl_fuzzer_proto/
+
 # Python
 .venv/
 __pycache__/
