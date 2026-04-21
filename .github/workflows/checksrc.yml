@@ -52,3 +52,31 @@ jobs:
         run: |
           mypy --version
           git ls-files 'src/*.py' -z | xargs -0 -r mypy --
+
+  cpp-linters:
+    name: 'C++ linters'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 'install prereqs'
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/{azure-cli.sources,docker.list,microsoft-prod.list}
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y cmake clang-format doxygen
+
+      # cmake configure is enough — the lint targets don't depend on any
+      # ExternalProject outputs, so there's no need to build curl/openssl/etc.
+      - name: 'configure'
+        run: cmake -B build .
+
+      - name: 'clang-format'
+        run: cmake --build build --target clang-format-check
+
+      # always() so doxygen still runs when clang-format fails; a single CI
+      # run then shows every lint failure at once instead of one-at-a-time.
+      - name: 'doxygen doc-coverage'
+        if: always()
+        run: cmake --build build --target doxygen-check

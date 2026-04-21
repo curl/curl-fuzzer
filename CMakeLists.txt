@@ -41,6 +41,7 @@ ExternalProject_Add(zstd_external
     PREFIX ${CMAKE_BINARY_DIR}/zstd
     SOURCE_SUBDIR build/cmake
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR}
+        -DCMAKE_INSTALL_LIBDIR=lib
         -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
     BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -141,7 +142,8 @@ set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 ExternalProject_Add(nghttp2_external
     URL ${NGHTTP2_URL}
     PREFIX ${CMAKE_BINARY_DIR}/nghttp2
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
+        -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
         -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
     BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -240,6 +242,7 @@ endif()
 
 set(CURL_CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
+    -DCMAKE_INSTALL_LIBDIR=lib
     -DBUILD_SHARED_LIBS=OFF
     -DENABLE_DEBUG=ON
     -DCURL_HIDDEN_SYMBOLS=OFF
@@ -431,3 +434,270 @@ add_custom_target(fuzz
         fuzz_url
         curl_fuzzer_fnmatch
 )
+
+# -----------------------------------------------------------------------------
+# Structured (libprotobuf-mutator) HTTP fuzzer
+#
+# This is a second fuzzer binary that lives entirely under proto_fuzzer/ and
+# shares no source with the TLV fuzzers above. It is skipped on 32-bit builds
+# so we don't have to drag LPM/protobuf through the i386 toolchain.
+# -----------------------------------------------------------------------------
+if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+    # renovate: datasource=github-tags depName=google/libprotobuf-mutator
+    set(LPM_VERSION v1.5)
+    set(LPM_INSTALL_DIR ${CMAKE_BINARY_DIR}/lpm-install)
+    set(LPM_STATIC_LIB ${LPM_INSTALL_DIR}/lib/libprotobuf-mutator.a)
+    set(LPM_LIBFUZZER_LIB ${LPM_INSTALL_DIR}/lib/libprotobuf-mutator-libfuzzer.a)
+
+    # LPM drops its bundled protobuf build *inside* its own build tree (not the
+    # install prefix). These paths match the layout set up by
+    # cmake/external/protobuf.cmake inside LPM v1.5. We don't use the system
+    # libprotobuf because OSS-Fuzz forces -stdlib=libc++ whereas the distro
+    # package is built against libstdc++, and the ABI mismatch breaks linking
+    # (every std::string symbol ends up mangled as std::__1::basic_string and
+    # the distro libprotobuf.so doesn't export it).
+    set(LPM_PB_DIR ${CMAKE_BINARY_DIR}/lpm/src/libprotobuf_mutator_external-build/external.protobuf)
+    set(LPM_PB_INCLUDE ${LPM_PB_DIR}/include)
+    set(LPM_PB_LIBDIR ${LPM_PB_DIR}/lib)
+    set(LPM_PROTOC ${LPM_PB_DIR}/bin/protoc)
+
+    ExternalProject_Add(libprotobuf_mutator_external
+        GIT_REPOSITORY https://github.com/google/libprotobuf-mutator.git
+        GIT_TAG ${LPM_VERSION}
+        GIT_SHALLOW 1
+        PREFIX ${CMAKE_BINARY_DIR}/lpm
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LPM_INSTALL_DIR}
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            # Have LPM fetch+build protobuf v29.3 from source, using the same
+            # compiler and stdlib we're compiling with. This is what keeps the
+            # libc++ ABI consistent end-to-end (LPM, protobuf, our .pb.cc, our
+            # fuzzer binary).
+            -DLIB_PROTO_MUTATOR_DOWNLOAD_PROTOBUF=ON
+            -DLIB_PROTO_MUTATOR_TESTING=OFF
+            # Disable the bundled examples (libxml2_example, expat_example,
+            # ...): the libxml2 example hard-depends on liblzma at configure
+            # time, which isn't present in the OSS-Fuzz image. We don't ship
+            # LPM's examples.
+            -DLIB_PROTO_MUTATOR_EXAMPLES=OFF
+        BUILD_BYPRODUCTS ${LPM_STATIC_LIB} ${LPM_LIBFUZZER_LIB} ${LPM_PROTOC}
+        DOWNLOAD_NO_PROGRESS 1
+    )
+
+    # Generate the expanded .proto and the C++ option manifest from curl.h.
+    set(CURL_HEADER ${CURL_INSTALL_DIR}/include/curl/curl.h)
+    set(PROTO_FUZZER_SCHEMA_DIR ${CMAKE_BINARY_DIR}/schemas)
+    set(GEN_PROTO ${PROTO_FUZZER_SCHEMA_DIR}/curl_fuzzer.proto)
+    set(GEN_MANIFEST ${CMAKE_BINARY_DIR}/curl_fuzzer_option_manifest.inc)
+    set(GEN_PB_CC ${CMAKE_BINARY_DIR}/curl_fuzzer.pb.cc)
+    set(GEN_PB_H ${CMAKE_BINARY_DIR}/curl_fuzzer.pb.h)
+
+    add_custom_command(
+        OUTPUT ${GEN_PROTO} ${GEN_MANIFEST}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${PROTO_FUZZER_SCHEMA_DIR}
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
+                --curl-header    ${CURL_HEADER}
+                --supported-list ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer_supported_curlopts.txt
+                --proto-template ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
+                --proto-out      ${GEN_PROTO}
+                --manifest-out   ${GEN_MANIFEST}
+        DEPENDS curl_external
+                ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
+                ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer_supported_curlopts.txt
+                ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
+        COMMENT "Generating CurlOptionId enum and manifest from curl.h"
+        VERBATIM
+    )
+
+    add_custom_command(
+        OUTPUT ${GEN_PB_CC} ${GEN_PB_H}
+        COMMAND ${LPM_PROTOC}
+                --cpp_out=${CMAKE_BINARY_DIR}
+                --proto_path=${PROTO_FUZZER_SCHEMA_DIR}
+                ${GEN_PROTO}
+        DEPENDS ${GEN_PROTO} libprotobuf_mutator_external
+        COMMENT "protoc curl_fuzzer.proto"
+        VERBATIM
+    )
+
+    # Write out a linker response file listing every .a the LPM install
+    # produced — LPM's own libs (libprotobuf-mutator, libprotobuf-mutator-
+    # libfuzzer) plus everything under its bundled protobuf (libprotobuf,
+    # libutf8_validity, ~80 abseil libs). Everything goes inside one
+    # --start-group/--end-group so we don't have to reason about the
+    # transitive reference order across protobuf and libprotobuf-mutator.
+    # We glob at build time from a -P script because these files don't exist
+    # when CMake configures, and because the abseil component list would rot
+    # every time protobuf's dep set moves.
+    set(LPM_LINK_RSP ${CMAKE_BINARY_DIR}/lpm_protobuf_link.rsp)
+    add_custom_command(
+        OUTPUT ${LPM_LINK_RSP}
+        COMMAND ${CMAKE_COMMAND}
+                "-DLIBDIRS=${LPM_INSTALL_DIR}/lib;${LPM_PB_LIBDIR}"
+                -DOUT=${LPM_LINK_RSP}
+                -P ${CMAKE_SOURCE_DIR}/scripts/write_lpm_link_rsp.cmake
+        DEPENDS libprotobuf_mutator_external
+                ${CMAKE_SOURCE_DIR}/scripts/write_lpm_link_rsp.cmake
+        COMMENT "Writing LPM protobuf link response file"
+        VERBATIM
+    )
+    add_custom_target(lpm_link_rsp DEPENDS ${LPM_LINK_RSP})
+
+    add_executable(curl_fuzzer_proto
+        proto_fuzzer/fuzzer_main.cc
+        proto_fuzzer/scenario_runner.cc
+        proto_fuzzer/option_apply.cc
+        proto_fuzzer/mock_server.cc
+        proto_fuzzer/transfer.cc
+        ${GEN_PB_CC}
+    )
+    target_compile_features(curl_fuzzer_proto PRIVATE cxx_std_17)
+    target_compile_options(curl_fuzzer_proto PRIVATE
+        ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+    target_include_directories(curl_fuzzer_proto PRIVATE
+        ${CURL_INCLUDE_DIRS}
+        ${CMAKE_BINARY_DIR}
+        ${CMAKE_SOURCE_DIR}
+        ${LPM_INSTALL_DIR}/include
+        # LPM's installed headers do `#include "port/protobuf.h"` and
+        # `#include "src/libfuzzer/libfuzzer_macro.h"`, so the include root
+        # needs to reach inside the `libprotobuf-mutator/` subdirectory too.
+        ${LPM_INSTALL_DIR}/include/libprotobuf-mutator
+        ${LPM_PB_INCLUDE}
+    )
+    target_link_libraries(curl_fuzzer_proto PRIVATE
+        ${CURL_LIB_DIR}/libcurl.a
+        ${NGHTTP2_STATIC_LIB}
+        ${OPENSSL_STATIC_LIB}
+        ${ZLIB_STATIC_LIB}
+        ${ZSTD_STATIC_LIB}
+        ${LIBIDN2_STATIC_LIB}
+        ${OPENLDAP_STATIC_LIB_LDAP}
+        ${OPENLDAP_STATIC_LIB_LBER}
+        ${LIB_FUZZING_ENGINE}
+        # -Wl,@file: ld reads the response file and substitutes its
+        # contents — the absolute paths to every .a from LPM's install +
+        # its bundled protobuf/abseil, wrapped in one
+        # --start-group/--end-group. This has to come AFTER our object
+        # files in the final link line (so the archives see unresolved
+        # symbols to pull in), which means it belongs in
+        # target_link_libraries (LINK_LIBRARIES slot), not
+        # target_link_options (LINK_FLAGS slot, which is pre-objects).
+        # The -Wl, prefix is what keeps CMake from mangling "@file" into
+        # "-l@file" (treating it as a library name).
+        "-Wl,@${LPM_LINK_RSP}"
+        pthread
+        m
+    )
+    target_link_options(curl_fuzzer_proto PRIVATE ${COMMON_LINK_OPTIONS})
+    add_dependencies(curl_fuzzer_proto
+        ${FUZZ_DEPS}
+        libprotobuf_mutator_external
+        lpm_link_rsp
+    )
+    add_dependencies(fuzz curl_fuzzer_proto)
+
+    # Compile textproto seed scenarios into binary corpus entries. These are
+    # derived artefacts — the textprotos in scenarios/ are the source of truth,
+    # and corpora/curl_fuzzer_proto/ is gitignored.
+    set(SCENARIO_SRC_DIR ${CMAKE_SOURCE_DIR}/scenarios/curl_fuzzer_proto)
+    set(SCENARIO_OUT_DIR ${CMAKE_SOURCE_DIR}/corpora/curl_fuzzer_proto)
+    file(GLOB SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/*.textproto)
+    set(SCENARIO_BINARIES)
+    foreach(textproto ${SCENARIO_TEXTPROTOS})
+        get_filename_component(name ${textproto} NAME_WE)
+        set(out ${SCENARIO_OUT_DIR}/${name}.scenario)
+        add_custom_command(
+            OUTPUT ${out}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${SCENARIO_OUT_DIR}
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
+                    ${LPM_PROTOC}
+                    ${PROTO_FUZZER_SCHEMA_DIR}
+                    ${GEN_PROTO}
+                    ${textproto}
+                    ${out}
+            DEPENDS ${textproto} ${GEN_PROTO} libprotobuf_mutator_external
+                    ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
+            COMMENT "Encoding ${name}.textproto"
+            VERBATIM
+        )
+        list(APPEND SCENARIO_BINARIES ${out})
+    endforeach()
+    add_custom_target(curl_fuzzer_proto_corpus
+        DEPENDS ${SCENARIO_BINARIES})
+    add_dependencies(curl_fuzzer_proto curl_fuzzer_proto_corpus)
+
+    # Documentation lint. `cmake --build build --target doxygen-check` runs
+    # Doxygen over proto_fuzzer/ with FAIL_ON_WARNINGS; any undocumented
+    # non-static function/class/member fails the build. Optional (not a hard
+    # dep of curl_fuzzer_proto) so builds in environments without
+    # doxygen installed still succeed.
+    find_program(DOXYGEN_EXECUTABLE doxygen)
+    if(DOXYGEN_EXECUTABLE)
+        set(PROTO_FUZZER_SRC_DIR ${CMAKE_SOURCE_DIR}/proto_fuzzer)
+        set(DOXYGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/proto_fuzzer_doxygen)
+        set(DOXYFILE_OUT ${CMAKE_BINARY_DIR}/proto_fuzzer_Doxyfile)
+        set(DOXYGEN_WARN_LOG ${CMAKE_BINARY_DIR}/proto_fuzzer_doxygen_warnings.log)
+        configure_file(
+            ${PROTO_FUZZER_SRC_DIR}/Doxyfile.in
+            ${DOXYFILE_OUT}
+            @ONLY)
+        # Doxygen's own exit code is unreliable for some warning categories
+        # in 1.9.1; instead, inspect the warn-log ourselves and fail if it is
+        # non-empty.
+        add_custom_target(doxygen-check
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${DOXYGEN_OUTPUT_DIR}
+            COMMAND ${CMAKE_COMMAND} -E remove -f ${DOXYGEN_WARN_LOG}
+            COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_OUT}
+            COMMAND ${CMAKE_COMMAND}
+                    -DWARN_LOG=${DOXYGEN_WARN_LOG}
+                    -P ${CMAKE_SOURCE_DIR}/scripts/doxygen_check_log.cmake
+            COMMENT "Running Doxygen doc-coverage check on proto_fuzzer/"
+            VERBATIM
+        )
+    endif()
+
+    # Formatting lint. `cmake --build build --target clang-format-check` runs
+    # clang-format --dry-run -Werror over proto_fuzzer/ using the scoped
+    # .clang-format file in that directory. Optional (not a hard dep of
+    # curl_fuzzer_proto) so builds in environments without clang-format
+    # installed still succeed.
+    find_program(CLANG_FORMAT_EXECUTABLE NAMES clang-format clang-format-20
+                                               clang-format-19 clang-format-18)
+    if(CLANG_FORMAT_EXECUTABLE)
+        file(GLOB PROTO_FUZZER_FORMAT_SOURCES
+             ${CMAKE_SOURCE_DIR}/proto_fuzzer/*.cc
+             ${CMAKE_SOURCE_DIR}/proto_fuzzer/*.h)
+        add_custom_target(clang-format-check
+            COMMAND ${CLANG_FORMAT_EXECUTABLE} --dry-run -Werror
+                    --style=file ${PROTO_FUZZER_FORMAT_SOURCES}
+            COMMENT "Running clang-format check on proto_fuzzer/"
+            VERBATIM
+        )
+        add_custom_target(clang-format-fix
+            COMMAND ${CLANG_FORMAT_EXECUTABLE} -i
+                    --style=file ${PROTO_FUZZER_FORMAT_SOURCES}
+            COMMENT "Applying clang-format fixes to proto_fuzzer/"
+            VERBATIM
+        )
+    endif()
+
+    # Aggregate lint target. `cmake --build build --target lint` runs whichever
+    # of the individual lint targets were successfully configured (each is
+    # gated on its tool being found). Missing tools are a soft skip rather
+    # than a hard fail so the top-level lint.sh can report them separately.
+    set(LINT_DEPS)
+    if(DOXYGEN_EXECUTABLE)
+        list(APPEND LINT_DEPS doxygen-check)
+    endif()
+    if(CLANG_FORMAT_EXECUTABLE)
+        list(APPEND LINT_DEPS clang-format-check)
+    endif()
+    if(LINT_DEPS)
+        add_custom_target(lint DEPENDS ${LINT_DEPS})
+    endif()
+endif()

@@ -1,0 +1,42 @@
+/*
+ * Copyright (C) Max Dymond, <cmeister2@gmail.com>, et al.
+ *
+ * SPDX-License-Identifier: curl
+ */
+
+syntax = "proto3";
+
+package curl.fuzzer.proto;
+
+// Structured HTTP scenario description for the curl-fuzzer libprotobuf-mutator
+// driver. One scenario configures a single easy handle and feeds a single mock
+// connection.
+
+message Scenario {
+  repeated SetOption options = 1;
+  Connection connection = 2;
+}
+
+message SetOption {
+  CurlOptionId option_id = 1;
+  oneof value {
+    bytes  string_value = 10;
+    uint64 uint_value   = 11;
+    bool   bool_value   = 12;
+  }
+}
+
+message Connection {
+  // Bytes written to the mock server fd as soon as curl opens the socket.
+  bytes initial_response = 1;
+  // Subsequent chunks, each sent the next time the fd becomes readable.
+  repeated bytes on_readable = 2;
+}
+
+// Populated at build time by generate_option_manifest.py. Keep the
+// UNSPECIFIED entry so the raw zero tag is harmless.
+enum CurlOptionId {
+  CURL_OPTION_UNSPECIFIED = 0;
+  // GENERATED-OPTIONS-BEGIN
+  // GENERATED-OPTIONS-END
+}

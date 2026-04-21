@@ -41,6 +41,8 @@ generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
 generate_decoder_html = "curl_fuzzer_tools.generate_decoder_html:run"
+generate_option_manifest = "curl_fuzzer_tools.generate_option_manifest:run"
+tlv_to_proto = "curl_fuzzer_tools.tlv_to_proto:run"
 
 
 [tool.setuptools.package-data]
@@ -98,3 +100,8 @@ skip-magic-trailing-comma = false
 
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+default = true
