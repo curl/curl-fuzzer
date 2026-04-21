@@ -1,0 +1,74 @@
+# Doxygen config for the proto_fuzzer/ tree. Used purely as a documentation
+# linter — we do not publish generated HTML. The CMake target `doxygen-check`
+# runs this with FAIL_ON_WARNINGS so any undocumented public or private (non-
+# static) API breaks the build.
+#
+# This file is a template processed by CMake (configure_file). The repo-tree
+# copy is Doxyfile.in; the resolved copy is written to the build tree.
+
+PROJECT_NAME           = "curl_fuzzer_proto"
+OUTPUT_DIRECTORY       = @DOXYGEN_OUTPUT_DIR@
+INPUT                  = @PROTO_FUZZER_SRC_DIR@
+RECURSIVE              = NO
+FILE_PATTERNS          = *.h *.cc
+
+# Preprocessing off: the doxygen preprocessor walks #include directives and
+# warns if it can't find the target. option_apply.cc pulls in a generated
+# .inc that only exists post-build, so preprocessing would fire "not found"
+# warnings during configure-only lint runs (e.g. CI). Doc extraction doesn't
+# need macro expansion — we're linting presence of doc comments, not types.
+ENABLE_PREPROCESSING   = NO
+
+# Only document declarations that actually have a doc comment. Without this,
+# Doxygen would invent docs for everything and WARN_IF_UNDOCUMENTED becomes
+# meaningless.
+EXTRACT_ALL            = NO
+
+# Private members are not enforced: private data members are declared in
+# headers and have no .cc definition site to attach docs to, which would
+# force documentation back into the headers the user doesn't want to police.
+# Public API surface is what matters — non-static free functions and public
+# class methods — and those are covered via @file + their out-of-line .cc
+# definitions.
+EXTRACT_PRIVATE        = NO
+EXTRACT_PACKAGE        = YES
+
+# Exempt impl-level helpers that only live inside a single TU.
+EXTRACT_STATIC         = NO
+EXTRACT_ANON_NSPACES   = NO
+EXTRACT_LOCAL_CLASSES  = NO
+
+# Warning configuration. Doxygen 1.9.1's FAIL_ON_WARNINGS does not reliably
+# set the exit code for every warning category (namespace-level members in
+# particular), so we capture warnings into a log file and let CMake fail the
+# target if the log is non-empty.
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = NO
+WARN_LOGFILE           = @DOXYGEN_WARN_LOG@
+
+# Doxygen complains if no output format is selected at all, even when we only
+# want lint output. Enable HTML into an ignored build-tree dir; we never ship
+# the output.
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_XML           = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+
+# Treat the first line of a /// block as the brief description.
+JAVADOC_AUTOBRIEF      = YES
+
+# Reduce noise in the generated HTML we don't actually read.
+GENERATE_TREEVIEW      = NO
+SOURCE_BROWSER         = NO
+VERBATIM_HEADERS       = NO
+
+# No graphviz: we never read the HTML, and requiring `dot` in CI buys nothing.
+# Without this, doxygen still emits graph_legend.dot and tries to invoke dot,
+# failing the build on runners that don't ship graphviz.
+HAVE_DOT               = NO
+CLASS_DIAGRAMS         = NO

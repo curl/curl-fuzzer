@@ -8,6 +8,7 @@ import sys
 
 log = logging.getLogger(__name__)
 
+
 def main() -> None:
     """Begin main function."""
     # Get FUZZ_TARGETS from the environment
@@ -21,15 +22,15 @@ def main() -> None:
     log.info("Parsed targets: %s", targets)
 
     # Generate a matrix for Github Actions
-    output_data = {
-        "fuzzer": targets
-    }
+    output_data = {"fuzzer": targets}
     print(f"matrix={json.dumps(output_data)}")
+
 
 def run() -> None:
     """Run the main function."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     main()
+
 
 if __name__ == "__main__":
     run()

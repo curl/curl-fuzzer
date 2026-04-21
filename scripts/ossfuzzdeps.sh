@@ -34,5 +34,3 @@ $SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
   cmake \
   ninja-build \
   groff-base \
-  protobuf-compiler \
-  libprotobuf-dev

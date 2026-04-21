@@ -100,7 +100,5 @@ def test_tlv_constants_are_in_sync() -> None:
     extra_value_ids = sorted(python_values - header_values)
     assert not extra_value_ids, (
         "curl_fuzzer.h is missing TLV numeric IDs present in Python: "
-        + ", ".join(
-            f"{python_by_value[value]} ({value})" for value in extra_value_ids
-        )
+        + ", ".join(f"{python_by_value[value]} ({value})" for value in extra_value_ids)
     )
