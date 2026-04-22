@@ -46,8 +46,8 @@ if [[ ! -d "${CURL_SRC}" ]]; then
   echo "         the coverage report filter may not match any files" >&2
 fi
 
-# %m-%p: per-module signature + PID. Guarantees uniqueness across the many
-# xargs invocations below without overwriting.
+# %m-%p: per-module signature + PID. %p alone would collide if two targets
+# happened to reuse a PID across sequential runs; %m keeps them apart.
 export LLVM_PROFILE_FILE="${PROFRAW_DIR}/%m-%p.profraw"
 
 for TARGET in ${TARGETS}; do
