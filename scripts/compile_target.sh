@@ -58,16 +58,19 @@ fi
 export MAKEFLAGS; MAKEFLAGS+=" -s -j$(($(nproc) + 0))"
 echo "MAKEFLAGS: ${MAKEFLAGS}"
 
-# Create a build directory for the dependencies.
-BUILD_DIR=${BUILD_ROOT}/build
+# Create a build directory for the dependencies. Honour BUILD_DIR if caller set
+# it (e.g. to redirect into a cache mount under CIFuzz); default to the
+# in-tree build/.
+BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 mkdir -p "${BUILD_DIR}"
 
 options=''
 command -v ninja >/dev/null 2>&1 && options+=' -G Ninja'
 
-# Compile the dependencies.
+# Compile the dependencies. Point cmake at BUILD_ROOT explicitly rather than
+# relying on "..", so BUILD_DIR can live outside the source tree (cache mount).
 pushd "${BUILD_DIR}"
 # shellcheck disable=SC2086
-cmake "${CMAKE_GDB_FLAG}" .. ${options}
+cmake "${CMAKE_GDB_FLAG}" "${BUILD_ROOT}" ${options}
 cmake --build . --target "${TARGET}" ${CMAKE_VERBOSE_FLAG}
 popd

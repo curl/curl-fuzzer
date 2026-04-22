@@ -35,6 +35,26 @@ echo "FUZZ_TARGETS: $FUZZ_TARGETS"
 # Set the CURL_SOURCE_DIR for the build.
 export CURL_SOURCE_DIR=/src/curl
 
+# Under CIFuzz the build runs in an ephemeral container, but $GITHUB_WORKSPACE
+# is bind-mounted into the container path-for-path and $OUT lives directly
+# beneath it. Redirect the CMake build tree into that mount so it survives
+# container teardown and GitHub Actions can cache it between runs.
+if [[ "${CIFUZZ:-}" == "True" && -n "${OUT:-}" ]]; then
+  CACHE_ROOT=$(dirname "${OUT}")/.ossfuzz-build-cache-${SANITIZER:-address}-${ARCHITECTURE:-x86_64}
+  export BUILD_DIR=${CACHE_ROOT}/build
+  mkdir -p "${BUILD_DIR}"
+  echo "CIFuzz detected: redirecting BUILD_DIR to ${BUILD_DIR}"
+
+  # Curl is cloned fresh (--depth 1) on every container start, but its CMake
+  # ExternalProject stamp would skip rebuilding if we kept it. Drop the stamps
+  # and the built library so curl (and the fuzzer binaries that link it) get
+  # rebuilt against the current tip. Mirrors the REPLAY_ENABLED handling in
+  # oss-fuzz/projects/curl/build.sh.
+  rm -f "${BUILD_DIR}/curl-install/lib/libcurl.a"
+  rm -f "${BUILD_DIR}"/curl_external-prefix/src/curl_external-stamp/curl_external-{configure,build,install,done}
+fi
+BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
+
 # Compile the fuzzers.
 "${SCRIPTDIR}"/compile_target.sh fuzz
 
@@ -44,7 +64,7 @@ scripts/create_zip.sh
 # Copy the fuzzers over.
 for TARGET in $FUZZ_TARGETS
 do
-  cp -v build/"${TARGET}" "${TARGET}_seed_corpus.zip" "$OUT"/
+  cp -v "${BUILD_DIR}/${TARGET}" "${TARGET}_seed_corpus.zip" "$OUT"/
 done
 
 # Copy dictionary and options file to $OUT.
