@@ -37,6 +37,7 @@ python-tests = [
 
 [project.scripts]
 read_corpus = "curl_fuzzer_tools.read_corpus:run"
+read_proto_corpus = "curl_fuzzer_tools.read_proto_corpus:run"
 generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
 corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
