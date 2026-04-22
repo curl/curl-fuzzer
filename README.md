@@ -16,6 +16,24 @@ temporary directory instead.
 
 `./mainline.sh` is run regressibly by Github Actions.
 
+## I want to see code coverage
+
+Run `./codecoverage.sh`. It builds every fuzzer with LLVM source-based coverage
+instrumentation, replays the checked-in corpora through them, and produces:
+
+- `build-coverage/coverage/summary.txt` - `llvm-cov report` (per-file line/region/function
+  percentages, restricted to curl's `lib/` and `src/`).
+- `build-coverage/coverage/html/index.html` - browsable HTML report.
+
+Like `mainline.sh`, pass `-c /path/to/curl` to measure coverage against a local
+curl checkout instead of the git master tip.
+
+The `Coverage` GitHub Actions workflow runs the same script on demand
+(Actions → Coverage → "Run workflow") and uploads the report as an
+artifact; the summary is also posted into the job summary page so the
+overall number is visible without downloading anything. It's manual
+rather than per-push to keep the main CI path fast.
+
 ## I want more information when running a testcase or multiple testcases
 
 Setting the `FUZZ_VERBOSE` environment variable turns on curl verbose logging.
@@ -23,7 +41,17 @@ This can be useful when debugging a single testcase.
 
 ## I want to download public corpus test files from OSS-Fuzz
 
-The public corpus links for each target should be accessible here:
+Run `./scripts/download_public_corpus.sh`. It pulls the public `public.zip`
+for every target listed in `scripts/fuzz_targets` into
+`ossfuzz_corpus/<target>/`, skipping any that don't have a published zip.
+Pass `-f` to force a refresh of already-downloaded corpora.
+
+`./codecoverage.sh` automatically replays `ossfuzz_corpus/<target>/`
+alongside the checked-in `corpora/<target>/` when the directory exists, so
+local coverage numbers reflect what the OSS-Fuzz fleet has discovered. The
+`Coverage` CI workflow runs the same download weekly (cached by ISO week).
+
+The public corpus links for each target are also accessible directly:
 
 - [curl_fuzzer_dict](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_dict/public.zip)
 - [curl_fuzzer_file](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_file/public.zip)
