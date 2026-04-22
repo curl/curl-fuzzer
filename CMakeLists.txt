@@ -9,6 +9,22 @@ endif()
 
 include(ExternalProject)
 
+# LLVM source-based coverage, driven by codecoverage.sh. When ON, libcurl and
+# the fuzzer binaries are compiled with -fprofile-instr-generate
+# -fcoverage-mapping; third-party deps (openssl, zlib, zstd, nghttp2, libidn2,
+# openldap, libprotobuf-mutator + its bundled protobuf/abseil) are left un-
+# instrumented. Only curl is what we want covered, and leaving deps alone
+# keeps the link size of curl_fuzzer_proto in particular under the memory
+# limits of a stock GitHub runner.
+option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
+set(COVERAGE_COMPILE_FLAGS "")
+set(COVERAGE_LINK_FLAGS "")
+if(ENABLE_COVERAGE)
+    set(COVERAGE_COMPILE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
+    set(COVERAGE_LINK_FLAGS -fprofile-instr-generate)
+    message(STATUS "Coverage instrumentation: ENABLED for libcurl and fuzzers")
+endif()
+
 # Install zlib
 #
 # renovate: datasource=github-tags depName=madler/zlib
@@ -262,6 +278,18 @@ set(CURL_CMAKE_ARGS
     -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
 
+# If coverage is requested, layer the instrumentation flags on top of the
+# CFLAGS/CXXFLAGS inherited from the environment. CMake treats the list
+# elements here as space-separated once rendered into CMAKE_C_FLAGS / CXX_FLAGS
+# on curl's own CMake command line, so we pass them as a single string.
+if(ENABLE_COVERAGE)
+    string(REPLACE ";" " " _COV_COMPILE_FLAGS_STR "${COVERAGE_COMPILE_FLAGS}")
+    list(APPEND CURL_CMAKE_ARGS
+        "-DCMAKE_C_FLAGS=$ENV{CFLAGS} ${_COV_COMPILE_FLAGS_STR}"
+        "-DCMAKE_CXX_FLAGS=$ENV{CXXFLAGS} ${_COV_COMPILE_FLAGS_STR}"
+    )
+endif()
+
 set(CURL_POST_INSTALL_COMMAND
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
     COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/curl_fnmatch.h ${CURL_INSTALL_DIR}/utfuzzer/
@@ -340,7 +368,7 @@ endif()
 
 # Common sources and flags
 set(COMMON_SOURCES curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc)
-set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION)
+set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
 set(COMMON_LINK_LIBS
     ${CURL_LIB_DIR}/libcurl.a
     ${NGHTTP2_STATIC_LIB}
@@ -354,7 +382,7 @@ set(COMMON_LINK_LIBS
     pthread
     m
 )
-set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG})
+set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG} ${COVERAGE_LINK_FLAGS})
 
 # Ensure that curl and its dependencies are built before the fuzzers
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})

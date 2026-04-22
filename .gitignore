@@ -3,10 +3,12 @@
 *.o
 *.pyc
 build/
+build-coverage/
 curl-fuzzer---*
 /curl_fuzzer
 /curl_fuzzer_seed_corpus.zip
 extra_corpus/
+ossfuzz_corpus/
 libstandaloneengine.a
 /curl_fuzzer_bufq
 /curl_fuzzer_dict
@@ -28,6 +30,7 @@ libstandaloneengine.a
 /curl_fuzzer_smtp
 /curl_fuzzer_tftp
 *_seed_corpus.zip
+*.profraw
 
 # Generated at build time from scenarios/curl_fuzzer_proto/*.textproto
 /corpora/curl_fuzzer_proto/

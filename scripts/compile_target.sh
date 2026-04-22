@@ -67,10 +67,15 @@ mkdir -p "${BUILD_DIR}"
 options=''
 command -v ninja >/dev/null 2>&1 && options+=' -G Ninja'
 
+# Allow callers (e.g. codecoverage.sh) to pass extra -D flags without
+# redefining the whole configure call. Intentionally unquoted so the variable
+# expands into multiple cmake args.
+EXTRA_CMAKE_ARGS=${EXTRA_CMAKE_ARGS:-}
+
 # Compile the dependencies. Point cmake at BUILD_ROOT explicitly rather than
 # relying on "..", so BUILD_DIR can live outside the source tree (cache mount).
 pushd "${BUILD_DIR}"
 # shellcheck disable=SC2086
-cmake "${CMAKE_GDB_FLAG}" "${BUILD_ROOT}" ${options}
+cmake "${CMAKE_GDB_FLAG}" ${EXTRA_CMAKE_ARGS} "${BUILD_ROOT}" ${options}
 cmake --build . --target "${TARGET}" ${CMAKE_VERBOSE_FLAG}
 popd

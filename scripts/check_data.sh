@@ -30,21 +30,15 @@ fi
 
 for TARGET in ${FUZZ_TARGETS}
 do
-  if [[ ${TARGET} == "curl_fuzzer_ftp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer" ]]
+  if [[ ${TARGET} == "curl_fuzzer_ftp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer" ]]
   then
     # For the moment, disable some problematic corpuses
     echo "Skipping ${TARGET}"
   else
-    if [[ ${DEBUG} == 1 ]]
-    then
-      # Call tests individually
-      PERCALL=1
-    else
-      # Call tests 100 at a time for speed.
-      PERCALL=100
-    fi
-
+    # The standalone runner walks directories itself, so we just hand it the
+    # corpus directory (plus any extra local corpus). One process per target,
+    # and a non-zero exit from a crash still fails the run under `set -e`.
     # shellcheck disable=SC2248
-    find "${BUILD_ROOT}/corpora/${TARGET}/" ${EXTRA_CORPUS} -type f -print0 | xargs -0 -L${PERCALL} "${BUILD_ROOT}/build/${TARGET}"
+    "${BUILD_ROOT}/build/${TARGET}" "${BUILD_ROOT}/corpora/${TARGET}/" ${EXTRA_CORPUS}
   fi
 done
