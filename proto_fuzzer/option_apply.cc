@@ -124,7 +124,14 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
     case OptionValueKind::kString: {
       const std::string& src = option.string_value();
       string_storage->emplace_back(src.data(), src.size());
-      return curl_easy_setopt(easy, desc->curlopt, string_storage->back().c_str());
+      const std::string& stored = string_storage->back();
+
+      // Handling for POSTFIELDS to set the size.
+      if (desc->curlopt == CURLOPT_POSTFIELDS) {
+        curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(stored.size()));
+      }
+
+      return curl_easy_setopt(easy, desc->curlopt, stored.c_str());
     }
 
     // Decode the uint_value and pass it as either a long or a curl_off_t depending on the option.
