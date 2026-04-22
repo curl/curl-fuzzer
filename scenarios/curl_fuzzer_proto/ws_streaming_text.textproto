@@ -1,0 +1,13 @@
+# Streaming WebSocket transfer: no CONNECT_ONLY, so libcurl's own client
+# writer (ws_cw_*) and connection reader (cr_ws_*) paths parse the frame.
+# The mock dynamically replies 101 Switching Protocols, then feeds a TEXT
+# frame via the transfer loop.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/stream"
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "streaming-text-payload"
+  }
+}

@@ -1,0 +1,14 @@
+# Masked server-origin TEXT frame. RFC 6455 forbids servers from masking,
+# so this should exercise curl's "masked server frame" error path in
+# ws_frame_firstbyte2flags.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/masked"
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    masked: true
+    mask_key: 0xdeadbeef
+    payload: "masked"
+  }
+}

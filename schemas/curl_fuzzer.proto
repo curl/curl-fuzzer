@@ -13,8 +13,24 @@ package curl.fuzzer.proto;
 // connection.
 
 message Scenario {
-  repeated SetOption options = 1;
-  Connection connection = 2;
+  // Scheme + host_path compose the request URL. Splitting them keeps the
+  // mutator honest: it can vary the scheme (and therefore the dispatch path
+  // in the runner) independently of the rest of the URL, without hand-rolled
+  // string matching to discover ws:// vs http://.
+  Scheme scheme = 1;
+  // Everything after the "://" — host, optional port, and path. The runner
+  // does not validate or percent-encode this; bytes land on the wire as-is.
+  string host_path = 2;
+  repeated SetOption options = 3;
+  Connection connection = 4;
+}
+
+enum Scheme {
+  SCHEME_UNSPECIFIED = 0;
+  SCHEME_HTTP = 1;
+  SCHEME_HTTPS = 2;
+  SCHEME_WS = 3;
+  SCHEME_WSS = 4;
 }
 
 message SetOption {
@@ -31,6 +47,38 @@ message Connection {
   bytes initial_response = 1;
   // Subsequent chunks, each sent the next time the fd becomes readable.
   repeated bytes on_readable = 2;
+  // Structured WebSocket frames. Each frame is serialised to RFC 6455 wire
+  // format and pushed onto the socket in order, as an alternative to the
+  // raw bytes in on_readable. Useful for scenarios where the mutator should
+  // explore frame fields (opcode, flags, length) independently of payload
+  // bytes. on_readable is still available for malformed / truncated frames.
+  repeated WebSocketFrame server_frames = 3;
+}
+
+// One WebSocket frame to be emitted by the mock server. Field semantics
+// mirror RFC 6455 §5.2; no validation is applied — the point of the fuzzer
+// is to exercise curl's parser against both well-formed and malformed
+// inputs, so e.g. opcode=15 or rsv bits set will simply land on the wire.
+message WebSocketFrame {
+  // Final fragment bit (bit 0 of byte 0).
+  bool fin = 1;
+  // Reserved bits. Any non-zero value should trip the extension-negotiation
+  // checks in curl's decoder.
+  bool rsv1 = 2;
+  bool rsv2 = 3;
+  bool rsv3 = 4;
+  // Opcode nibble (low 4 bits of byte 0). Values > 15 are masked to 4 bits.
+  uint32 opcode = 5;
+  // Mask bit + 32-bit masking key. The serializer XORs the payload if set.
+  bool masked = 6;
+  uint32 mask_key = 7;
+  // Payload bytes (length implied — the serializer picks the narrowest
+  // length encoding unless length_form overrides it).
+  bytes payload = 8;
+  // Force a specific length-encoding form: 0 = auto, 1 = 7-bit, 2 = 16-bit
+  // (0x7E marker), 3 = 64-bit (0x7F marker). Lets scenarios exercise the
+  // extended-length decode paths even for small payloads.
+  uint32 length_form = 9;
 }
 
 // Populated at build time by generate_option_manifest.py. Keep the

@@ -1,0 +1,13 @@
+# WebSocket handshake + one server-origin TEXT frame.
+# The mock computes Sec-WebSocket-Accept dynamically; initial_response is
+# ignored for ws:// URLs. Each WebSocketFrame is serialised to RFC 6455 wire
+# bytes and pushed onto the socket.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/chat"
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "hello"
+  }
+}

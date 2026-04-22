@@ -139,6 +139,24 @@ void MockConnection::DrainIncoming() {
   }
 }
 
+/// Non-blocking read: append whatever bytes are currently available on the
+/// server fd to 'out'. Used by the WS handshake path to collect curl's HTTP
+/// Upgrade request without losing any bytes.
+/// @param out Destination buffer; unchanged if no bytes are pending.
+void MockConnection::ReadAvailable(std::string* out) {
+  if (server_fd_ < 0 || out == nullptr) {
+    return;
+  }
+  unsigned char scratch[4096];
+  while (true) {
+    ssize_t n = ::read(server_fd_, scratch, sizeof(scratch));
+    if (n <= 0) {
+      break;
+    }
+    out->append(reinterpret_cast<const char*>(scratch), static_cast<std::size_t>(n));
+  }
+}
+
 /// Signal end-of-response to libcurl by half-closing the write side.
 void MockConnection::ShutdownWrite() {
   if (server_fd_ < 0) {

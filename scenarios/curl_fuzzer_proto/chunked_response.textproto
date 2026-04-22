@@ -1,5 +1,6 @@
 # GET followed by a chunked response delivered in two reads.
-options { option_id: CURLOPT_URL string_value: "http://127.0.0.1/chunked" }
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/chunked"
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n"
   on_readable: "6\r\n world\r\n0\r\n\r\n"

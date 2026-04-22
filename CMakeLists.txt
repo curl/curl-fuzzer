@@ -580,6 +580,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/option_apply.cc
         proto_fuzzer/mock_server.cc
         proto_fuzzer/transfer.cc
+        proto_fuzzer/websocket_mock_server.cc
+        proto_fuzzer/ws_frame.cc
         ${GEN_PB_CC}
     )
     target_compile_features(curl_fuzzer_proto PRIVATE cxx_std_17)
@@ -599,7 +601,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     target_link_libraries(curl_fuzzer_proto PRIVATE
         ${CURL_LIB_DIR}/libcurl.a
         ${NGHTTP2_STATIC_LIB}
-        ${OPENSSL_STATIC_LIB}
+        $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
         ${ZLIB_STATIC_LIB}
         ${ZSTD_STATIC_LIB}
         ${LIBIDN2_STATIC_LIB}

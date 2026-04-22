@@ -1,0 +1,12 @@
+# Exercises the 64-bit extended-length decode path. length_form=3 forces
+# the 0x7F length marker even for a small payload.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/len64"
+connection {
+  server_frames {
+    fin: true
+    opcode: 2       # BINARY
+    length_form: 3  # force 64-bit length encoding
+    payload: "sixty-four-bit-length-probe"
+  }
+}

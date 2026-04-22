@@ -1,0 +1,16 @@
+# Control frames: server-origin PING followed by CLOSE with a status code.
+# The CLOSE payload is the 2-byte big-endian status code 1000 (0x03e8).
+scheme: SCHEME_WS
+host_path: "127.0.0.1/control"
+connection {
+  server_frames {
+    fin: true
+    opcode: 9       # PING
+    payload: "ping"
+  }
+  server_frames {
+    fin: true
+    opcode: 8       # CLOSE
+    payload: "\x03\xe8"
+  }
+}
