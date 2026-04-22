@@ -1,0 +1,18 @@
+# CONNECT_ONLY=2: handshake only, then the harness drives curl_ws_recv and
+# curl_ws_send against the queued frame bytes. Exercises the caller-managed
+# WebSocket path instead of libcurl's streaming ws_cw_/cr_ws_ integration.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/manual"
+options { option_id: CURLOPT_CONNECT_ONLY uint_value: 2 }
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "manual-drive-text"
+  }
+  server_frames {
+    fin: true
+    opcode: 9       # PING
+    payload: "ping"
+  }
+}

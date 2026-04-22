@@ -1,0 +1,13 @@
+# Exercises the 16-bit extended-length decode path in ws_dec_read_head.
+# length_form=2 forces the 0x7E length marker even though the payload is
+# tiny; the mutator will naturally grow the payload from here.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/len16"
+connection {
+  server_frames {
+    fin: true
+    opcode: 2       # BINARY
+    length_form: 2  # force 16-bit length encoding
+    payload: "sixteen-bit-length-probe"
+  }
+}

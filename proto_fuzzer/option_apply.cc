@@ -42,7 +42,7 @@ struct OptionDescriptor {
 
 namespace {
 
-constexpr char kProtocolsAllowed[] = "http";
+constexpr char kProtocolsAllowed[] = "http,ws,wss";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
 constexpr char kVerboseEnvVar[] = "FUZZ_VERBOSE";

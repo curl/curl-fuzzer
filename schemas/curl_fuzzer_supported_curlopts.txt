@@ -2,7 +2,6 @@
 # One CURLOPT name per line. Blank lines and '#' comments are ignored.
 # Adding an entry here is enough to make it reachable by the fuzzer;
 # the numeric value and value kind are derived from curl.h at build time.
-CURLOPT_URL
 CURLOPT_CUSTOMREQUEST
 CURLOPT_HTTPGET
 CURLOPT_NOBODY
@@ -18,3 +17,5 @@ CURLOPT_HTTP_VERSION
 CURLOPT_HTTP09_ALLOWED
 CURLOPT_AUTOREFERER
 CURLOPT_REFERER
+CURLOPT_CONNECT_ONLY
+CURLOPT_WS_OPTIONS

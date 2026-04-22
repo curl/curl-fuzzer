@@ -130,9 +130,7 @@ def render_uint_option(tlv_type: int, value: bytes) -> str:
             f"expected 4 bytes for {curlopt_name(tlv_type)}, got {len(value)}"
         )
     number = int.from_bytes(value, "big")
-    return (
-        f"options {{ option_id: {curlopt_name(tlv_type)} uint_value: {number} }}"
-    )
+    return f"options {{ option_id: {curlopt_name(tlv_type)} uint_value: {number} }}"
 
 
 def convert_stream(stream: bytes) -> ProtoOutput:

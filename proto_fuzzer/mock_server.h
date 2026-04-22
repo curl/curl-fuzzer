@@ -34,6 +34,7 @@ class MockConnection {
 
   bool WriteAll(const unsigned char* data, std::size_t size);
   void DrainIncoming();
+  void ReadAvailable(std::string* out);
   void ShutdownWrite();
 
  private:
@@ -54,7 +55,6 @@ class MockServer {
   void SetScript(std::string initial_response, std::vector<std::string> on_readable);
 
   void DeliverNextChunk();
-
   bool has_more_chunks() const;
   MockConnection* connection();
 

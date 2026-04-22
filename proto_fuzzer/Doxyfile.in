@@ -71,4 +71,3 @@ VERBATIM_HEADERS       = NO
 # Without this, doxygen still emits graph_legend.dot and tries to invoke dot,
 # failing the build on runners that don't ship graphviz.
 HAVE_DOT               = NO
-CLASS_DIAGRAMS         = NO

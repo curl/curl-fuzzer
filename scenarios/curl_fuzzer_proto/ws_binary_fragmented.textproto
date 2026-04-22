@@ -1,0 +1,16 @@
+# Fragmented BINARY message across two frames: first has FIN=0 + opcode
+# BINARY, second uses the CONTINUATION opcode with FIN=1.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/binary"
+connection {
+  server_frames {
+    fin: false
+    opcode: 2       # BINARY
+    payload: "abcd"
+  }
+  server_frames {
+    fin: true
+    opcode: 0       # CONT
+    payload: "xyz"
+  }
+}

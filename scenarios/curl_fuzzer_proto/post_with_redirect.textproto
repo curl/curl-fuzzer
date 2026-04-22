@@ -1,7 +1,8 @@
 # POST with body; server replies 301 and curl should follow the Location
 # (redirect target is a second connection, which the mock server will reject
 # with CURL_SOCKET_BAD - this exercises curl's redirect failure path).
-options { option_id: CURLOPT_URL string_value: "http://127.0.0.1/post" }
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/post"
 options { option_id: CURLOPT_POST bool_value: true }
 options { option_id: CURLOPT_POSTFIELDS string_value: "key=value&x=1" }
 options { option_id: CURLOPT_FOLLOWLOCATION bool_value: true }
