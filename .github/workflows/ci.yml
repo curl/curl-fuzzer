@@ -43,7 +43,26 @@ jobs:
   BuildFuzzers:
     name: 'Build fuzzers'
     runs-on: ubuntu-latest
+    env:
+      # Must match the path ossfuzz.sh writes to when CIFUZZ=True.
+      CACHE_PATH: .ossfuzz-build-cache-address-x86_64
     steps:
+      # Check out curl-fuzzer on the runner so the cache key can hash the
+      # build-definition files. CIFuzz still uses its own clone baked into the
+      # gcr.io/oss-fuzz/curl image, so this checkout does not affect the build.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Restore build cache
+        id: build-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ossfuzz-build-v1-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'ossfuzz.sh') }}
+          restore-keys: |
+            ossfuzz-build-v1-${{ runner.os }}-address-x86_64-
+
       # Use the CIFuzz job to test the repository.
       - name: Build Fuzzers
         uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master  # zizmor: ignore[unpinned-uses]
@@ -51,6 +70,13 @@ jobs:
           oss-fuzz-project-name: 'curl'
           dry-run: false
           keep-unaffected-fuzz-targets: true
+
+      - name: Save build cache
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ossfuzz-build-v1-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'ossfuzz.sh') }}
 
       # Archive the fuzzer output (which maintains permissions)
       - name: Create fuzz tar
