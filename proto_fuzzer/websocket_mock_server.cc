@@ -9,28 +9,37 @@
 
 #include "proto_fuzzer/websocket_mock_server.h"
 
+#include <curl/websockets.h>
+
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <utility>
 
 #include "proto_fuzzer/ws_accept_key.h"
+#include "proto_fuzzer/ws_frame.h"
 
 namespace proto_fuzzer {
 
 namespace {
 
-/// @brief Noop function to satisfy CURLOPT_SOCKOPTFUNCTION.
-/// @return CURL_SOCKOPT_ALREADY_CONNECTED to indicate the socket is ready.
-int SockOptTrampoline(void* /*clientp*/, curl_socket_t /*curlfd*/, curlsocktype /*purpose*/) {
-  return CURL_SOCKOPT_ALREADY_CONNECTED;
-}
+// Cap per-scenario frame chunks so a mutator that creates thousands of tiny
+// entries can't dominate runtime.
+constexpr std::size_t kMaxResponseChunks = 16;
 
-/// @brief C trampoline for CURLOPT_OPENSOCKETFUNCTION.
-/// @param clientp Pointer to the WebSocketMockServer instance.
-/// @return The client-side socket fd as a curl_socket_t.
-curl_socket_t OpenSocketTrampoline(void* clientp, curlsocktype /*purpose*/, struct curl_sockaddr* /*address*/) {
-  return static_cast<WebSocketMockServer*>(clientp)->HandleOpenSocket();
-}
+// Iteration caps for the post-handshake manual WS drive. Kept small because
+// every iteration makes a curl_ws_recv / curl_ws_send call.
+constexpr std::size_t kMaxWsRecvIterations = 128;
+constexpr std::size_t kMaxWsSendIterations = 16;
+
+/// One representative flag combination per major curl_ws_send code path.
+/// Order matters: CONT only makes sense after a non-FINAL TEXT/BINARY start,
+/// but we don't chase correctness here — invalid sequences exercise error
+/// handling in ws_enc_add_frame / ws_send_raw.
+constexpr unsigned int kWsSendFlagMatrix[] = {
+    CURLWS_TEXT, CURLWS_BINARY, CURLWS_TEXT | CURLWS_OFFSET, CURLWS_BINARY | CURLWS_OFFSET, CURLWS_CONT, CURLWS_PING,
+    CURLWS_PONG, CURLWS_CLOSE,
+};
 
 /// Find "Sec-WebSocket-Key:" in the request and return the trimmed value.
 /// @param request The raw HTTP request bytes buffered from the client.
@@ -60,32 +69,67 @@ std::string ExtractWebSocketKey(const std::string& request) {
 /// need OpenSSL.
 std::string ComputeWebSocketAccept(const std::string& key) { return proto_fuzzer::ComputeWebSocketAcceptKey(key); }
 
+/// Build the ordered list of chunks to deliver once the 101 handshake has
+/// completed. Mixes raw `on_readable` bytes (fuzzer-controlled) with serialised
+/// `server_frames` (structured RFC 6455 frames from the proto) under a shared
+/// kMaxResponseChunks budget.
+std::vector<std::string> BuildFrameChunks(const curl::fuzzer::proto::Connection& conn) {
+  std::vector<std::string> chunks;
+  chunks.reserve(kMaxResponseChunks);
+  const std::size_t raw_budget = std::min<std::size_t>(kMaxResponseChunks, conn.on_readable_size());
+  for (std::size_t i = 0; i < raw_budget; ++i) {
+    chunks.emplace_back(conn.on_readable(i));
+  }
+  const std::size_t frame_budget = kMaxResponseChunks - chunks.size();
+  const std::size_t frame_count = std::min<std::size_t>(frame_budget, conn.server_frames_size());
+  for (std::size_t i = 0; i < frame_count; ++i) {
+    chunks.emplace_back(SerializeWebSocketFrame(conn.server_frames(static_cast<int>(i))));
+  }
+  return chunks;
+}
+
+/// @return true if any scenario option sets CURLOPT_CONNECT_ONLY to 2, which
+///         is curl's "WebSocket connect-only, drive recv/send manually" mode.
+bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario) {
+  for (const auto& opt : scenario.options()) {
+    if (opt.option_id() != curl::fuzzer::proto::CURLOPT_CONNECT_ONLY) {
+      continue;
+    }
+    if (opt.value_case() == curl::fuzzer::proto::SetOption::ValueCase::kUintValue && opt.uint_value() == 2) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Drain curl_ws_recv in a tight loop until it returns CURLE_AGAIN / nothing
+/// pending. Bounded; not expected to do anything on well-formed scenarios.
+void DrainWsRecv(CURL* easy) {
+  for (std::size_t i = 0; i < kMaxWsRecvIterations; ++i) {
+    unsigned char buffer[4096];
+    std::size_t nread = 0;
+    const struct curl_ws_frame* meta = nullptr;
+    CURLcode rr = curl_ws_recv(easy, buffer, sizeof(buffer), &nread, &meta);
+    if (rr == CURLE_AGAIN) {
+      break;
+    }
+    if (rr != CURLE_OK && rr != CURLE_GOT_NOTHING) {
+      break;
+    }
+    if (nread == 0 && meta == nullptr) {
+      break;
+    }
+  }
+}
+
 }  // namespace
 
-/// @class proto_fuzzer::WebSocketMockServer
-/// @brief In-process WebSocket peer. Owns the socketpair, parses curl's
-///        Upgrade request, synthesises a valid 101 response, and then either
-///        pushes queued frame bytes via the transfer loop (streaming mode) or
-///        hands them to the caller for manual drive via curl_ws_recv/send
-///        (manual mode, used with CURLOPT_CONNECT_ONLY=2L).
-
-/// Construct an idle WebSocketMockServer with no connection and no queued
-/// frames. Install() and SetFrames() must be called before the easy handle
-/// performs.
-WebSocketMockServer::WebSocketMockServer()
-    : connection_(nullptr), next_chunk_(0), manual_delivery_(false), handshake_sent_(false) {}
+/// Construct an idle WebSocketMockServer with no queued frames. Install()
+/// on the base class and DriveScenario() configure it from a Scenario proto.
+WebSocketMockServer::WebSocketMockServer() : next_chunk_(0), manual_delivery_(false), handshake_sent_(false) {}
 
 /// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
 WebSocketMockServer::~WebSocketMockServer() = default;
-
-/// Install CURLOPT_OPENSOCKETFUNCTION / OPENSOCKETDATA / SOCKOPTFUNCTION on
-/// 'easy'. Must be called before curl_easy_perform / curl_multi_perform.
-/// @param easy The curl easy handle to configure.
-void WebSocketMockServer::Install(CURL* easy) {
-  curl_easy_setopt(easy, CURLOPT_OPENSOCKETFUNCTION, &OpenSocketTrampoline);
-  curl_easy_setopt(easy, CURLOPT_OPENSOCKETDATA, this);
-  curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, &SockOptTrampoline);
-}
 
 /// Queue RFC 6455 wire-byte chunks to emit once the handshake has completed.
 /// Resets the next-chunk cursor.
@@ -97,10 +141,10 @@ void WebSocketMockServer::SetFrames(std::vector<std::string> frames) {
 
 /// Toggle streaming (false, default) vs manual (true) chunk delivery.
 /// @param manual Whether to suppress automatic chunk pushing by the
-///        transfer loop.
+///        drive loop.
 void WebSocketMockServer::SetManualDelivery(bool manual) { manual_delivery_ = manual; }
 
-/// @return true if chunks are caller-driven rather than transfer-loop-driven.
+/// @return true if chunks are caller-driven rather than drive-loop-driven.
 bool WebSocketMockServer::manual_delivery() const { return manual_delivery_; }
 
 /// @return true once a 101 Switching Protocols response has been written.
@@ -126,12 +170,9 @@ void WebSocketMockServer::ConsumeChunk() {
   }
 }
 
-/// @return the active MockConnection, or nullptr if none has been opened.
-MockConnection* WebSocketMockServer::connection() { return connection_.get(); }
-
-/// Called by the OPENSOCKETFUNCTION C trampoline. Creates the MockConnection
-/// but does NOT write anything — the handshake is driven later by
-/// TryAdvanceHandshake().
+/// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
+/// MockConnection but does NOT write anything — the handshake is driven later
+/// by TryAdvanceHandshake().
 /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD on
 ///         failure.
 curl_socket_t WebSocketMockServer::HandleOpenSocket() {
@@ -143,7 +184,7 @@ curl_socket_t WebSocketMockServer::HandleOpenSocket() {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
-  // Wait for curl's Upgrade request before we write anything — the transfer
+  // Wait for curl's Upgrade request before we write anything — the drive
   // loop calls TryAdvanceHandshake() to drive that exchange.
   return connection_->take_client_fd();
 }
@@ -162,7 +203,7 @@ bool WebSocketMockServer::PushRawBytes(const unsigned char* data, std::size_t si
 }
 
 /// Push the next queued frame when curl is ready. Used in streaming mode;
-/// the transfer loop calls this after the handshake has been sent. Shuts
+/// the drive loop calls this after the handshake has been sent. Shuts
 /// the write side once the last chunk is delivered.
 void WebSocketMockServer::DeliverNextChunk() {
   if (!connection_ || next_chunk_ >= frames_.size()) {
@@ -203,6 +244,93 @@ bool WebSocketMockServer::TryAdvanceHandshake() {
   connection_->WriteAll(reinterpret_cast<const unsigned char*>(response.data()), response.size());
   handshake_sent_ = true;
   return true;
+}
+
+/// Seed the mock from the scenario, then run the perform loop. Drives the 101
+/// handshake on every iteration; in streaming mode also pushes queued frame
+/// chunks as curl becomes readable. In manual mode (CURLOPT_CONNECT_ONLY=2)
+/// chunks are left alone during the loop — once the loop returns, this method
+/// pushes them as raw bytes and exercises curl_ws_recv / curl_ws_send against
+/// a small flag matrix.
+/// @param multi    caller-owned multi; 'easy' is already added.
+/// @param easy     the curl easy handle attached to this mock.
+/// @param scenario source of the frame chunks and CONNECT_ONLY setting.
+void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  SetManualDelivery(ScenarioRequestsManualWsDrive(scenario));
+  // initial_response is unused in WS mode; we synthesise the 101 dynamically
+  // from curl's Upgrade request.
+  SetFrames(BuildFrameChunks(scenario.connection()));
+
+  int still_running = 1;
+  int idle_iterations = 0;
+  CURLMcode rc = CURLM_OK;
+
+  while (still_running && idle_iterations < kMaxIdleIterations) {
+    rc = curl_multi_perform(multi, &still_running);
+    if (rc != CURLM_OK) {
+      break;
+    }
+    // Drive the 101 handshake on every iteration; no-op once sent.
+    if (!handshake_sent()) {
+      if (TryAdvanceHandshake()) {
+        idle_iterations = 0;
+      }
+    }
+    if (!still_running) {
+      break;
+    }
+
+    int ready = WaitOnMultiFdset(multi, &rc);
+    if (rc != CURLM_OK) {
+      break;
+    }
+
+    // Only push frame chunks in streaming mode — in manual mode the caller
+    // will push them below after the handshake.
+    if (!manual_delivery() && handshake_sent() && has_more_chunks()) {
+      DeliverNextChunk();
+      idle_iterations = 0;
+    } else if (ready == 0) {
+      ++idle_iterations;
+    } else {
+      idle_iterations = 0;
+    }
+  }
+
+  if (!manual_delivery() || !handshake_sent()) {
+    return;
+  }
+
+  // Manual-drive tail: feed every remaining scripted chunk straight onto the
+  // server fd as raw frame bytes, draining curl_ws_recv between each push.
+  while (remaining_chunks() > 0) {
+    const std::string& chunk = PeekChunk(0);
+    if (!chunk.empty()) {
+      PushRawBytes(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
+    }
+    ConsumeChunk();
+    DrainWsRecv(easy);
+  }
+  // Final drain in case frame parsing produced more work after the last push.
+  DrainWsRecv(easy);
+
+  // Exercise curl_ws_send with a fixed matrix of flags. We don't care whether
+  // the send actually lands on the wire — the point is to reach the encode
+  // paths in ws_enc_add_frame.
+  static const unsigned char kPayload[] = "hello-from-proto-fuzzer";
+  const std::size_t payload_len = sizeof(kPayload) - 1;
+  std::size_t iteration = 0;
+  for (unsigned int flags : kWsSendFlagMatrix) {
+    if (iteration++ >= kMaxWsSendIterations) {
+      break;
+    }
+    std::size_t sent = 0;
+    curl_off_t fragsize = (flags & CURLWS_OFFSET) ? static_cast<curl_off_t>(payload_len) : 0;
+    (void)curl_ws_send(easy, kPayload, payload_len, &sent, fragsize, flags);
+    if (connection() != nullptr) {
+      connection()->DrainIncoming();
+    }
+  }
 }
 
 }  // namespace proto_fuzzer
