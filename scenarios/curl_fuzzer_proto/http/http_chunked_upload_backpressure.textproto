@@ -1,0 +1,18 @@
+# PUT with chunked request-body encoding under backpressure. CURLOPT_UPLOAD=1
+# with no INFILESIZE tells curl the body length is unknown, so curl emits
+# Transfer-Encoding: chunked and wraps each read-callback chunk in a chunk
+# header/trailer. The bounded READFUNCTION produces ~16 KB so curl's send()
+# outruns SO_RCVBUF=2048; drain_limit=256 keeps the mock just behind so the
+# chunked encoder keeps seeing short writes across its per-chunk framing.
+# Exercises request-side chunked TE encoding paths in http_chunks.c and
+# sendf.c that the streaming response scenarios don't reach.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/chunked-upload"
+options { option_id: CURLOPT_UPLOAD uint_value: 1 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+  backpressure {
+    recv_buf_bytes: 2048
+    drain_limit: 256
+  }
+}

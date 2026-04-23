@@ -60,9 +60,12 @@ size_t SilentWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* 
 
 /// Bounded stream of bytes fed to curl_easy when CURLOPT_UPLOAD is enabled.
 /// The fuzzer can't use stdin as the default UPLOAD source — it'd hang — so we
-/// always install a read callback that emits a small finite payload. The total
-/// budget is deliberately tiny so a runaway upload can't dominate a fuzz case.
-constexpr std::size_t kMaxUploadBytes = 256;
+/// always install a read callback that emits a finite payload. The budget is
+/// sized to comfortably outrun a backpressure scenario's kernel recv buffer
+/// (typically ~4 KB after Linux doubles SO_RCVBUF=2048) so curl's send() is
+/// forced to short-write and re-enter the partial-write paths we care about,
+/// while still capping total runaway upload bytes per fuzz case.
+constexpr std::size_t kMaxUploadBytes = 16 * 1024;
 
 struct ReadState {
   std::size_t remaining;
