@@ -307,6 +307,13 @@ void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Sc
       break;
     }
 
+    // Always drain whatever curl has written. Under backpressure the kernel
+    // recv buffer would otherwise stay full — curl short-writes, the mock
+    // never consumes, and the transfer wedges until kMaxIdleIterations. With
+    // drain_limit set this still honours the per-tick byte budget.
+    if (connection_) {
+      connection_->DrainIncoming();
+    }
     if (has_more_chunks()) {
       DeliverNextChunk();
       idle_iterations = 0;
