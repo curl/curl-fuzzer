@@ -12,6 +12,9 @@ concurrency:
 
 permissions: {}
 
+env:
+  DO_NOT_TRACK: '1'
+
 jobs:
   build:
     name: 'Build pages'
