@@ -15,4 +15,9 @@ connection {
     opcode: 9       # PING
     payload: "ping"
   }
+  manual_probes {
+    flag_matrix: true
+    unaligned_send: true
+    raw_send: true
+  }
 }

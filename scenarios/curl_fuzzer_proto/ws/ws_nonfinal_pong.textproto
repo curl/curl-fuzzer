@@ -1,0 +1,13 @@
+# Single non-final PONG frame (FIN=0, opcode 0x0a). ws_frame_firstbyte2flags
+# rejects fragmented PONG with a dedicated failf() on firstbyte 0x0a.
+# (Split out of ws_nonfinal_control.textproto because the first bad frame
+# closes the connection before later frames are parsed.)
+scheme: SCHEME_WS
+host_path: "127.0.0.1/nonfinal-pong"
+connection {
+  server_frames {
+    fin: false
+    opcode: 10      # PONG with FIN=0 → rejected as fragmented PONG
+    payload: "o"
+  }
+}

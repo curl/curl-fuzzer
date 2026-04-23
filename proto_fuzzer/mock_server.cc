@@ -63,7 +63,7 @@ std::vector<std::string> BuildChunkList(const curl::fuzzer::proto::Connection& c
 
 /// Construct a non-blocking AF_UNIX/SOCK_STREAM socketpair. Both fds are validated to fit inside FD_SETSIZE; on any
 /// failure ok() returns false and the instance is unusable.
-MockConnection::MockConnection() : server_fd_(-1), client_fd_(-1) {
+MockConnection::MockConnection() : server_fd_(-1), client_fd_(-1), drain_limit_(0) {
   int fds[2];
 
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
@@ -135,18 +135,49 @@ bool MockConnection::WriteAll(const unsigned char* data, std::size_t size) {
   return true;
 }
 
-/// Drain anything curl has written so the fd returns to "not readable" after the caller pushes the next response.
+/// Drain bytes curl has written. When a backpressure drain limit has been
+/// applied (see ApplyBackpressure), stops after drain_limit_ bytes so the
+/// kernel recv buffer stays near-full and curl keeps seeing short writes.
+/// Otherwise drains until read() returns 0/EAGAIN, matching legacy behaviour.
 void MockConnection::DrainIncoming() {
   if (server_fd_ < 0) {
     return;
   }
   unsigned char scratch[4096];
-  while (true) {
-    ssize_t n = ::read(server_fd_, scratch, sizeof(scratch));
+  std::size_t drained = 0;
+  while (drain_limit_ == 0 || drained < drain_limit_) {
+    std::size_t want = sizeof(scratch);
+    if (drain_limit_ != 0) {
+      const std::size_t remaining = drain_limit_ - drained;
+      if (remaining < want) {
+        want = remaining;
+      }
+    }
+    ssize_t n = ::read(server_fd_, scratch, want);
     if (n <= 0) {
       break;
     }
+    drained += static_cast<std::size_t>(n);
   }
+}
+
+/// Tighten both halves of the socketpair buffer and/or cap DrainIncoming's
+/// per-call byte budget. SO_RCVBUF on the server fd caps how much curl can
+/// push into the pipe; SO_SNDBUF on the client fd (which curl will soon own
+/// but hasn't yet, so we can still tune it) caps how much curl's send() can
+/// buffer before short-writing. Linux socketpairs effectively use max(SNDBUF,
+/// RCVBUF*2) as pipe capacity, so we need both to see short writes reliably.
+/// See header docs.
+void MockConnection::ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit) {
+  if (recv_buf_bytes > 0) {
+    if (server_fd_ >= 0) {
+      (void)setsockopt(server_fd_, SOL_SOCKET, SO_RCVBUF, &recv_buf_bytes, sizeof(recv_buf_bytes));
+    }
+    if (client_fd_ >= 0) {
+      (void)setsockopt(client_fd_, SOL_SOCKET, SO_SNDBUF, &recv_buf_bytes, sizeof(recv_buf_bytes));
+    }
+  }
+  drain_limit_ = drain_limit;
 }
 
 /// Non-blocking read: append whatever bytes are currently available on the
@@ -216,6 +247,7 @@ curl_socket_t MockServer::HandleOpenSocket() {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
+  ApplyPendingBackpressure();
   if (!initial_response_.empty()) {
     if (!connection_->WriteAll(reinterpret_cast<const unsigned char*>(initial_response_.data()),
                                initial_response_.size())) {

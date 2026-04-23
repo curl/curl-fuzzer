@@ -1,0 +1,13 @@
+# Single non-final PING frame (FIN=0, opcode 0x09). ws_frame_firstbyte2flags
+# rejects fragmented PING with a dedicated failf() on firstbyte 0x09.
+# (Split out of ws_nonfinal_control.textproto because the first bad frame
+# closes the connection before later frames are parsed.)
+scheme: SCHEME_WS
+host_path: "127.0.0.1/nonfinal-ping"
+connection {
+  server_frames {
+    fin: false
+    opcode: 9       # PING with FIN=0 → rejected as fragmented PING
+    payload: "p"
+  }
+}

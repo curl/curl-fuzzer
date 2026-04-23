@@ -22,4 +22,9 @@ connection {
     opcode: 8       # CLOSE
     payload: "\x03\xe8"
   }
+  manual_probes {
+    flag_matrix: true
+    unaligned_send: true
+    raw_send: true
+  }
 }

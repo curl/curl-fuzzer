@@ -1,0 +1,15 @@
+# Non-raw WS upload under backpressure. CURLOPT_UPLOAD drives cr_ws_read to
+# generate upload bytes, which ws_enc_send encodes into TEXT frames and
+# writes to the send buffer. With SO_RCVBUF/SO_SNDBUF tightened and drain
+# capped at 32 bytes/call, ws_flush hits CURLE_AGAIN and ws_enc_add_pending
+# buffers the overflow — both uncovered in the raw-mode scenario.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/bp-upload"
+options { option_id: CURLOPT_UPLOAD           uint_value: 1 }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 16384 }
+connection {
+  backpressure {
+    recv_buf_bytes: 2048
+    drain_limit: 32
+  }
+}

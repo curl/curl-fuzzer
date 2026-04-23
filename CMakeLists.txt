@@ -635,7 +635,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # and corpora/curl_fuzzer_proto/ is gitignored.
     set(SCENARIO_SRC_DIR ${CMAKE_SOURCE_DIR}/scenarios/curl_fuzzer_proto)
     set(SCENARIO_OUT_DIR ${CMAKE_SOURCE_DIR}/corpora/curl_fuzzer_proto)
-    file(GLOB SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+    # Scenarios are organised into protocol-specific subdirectories
+    # (http/, ws/, …). Output .scenario files still go into a flat
+    # corpora/curl_fuzzer_proto/ directory — libFuzzer doesn't care about
+    # source-side grouping. Name collisions across subdirs would clobber each
+    # other; keep stems unique.
+    file(GLOB_RECURSE SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/*.textproto)
     set(SCENARIO_BINARIES)
     foreach(textproto ${SCENARIO_TEXTPROTOS})

@@ -1,0 +1,20 @@
+# CURLWS_RAW_MODE without CONNECT_ONLY=2 — a regular transfer runs, so
+# WRITEFUNCTION fires as the server delivers frames. The write callback's
+# in-callback curl_ws_send probe then takes the raw-mode + in_callback
+# branch of ws_send_raw, which calls ws_flush(blocking=TRUE) and
+# ws_send_raw_blocking — both unreachable without this combination.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/raw-cb"
+options { option_id: CURLOPT_WS_OPTIONS uint_value: 1 }  # CURLWS_RAW_MODE
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "raw-cb-1"
+  }
+  server_frames {
+    fin: true
+    opcode: 1
+    payload: "raw-cb-2"
+  }
+}

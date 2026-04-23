@@ -84,9 +84,23 @@ class MockServerBase {
   /// Shared so subclass loops cap identically.
   static constexpr int kMaxIdleIterations = 256;
 
+  /// Apply the pending BackpressureConfig (set by DriveScenario from the
+  /// Scenario proto) to the newly-created connection_. Subclasses call this
+  /// at the end of HandleOpenSocket, right before returning the client fd,
+  /// so the SO_RCVBUF setting takes effect before any traffic flows.
+  void ApplyPendingBackpressure();
+
   /// The per-scenario MockConnection, lazily created by HandleOpenSocket().
   /// Subclasses read/write through this pointer inside their RunLoop.
   std::unique_ptr<MockConnection> connection_;
+
+  /// Cached SO_RCVBUF/SO_SNDBUF setting in bytes. Populated by DriveScenario
+  /// before the first curl_multi_perform so HandleOpenSocket can consult it
+  /// when it constructs the MockConnection.
+  int pending_recv_buf_bytes_;
+  /// Cached per-call DrainIncoming byte budget. Same population timing as
+  /// pending_recv_buf_bytes_; 0 means unlimited (legacy drain behaviour).
+  std::size_t pending_drain_limit_;
 
  private:
   friend curl_socket_t MockServerBaseOpenSocketTrampoline(void*, curlsocktype, struct curl_sockaddr*);

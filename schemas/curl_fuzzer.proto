@@ -20,7 +20,12 @@ message Scenario {
   Scheme scheme = 1;
   // Everything after the "://" — host, optional port, and path. The runner
   // does not validate or percent-encode this; bytes land on the wire as-is.
-  string host_path = 2;
+  // Declared as `bytes` rather than `string` because a libFuzzer / LPM mutator
+  // will cheerfully produce non-UTF-8 byte sequences here, and proto3's
+  // `string` validator warns on those at parse time even though the bytes are
+  // preserved. Using `bytes` skips the validator; curl's URL parser is happy
+  // with raw bytes and will reject anything invalid itself.
+  bytes host_path = 2;
   repeated SetOption options = 3;
   Connection connection = 4;
 }
@@ -53,6 +58,53 @@ message Connection {
   // explore frame fields (opcode, flags, length) independently of payload
   // bytes. on_readable is still available for malformed / truncated frames.
   repeated WebSocketFrame server_frames = 3;
+  // Deterministic backpressure knobs for the curl→mock direction. Shrink the
+  // kernel recv buffer and/or cap how much the mock drains per call, to force
+  // curl's send() into short-write / EAGAIN paths (ws_send_raw_blocking's
+  // partial-write loop, ws_flush's CURLE_AGAIN branch, ws_enc_add_pending,
+  // etc). Left at defaults (0/0) the mock drains greedily and nothing
+  // backpressures — same behaviour as before this field existed.
+  BackpressureConfig backpressure = 4;
+  // Opt-in probes run in the CONNECT_ONLY=2 manual-drive tail. Each probe
+  // targets a specific region of ws.c; default-off keeps new scenarios
+  // focused on the behaviour they're exercising. Ignored when the scenario
+  // isn't in manual-drive mode.
+  WsManualProbes manual_probes = 5;
+}
+
+// Gates the optional client-side send probes fired from the manual-drive
+// tail in WebSocketMockServer::RunLoop. All bools default to false, so
+// adding this message to a scenario is purely additive — existing scenarios
+// that don't set it skip every probe and simply exercise curl_ws_recv plus
+// whatever raw frame bytes are queued.
+message WsManualProbes {
+  // Walk curl_ws_start_frame / curl_ws_send through kWsSendFlagMatrix.
+  // Covers ws_frame_flags2firstbyte branches plus invalid-flag failf paths.
+  bool flag_matrix = 1;
+  // Declare a fragsize=200 frame, send 23 bytes, then send a 500-byte buffer
+  // — trips the "unaligned frame size" guard in ws_enc_send.
+  bool unaligned_send = 2;
+  // curl_ws_send with flags=0, fragsize=0. In CURLWS_RAW_MODE this hits the
+  // ws_raw_mode / ws_send_raw branch; otherwise it reaches the "no flags
+  // given" rejection (already covered elsewhere).
+  bool raw_send = 3;
+}
+
+// Tunes how aggressively the mock drains bytes curl sends it. Deterministic
+// by construction: both knobs are byte-budgets, not time-budgets, so a
+// scenario's kernel-buffer trajectory is a pure function of the scripted
+// byte stream. The existing select() timeout in WaitOnMultiFdset remains
+// the only wall-clock input to the drive loop.
+message BackpressureConfig {
+  // SO_RCVBUF applied to the mock-server side of the socketpair. When >0
+  // this caps how many bytes curl can push into the pipe before its send()
+  // short-writes or returns EAGAIN. Linux clamps below SOCK_MIN_RCVBUF
+  // (~2 KB after doubling); effectively a floor around 2048.
+  uint32 recv_buf_bytes = 1;
+  // Upper bound on bytes drained per DrainIncoming() call. 0 = unlimited
+  // (legacy behaviour). Small values keep the mock-side recv buffer full
+  // so curl keeps seeing short writes across multiple loop iterations.
+  uint32 drain_limit = 2;
 }
 
 // One WebSocket frame to be emitted by the mock server. Field semantics

@@ -56,9 +56,7 @@ constexpr long kMaxRecvSpeed = 16 * 1024;
 /// backpressure and emits nothing. Protocol-specific mocks may install their
 /// own WRITEFUNCTION afterwards if they need to poke protocol APIs while
 /// inside a curl callback.
-size_t SilentWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* /*userdata*/) {
-  return size * nmemb;
-}
+size_t SilentWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* /*userdata*/) { return size * nmemb; }
 
 /// Bounded stream of bytes fed to curl_easy when CURLOPT_UPLOAD is enabled.
 /// The fuzzer can't use stdin as the default UPLOAD source — it'd hang — so we
