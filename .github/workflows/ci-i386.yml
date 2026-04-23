@@ -14,6 +14,9 @@ concurrency:
 
 permissions: {}
 
+env:
+  DO_NOT_TRACK: '1'
+
 jobs:
   # Ensure that the repository can be built for i386
   Testi386:
