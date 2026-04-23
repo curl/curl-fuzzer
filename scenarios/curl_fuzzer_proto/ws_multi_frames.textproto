@@ -1,0 +1,27 @@
+# Long chain of mixed frames driven through the streaming decoder in a single
+# perform loop. Useful for keeping ws_dec_pass / ws_client_collect warm across
+# opcode transitions (PING → auto-PONG queue, then TEXT, then CLOSE).
+scheme: SCHEME_WS
+host_path: "127.0.0.1/chain"
+connection {
+  server_frames {
+    fin: true
+    opcode: 9       # PING → expect auto-PONG enqueued
+    payload: "ping"
+  }
+  server_frames {
+    fin: true
+    opcode: 10      # PONG (no action)
+    payload: "pong"
+  }
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "mid"
+  }
+  server_frames {
+    fin: true
+    opcode: 8       # CLOSE
+    payload: "\x03\xe9"  # 1001 going away, no reason
+  }
+}

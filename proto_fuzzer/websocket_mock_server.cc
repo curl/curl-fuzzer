@@ -30,15 +30,34 @@ constexpr std::size_t kMaxResponseChunks = 16;
 // Iteration caps for the post-handshake manual WS drive. Kept small because
 // every iteration makes a curl_ws_recv / curl_ws_send call.
 constexpr std::size_t kMaxWsRecvIterations = 128;
-constexpr std::size_t kMaxWsSendIterations = 16;
+constexpr std::size_t kMaxWsSendIterations = 32;
 
-/// One representative flag combination per major curl_ws_send code path.
-/// Order matters: CONT only makes sense after a non-FINAL TEXT/BINARY start,
-/// but we don't chase correctness here — invalid sequences exercise error
-/// handling in ws_enc_add_frame / ws_send_raw.
+/// Ordered list of flag combinations fed to curl_ws_send / curl_ws_start_frame
+/// during the manual-drive tail. Sequencing matters: the TEXT|CONT entry puts
+/// the encoder into `contfragment=true`, so subsequent CONT / TEXT|CONT /
+/// BINARY|CONT entries then take the contfragment-aware branches in
+/// ws_frame_flags2firstbyte that would otherwise be unreachable from the
+/// fuzzer. 0 is included so the encoder sees the "no flags" compatibility
+/// path, and (TEXT|BINARY), (CLOSE|CONT), (PING|CONT), (PONG|CONT) drive the
+/// invalid-combination failf() branches.
 constexpr unsigned int kWsSendFlagMatrix[] = {
-    CURLWS_TEXT, CURLWS_BINARY, CURLWS_TEXT | CURLWS_OFFSET, CURLWS_BINARY | CURLWS_OFFSET, CURLWS_CONT, CURLWS_PING,
-    CURLWS_PONG, CURLWS_CLOSE,
+    CURLWS_TEXT,
+    CURLWS_BINARY,
+    CURLWS_TEXT | CURLWS_OFFSET,
+    CURLWS_BINARY | CURLWS_OFFSET,
+    CURLWS_TEXT | CURLWS_CONT,
+    CURLWS_CONT,
+    CURLWS_TEXT,
+    CURLWS_BINARY | CURLWS_CONT,
+    CURLWS_BINARY,
+    CURLWS_PING,
+    CURLWS_PONG,
+    CURLWS_CLOSE,
+    0,
+    CURLWS_CLOSE | CURLWS_CONT,
+    CURLWS_PING | CURLWS_CONT,
+    CURLWS_PONG | CURLWS_CONT,
+    CURLWS_TEXT | CURLWS_BINARY,
 };
 
 /// Find "Sec-WebSocket-Key:" in the request and return the trimmed value.
@@ -102,6 +121,18 @@ bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario
   return false;
 }
 
+/// WRITEFUNCTION / HEADERFUNCTION installed on the easy handle by
+/// WebSocketMockServer::Install. Pokes curl_ws_meta from inside a curl
+/// callback — curl_ws_meta's Curl_is_in_callback() guard would otherwise make
+/// that branch unreachable from fuzzer code. Returns everything consumed so
+/// the transfer never stalls on backpressure.
+size_t WebSocketWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* userdata) {
+  if (userdata != nullptr) {
+    (void)curl_ws_meta(static_cast<CURL*>(userdata));
+  }
+  return size * nmemb;
+}
+
 /// Drain curl_ws_recv in a tight loop until it returns CURLE_AGAIN / nothing
 /// pending. Bounded; not expected to do anything on well-formed scenarios.
 void DrainWsRecv(CURL* easy) {
@@ -130,6 +161,16 @@ WebSocketMockServer::WebSocketMockServer() : next_chunk_(0), manual_delivery_(fa
 
 /// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
 WebSocketMockServer::~WebSocketMockServer() = default;
+
+/// Install the common socket callbacks via the base, then overwrite
+/// WRITEFUNCTION / HEADERFUNCTION with a ws-aware variant and wire
+/// WRITEDATA to the easy handle so the callback can call curl_ws_meta.
+void WebSocketMockServer::Install(CURL* easy) {
+  MockServerBase::Install(easy);
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &WebSocketWriteCallback);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, easy);
+  curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &WebSocketWriteCallback);
+}
 
 /// Queue RFC 6455 wire-byte chunks to emit once the handshake has completed.
 /// Resets the next-chunk cursor.
@@ -316,7 +357,7 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
 
   // Exercise curl_ws_send with a fixed matrix of flags. We don't care whether
   // the send actually lands on the wire — the point is to reach the encode
-  // paths in ws_enc_add_frame.
+  // paths in ws_enc_add_frame / ws_enc_write_head.
   static const unsigned char kPayload[] = "hello-from-proto-fuzzer";
   const std::size_t payload_len = sizeof(kPayload) - 1;
   std::size_t iteration = 0;
@@ -324,9 +365,26 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
     if (iteration++ >= kMaxWsSendIterations) {
       break;
     }
+    // Announce the frame via the public curl_ws_start_frame entrypoint before
+    // the actual send. In non-raw mode this writes the frame head into the
+    // sendbuf; the follow-up curl_ws_send with the same flags finishes the
+    // exchange or fails cleanly on invalid flag combos.
+    (void)curl_ws_start_frame(easy, flags, static_cast<curl_off_t>(payload_len));
     std::size_t sent = 0;
     curl_off_t fragsize = (flags & CURLWS_OFFSET) ? static_cast<curl_off_t>(payload_len) : 0;
     (void)curl_ws_send(easy, kPayload, payload_len, &sent, fragsize, flags);
+    if (connection() != nullptr) {
+      connection()->DrainIncoming();
+    }
+  }
+
+  // Raw-mode send path: reachable only when CURLOPT_WS_OPTIONS has
+  // CURLWS_RAW_MODE set. curl_ws_send with flags=0, fragsize=0 takes the
+  // data->set.ws_raw_mode branch → ws_send_raw. No-op for non-raw scenarios
+  // (hits the "no flags given" failure path instead).
+  {
+    std::size_t sent = 0;
+    (void)curl_ws_send(easy, kPayload, payload_len, &sent, 0, 0);
     if (connection() != nullptr) {
       connection()->DrainIncoming();
     }

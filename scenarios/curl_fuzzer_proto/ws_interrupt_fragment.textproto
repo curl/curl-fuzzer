@@ -1,0 +1,17 @@
+# Start a fragmented TEXT message, then send another unfragmented TEXT
+# before the CONT arrives. Exercises the "fragmented message interrupted
+# by new TEXT msg" rejection path in ws_frame_firstbyte2flags.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/interrupt"
+connection {
+  server_frames {
+    fin: false
+    opcode: 1       # TEXT fragment start
+    payload: "abc"
+  }
+  server_frames {
+    fin: true
+    opcode: 1       # unfragmented TEXT — invalid while CONT expected
+    payload: "def"
+  }
+}

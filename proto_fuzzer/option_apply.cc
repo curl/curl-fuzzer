@@ -10,6 +10,7 @@
 
 #include "proto_fuzzer/option_apply.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -50,7 +51,48 @@ constexpr long kConnectTimeoutMs = 200;
 constexpr long kTimeoutMs = 2000;
 constexpr long kMaxRecvSpeed = 16 * 1024;
 
-size_t SilentWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* /*userdata*/) { return size * nmemb; }
+/// Baseline write callback for both CURLOPT_WRITEFUNCTION and
+/// CURLOPT_HEADERFUNCTION. Consumes every byte so transfers don't stall on
+/// backpressure and emits nothing. Protocol-specific mocks may install their
+/// own WRITEFUNCTION afterwards if they need to poke protocol APIs while
+/// inside a curl callback.
+size_t SilentWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* /*userdata*/) {
+  return size * nmemb;
+}
+
+/// Bounded stream of bytes fed to curl_easy when CURLOPT_UPLOAD is enabled.
+/// The fuzzer can't use stdin as the default UPLOAD source — it'd hang — so we
+/// always install a read callback that emits a small finite payload. The total
+/// budget is deliberately tiny so a runaway upload can't dominate a fuzz case.
+constexpr std::size_t kMaxUploadBytes = 256;
+
+struct ReadState {
+  std::size_t remaining;
+};
+
+size_t BoundedReadCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
+  if (userdata == nullptr) {
+    return 0;
+  }
+  auto* state = static_cast<ReadState*>(userdata);
+  const std::size_t cap = size * nitems;
+  const std::size_t n = std::min(cap, state->remaining);
+  if (n == 0) {
+    return 0;  // signals EOF to curl
+  }
+  // Fill with a deterministic byte pattern; content doesn't matter for fuzz
+  // coverage of the reader framing / encoder path.
+  for (std::size_t i = 0; i < n; ++i) {
+    buffer[i] = 'U';
+  }
+  state->remaining -= n;
+  return n;
+}
+
+/// File-static read state. Reset at the start of each scenario by
+/// ApplyBaselineOptions; the cr_ws_read path only needs it populated when
+/// CURLOPT_UPLOAD has been enabled on a WS transfer.
+ReadState g_read_state{};
 
 const OptionDescriptor* Lookup(curl::fuzzer::proto::CurlOptionId id) {
   for (std::size_t i = 0; i < kOptionManifestSize; ++i) {
@@ -72,6 +114,14 @@ const OptionDescriptor* Lookup(curl::fuzzer::proto::CurlOptionId id) {
 struct curl_slist* ApplyBaselineOptions(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &SilentWriteCallback);
   curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &SilentWriteCallback);
+
+  // Pre-seed a bounded upload buffer in case the scenario enables
+  // CURLOPT_UPLOAD. This is the only safe way to let scenarios reach the
+  // client-reader path (cr_ws_read etc.) — without a read callback curl would
+  // fall back to stdin and block the fuzzer.
+  g_read_state.remaining = kMaxUploadBytes;
+  curl_easy_setopt(easy, CURLOPT_READFUNCTION, &BoundedReadCallback);
+  curl_easy_setopt(easy, CURLOPT_READDATA, &g_read_state);
 
   // Confine the easy handle to plain HTTP; refuse redirects to any other
   // scheme. CURLOPT_PROTOCOLS_STR arrived in 7.85.0.

@@ -1,0 +1,12 @@
+# Orphan CONTINUATION frame with no prior fragmented message. Drives the
+# "[WS] no ongoing fragmented message to resume" rejection path in
+# ws_frame_firstbyte2flags for both 0x00 (non-final) and 0x80 (final) cases.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/orphan-cont"
+connection {
+  server_frames {
+    fin: true
+    opcode: 0       # CONT with no message in progress
+    payload: "abc"
+  }
+}

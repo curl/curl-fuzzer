@@ -1,0 +1,12 @@
+# CLOSE frame > 125 bytes. The decoder enforces WS_MAX_CNTRL_LEN on CLOSE
+# and fails with CURLE_RECV_ERROR.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/close-big"
+connection {
+  server_frames {
+    fin: true
+    opcode: 8       # CLOSE
+    length_form: 2  # force 16-bit length so >125 is encodable
+    payload: "\x03\xe8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}

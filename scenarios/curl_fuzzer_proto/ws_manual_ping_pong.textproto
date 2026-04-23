@@ -1,0 +1,25 @@
+# Manual drive: server sends a PING that curl auto-PONGs, then we let the
+# curl_ws_send flag matrix land on top. After curl_ws_recv sees the PING it
+# enqueues a PONG in ws->pending; the subsequent curl_ws_recv call triggers
+# ws_enc_add_pending + ws_flush, exercising the auto-PONG send path from
+# within the manual-drive loop.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/manual-ping"
+options { option_id: CURLOPT_CONNECT_ONLY uint_value: 2 }
+connection {
+  server_frames {
+    fin: true
+    opcode: 9       # PING with payload; curl auto-PONGs
+    payload: "probe"
+  }
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "after-ping"
+  }
+  server_frames {
+    fin: true
+    opcode: 8       # CLOSE
+    payload: "\x03\xe8"
+  }
+}

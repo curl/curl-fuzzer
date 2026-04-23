@@ -1,0 +1,12 @@
+# PONG frame > 125 bytes. The decoder enforces WS_MAX_CNTRL_LEN on PONG
+# (same as PING / CLOSE) and fails with CURLE_RECV_ERROR.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/pong-big"
+connection {
+  server_frames {
+    fin: true
+    opcode: 10      # PONG
+    length_form: 2  # force 16-bit length so >125 is encodable
+    payload: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}

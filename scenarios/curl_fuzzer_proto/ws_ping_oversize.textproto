@@ -1,0 +1,13 @@
+# PING frame with payload > 125 bytes. Drives the "[WS] received PING frame
+# is too big" branch in ws_dec_read_head, and forces the 16-bit extended
+# length encoding through the same code path used for TEXT/BINARY.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/ping-big"
+connection {
+  server_frames {
+    fin: true
+    opcode: 9       # PING
+    length_form: 2  # force 16-bit length
+    payload: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}

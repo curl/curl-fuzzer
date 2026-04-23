@@ -1,0 +1,12 @@
+# CLOSE frame carrying the standard 2-byte status code (1000) plus a UTF-8
+# reason. ws_client_collect treats CLOSE specially — this exercises the path
+# where the decoder delivers a non-empty CLOSE payload.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/close-code"
+connection {
+  server_frames {
+    fin: true
+    opcode: 8       # CLOSE
+    payload: "\x03\xe8bye"  # status=1000, reason="bye"
+  }
+}

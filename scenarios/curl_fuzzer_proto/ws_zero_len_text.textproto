@@ -1,0 +1,11 @@
+# Zero-length TEXT frame. Drives the "payload_len == 0" special case in
+# ws_dec_pass that calls the write_cb once with len=0 before returning to
+# WS_DEC_INIT.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/zero"
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+  }
+}
