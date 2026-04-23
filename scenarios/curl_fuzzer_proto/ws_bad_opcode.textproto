@@ -1,0 +1,12 @@
+# Reserved opcode (0xb). Exercises the "invalid opcode" failure path in
+# ws_frame_firstbyte2flags that's otherwise unreachable from the standard
+# TEXT/BINARY/CONTROL values.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/bad-opcode"
+connection {
+  server_frames {
+    fin: true
+    opcode: 11      # reserved control-range opcode
+    payload: "x"
+  }
+}

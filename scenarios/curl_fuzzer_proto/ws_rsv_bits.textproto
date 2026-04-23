@@ -1,0 +1,13 @@
+# Frame with RSV1/2/3 bits set. Without negotiated extensions, the decoder
+# must reject this via the WSBIT_RSV_MASK branch in ws_frame_firstbyte2flags.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/rsv"
+connection {
+  server_frames {
+    fin: true
+    rsv1: true
+    rsv2: true
+    opcode: 1       # TEXT
+    payload: "rsv"
+  }
+}

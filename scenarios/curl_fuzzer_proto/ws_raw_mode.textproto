@@ -1,0 +1,15 @@
+# CURLOPT_WS_OPTIONS=CURLWS_RAW_MODE (1) with CONNECT_ONLY=2. In raw mode,
+# curl_ws_send skips frame encoding and writes buffer bytes directly via
+# ws_send_raw — the zero-coverage raw-send path in ws.c. Also guards
+# curl_ws_start_frame against RAW mode (returns CURLE_FAILED_INIT).
+scheme: SCHEME_WS
+host_path: "127.0.0.1/raw"
+options { option_id: CURLOPT_CONNECT_ONLY uint_value: 2 }
+options { option_id: CURLOPT_WS_OPTIONS   uint_value: 1 }  # CURLWS_RAW_MODE
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "raw"
+  }
+}

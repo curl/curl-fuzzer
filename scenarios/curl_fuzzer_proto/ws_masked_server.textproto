@@ -1,0 +1,14 @@
+# Server-to-client frame with the MASK bit set. Per RFC 6455 a client MUST
+# close on a masked server frame — this exercises the ws_dec_read_head
+# masked-input error branch.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/bad-mask"
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    masked: true
+    mask_key: 0x12345678
+    payload: "should-be-rejected"
+  }
+}

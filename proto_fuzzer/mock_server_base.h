@@ -40,9 +40,11 @@ class MockServerBase {
 
   /// Install the common OPENSOCKETFUNCTION / OPENSOCKETDATA / SOCKOPTFUNCTION
   /// callbacks on 'easy'. The trampolines route back into this instance via
-  /// HandleOpenSocket.
+  /// HandleOpenSocket. Subclasses may override to layer additional, protocol-
+  /// specific setopts (e.g. a WRITEFUNCTION that pokes protocol-specific APIs
+  /// from inside a curl callback).
   /// @param easy The curl easy handle to configure.
-  void Install(CURL* easy);
+  virtual void Install(CURL* easy);
 
   /// Run 'scenario' to completion on 'easy'. Allocates a curl_multi handle,
   /// attaches 'easy', delegates the protocol-specific drive to RunLoop, and

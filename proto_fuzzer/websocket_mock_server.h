@@ -34,6 +34,13 @@ class WebSocketMockServer : public MockServerBase {
   WebSocketMockServer();
   ~WebSocketMockServer() override;
 
+  /// Install the shared socket trampolines via the base class, then layer a
+  /// WebSocket-aware WRITEFUNCTION / HEADERFUNCTION on top: these call
+  /// curl_ws_meta from inside the callback, which is the only way to reach
+  /// its Curl_is_in_callback-guarded branch from the fuzzer.
+  /// @param easy The curl easy handle to configure.
+  void Install(CURL* easy) override;
+
   void SetFrames(std::vector<std::string> frames);
 
   void SetManualDelivery(bool manual);

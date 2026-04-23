@@ -1,0 +1,12 @@
+# CURLOPT_UPLOAD on a ws:// transfer: engages the ws client reader
+# (cr_ws_read) which wraps the READFUNCTION output in BINARY frames. No
+# server_frames — any ShutdownWrite from the mock after sending a frame
+# finalises the transfer before curl pulls the upload buffer through the
+# cr_ws chain, so we deliberately leave the server idle after the 101
+# handshake and rely on CURLOPT_TIMEOUT_MS to end the transfer.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/upload"
+options { option_id: CURLOPT_UPLOAD             uint_value: 1 }
+options { option_id: CURLOPT_INFILESIZE_LARGE   uint_value: 256 }
+connection {
+}
