@@ -579,7 +579,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/scenario_runner.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/mock_server.cc
-        proto_fuzzer/transfer.cc
+        proto_fuzzer/mock_server_base.cc
         proto_fuzzer/websocket_mock_server.cc
         proto_fuzzer/ws_frame.cc
         ${GEN_PB_CC}

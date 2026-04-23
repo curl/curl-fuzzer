@@ -14,23 +14,25 @@
 #include <curl/curl.h>
 
 #include <cstddef>
-#include <memory>
 #include <string>
 #include <vector>
 
+#include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/mock_server.h"
+#include "proto_fuzzer/mock_server_base.h"
 
 namespace proto_fuzzer {
 
-class WebSocketMockServer {
+/// @class proto_fuzzer::WebSocketMockServer
+/// @brief In-process WebSocket peer. Dynamically generates a 101 response
+///        against curl's Upgrade request, then either pushes queued frame
+///        bytes via the drive loop (streaming mode) or, for
+///        CURLOPT_CONNECT_ONLY=2L, hands them to the caller-driven manual
+///        path exercised from DriveScenario.
+class WebSocketMockServer : public MockServerBase {
  public:
   WebSocketMockServer();
-  ~WebSocketMockServer();
-
-  WebSocketMockServer(const WebSocketMockServer&) = delete;
-  WebSocketMockServer& operator=(const WebSocketMockServer&) = delete;
-
-  void Install(CURL* easy);
+  ~WebSocketMockServer() override;
 
   void SetFrames(std::vector<std::string> frames);
 
@@ -48,11 +50,11 @@ class WebSocketMockServer {
   void ConsumeChunk();
   bool PushRawBytes(const unsigned char* data, std::size_t size);
 
-  MockConnection* connection();
-  curl_socket_t HandleOpenSocket();
+ protected:
+  curl_socket_t HandleOpenSocket() override;
+  void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:
-  std::unique_ptr<MockConnection> connection_;
   std::vector<std::string> frames_;
   std::size_t next_chunk_;
   bool manual_delivery_;

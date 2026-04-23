@@ -16,7 +16,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <string>
 #include <utility>
+#include <vector>
+
+#include "proto_fuzzer/ws_frame.h"
 
 namespace proto_fuzzer {
 
@@ -26,23 +32,27 @@ namespace {
 // without memory corruption.
 bool FdFitsInFdSet(int fd) { return fd >= 0 && fd < FD_SETSIZE; }
 
-/// @brief Noop function to satisfy CURLOPT_SOCKOPTFUNCTION.
-/// @param clientp Unused.
-/// @param curlfd Unused.
-/// @param purpose Unused.
-/// @return CURL_SOCKOPT_ALREADY_CONNECTED to indicate the socket is ready for use.
-int SockOptTrampoline(void* /*clientp*/, curl_socket_t /*curlfd*/, curlsocktype /*purpose*/) {
-  // The socketpair is already "connected" as far as curl is concerned.
-  return CURL_SOCKOPT_ALREADY_CONNECTED;
-}
+// Cap per-scenario response chunks so a mutator that creates thousands of
+// tiny on_readable entries can't dominate runtime.
+constexpr std::size_t kMaxResponseChunks = 16;
 
-/// @brief C trampoline for CURLOPT_OPENSOCKETFUNCTION.
-/// @param clientp Pointer to the MockServer instance.
-/// @param purpose Unused.
-/// @param address Unused.
-/// @return The client-side socket fd as a curl_socket_t.
-curl_socket_t OpenSocketTrampoline(void* clientp, curlsocktype /*purpose*/, struct curl_sockaddr* /*address*/) {
-  return static_cast<MockServer*>(clientp)->HandleOpenSocket();
+/// Combine the scenario's raw on_readable strings with any serialised
+/// WebSocket frames into a single ordered chunk list, capped at
+/// kMaxResponseChunks. Historical behaviour: HTTP scenarios can carry
+/// server_frames too; the fuzzer just feeds those bytes to curl.
+std::vector<std::string> BuildChunkList(const curl::fuzzer::proto::Connection& conn) {
+  std::vector<std::string> chunks;
+  chunks.reserve(kMaxResponseChunks);
+  const std::size_t raw_budget = std::min<std::size_t>(kMaxResponseChunks, conn.on_readable_size());
+  for (std::size_t i = 0; i < raw_budget; ++i) {
+    chunks.emplace_back(conn.on_readable(i));
+  }
+  const std::size_t frame_budget = kMaxResponseChunks - chunks.size();
+  const std::size_t frame_count = std::min<std::size_t>(frame_budget, conn.server_frames_size());
+  for (std::size_t i = 0; i < frame_count; ++i) {
+    chunks.emplace_back(SerializeWebSocketFrame(conn.server_frames(static_cast<int>(i))));
+  }
+  return chunks;
 }
 
 }  // namespace
@@ -169,25 +179,16 @@ void MockConnection::ShutdownWrite() {
 /// @brief Orchestrates a single mock HTTP exchange: installs the socket callbacks on an easy handle, then feeds queued
 /// responses as libcurl reads them.
 
-/// Construct an idle MockServer with no connection and no scripted responses. Install() and SetScript() must be called
-/// before the easy handle performs.
-MockServer::MockServer() : connection_(nullptr), next_chunk_(0), initial_sent_(false) {}
+/// Construct an idle MockServer with no scripted responses. Install() on the
+/// base class and DriveScenario() configure it from a Scenario proto.
+MockServer::MockServer() : next_chunk_(0), initial_sent_(false) {}
 
 /// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
 MockServer::~MockServer() = default;
 
-/// Install CURLOPT_OPENSOCKETFUNCTION / OPENSOCKETDATA / SOCKOPTFUNCTION on 'easy'. Must be called before
-/// curl_easy_perform / curl_multi_perform.
-/// @param easy The curl easy handle to configure.
-void MockServer::Install(CURL* easy) {
-  curl_easy_setopt(easy, CURLOPT_OPENSOCKETFUNCTION, &OpenSocketTrampoline);
-  curl_easy_setopt(easy, CURLOPT_OPENSOCKETDATA, this);
-  curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, &SockOptTrampoline);
-}
-
 /// Queue bytes to emit. initial_response is written synchronously in the
-/// OPENSOCKETFUNCTION callback (HandleOpenSocket); on_readable entries are written one-at-a-time
-/// when libcurl makes the fd readable (driven by DriveTransfer).
+/// OPENSOCKETFUNCTION callback (HandleOpenSocket); on_readable entries are
+/// written one-at-a-time when libcurl makes the fd readable.
 /// @param initial_response Bytes written immediately on connection open.
 /// @param on_readable      Additional chunks delivered one per iteration.
 void MockServer::SetScript(std::string initial_response, std::vector<std::string> on_readable) {
@@ -200,12 +201,9 @@ void MockServer::SetScript(std::string initial_response, std::vector<std::string
 /// @return true if at least one on_readable chunk has not yet been sent.
 bool MockServer::has_more_chunks() const { return next_chunk_ < on_readable_.size(); }
 
-/// @return the active MockConnection, or nullptr if none has been opened.
-MockConnection* MockServer::connection() { return connection_.get(); }
-
-/// Called by the OPENSOCKETFUNCTION C trampoline. Creates the MockConnection,
-/// writes initial_response into it, and returns the client-side fd to hand
-/// to libcurl.
+/// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
+/// MockConnection, writes initial_response into it, and returns the
+/// client-side fd to hand to libcurl.
 /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD on
 ///         failure.
 curl_socket_t MockServer::HandleOpenSocket() {
@@ -232,7 +230,7 @@ curl_socket_t MockServer::HandleOpenSocket() {
   return connection_->take_client_fd();
 }
 
-/// Push the next queued chunk. Called by the transfer loop when curl is ready
+/// Push the next queued chunk. Called by the drive loop when curl is ready
 /// for more data. No-op if the queue is empty or no connection is open.
 void MockServer::DeliverNextChunk() {
   if (!connection_ || next_chunk_ >= on_readable_.size()) {
@@ -245,6 +243,46 @@ void MockServer::DeliverNextChunk() {
   }
   if (next_chunk_ >= on_readable_.size()) {
     connection_->ShutdownWrite();
+  }
+}
+
+/// Seed the mock from the scenario, then drive the perform loop until curl is
+/// done or the idle-iteration cap is hit. Bounded by select() timeouts so a
+/// misbehaving scenario cannot spin forever.
+/// @param multi    caller-owned multi; 'easy' is already added.
+/// @param easy     the curl easy handle attached to this mock.
+/// @param scenario source of the initial_response and on_readable chunks.
+void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  (void)easy;
+  const auto& conn = scenario.connection();
+  SetScript(conn.initial_response(), BuildChunkList(conn));
+
+  int still_running = 1;
+  int idle_iterations = 0;
+  CURLMcode rc = CURLM_OK;
+
+  while (still_running && idle_iterations < kMaxIdleIterations) {
+    rc = curl_multi_perform(multi, &still_running);
+    if (rc != CURLM_OK) {
+      break;
+    }
+    if (!still_running) {
+      break;
+    }
+
+    int ready = WaitOnMultiFdset(multi, &rc);
+    if (rc != CURLM_OK) {
+      break;
+    }
+
+    if (has_more_chunks()) {
+      DeliverNextChunk();
+      idle_iterations = 0;
+    } else if (ready == 0) {
+      ++idle_iterations;
+    } else {
+      idle_iterations = 0;
+    }
   }
 }
 
