@@ -1,0 +1,21 @@
+# Raw-mode WS transfer with tight backpressure. The WebSocketWriteCallback
+# fires a 4KB curl_ws_send probe from inside the callback; with the server
+# side pinned to SO_RCVBUF=2048 and DrainIncoming capped at 32 bytes per
+# call, the probe's send() short-writes and enters ws_send_raw_blocking's
+# partial-write + SOCKET_WRITABLE loop — the second-largest uncovered block
+# in ws.c. Deterministic: byte-budget gates only, no wall-clock inputs
+# beyond the existing select() timeout.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/bp-raw"
+options { option_id: CURLOPT_WS_OPTIONS uint_value: 1 }  # CURLWS_RAW_MODE
+connection {
+  server_frames {
+    fin: true
+    opcode: 1       # TEXT
+    payload: "bp-raw"
+  }
+  backpressure {
+    recv_buf_bytes: 2048
+    drain_limit: 32
+  }
+}

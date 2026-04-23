@@ -12,4 +12,9 @@ connection {
     opcode: 1       # TEXT
     payload: "raw"
   }
+  manual_probes {
+    flag_matrix: true
+    unaligned_send: true
+    raw_send: true
+  }
 }

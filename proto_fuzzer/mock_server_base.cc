@@ -39,7 +39,7 @@ curl_socket_t MockServerBaseOpenSocketTrampoline(void* clientp, curlsocktype /*p
 }
 
 /// Default-construct an empty base instance with no connection.
-MockServerBase::MockServerBase() : connection_(nullptr) {}
+MockServerBase::MockServerBase() : connection_(nullptr), pending_recv_buf_bytes_(0), pending_drain_limit_(0) {}
 
 /// Out-of-line destructor so MockConnection can stay forward-declared in the
 /// base header (its complete type is only needed where unique_ptr is
@@ -61,6 +61,13 @@ void MockServerBase::Install(CURL* easy) {
 /// up. Failures in multi_init / add_handle silently no-op: the fuzzer cares
 /// about what curl does when driven, not about harness-level errors.
 void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  // Cache backpressure knobs so HandleOpenSocket can apply them the moment
+  // connection_ exists. Both default to 0, which matches the legacy "drain
+  // greedily, kernel-default buffers" behaviour exactly.
+  const auto& bp = scenario.connection().backpressure();
+  pending_recv_buf_bytes_ = static_cast<int>(bp.recv_buf_bytes());
+  pending_drain_limit_ = static_cast<std::size_t>(bp.drain_limit());
+
   CURLM* multi = curl_multi_init();
   if (multi == nullptr) {
     return;
@@ -70,6 +77,15 @@ void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenar
     curl_multi_remove_handle(multi, easy);
   }
   curl_multi_cleanup(multi);
+}
+
+/// Hand the cached backpressure config to the connection. Safe to call when
+/// connection_ is null (no-op) or when both knobs are 0 (ApplyBackpressure
+/// itself is a no-op in that case).
+void MockServerBase::ApplyPendingBackpressure() {
+  if (connection_) {
+    connection_->ApplyBackpressure(pending_recv_buf_bytes_, pending_drain_limit_);
+  }
 }
 
 /// Wait on curl's fdset with a short timeout. Returns select()'s result; on

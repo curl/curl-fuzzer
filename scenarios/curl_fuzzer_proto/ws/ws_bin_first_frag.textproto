@@ -1,0 +1,17 @@
+# Single first BINARY fragment (FIN=0, opcode 0x02). Hits the
+# "WSBIT_OPCODE_BIN first fragment" decoder case which the ordinary
+# fragmented scenarios don't reach (they use TEXT first-fragment instead).
+scheme: SCHEME_WS
+host_path: "127.0.0.1/bin-first-frag"
+connection {
+  server_frames {
+    fin: false
+    opcode: 2       # first BINARY fragment (FIN=0)
+    payload: "bin1"
+  }
+  server_frames {
+    fin: true
+    opcode: 0       # final CONT of BINARY
+    payload: "end"
+  }
+}

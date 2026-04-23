@@ -39,9 +39,19 @@ class MockConnection {
   void ReadAvailable(std::string* out);
   void ShutdownWrite();
 
+  /// Apply deterministic backpressure knobs. Set SO_RCVBUF on the server
+  /// side (if recv_buf_bytes > 0) to cap how much curl can write before it
+  /// short-writes / EAGAINs, and cap DrainIncoming()'s per-call byte budget
+  /// (0 = unlimited). Must be called before any traffic for the recv_buf
+  /// setting to matter.
+  /// @param recv_buf_bytes SO_RCVBUF size in bytes, or 0 to leave default.
+  /// @param drain_limit    Max bytes drained per DrainIncoming call, 0 for unlimited.
+  void ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit);
+
  private:
   int server_fd_;
   int client_fd_;
+  std::size_t drain_limit_;
 };
 
 /// @class proto_fuzzer::MockServer

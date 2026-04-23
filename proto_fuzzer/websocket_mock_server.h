@@ -61,11 +61,22 @@ class WebSocketMockServer : public MockServerBase {
   curl_socket_t HandleOpenSocket() override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
+ public:
+  /// One-shot probe-fire gate. The write callback calls curl_ws_send once per
+  /// scenario to reach ws_send_raw_blocking; firing it per-callback would wedge
+  /// each frame under backpressure. Public so the free-function callback can
+  /// read/flip it; reset by Install().
+  bool ws_probe_fired() const;
+  void MarkWsProbeFired();
+  CURL* easy_handle() const;
+
  private:
   std::vector<std::string> frames_;
   std::size_t next_chunk_;
   bool manual_delivery_;
   bool handshake_sent_;
+  bool ws_probe_fired_;
+  CURL* easy_handle_;
   std::string ws_request_buffer_;
 };
 

@@ -1,0 +1,17 @@
+# Start a TEXT fragment (FIN=0) then interrupt with a fresh TEXT/BINARY
+# start-frame instead of a CONT. Exercises ws_frame_firstbyte2flags'
+# "fragmented message interrupted by new TEXT/BINARY msg" branches.
+scheme: SCHEME_WS
+host_path: "127.0.0.1/interrupt-frag"
+connection {
+  server_frames {
+    fin: false
+    opcode: 1       # first TEXT fragment (FIN=0)
+    payload: "part"
+  }
+  server_frames {
+    fin: true
+    opcode: 2       # unfragmented BINARY → interrupts fragment
+    payload: "bin"
+  }
+}

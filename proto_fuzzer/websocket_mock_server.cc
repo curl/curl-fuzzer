@@ -37,16 +37,21 @@ constexpr std::size_t kMaxWsSendIterations = 32;
 /// the encoder into `contfragment=true`, so subsequent CONT / TEXT|CONT /
 /// BINARY|CONT entries then take the contfragment-aware branches in
 /// ws_frame_flags2firstbyte that would otherwise be unreachable from the
-/// fuzzer. 0 is included so the encoder sees the "no flags" compatibility
-/// path, and (TEXT|BINARY), (CLOSE|CONT), (PING|CONT), (PONG|CONT) drive the
-/// invalid-combination failf() branches.
+/// fuzzer. A lone CURLWS_CONT runs first (contfragment=false → "No ongoing
+/// fragmented message" failf), and a bare `0` directly after CURLWS_CONT
+/// drives the "no flags given; interpreting as continuation" compatibility
+/// path. (TEXT|BINARY), (CLOSE|CONT), (PING|CONT), (PONG|CONT) cover the
+/// invalid-combination failf() branches; the trailing lone `0` reaches the
+/// ordinary "no flags given" rejection with contfragment=false.
 constexpr unsigned int kWsSendFlagMatrix[] = {
+    CURLWS_CONT,
     CURLWS_TEXT,
     CURLWS_BINARY,
     CURLWS_TEXT | CURLWS_OFFSET,
     CURLWS_BINARY | CURLWS_OFFSET,
     CURLWS_TEXT | CURLWS_CONT,
     CURLWS_CONT,
+    0,
     CURLWS_TEXT,
     CURLWS_BINARY | CURLWS_CONT,
     CURLWS_BINARY,
@@ -122,13 +127,29 @@ bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario
 }
 
 /// WRITEFUNCTION / HEADERFUNCTION installed on the easy handle by
-/// WebSocketMockServer::Install. Pokes curl_ws_meta from inside a curl
-/// callback — curl_ws_meta's Curl_is_in_callback() guard would otherwise make
-/// that branch unreachable from fuzzer code. Returns everything consumed so
-/// the transfer never stalls on backpressure.
+/// WebSocketMockServer::Install. Pokes curl_ws_meta on every invocation (so
+/// the Curl_is_in_callback-guarded branch stays covered), and fires a
+/// one-shot curl_ws_send probe to reach ws_send_raw_blocking — that target
+/// is unreachable unless CURLWS_RAW_MODE is set AND the caller is inside a
+/// callback. The probe is sized larger than typical backpressure recv
+/// buffers so the partial-write / SOCKET_WRITABLE loop engages under a
+/// tightened SO_RCVBUF. The one-shot gate keeps the per-scenario cost
+/// bounded when SOCKET_WRITABLE times out. WRITEDATA is the owning
+/// WebSocketMockServer so callback state lives on the server, not globals.
 size_t WebSocketWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* userdata) {
-  if (userdata != nullptr) {
-    (void)curl_ws_meta(static_cast<CURL*>(userdata));
+  auto* server = static_cast<WebSocketMockServer*>(userdata);
+  if (server != nullptr) {
+    CURL* easy = server->easy_handle();
+    if (easy != nullptr) {
+      (void)curl_ws_meta(easy);
+      if (!server->ws_probe_fired()) {
+        server->MarkWsProbeFired();
+        static unsigned char kProbe[16384];
+        std::fill(kProbe, kProbe + sizeof(kProbe), 'P');
+        std::size_t sent = 0;
+        (void)curl_ws_send(easy, kProbe, sizeof(kProbe), &sent, 0, 0);
+      }
+    }
   }
   return size * nmemb;
 }
@@ -157,20 +178,34 @@ void DrainWsRecv(CURL* easy) {
 
 /// Construct an idle WebSocketMockServer with no queued frames. Install()
 /// on the base class and DriveScenario() configure it from a Scenario proto.
-WebSocketMockServer::WebSocketMockServer() : next_chunk_(0), manual_delivery_(false), handshake_sent_(false) {}
+WebSocketMockServer::WebSocketMockServer()
+    : next_chunk_(0), manual_delivery_(false), handshake_sent_(false), ws_probe_fired_(false), easy_handle_(nullptr) {}
 
 /// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
 WebSocketMockServer::~WebSocketMockServer() = default;
 
 /// Install the common socket callbacks via the base, then overwrite
 /// WRITEFUNCTION / HEADERFUNCTION with a ws-aware variant and wire
-/// WRITEDATA to the easy handle so the callback can call curl_ws_meta.
+/// WRITEDATA to this server instance so the callback can consult per-
+/// scenario state (easy handle, one-shot probe flag).
 void WebSocketMockServer::Install(CURL* easy) {
   MockServerBase::Install(easy);
+  easy_handle_ = easy;
+  ws_probe_fired_ = false;
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &WebSocketWriteCallback);
-  curl_easy_setopt(easy, CURLOPT_WRITEDATA, easy);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, this);
   curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &WebSocketWriteCallback);
 }
+
+/// @return true once the one-shot WS probe has fired for this scenario.
+bool WebSocketMockServer::ws_probe_fired() const { return ws_probe_fired_; }
+
+/// Flip the one-shot gate closed. Called from the write callback before it
+/// invokes curl_ws_send, so subsequent callback entries skip the probe.
+void WebSocketMockServer::MarkWsProbeFired() { ws_probe_fired_ = true; }
+
+/// @return the curl easy handle cached by Install() for the write callback.
+CURL* WebSocketMockServer::easy_handle() const { return easy_handle_; }
 
 /// Queue RFC 6455 wire-byte chunks to emit once the handshake has completed.
 /// Resets the next-chunk cursor.
@@ -225,6 +260,7 @@ curl_socket_t WebSocketMockServer::HandleOpenSocket() {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
+  ApplyPendingBackpressure();
   // Wait for curl's Upgrade request before we write anything — the drive
   // loop calls TryAdvanceHandshake() to drive that exchange.
   return connection_->take_client_fd();
@@ -355,34 +391,58 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
   // Final drain in case frame parsing produced more work after the last push.
   DrainWsRecv(easy);
 
-  // Exercise curl_ws_send with a fixed matrix of flags. We don't care whether
-  // the send actually lands on the wire — the point is to reach the encode
-  // paths in ws_enc_add_frame / ws_enc_write_head.
+  const auto& probes = scenario.connection().manual_probes();
   static const unsigned char kPayload[] = "hello-from-proto-fuzzer";
   const std::size_t payload_len = sizeof(kPayload) - 1;
-  std::size_t iteration = 0;
-  for (unsigned int flags : kWsSendFlagMatrix) {
-    if (iteration++ >= kMaxWsSendIterations) {
-      break;
+
+  if (probes.flag_matrix()) {
+    // Exercise curl_ws_send with a fixed matrix of flags. We don't care whether
+    // the send actually lands on the wire — the point is to reach the encode
+    // paths in ws_enc_add_frame / ws_enc_write_head.
+    std::size_t iteration = 0;
+    for (unsigned int flags : kWsSendFlagMatrix) {
+      if (iteration++ >= kMaxWsSendIterations) {
+        break;
+      }
+      // Announce the frame via the public curl_ws_start_frame entrypoint before
+      // the actual send. In non-raw mode this writes the frame head into the
+      // sendbuf; the follow-up curl_ws_send with the same flags finishes the
+      // exchange or fails cleanly on invalid flag combos.
+      (void)curl_ws_start_frame(easy, flags, static_cast<curl_off_t>(payload_len));
+      std::size_t sent = 0;
+      curl_off_t fragsize = (flags & CURLWS_OFFSET) ? static_cast<curl_off_t>(payload_len) : 0;
+      (void)curl_ws_send(easy, kPayload, payload_len, &sent, fragsize, flags);
+      if (connection() != nullptr) {
+        connection()->DrainIncoming();
+      }
     }
-    // Announce the frame via the public curl_ws_start_frame entrypoint before
-    // the actual send. In non-raw mode this writes the frame head into the
-    // sendbuf; the follow-up curl_ws_send with the same flags finishes the
-    // exchange or fails cleanly on invalid flag combos.
-    (void)curl_ws_start_frame(easy, flags, static_cast<curl_off_t>(payload_len));
+  }
+
+  if (probes.unaligned_send()) {
+    // Multi-call mis-sized send probe: declare a fragsize=200 frame, send 23
+    // bytes, then call curl_ws_send again with a buflen much bigger than the
+    // remaining payload. Hits the "unaligned frame size" failf in ws_enc_send.
+    constexpr curl_off_t kBigFrag = 200;
+    (void)curl_ws_start_frame(easy, CURLWS_TEXT | CURLWS_OFFSET, kBigFrag);
     std::size_t sent = 0;
-    curl_off_t fragsize = (flags & CURLWS_OFFSET) ? static_cast<curl_off_t>(payload_len) : 0;
-    (void)curl_ws_send(easy, kPayload, payload_len, &sent, fragsize, flags);
+    (void)curl_ws_send(easy, kPayload, payload_len, &sent, kBigFrag, CURLWS_TEXT | CURLWS_OFFSET);
+    // Now enc.payload_remain ≈ kBigFrag - payload_len. A follow-up send with
+    // buflen > remaining trips the guard at ws_enc_send:~1050.
+    std::size_t sent2 = 0;
+    constexpr std::size_t kOverrun = 500;
+    unsigned char overrun[kOverrun];
+    std::fill(overrun, overrun + kOverrun, 'X');
+    (void)curl_ws_send(easy, overrun, kOverrun, &sent2, kBigFrag, CURLWS_TEXT | CURLWS_OFFSET);
     if (connection() != nullptr) {
       connection()->DrainIncoming();
     }
   }
 
-  // Raw-mode send path: reachable only when CURLOPT_WS_OPTIONS has
-  // CURLWS_RAW_MODE set. curl_ws_send with flags=0, fragsize=0 takes the
-  // data->set.ws_raw_mode branch → ws_send_raw. No-op for non-raw scenarios
-  // (hits the "no flags given" failure path instead).
-  {
+  if (probes.raw_send()) {
+    // Raw-mode send path: reachable only when CURLOPT_WS_OPTIONS has
+    // CURLWS_RAW_MODE set. curl_ws_send with flags=0, fragsize=0 takes the
+    // data->set.ws_raw_mode branch → ws_send_raw. No-op for non-raw scenarios
+    // (hits the "no flags given" failure path instead).
     std::size_t sent = 0;
     (void)curl_ws_send(easy, kPayload, payload_len, &sent, 0, 0);
     if (connection() != nullptr) {

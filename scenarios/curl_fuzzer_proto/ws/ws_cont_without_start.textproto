@@ -1,0 +1,12 @@
+# Server sends a non-final CONT frame (firstbyte 0x00) with no prior
+# fragmented message underway. ws_frame_firstbyte2flags fails with
+# "no ongoing fragmented message to resume".
+scheme: SCHEME_WS
+host_path: "127.0.0.1/cont-noprior"
+connection {
+  server_frames {
+    fin: false
+    opcode: 0       # CONT, FIN=0 → rejected (no prior fragment)
+    payload: "lone"
+  }
+}
