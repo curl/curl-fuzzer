@@ -72,7 +72,13 @@ The public corpus links for each target are also accessible directly:
 - [curl_fuzzer_tftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_tftp/public.zip)
 - [curl_fuzzer_ws](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ws/public.zip)
 - [curl_fuzzer](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer/public.zip)
-- fuzz_url: no public link yet.
+- [fuzz_url](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzz_url/public.zip) (OSS-Fuzz prefixes with `curl_`)
+- fuzz_bufq: the target was renamed from `curl_fuzzer_bufq`; until OSS-Fuzz
+  picks up the new name, the live corpus remains at
+  [curl_fuzzer_bufq](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_bufq/public.zip)
+  and the new location `curl_fuzz_bufq` will start filling in once the
+  rebuild propagates.
+- fuzz_doh: no public link yet (new targets take a while to land on OSS-Fuzz).
 
 ## I want to reproduce an error hit overnight by OSS-Fuzz
 
