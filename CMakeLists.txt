@@ -278,17 +278,28 @@ set(CURL_CMAKE_ARGS
     -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
 
-# If coverage is requested, layer the instrumentation flags on top of the
-# CFLAGS/CXXFLAGS inherited from the environment. CMake treats the list
-# elements here as space-separated once rendered into CMAKE_C_FLAGS / CXX_FLAGS
-# on curl's own CMake command line, so we pass them as a single string.
+# Baseline CFLAGS passed to curl's own CMake. Always defines UNITTESTS so
+# the UNITTEST macro in curl_setup.h flips from `static` to empty, giving
+# external linkage to parsers we want to fuzz directly (e.g. doh_resp_decode,
+# doh_req_encode via fuzz_doh). The knock-on is a slightly larger libcurl.a
+# with more exported symbols — harmless for every target.
+set(_CURL_BASE_C_FLAGS "$ENV{CFLAGS} -DUNITTESTS")
+set(_CURL_BASE_CXX_FLAGS "$ENV{CXXFLAGS} -DUNITTESTS")
+
+# If coverage is requested, layer the instrumentation flags on top. CMake
+# treats the list elements here as space-separated once rendered into
+# CMAKE_C_FLAGS / CXX_FLAGS on curl's own CMake command line, so we pass them
+# as a single string.
 if(ENABLE_COVERAGE)
     string(REPLACE ";" " " _COV_COMPILE_FLAGS_STR "${COVERAGE_COMPILE_FLAGS}")
-    list(APPEND CURL_CMAKE_ARGS
-        "-DCMAKE_C_FLAGS=$ENV{CFLAGS} ${_COV_COMPILE_FLAGS_STR}"
-        "-DCMAKE_CXX_FLAGS=$ENV{CXXFLAGS} ${_COV_COMPILE_FLAGS_STR}"
-    )
+    set(_CURL_BASE_C_FLAGS "${_CURL_BASE_C_FLAGS} ${_COV_COMPILE_FLAGS_STR}")
+    set(_CURL_BASE_CXX_FLAGS "${_CURL_BASE_CXX_FLAGS} ${_COV_COMPILE_FLAGS_STR}")
 endif()
+
+list(APPEND CURL_CMAKE_ARGS
+    "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
+    "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
+)
 
 set(CURL_POST_INSTALL_COMMAND
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
@@ -431,6 +442,17 @@ target_link_libraries(fuzz_url PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(fuzz_url PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(fuzz_url ${FUZZ_DEPS})
 
+# DOH parser fuzzer. Forward-declares the UNITTEST-exposed entrypoints from
+# lib/doh.c (doh_resp_decode, doh_req_encode, de_init, de_cleanup) so we don't
+# have to pull in the full urldata.h include tree. Linkage depends on
+# -DUNITTESTS being threaded through to curl's build — see CURL_CMAKE_ARGS.
+add_executable(fuzz_doh fuzz_doh.cc)
+target_compile_options(fuzz_doh PRIVATE ${COMMON_FLAGS})
+target_include_directories(fuzz_doh PRIVATE ${CURL_INCLUDE_DIRS})
+target_link_libraries(fuzz_doh PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(fuzz_doh PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(fuzz_doh ${FUZZ_DEPS})
+
 # Unit test fuzzer
 add_executable(curl_fuzzer_fnmatch fuzz_fnmatch.cc)
 target_compile_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_FLAGS})
@@ -460,6 +482,7 @@ add_custom_target(fuzz
         curl_fuzzer_ws
         curl_fuzzer_bufq
         fuzz_url
+        fuzz_doh
         curl_fuzzer_fnmatch
 )
 
