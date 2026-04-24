@@ -427,12 +427,12 @@ curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
 curl_add_fuzzer(curl_fuzzer_ws        WS)
 
 # BUFQ fuzzer
-add_executable(curl_fuzzer_bufq fuzz_bufq.cc)
-target_compile_options(curl_fuzzer_bufq PRIVATE ${COMMON_FLAGS})
-target_include_directories(curl_fuzzer_bufq PRIVATE ${CURL_INCLUDE_DIRS})
-target_link_libraries(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_LIBS})
-target_link_options(curl_fuzzer_bufq PRIVATE ${COMMON_LINK_OPTIONS})
-add_dependencies(curl_fuzzer_bufq ${FUZZ_DEPS})
+add_executable(fuzz_bufq fuzz_bufq.cc)
+target_compile_options(fuzz_bufq PRIVATE ${COMMON_FLAGS})
+target_include_directories(fuzz_bufq PRIVATE ${CURL_INCLUDE_DIRS})
+target_link_libraries(fuzz_bufq PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(fuzz_bufq PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(fuzz_bufq ${FUZZ_DEPS})
 
 # URL fuzzer
 add_executable(fuzz_url fuzz_url.cc)
@@ -480,7 +480,7 @@ add_custom_target(fuzz
         curl_fuzzer_smtp
         curl_fuzzer_tftp
         curl_fuzzer_ws
-        curl_fuzzer_bufq
+        fuzz_bufq
         fuzz_url
         fuzz_doh
         curl_fuzzer_fnmatch

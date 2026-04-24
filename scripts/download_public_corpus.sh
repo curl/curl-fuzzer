@@ -11,11 +11,14 @@
 #          exists. Without -f, a non-empty target dir is left alone.
 #
 # The public zips live at:
-#   https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/<target>/public.zip
+#   https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/<oss-fuzz-name>/public.zip
 #
-# Not every target has a public zip (e.g. fuzz_url is not published, and
-# new targets take a while to land). A 404 is logged and skipped rather
-# than failing the whole run.
+# OSS-Fuzz prefixes binaries with the project name when the target doesn't
+# already start with "curl_" — so fuzz_url is published as curl_fuzz_url,
+# while curl_fuzzer_dict stays as-is.
+#
+# New targets take a while to land after first upload; a non-200 response
+# is logged and skipped rather than failing the whole run.
 
 set -eu
 
@@ -37,9 +40,6 @@ BASE_URL="https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspo
 CORPUS_ROOT="${BUILD_ROOT}/ossfuzz_corpus"
 mkdir -p "${CORPUS_ROOT}"
 
-# fuzz_url has no published corpus yet per README.md.
-SKIP_TARGETS=" fuzz_url "
-
 command -v unzip >/dev/null 2>&1 || {
   echo "error: unzip is required" >&2
   exit 1
@@ -49,9 +49,19 @@ TMPDIR_ROOT=$(mktemp -d)
 trap 'rm -rf "${TMPDIR_ROOT}"' EXIT
 
 for TARGET in ${FUZZ_TARGETS}; do
-  if [[ "${SKIP_TARGETS}" == *" ${TARGET} "* ]]; then
-    echo "== ${TARGET}: skip (no public corpus published)"
-    continue
+  # OSS-Fuzz adds the project prefix to any target that doesn't already
+  # start with "curl_": fuzz_url → curl_fuzz_url, curl_fuzzer_dict unchanged.
+  if [[ "${TARGET}" == curl_* ]]; then
+    OSS_NAMES=("${TARGET}")
+  else
+    OSS_NAMES=("curl_${TARGET}")
+  fi
+
+  # fuzz_bufq was renamed from curl_fuzzer_bufq. Until OSS-Fuzz rebuilds
+  # and starts populating curl_fuzz_bufq, fall back to the legacy name so
+  # we don't lose the accumulated corpus.
+  if [[ "${TARGET}" == "fuzz_bufq" ]]; then
+    OSS_NAMES+=("curl_fuzzer_bufq")
   fi
 
   DEST="${CORPUS_ROOT}/${TARGET}"
@@ -62,14 +72,20 @@ for TARGET in ${FUZZ_TARGETS}; do
   fi
 
   ZIP="${TMPDIR_ROOT}/${TARGET}.zip"
-  URL="${BASE_URL}/${TARGET}/public.zip"
-
-  echo "== ${TARGET}: downloading ${URL}"
-  # -f turns HTTP errors into non-zero exit; -S shows errors even under -s.
-  HTTP_STATUS=$(curl -sS -o "${ZIP}" -w '%{http_code}' "${URL}" || echo "000")
-  if [[ "${HTTP_STATUS}" != "200" ]]; then
-    echo "   skip: HTTP ${HTTP_STATUS}"
+  HTTP_STATUS=000
+  for OSS_NAME in "${OSS_NAMES[@]}"; do
+    URL="${BASE_URL}/${OSS_NAME}/public.zip"
+    echo "== ${TARGET}: downloading ${URL}"
+    # -S shows errors even under -s; success is HTTP 200.
+    HTTP_STATUS=$(curl -sS -o "${ZIP}" -w '%{http_code}' "${URL}" || echo "000")
+    if [[ "${HTTP_STATUS}" == "200" ]]; then
+      break
+    fi
+    echo "   miss: HTTP ${HTTP_STATUS}"
     rm -f "${ZIP}"
+  done
+  if [[ "${HTTP_STATUS}" != "200" ]]; then
+    echo "   skip: no corpus available"
     continue
   fi
 
