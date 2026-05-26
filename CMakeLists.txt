@@ -34,15 +34,20 @@ set(ZLIB_URL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/z
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
-ExternalProject_Add(zlib_external
-    URL ${ZLIB_URL}
-    PREFIX ${CMAKE_BINARY_DIR}/zlib
-    CONFIGURE_COMMAND ./configure --static --prefix=${ZLIB_INSTALL_DIR}
-    BUILD_IN_SOURCE 1
-    BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    DOWNLOAD_NO_PROGRESS 1
-)
+if(NOT EXISTS ${ZLIB_STATIC_LIB})
+    ExternalProject_Add(zlib_external
+        URL ${ZLIB_URL}
+        PREFIX ${CMAKE_BINARY_DIR}/zlib
+        CONFIGURE_COMMAND ./configure --static --prefix=${ZLIB_INSTALL_DIR}
+        BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+else()
+    message(STATUS "zlib already installed at ${ZLIB_INSTALL_DIR}, skipping build")
+    add_custom_target(zlib_external)
+endif()
 
 # Install zstd
 #
@@ -52,17 +57,22 @@ set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
 set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
-ExternalProject_Add(zstd_external
-    URL ${ZSTD_URL}
-    PREFIX ${CMAKE_BINARY_DIR}/zstd
-    SOURCE_SUBDIR build/cmake
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR}
-        -DCMAKE_INSTALL_LIBDIR=lib
-        -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
-    BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    DOWNLOAD_NO_PROGRESS 1
-)
+if(NOT EXISTS ${ZSTD_STATIC_LIB})
+    ExternalProject_Add(zstd_external
+        URL ${ZSTD_URL}
+        PREFIX ${CMAKE_BINARY_DIR}/zstd
+        SOURCE_SUBDIR build/cmake
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR}
+            -DCMAKE_INSTALL_LIBDIR=lib
+            -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
+        BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+else()
+    message(STATUS "zstd already installed at ${ZSTD_INSTALL_DIR}, skipping build")
+    add_custom_target(zstd_external)
+endif()
 
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
 # affect (see 16697, 17624)
@@ -121,19 +131,22 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
         $ENV{OPENSSLFLAGS}
     )
 
-    ExternalProject_Add(openssl_external
-        URL ${OPENSSL_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/openssl
-        CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
-        INSTALL_COMMAND ${MAKE} install_sw
-        BUILD_IN_SOURCE 1
-        BUILD_BYPRODUCTS ${OPENSSL_STATIC_LIB}
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-        DOWNLOAD_NO_PROGRESS 1
-    )
-
-    # Build zlib before openssl
-    add_dependencies(openssl_external zlib_external)
+    if(NOT EXISTS ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
+        ExternalProject_Add(openssl_external
+            URL ${OPENSSL_URL}
+            PREFIX ${CMAKE_BINARY_DIR}/openssl
+            CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
+            INSTALL_COMMAND ${MAKE} install_sw
+            BUILD_IN_SOURCE 1
+            BUILD_BYPRODUCTS ${OPENSSL_STATIC_LIB}
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+            DOWNLOAD_NO_PROGRESS 1
+        )
+        add_dependencies(openssl_external zlib_external)
+    else()
+        message(STATUS "OpenSSL already installed at ${OPENSSL_INSTALL_DIR}, skipping build")
+        add_custom_target(openssl_external)
+    endif()
 
     # Set the OpenSSL option for nghttp2
     set(NGHTTP2_OPENSSL_OPTION -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
@@ -155,19 +168,22 @@ set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
 set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
-ExternalProject_Add(nghttp2_external
-    URL ${NGHTTP2_URL}
-    PREFIX ${CMAKE_BINARY_DIR}/nghttp2
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
-        -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
-        -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
-    BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    DOWNLOAD_NO_PROGRESS 1
-)
-
-# Ensure zlib and openssl are built before nghttp2
-add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
+if(NOT EXISTS ${NGHTTP2_STATIC_LIB})
+    ExternalProject_Add(nghttp2_external
+        URL ${NGHTTP2_URL}
+        PREFIX ${CMAKE_BINARY_DIR}/nghttp2
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
+            -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
+            -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
+        BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+    add_dependencies(nghttp2_external ${OPENSSL_DEP} zlib_external)
+else()
+    message(STATUS "nghttp2 already installed at ${NGHTTP2_INSTALL_DIR}, skipping build")
+    add_custom_target(nghttp2_external)
+endif()
 
 # Install libidn2
 #
@@ -178,16 +194,21 @@ set(LIBIDN2_URL https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
-ExternalProject_Add(libidn2_external
-    URL ${LIBIDN2_URL}
-    PREFIX ${CMAKE_BINARY_DIR}/libidn2
-    CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
-        --disable-doc
-    BUILD_IN_SOURCE 1
-    BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    DOWNLOAD_NO_PROGRESS 1
-)
+if(NOT EXISTS ${LIBIDN2_STATIC_LIB})
+    ExternalProject_Add(libidn2_external
+        URL ${LIBIDN2_URL}
+        PREFIX ${CMAKE_BINARY_DIR}/libidn2
+        CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
+            --disable-doc
+        BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+else()
+    message(STATUS "libidn2 already installed at ${LIBIDN2_INSTALL_DIR}, skipping build")
+    add_custom_target(libidn2_external)
+endif()
 
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
@@ -216,20 +237,24 @@ set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
 set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
 set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
-ExternalProject_Add(openldap_external
-    URL ${OPENLDAP_URL}
-    PREFIX ${CMAKE_BINARY_DIR}/openldap
-    CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls --disable-slapd
-    BUILD_IN_SOURCE 1
-    BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    DOWNLOAD_NO_PROGRESS 1
-)
-
-if(TARGET openssl_external)
-    add_dependencies(openldap_external openssl_external)
+if(NOT EXISTS ${OPENLDAP_STATIC_LIB_LDAP})
+    ExternalProject_Add(openldap_external
+        URL ${OPENLDAP_URL}
+        PREFIX ${CMAKE_BINARY_DIR}/openldap
+        CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls --disable-slapd
+        BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+    if(TARGET openssl_external)
+        add_dependencies(openldap_external openssl_external)
+    else()
+        message(STATUS "Not building OpenLDAP with OpenSSL")
+    endif()
 else()
-    message(STATUS "Not building OpenLDAP with OpenSSL")
+    message(STATUS "OpenLDAP already installed at ${OPENLDAP_INSTALL_DIR}, skipping build")
+    add_custom_target(openldap_external)
 endif()
 
 # Group non-curl dependencies into a single target
@@ -514,28 +539,26 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(LPM_PB_LIBDIR ${LPM_PB_DIR}/lib)
     set(LPM_PROTOC ${LPM_PB_DIR}/bin/protoc)
 
-    ExternalProject_Add(libprotobuf_mutator_external
-        GIT_REPOSITORY https://github.com/google/libprotobuf-mutator.git
-        GIT_TAG ${LPM_VERSION}
-        GIT_SHALLOW 1
-        PREFIX ${CMAKE_BINARY_DIR}/lpm
-        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LPM_INSTALL_DIR}
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-            # Have LPM fetch+build protobuf v29.3 from source, using the same
-            # compiler and stdlib we're compiling with. This is what keeps the
-            # libc++ ABI consistent end-to-end (LPM, protobuf, our .pb.cc, our
-            # fuzzer binary).
-            -DLIB_PROTO_MUTATOR_DOWNLOAD_PROTOBUF=ON
-            -DLIB_PROTO_MUTATOR_TESTING=OFF
-            # Disable the bundled examples (libxml2_example, expat_example,
-            # ...): the libxml2 example hard-depends on liblzma at configure
-            # time, which isn't present in the OSS-Fuzz image. We don't ship
-            # LPM's examples.
-            -DLIB_PROTO_MUTATOR_EXAMPLES=OFF
-        BUILD_BYPRODUCTS ${LPM_STATIC_LIB} ${LPM_LIBFUZZER_LIB} ${LPM_PROTOC}
-        DOWNLOAD_NO_PROGRESS 1
-    )
+    if(NOT EXISTS ${LPM_STATIC_LIB} OR NOT EXISTS ${LPM_PROTOC})
+        ExternalProject_Add(libprotobuf_mutator_external
+            GIT_REPOSITORY https://github.com/google/libprotobuf-mutator.git
+            GIT_TAG ${LPM_VERSION}
+            GIT_SHALLOW 1
+            UPDATE_DISCONNECTED ON
+            PREFIX ${CMAKE_BINARY_DIR}/lpm
+            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LPM_INSTALL_DIR}
+                -DCMAKE_BUILD_TYPE=Release
+                -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+                -DLIB_PROTO_MUTATOR_DOWNLOAD_PROTOBUF=ON
+                -DLIB_PROTO_MUTATOR_TESTING=OFF
+                -DLIB_PROTO_MUTATOR_EXAMPLES=OFF
+            BUILD_BYPRODUCTS ${LPM_STATIC_LIB} ${LPM_LIBFUZZER_LIB} ${LPM_PROTOC}
+            DOWNLOAD_NO_PROGRESS 1
+        )
+    else()
+        message(STATUS "LPM already installed at ${LPM_INSTALL_DIR}, skipping build")
+        add_custom_target(libprotobuf_mutator_external)
+    endif()
 
     # Generate the expanded .proto and the C++ option manifest from curl.h.
     set(CURL_HEADER ${CURL_INSTALL_DIR}/include/curl/curl.h)

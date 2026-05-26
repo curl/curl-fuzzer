@@ -62,9 +62,9 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v1-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh', 'ossfuzz.sh') }}
           restore-keys: |
-            ossfuzz-build-v1-${{ runner.os }}-address-x86_64-
+            ossfuzz-build-v2-${{ runner.os }}-address-x86_64-
 
       # Use the CIFuzz job to test the repository.
       - name: Build Fuzzers
@@ -74,12 +74,16 @@ jobs:
           dry-run: false
           keep-unaffected-fuzz-targets: true
 
+      - name: Trim build cache
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: sudo scripts/trim_cache.sh "${CACHE_PATH}/build"
+
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v1-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh', 'ossfuzz.sh') }}
 
       # Archive the fuzzer output (which maintains permissions)
       - name: Create fuzz tar
