@@ -50,19 +50,29 @@ jobs:
       # Must match the path ossfuzz.sh writes to when CIFUZZ=True.
       CACHE_PATH: .ossfuzz-build-cache-address-x86_64
     steps:
-      # Check out curl-fuzzer on the runner so the cache key can hash the
-      # build-definition files. CIFuzz still uses its own clone baked into the
-      # gcr.io/oss-fuzz/curl image, so this checkout does not affect the build.
+      # Check out the calling repo (curl/curl on workflow_call, curl-fuzzer
+      # on push/PR). CIFuzz mounts this into the build container.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      # Check out curl-fuzzer into a subdirectory so the cache key can hash
+      # the build-definition files and trim_cache.sh is available. When
+      # running on curl-fuzzer itself, use the PR/push ref; when called from
+      # curl/curl via workflow_call, default to master.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          repository: curl/curl-fuzzer
+          ref: ${{ github.repository == 'curl/curl-fuzzer' && github.ref || '' }}
+          path: .curl-fuzzer
 
       - name: Restore build cache
         id: build-cache
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh', 'ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
           restore-keys: |
             ossfuzz-build-v2-${{ runner.os }}-address-x86_64-
 
@@ -76,14 +86,14 @@ jobs:
 
       - name: Trim build cache
         if: steps.build-cache.outputs.cache-hit != 'true'
-        run: sudo scripts/trim_cache.sh "${CACHE_PATH}/build"
+        run: sudo .curl-fuzzer/scripts/trim_cache.sh "${CACHE_PATH}/build"
 
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh', 'ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
 
       # Archive the fuzzer output (which maintains permissions)
       - name: Create fuzz tar
