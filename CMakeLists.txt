@@ -218,10 +218,15 @@ set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/gdb-install)
 
 option(BUILD_GDB "Build GDB as an external project" OFF)
 if(BUILD_GDB)
+    # GDB is a host tool, not a fuzz target — build with system GCC and
+    # clean flags so sanitizer/fuzzer flags don't break its build.
     ExternalProject_Add(gdb_external
         URL ${GDB_URL}
         PREFIX ${CMAKE_BINARY_DIR}/gdb
-        CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
+        CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
+            "CC=gcc" "CXX=g++"
+            "CFLAGS=-O2" "CXXFLAGS=-O2" "LDFLAGS=" "CPPFLAGS="
+            ./configure --disable-dependency-tracking --prefix=${GDB_INSTALL_DIR}
         BUILD_IN_SOURCE 1
     )
     set(GDB_DEP gdb_external)
@@ -265,7 +270,6 @@ add_custom_target(deps
         nghttp2_external
         zstd_external
         libidn2_external
-        ${GDB_DEP}
         openldap_external
 )
 
