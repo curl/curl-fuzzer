@@ -69,3 +69,8 @@ done
 
 # Copy dictionary and options file to $OUT.
 cp -v ossconfig/*.dict ossconfig/*.options "$OUT"/
+
+# Copy the built GDB installation to $OUT if requested.
+if [[ -n ${GDBINSTALL:-} ]] && [[ -d "${BUILD_DIR}/gdb-install" ]]; then
+  cp -rv "${BUILD_DIR}/gdb-install" "$OUT"/
+fi

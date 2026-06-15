@@ -16,16 +16,31 @@ permissions: {}
 
 jobs:
   acr:
-    name: 'Build and push to ACR'
+    name: 'Build ${{ matrix.sanitizer }}/${{ matrix.engine }}'
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/master' && 'acrmaster' || 'acrpr' }}
     permissions:
       contents: read
       id-token: write  # Required for OIDC authentication to Azure.
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined]
+        engine: [libfuzzer, honggfuzz]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          repository: google/oss-fuzz
+          path: .oss-fuzz
+
+      - name: Set date tag
+        id: date
+        run: echo "tag=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
       - name: Azure login
         uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
@@ -35,13 +50,39 @@ jobs:
           subscription-id: ${{ secrets.ACR_SUBSCRIPTION_ID }}
 
       - name: ACR login
-        run: az acr login --name "${ACR_LOCATION}"
+        run: az acr login --name "${ACR_LOCATION%.azurecr.io}"
         env:
           ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
 
-      - name: Build and push
-        run: |
-          docker build -f docker/Dockerfile -t "${ACR_LOCATION}/test:${GITHUB_SHA}" .
-          docker push "${ACR_LOCATION}/test:${GITHUB_SHA}"
+      - name: Build repro image
         env:
           ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
+          SANITIZER: ${{ matrix.sanitizer }}
+          ENGINE: ${{ matrix.engine }}
+          DATE_TAG: ${{ steps.date.outputs.tag }}
+        run: |
+          python3 scripts/build_repro_image.py \
+            --sanitizer "${SANITIZER}" \
+            --engine "${ENGINE}" \
+            --source-path . \
+            --oss-fuzz-dir .oss-fuzz \
+            --tag "${ACR_LOCATION}/curl-fuzzer:${SANITIZER}-${ENGINE}-${DATE_TAG}"
+
+      - name: Test image
+        env:
+          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
+          SANITIZER: ${{ matrix.sanitizer }}
+          ENGINE: ${{ matrix.engine }}
+          DATE_TAG: ${{ steps.date.outputs.tag }}
+        run: |
+          IMAGE="${ACR_LOCATION}/curl-fuzzer:${SANITIZER}-${ENGINE}-${DATE_TAG}"
+          docker run --rm "${IMAGE}" gdb --version
+          docker run --rm "${IMAGE}" ls /out/curl_fuzzer
+
+      - name: Push image
+        env:
+          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
+          SANITIZER: ${{ matrix.sanitizer }}
+          ENGINE: ${{ matrix.engine }}
+          DATE_TAG: ${{ steps.date.outputs.tag }}
+        run: docker push "${ACR_LOCATION}/curl-fuzzer:${SANITIZER}-${ENGINE}-${DATE_TAG}"

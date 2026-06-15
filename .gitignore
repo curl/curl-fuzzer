@@ -43,3 +43,6 @@ logs/
 
 # Docs
 docs/
+
+# oss-fuzz checkout
+.oss-fuzz/
