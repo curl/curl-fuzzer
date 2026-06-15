@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=gcr.io/oss-fuzz/curl
+ARG BASE_IMAGE=gcr.io/oss-fuzz/curl@sha256:1ee078e794f081765f6244f3c91a51daf070568f9709d05c17eebc4daaac30f5
 FROM ${BASE_IMAGE}
 COPY out/ /out/
 ENV PATH="/out/gdb-install/bin:${PATH}"
