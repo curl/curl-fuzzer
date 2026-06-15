@@ -25,6 +25,7 @@ SANITIZERS = ["address", "undefined", "memory", "none"]
 ENGINES = ["libfuzzer", "honggfuzz", "afl", "centipede", "none"]
 ARCHITECTURES = ["x86_64", "i386"]
 
+BASE_IMAGE = "gcr.io/oss-fuzz/curl"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -66,6 +67,11 @@ def main() -> None:
     parser.add_argument(
         "--tag",
         help="Docker image tag (default: curl-fuzzer:{sanitizer}-{engine}-{date})",
+    )
+    parser.add_argument(
+        "--push",
+        action="store_true",
+        help="Push the built image to the registry",
     )
     args = parser.parse_args()
 
@@ -131,6 +137,8 @@ def main() -> None:
                 "build",
                 "-f",
                 dockerfile,
+                "--build-arg",
+                f"BASE_IMAGE={BASE_IMAGE}",
                 "-t",
                 tag,
                 context,
@@ -138,10 +146,14 @@ def main() -> None:
         )
 
     log.info("Repro image built: %s", tag)
-    log.info(
-        "Usage: docker run --rm -v /path/to/testcase:/testcase %s ./curl_fuzzer /testcase",
-        tag,
-    )
+
+    if args.push:
+        run(["docker", "push", tag])
+    else:
+        log.info(
+            "Usage: docker run --rm -v /path/to/testcase:/testcase %s ./curl_fuzzer /testcase",
+            tag,
+        )
 
 
 if __name__ == "__main__":
