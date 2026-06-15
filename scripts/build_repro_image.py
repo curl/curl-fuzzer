@@ -96,6 +96,7 @@ def main() -> None:
         sys.executable,
         helper,
         "build_fuzzers",
+        "--clean",
         "--sanitizer",
         args.sanitizer,
         "--engine",

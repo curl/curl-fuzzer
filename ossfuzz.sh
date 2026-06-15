@@ -58,6 +58,11 @@ BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 # Compile the fuzzers.
 "${SCRIPTDIR}"/compile_target.sh fuzz
 
+# Build GDB separately if requested (it's a tool, not a fuzzer dependency).
+if [[ -n ${GDBMODE:-} ]]; then
+  "${SCRIPTDIR}"/compile_target.sh gdb_external
+fi
+
 # Zip up the seed corpus.
 scripts/create_zip.sh
 
