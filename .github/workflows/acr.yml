@@ -41,9 +41,16 @@ jobs:
           repository: google/oss-fuzz
           path: .oss-fuzz
 
-      - name: Set date tag
-        id: date
-        run: echo "tag=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: Set image names
+        id: image
+        env:
+          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
+          SANITIZER: ${{ matrix.sanitizer }}
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          REPO="${ACR_LOCATION}/${SANITIZER}-${ENGINE}"
+          echo "dated=${REPO}:$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "latest=${REPO}:latest" >> "$GITHUB_OUTPUT"
 
       - name: Restore build cache
         id: build-cache
@@ -68,19 +75,18 @@ jobs:
 
       - name: Build repro image
         env:
-          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
           SANITIZER: ${{ matrix.sanitizer }}
           ENGINE: ${{ matrix.engine }}
-          DATE_TAG: ${{ steps.date.outputs.tag }}
+          IMAGE: ${{ steps.image.outputs.dated }}
+          IMAGE_LATEST: ${{ steps.image.outputs.latest }}
         run: |
-          IMAGE="${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:${DATE_TAG}"
           python3 scripts/build_repro_image.py \
             --sanitizer "${SANITIZER}" \
             --engine "${ENGINE}" \
             --source-path . \
             --oss-fuzz-dir .oss-fuzz \
             --tag "${IMAGE}"
-          docker tag "${IMAGE}" "${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:latest"
+          docker tag "${IMAGE}" "${IMAGE_LATEST}"
 
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master'
@@ -91,21 +97,15 @@ jobs:
 
       - name: Test image
         env:
-          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
-          SANITIZER: ${{ matrix.sanitizer }}
-          ENGINE: ${{ matrix.engine }}
-          DATE_TAG: ${{ steps.date.outputs.tag }}
+          IMAGE: ${{ steps.image.outputs.dated }}
         run: |
-          IMAGE="${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:${DATE_TAG}"
           docker run --rm "${IMAGE}" gdb --version
           docker run --rm "${IMAGE}" ls /out/curl_fuzzer
 
       - name: Push image
         env:
-          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
-          SANITIZER: ${{ matrix.sanitizer }}
-          ENGINE: ${{ matrix.engine }}
-          DATE_TAG: ${{ steps.date.outputs.tag }}
+          IMAGE: ${{ steps.image.outputs.dated }}
+          IMAGE_LATEST: ${{ steps.image.outputs.latest }}
         run: |
-          docker push "${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:${DATE_TAG}"
-          docker push "${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:latest"
+          docker push "${IMAGE}"
+          docker push "${IMAGE_LATEST}"
