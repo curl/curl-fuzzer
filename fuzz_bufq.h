@@ -24,8 +24,8 @@
  * Limits for fields
  */
 #define FUZZ_MAX_CHUNK_SIZE      (16 * 1024)
-#define FUZZ_MAX_CHUNKS_QTY      (1 * 1024)
-#define FUZZ_MAX_MAX_SPARE       (1 * 1024)
+#define FUZZ_MAX_CHUNKS_QTY      16
+#define FUZZ_MAX_MAX_SPARE       16
 #define FUZZ_MAX_RW_SIZE         (FUZZ_MAX_CHUNKS_QTY * FUZZ_MAX_CHUNK_SIZE)
 
 /**
