@@ -382,29 +382,10 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       FV_PRINTF(fuzz, "FUZZ: select failed, exiting \n");
       break;
     }
-    else if(rc == 0) {
-      FV_PRINTF(fuzz,
-                "FUZZ: Timed out; double timeout? %d \n",
-                double_timeout);
-
-      /* Timed out. */
-      if(double_timeout == 1) {
-        /* We don't expect multiple timeouts in a row. If there are double
-           timeouts then exit. */
-        break;
-      }
-      else {
-        /* Set the timeout flag for the next time we select(). */
-        double_timeout = 1;
-      }
-    }
-    else {
-      /* There's an active file descriptor. Reset the timeout flag. */
-      double_timeout = 0;
-    }
 
     /* Check to see if a server file descriptor is readable. If it is,
        then send the next response from the fuzzing data. */
+    int server_data_sent = 0;
     for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
       if(sman[ii]->fd_state == FUZZ_SOCK_OPEN &&
          FD_ISSET(sman[ii]->fd, &fdread)) {
@@ -413,7 +394,23 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
           /* Failed to send a response. Break out here. */
           break;
         }
+        server_data_sent = 1;
       }
+    }
+
+    /* Stall detection: exit after two consecutive iterations where no new
+       data was provided to curl. This handles both select() timeouts and
+       cases where curl registers a writable fd but cannot make progress
+       (e.g. HTTP/2 egress stuck with no real peer to drain to). */
+    if(!server_data_sent) {
+      FV_PRINTF(fuzz, "FUZZ: No data sent; stall count %d \n", double_timeout);
+      if(double_timeout == 1) {
+        break;
+      }
+      double_timeout = 1;
+    }
+    else {
+      double_timeout = 0;
     }
 
     curl_multi_perform(multi_handle, &still_running);
