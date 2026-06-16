@@ -66,21 +66,21 @@ jobs:
         env:
           ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
 
-      - name: Build and push repro image
+      - name: Build repro image
         env:
+          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
           SANITIZER: ${{ matrix.sanitizer }}
           ENGINE: ${{ matrix.engine }}
-          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
           DATE_TAG: ${{ steps.date.outputs.tag }}
-          PUSH_FLAG: ${{ github.ref == 'refs/heads/master' && '--push' || '' }}
         run: |
+          IMAGE="${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:${DATE_TAG}"
           python3 scripts/build_repro_image.py \
             --sanitizer "${SANITIZER}" \
             --engine "${ENGINE}" \
             --source-path . \
             --oss-fuzz-dir .oss-fuzz \
-            --tag "${ACR_LOCATION}/curl-fuzzer:${SANITIZER}-${ENGINE}-${DATE_TAG}" \
-            ${PUSH_FLAG}
+            --tag "${IMAGE}"
+          docker tag "${IMAGE}" "${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:latest"
 
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master'
@@ -96,6 +96,16 @@ jobs:
           ENGINE: ${{ matrix.engine }}
           DATE_TAG: ${{ steps.date.outputs.tag }}
         run: |
-          IMAGE="${ACR_LOCATION}/curl-fuzzer:${SANITIZER}-${ENGINE}-${DATE_TAG}"
+          IMAGE="${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:${DATE_TAG}"
           docker run --rm "${IMAGE}" gdb --version
           docker run --rm "${IMAGE}" ls /out/curl_fuzzer
+
+      - name: Push image
+        env:
+          ACR_LOCATION: ${{ secrets.ACR_LOCATION }}
+          SANITIZER: ${{ matrix.sanitizer }}
+          ENGINE: ${{ matrix.engine }}
+          DATE_TAG: ${{ steps.date.outputs.tag }}
+        run: |
+          docker push "${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:${DATE_TAG}"
+          docker push "${ACR_LOCATION}/curl-fuzzer/${SANITIZER}-${ENGINE}:latest"
