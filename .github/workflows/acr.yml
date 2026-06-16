@@ -5,6 +5,9 @@ name: ACR
     branches:
       - master
 
+  schedule:
+    - cron: '37 6 * * *'  # Daily at 06:37 UTC.
+
   # Triggerable from PRs, but permission must be requested.
   workflow_dispatch: {}
 
