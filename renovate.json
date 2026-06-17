@@ -11,7 +11,7 @@
         "CMakeLists.txt"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\n\\s*set\\(\\w+_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\r?\\n\\s*set\\([A-Z0-9_]+_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
       ]
     },
     {
