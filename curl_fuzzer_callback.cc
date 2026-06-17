@@ -91,16 +91,24 @@ curl_socket_t fuzz_open_socket(void *ptr,
     return CURL_SOCKET_BAD;
   }
 
-  /* Make the server non-blocking. */
+  /* Make both ends non-blocking. The curl end (fds[1]) must be non-blocking
+     so that a large send() from the protocol layer (e.g. a 1MB DICT URL)
+     cannot stall indefinitely when the kernel socket buffer fills up. */
   flags = fcntl(fds[0], F_GETFL, 0);
   status = fcntl(fds[0], F_SETFL, flags | O_NONBLOCK);
 
   if(status == -1) {
-    /* Close the file descriptors so they don't leak. */
     close(fds[0]);
     close(fds[1]);
+    return CURL_SOCKET_BAD;
+  }
 
-    /* Setting non-blocking failed. Return a negative response code. */
+  flags = fcntl(fds[1], F_GETFL, 0);
+  status = fcntl(fds[1], F_SETFL, flags | O_NONBLOCK);
+
+  if(status == -1) {
+    close(fds[0]);
+    close(fds[1]);
     return CURL_SOCKET_BAD;
   }
 
