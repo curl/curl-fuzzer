@@ -11,8 +11,21 @@
         "CMakeLists.txt"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s.*?_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)?"
       ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "openldap/openldap",
+      "extractVersionTemplate": "^OPENLDAP_REL_ENG_(?<major>\\d+)_(?<minor>\\d+)_(?<patch>\\d+)$",
+      "managerFilePatterns": [
+        "CMakeLists.txt"
+      ],
+      "matchStrings": [
+        "# Install OpenLDAP\\nset\\(OPENLDAP_VERSION (?<currentValue>.*)\\)"
+      ],
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
