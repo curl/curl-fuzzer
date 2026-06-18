@@ -28,7 +28,7 @@ endif()
 # Install zlib
 #
 # renovate: datasource=github-tags depName=madler/zlib
-set(ZLIB_VERSION 1.3.1)
+set(ZLIB_VERSION 1.3.2)
 set(ZLIB_URL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.xz
              https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
