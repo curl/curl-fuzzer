@@ -7,11 +7,69 @@
   "customManagers": [
     {
       "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "madler/zlib",
       "managerFilePatterns": [
         "CMakeLists.txt"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\r?\\n\\s*set\\([A-Z0-9_]+_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+        "# renovate: datasource=github-tags depName=madler/zlib\\r?\\nset\\(ZLIB_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "facebook/zstd",
+      "managerFilePatterns": [
+        "CMakeLists.txt"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-tags depName=facebook/zstd\\r?\\nset\\(ZSTD_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "openssl/openssl",
+      "extractVersionTemplate": "^openssl-(?<version>.*)$",
+      "managerFilePatterns": [
+        "CMakeLists.txt"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-tags depName=openssl/openssl\\r?\\n\\s*set\\(OPENSSL_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "nghttp2/nghttp2",
+      "managerFilePatterns": [
+        "CMakeLists.txt"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-tags depName=nghttp2/nghttp2\\r?\\nset\\(NGHTTP2_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "libidn/libidn2",
+      "managerFilePatterns": [
+        "CMakeLists.txt"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-tags depName=libidn/libidn2\\r?\\nset\\(LIBIDN2_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "google/libprotobuf-mutator",
+      "managerFilePatterns": [
+        "CMakeLists.txt"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-tags depName=google/libprotobuf-mutator\\r?\\n\\s*set\\(LPM_VERSION (?<currentValue>\\S+)\\)"
       ]
     },
     {
@@ -40,15 +98,6 @@
         "pep621"
       ],
       "groupName": "Python dependencies"
-    },
-    {
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchPackageNames": [
-        "openssl/openssl"
-      ],
-      "extractVersion": "^openssl-(?<version>.*)$"
     }
   ]
 }
