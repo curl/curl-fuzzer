@@ -4,6 +4,7 @@
     "config:best-practices",
     ":assignAndReview(cmeister2)"
   ],
+  "automerge": true,
   "customManagers": [
     {
       "customType": "regex",
