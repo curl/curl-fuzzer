@@ -137,3 +137,21 @@ jobs:
         with:
           name: artifacts
           path: ./out/artifacts
+
+  Success:
+    name: 'Success'
+    # Single required status check: green only when every RunFuzzers matrix
+    # leg succeeded.
+    needs: [RunFuzzers]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check RunFuzzers result
+        env:
+          RESULT: ${{ needs.RunFuzzers.result }}
+        run: |
+          if [ "${RESULT}" != "success" ]; then
+            echo "RunFuzzers did not succeed: ${RESULT}"
+            exit 1
+          fi
+          echo "All fuzzers ran successfully."
