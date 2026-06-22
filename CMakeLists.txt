@@ -121,9 +121,7 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
         enable-tls1_3
         enable-rc5
         enable-md2
-        enable-ssl3
         ${OPENSSL_EC_FLAG}
-        enable-ssl3-method
         enable-nextprotoneg
         enable-weak-ssl-ciphers
         --with-zlib-include=${ZLIB_INSTALL_DIR}/include
