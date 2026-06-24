@@ -496,7 +496,7 @@ int fuzz_select(int nfds,
 /**
  * Set allowed protocols based on the compile options.
  *
- * Note that it can only use ONE of the FUZZ_PROTOCOLS_* defines.a
+ * Note that it can only use ONE of the FUZZ_PROTOCOLS_* defines.
  */
 int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 {
