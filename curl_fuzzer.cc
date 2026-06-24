@@ -169,7 +169,6 @@ EXIT_LABEL:
 int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 {
   int rc = 0;
-  unsigned long allowed_protocols;
 
   /* Set some standard options on the CURL easy handle. We need to override the
      socket function so that we create our own sockets to present to CURL. */
@@ -423,7 +422,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
      handle. */
   curl_multi_cleanup(multi_handle);
 
-  return(rc);
+  return rc;
 }
 
 /**
@@ -480,7 +479,7 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sman)
     sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
-  return(rc);
+  return rc;
 }
 
 /**
@@ -497,7 +496,7 @@ int fuzz_select(int nfds,
 /**
  * Set allowed protocols based on the compile options.
  *
- * Note that it can only use ONE of the FUZZ_PROTOCOLS_* defines.a
+ * Note that it can only use ONE of the FUZZ_PROTOCOLS_* defines.
  */
 int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 {

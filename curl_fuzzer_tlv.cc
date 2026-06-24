@@ -515,7 +515,7 @@ int fuzz_add_mime_part(TLV *src_tlv, curl_mimepart *part)
 
 EXIT_LABEL:
 
-  return(rc);
+  return rc;
 }
 
 /**
