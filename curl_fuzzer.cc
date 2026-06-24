@@ -169,7 +169,6 @@ EXIT_LABEL:
 int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 {
   int rc = 0;
-  unsigned long allowed_protocols;
 
   /* Set some standard options on the CURL easy handle. We need to override the
      socket function so that we create our own sockets to present to CURL. */
