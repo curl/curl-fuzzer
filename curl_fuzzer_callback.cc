@@ -206,7 +206,7 @@ size_t fuzz_read_callback(char *buffer,
     fuzz->upload1_data_written += remaining_data;
   }
 
-  return(remaining_data);
+  return remaining_data;
 }
 
 /**

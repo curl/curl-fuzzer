@@ -423,7 +423,7 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
      handle. */
   curl_multi_cleanup(multi_handle);
 
-  return(rc);
+  return rc;
 }
 
 /**
@@ -480,7 +480,7 @@ int fuzz_send_next_response(FUZZ_DATA *fuzz, FUZZ_SOCKET_MANAGER *sman)
     sman->fd_state = FUZZ_SOCK_SHUTDOWN;
   }
 
-  return(rc);
+  return rc;
 }
 
 /**
