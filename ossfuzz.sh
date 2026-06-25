@@ -75,7 +75,11 @@ done
 # Copy dictionary and options file to $OUT.
 cp -v ossconfig/*.dict ossconfig/*.options "$OUT"/
 
-# Copy the built GDB installation to $OUT if requested.
-if [[ -n ${GDBINSTALL:-} ]] && [[ -d "${BUILD_DIR}/gdb-install" ]]; then
-  cp -rv "${BUILD_DIR}/gdb-install" "$OUT"/
+# Copy the built GDB installation to $OUT if requested. The GDB build
+# directory is named after its version (e.g. gdb-13.2-install), so resolve
+# it with a glob, but always install to a stable $OUT/gdb-install so the
+# repro image's PATH (/out/gdb-install/bin) keeps working.
+GDB_INSTALL=$(echo "${BUILD_DIR}"/gdb-*-install)
+if [[ -n ${GDBINSTALL:-} ]] && [[ -d "${GDB_INSTALL}" ]]; then
+  cp -rv "${GDB_INSTALL}" "$OUT"/gdb-install
 fi

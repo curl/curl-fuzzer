@@ -57,7 +57,7 @@ jobs:
         uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: build
-          key: acr-build-${{ matrix.sanitizer }}-${{ matrix.engine }}-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'ossfuzz.sh') }}
+          key: acr-build-${{ matrix.sanitizer }}-${{ matrix.engine }}-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh', 'ossfuzz.sh') }}
           restore-keys: |
             acr-build-${{ matrix.sanitizer }}-${{ matrix.engine }}-
 
@@ -88,12 +88,16 @@ jobs:
             --tag "${IMAGE}"
           docker tag "${IMAGE}" "${IMAGE_LATEST}"
 
+      - name: Trim build cache
+        if: steps.build-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master'
+        run: sudo scripts/trim_cache.sh build
+
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master'
         uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: build
-          key: acr-build-${{ matrix.sanitizer }}-${{ matrix.engine }}-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'ossfuzz.sh') }}
+          key: acr-build-${{ matrix.sanitizer }}-${{ matrix.engine }}-${{ hashFiles('CMakeLists.txt', 'scripts/compile_target.sh', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh', 'ossfuzz.sh') }}
 
       - name: Test image
         env:
