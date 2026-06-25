@@ -31,13 +31,14 @@ endif()
 set(ZLIB_VERSION 1.3.2)
 set(ZLIB_URL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.xz
              https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
-set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/zlib-install)
+set(ZLIB_BUILD_NAME zlib-${ZLIB_VERSION})
+set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/${ZLIB_BUILD_NAME}-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
 
 if(NOT EXISTS ${ZLIB_STATIC_LIB})
     ExternalProject_Add(zlib_external
         URL ${ZLIB_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/zlib
+        PREFIX ${CMAKE_BINARY_DIR}/${ZLIB_BUILD_NAME}
         CONFIGURE_COMMAND ./configure --static --prefix=${ZLIB_INSTALL_DIR}
         BUILD_IN_SOURCE 1
         BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
@@ -54,13 +55,14 @@ endif()
 # renovate: datasource=github-tags depName=facebook/zstd
 set(ZSTD_VERSION 1.5.7)
 set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz)
-set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/zstd-install)
+set(ZSTD_BUILD_NAME zstd-${ZSTD_VERSION})
+set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/${ZSTD_BUILD_NAME}-install)
 set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
 
 if(NOT EXISTS ${ZSTD_STATIC_LIB})
     ExternalProject_Add(zstd_external
         URL ${ZSTD_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/zstd
+        PREFIX ${CMAKE_BINARY_DIR}/${ZSTD_BUILD_NAME}
         SOURCE_SUBDIR build/cmake
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR}
             -DCMAKE_INSTALL_LIBDIR=lib
@@ -84,8 +86,9 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
     set(OPENSSL_VERSION 4.0.1)
     set(OPENSSL_URL
         https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
-    set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/openssl-install)
-    set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/openssl/src/openssl_external)
+    set(OPENSSL_BUILD_NAME openssl-${OPENSSL_VERSION})
+    set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}-install)
+    set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}/src/openssl_external)
     set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
 
     # Architecture and sanitizer logic
@@ -132,7 +135,7 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
     if(NOT EXISTS ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
         ExternalProject_Add(openssl_external
             URL ${OPENSSL_URL}
-            PREFIX ${CMAKE_BINARY_DIR}/openssl
+            PREFIX ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}
             CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
             INSTALL_COMMAND ${MAKE} install_sw
             BUILD_IN_SOURCE 1
@@ -163,13 +166,14 @@ endif()
 # renovate: datasource=github-tags depName=nghttp2/nghttp2
 set(NGHTTP2_VERSION 1.69.0)
 set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz)
-set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/nghttp2-install)
+set(NGHTTP2_BUILD_NAME nghttp2-${NGHTTP2_VERSION})
+set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/${NGHTTP2_BUILD_NAME}-install)
 set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
 
 if(NOT EXISTS ${NGHTTP2_STATIC_LIB})
     ExternalProject_Add(nghttp2_external
         URL ${NGHTTP2_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/nghttp2
+        PREFIX ${CMAKE_BINARY_DIR}/${NGHTTP2_BUILD_NAME}
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
             -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
             -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
@@ -189,13 +193,14 @@ endif()
 set(LIBIDN2_VERSION 2.3.8)
 set(LIBIDN2_URL https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
                 https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
-set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/libidn2-install)
+set(LIBIDN2_BUILD_NAME libidn2-${LIBIDN2_VERSION})
+set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/${LIBIDN2_BUILD_NAME}-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
 
 if(NOT EXISTS ${LIBIDN2_STATIC_LIB})
     ExternalProject_Add(libidn2_external
         URL ${LIBIDN2_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/libidn2
+        PREFIX ${CMAKE_BINARY_DIR}/${LIBIDN2_BUILD_NAME}
         CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
             --disable-doc
         BUILD_IN_SOURCE 1
@@ -212,7 +217,8 @@ endif()
 set(GDB_VERSION 13.2)
 set(GDB_URL https://ftpmirror.gnu.org/gdb/gdb-${GDB_VERSION}.tar.gz
             https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz)
-set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/gdb-install)
+set(GDB_BUILD_NAME gdb-${GDB_VERSION})
+set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/${GDB_BUILD_NAME}-install)
 
 option(BUILD_GDB "Build GDB as an external project" OFF)
 if(BUILD_GDB)
@@ -220,7 +226,7 @@ if(BUILD_GDB)
     # clean flags so sanitizer/fuzzer flags don't break its build.
     ExternalProject_Add(gdb_external
         URL ${GDB_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/gdb
+        PREFIX ${CMAKE_BINARY_DIR}/${GDB_BUILD_NAME}
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
             "CC=gcc" "CXX=g++"
             "CFLAGS=-O2" "CXXFLAGS=-O2" "LDFLAGS=" "CPPFLAGS="
@@ -236,14 +242,15 @@ endif()
 set(OPENLDAP_VERSION 2.6.13)
 set(OPENLDAP_URL https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz
                  https://mirror.lyrahosting.com/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
-set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openldap-install)
+set(OPENLDAP_BUILD_NAME openldap-${OPENLDAP_VERSION})
+set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/${OPENLDAP_BUILD_NAME}-install)
 set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
 set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
 
 if(NOT EXISTS ${OPENLDAP_STATIC_LIB_LDAP})
     ExternalProject_Add(openldap_external
         URL ${OPENLDAP_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/openldap
+        PREFIX ${CMAKE_BINARY_DIR}/${OPENLDAP_BUILD_NAME}
         CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls --disable-slapd
         BUILD_IN_SOURCE 1
         BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
@@ -525,7 +532,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
 
     # renovate: datasource=github-tags depName=google/libprotobuf-mutator
     set(LPM_VERSION v1.5)
-    set(LPM_INSTALL_DIR ${CMAKE_BINARY_DIR}/lpm-install)
+    set(LPM_BUILD_NAME lpm-${LPM_VERSION})
+    set(LPM_INSTALL_DIR ${CMAKE_BINARY_DIR}/${LPM_BUILD_NAME}-install)
     set(LPM_STATIC_LIB ${LPM_INSTALL_DIR}/lib/libprotobuf-mutator.a)
     set(LPM_LIBFUZZER_LIB ${LPM_INSTALL_DIR}/lib/libprotobuf-mutator-libfuzzer.a)
 
@@ -536,7 +544,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # package is built against libstdc++, and the ABI mismatch breaks linking
     # (every std::string symbol ends up mangled as std::__1::basic_string and
     # the distro libprotobuf.so doesn't export it).
-    set(LPM_PB_DIR ${CMAKE_BINARY_DIR}/lpm/src/libprotobuf_mutator_external-build/external.protobuf)
+    set(LPM_PB_DIR ${CMAKE_BINARY_DIR}/${LPM_BUILD_NAME}/src/libprotobuf_mutator_external-build/external.protobuf)
     set(LPM_PB_INCLUDE ${LPM_PB_DIR}/include)
     set(LPM_PB_LIBDIR ${LPM_PB_DIR}/lib)
     set(LPM_PROTOC ${LPM_PB_DIR}/bin/protoc)
@@ -547,7 +555,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             GIT_TAG ${LPM_VERSION}
             GIT_SHALLOW 1
             UPDATE_DISCONNECTED ON
-            PREFIX ${CMAKE_BINARY_DIR}/lpm
+            PREFIX ${CMAKE_BINARY_DIR}/${LPM_BUILD_NAME}
             CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LPM_INSTALL_DIR}
                 -DCMAKE_BUILD_TYPE=Release
                 -DCMAKE_POSITION_INDEPENDENT_CODE=ON
