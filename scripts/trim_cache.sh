@@ -46,8 +46,10 @@ du -sh "${BD}" 2>/dev/null || true
 
 # Stash LPM's bundled-protobuf install outputs - they live outside any
 # *-install/ directory but are needed by the proto fuzzer build (protoc
-# binary, protobuf headers, static libs).
-LPM_PB=${BD}/lpm/src/libprotobuf_mutator_external-build/external.protobuf
+# binary, protobuf headers, static libs). The LPM build directory is named
+# after its version (e.g. lpm-v1.5), so resolve it with a glob rather than
+# hardcoding the version.
+LPM_PB=$(echo "${BD}"/lpm-*/src/libprotobuf_mutator_external-build/external.protobuf)
 STASH=$(mktemp -d)
 if [ -d "${LPM_PB}/bin" ]; then
   mkdir -p "${STASH}/lpm_pb"
