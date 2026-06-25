@@ -119,6 +119,7 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
         no-tests
         no-apps
         no-makedepend
+        no-engine
         ${OPENSSL_ASM_FLAG}
         ${OPENSSL_ARCH_FLAG}
         enable-tls1_3
