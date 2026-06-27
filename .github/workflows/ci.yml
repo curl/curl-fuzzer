@@ -69,7 +69,7 @@ jobs:
 
       - name: Restore build cache
         id: build-cache
-        uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CACHE_PATH }}
           key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CACHE_PATH }}
           key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
