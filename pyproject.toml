@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 browser-tests = [
-    "playwright>=1.60,<1.61",
+    "playwright>=1.61,<1.62",
     "pytest_playwright>=0.8,<0.9",
     "pytest>=9,<10",
 ]
