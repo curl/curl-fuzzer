@@ -1,0 +1,12 @@
+# Exercise both transport-metadata caches entirely in memory. The harness owns
+# fixed /dev/null persistence paths, and curl's debug HTTP opt-ins let this fast
+# plaintext seed cover the same parsers that production restricts to HTTPS.
+# Repeated headers deliberately reach create/update/clear and invalid-directive
+# paths within one transfer.
+scheme: SCHEME_HTTP
+host_path: "origin.example/transport-metadata"
+options { option_id: CURLOPT_ALTSVC_CTRL uint_value: 24 }
+options { option_id: CURLOPT_HSTS_CTRL uint_value: 1 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nAlt-Svc: h2=\"alt.example:8443\"; ma=86400; persist=1, h1=\":8080\"; ma=\"60\"\r\nAlt-Svc: h1=\"[ffff::1]:8181\"; ma=1\r\nAlt-Svc: h1=\"broken.example:-1\"\r\nAlt-Svc: h1=\":70000\"\r\nAlt-Svc: h9=\"ignored.example:443\"; unknown=7\r\nAlt-Svc: nonsense\r\nAlt-Svc: clear\r\nStrict-Transport-Security: max-age=31536000; includeSubDomains; preload\r\nStrict-Transport-Security: max-age  = 1000\r\nStrict-Transport-Security: max-age=60; includeSubDomains; includeSubDomains\r\nStrict-Transport-Security: max-age=60; max-age=70\r\nStrict-Transport-Security: includeSubDomains\r\nStrict-Transport-Security: max-age=0\r\nContent-Length: 0\r\n\r\n"
+}

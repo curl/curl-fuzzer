@@ -1,0 +1,9 @@
+# Known-good gzip stream adapted from the legacy test_accept_encoding seed.
+# An empty CURLOPT_ACCEPT_ENCODING enables every decoder compiled into curl;
+# Content-Encoding then selects the gzip path for this response.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/gzip"
+options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 110\r\nContent-Encoding: gzip\r\n\r\n\x1f\x8b\x08\x00\x08\x7f\xe6Y\x00\x03\xab\xe6RPPJ\xaf\xca,(HMQ\xb2R()*M\xd5Q\x00\x89e\xa4&\xa6\xa4\x16\x15\x03\xc5\xaa\x81\\\xa0\x80crrjA\t\x90\xaf\xa4\xa5\xaf\xa5\x04V\x04\x14u\xce\xcf\xcbKM.\xc9\xcc\xcf\x03\xc9$\xe7\xe4\x17\xa7B\xe4j!\xc6\xe4\xa6\x96d\xe4\x83LVrw\r\x01\xc9\xd4r\x01\x00k\\H,s\x00\x00\x00"
+}

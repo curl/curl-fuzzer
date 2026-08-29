@@ -1,0 +1,17 @@
+# A compact HTTP/2 exchange whose response header block crosses a CONTINUATION
+# boundary, followed by flow-control, PING, trailers, stream reset, and GOAWAY.
+# RST_STREAM arrives after END_STREAM and is therefore harmless to the body,
+# while still exercising curl/nghttp2's closed-stream control handling.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/http2-controls"
+options { option_id: CURLOPT_HTTP_VERSION uint_value: 5 }
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  # SETTINGS ack, empty HEADERS, then :status=200 in CONTINUATION.
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x01\x09\x04\x00\x00\x00\x01\x88"
+  # Server PING plus connection- and stream-level WINDOW_UPDATE.
+  on_readable: "\x00\x00\x08\x06\x00\x00\x00\x00\x00ABCDEFGH\x00\x00\x04\x08\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x04\x08\x00\x00\x00\x00\x01\x00\x00\x04\x00"
+  # One DATA byte, literal x-trailer: done with END_STREAM, then a reset and
+  # clean GOAWAY carrying a short debug string.
+  on_readable: "\x00\x00\x01\x00\x00\x00\x00\x00\x01x\x00\x00\x10\x01\x05\x00\x00\x00\x01\x00\x09x-trailer\x04done\x00\x00\x04\x03\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x0b\x07\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00bye"
+}

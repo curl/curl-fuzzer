@@ -1,0 +1,9 @@
+# Userinfo, an IPv6 zone identifier, a zero-padded port, dot segments, encoded
+# delimiters, an empty query value, and a fragment all exercise distinct URL
+# normalization decisions before the wildcard CONNECT_TO rule routes the
+# transfer into the socketpair mock.
+scheme: SCHEME_HTTP
+host_path: "user%3Aname:p%40ss@[fe80::1%25lo]:00080/a/./b/../c;param?escaped=%2F&empty=&flag#fragment"
+connection {
+  initial_response: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+}

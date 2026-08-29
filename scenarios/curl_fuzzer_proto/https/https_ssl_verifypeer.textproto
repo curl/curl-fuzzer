@@ -1,0 +1,9 @@
+# Deliberately override the harness's fast verification-off baseline. This seed
+# exercises trust-store verification through the proto option-dispatch path and
+# mirrors the intentional legacy HTTPS regression seed.
+scheme: SCHEME_HTTPS
+host_path: "127.0.0.1/"
+options {
+  option_id: CURLOPT_SSL_VERIFYPEER
+  bool_value: true
+}

@@ -1,0 +1,10 @@
+# Keep malformed-domain, public-suffix fallback, invalid-octet, and reserved
+# prefix decisions together: all are cheap Set-Cookie parser exits, while the
+# final valid __Host cookie proves the engine did not reject the whole block.
+# localhost is a secure cookie context in curl, allowing prefix rules to be
+# covered without paying for a TLS handshake.
+scheme: SCHEME_HTTP
+host_path: "localhost/cookie/prefix"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nSet-Cookie: suffix=drop; Domain=com; Path=/\r\nSet-Cookie: tail=drop; Domain=example.net; Path=/\r\nSet-Cookie: bad=control\x01byte; Path=/\r\nSet-Cookie: __Secure-missing=drop; Path=/\r\nSet-Cookie: __Host-domain=drop; Secure; Domain=localhost; Path=/\r\nSet-Cookie: __Host-path=drop; Secure; Path=/cookie\r\nSet-Cookie: __Secure-valid=keep; Secure; Path=/\r\nSet-Cookie: __Host-valid=keep; Secure; Path=/\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
+}

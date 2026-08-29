@@ -1,0 +1,9 @@
+# FAILONERROR changes a syntactically complete HTTP response into a transfer
+# error after curl has parsed its status and headers. A non-authentication 4xx
+# keeps this seed focused on the terminal-status decision.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/fail-on-error"
+options { option_id: CURLOPT_FAILONERROR bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 418 I'm a teapot\r\nContent-Type: text/plain\r\nContent-Length: 6\r\nRetry-After: 1\r\n\r\nshort\n"
+}

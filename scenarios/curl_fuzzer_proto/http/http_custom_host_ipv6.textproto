@@ -1,0 +1,11 @@
+# A custom bracketed IPv6 Host with an explicit port takes curl's dedicated
+# cookie-host normalization path. The origin itself remains an ordinary DNS
+# name so the seed distinguishes application-supplied Host handling from URL
+# authority parsing, while CONNECT_TO still confines the socket.
+scheme: SCHEME_HTTP
+host_path: "origin.test:8080/custom-host"
+request_headers: "Host: [2001:db8::1]:8443"
+options { option_id: CURLOPT_COOKIE string_value: "client=seed" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nSet-Cookie: hostonly=1; Path=/\r\nContent-Length: 0\r\n\r\n"
+}

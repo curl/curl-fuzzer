@@ -48,8 +48,10 @@ class MockServerBase {
 
   /// Run 'scenario' to completion on 'easy'. Allocates a curl_multi handle,
   /// attaches 'easy', delegates the protocol-specific drive to RunLoop, and
-  /// cleans up. All protocol-specific behaviour lives inside the subclass;
-  /// this method is multi-handle RAII only.
+  /// drains the completion queue before cleanup. Reading the result here is
+  /// important because removing the only easy handle would otherwise make
+  /// every protocol runner skip the public multi-result path. All protocol-
+  /// specific behaviour still lives inside the subclass.
   /// @param easy     curl easy handle already Install()ed on this mock.
   /// @param scenario the Scenario proto to drive.
   void DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
@@ -73,16 +75,39 @@ class MockServerBase {
   /// @param scenario the Scenario proto to drive.
   virtual void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) = 0;
 
-  /// Wait on curl's fdset with a short timeout so a scenario cannot spin
-  /// forever. Shared by every subclass's drive loop.
+  /// Wait on curl's fdset with a short timeout. Drive loops call this only for
+  /// scenarios that explicitly request backpressure/timing behaviour; ordinary
+  /// scenarios run without wall-clock sleeps.
   /// @param multi The multi handle whose fdset to poll.
   /// @param rc    Out parameter: set to the CURLMcode on error.
   /// @return select()'s result, or -1 on curl_multi_fdset failure.
   static int WaitOnMultiFdset(CURLM* multi, CURLMcode* rc);
 
-  /// Cap on consecutive idle perform iterations before a drive loop bails.
-  /// Shared so subclass loops cap identically.
-  static constexpr int kMaxIdleIterations = 256;
+  /// Ask curl to construct and inspect its current connection-filter pollset
+  /// without waiting. A perform-only harness can complete local socketpair
+  /// transfers while systematically skipping the public multi-poll path that
+  /// event-driven applications use. Timing scenarios make one zero-timeout
+  /// probe, retaining that coverage without taxing the fixed fast lanes.
+  /// @param multi The active multi handle after at least one perform call.
+  static void ProbeMultiPollset(CURLM* multi);
+
+  /// Hard operation budget for one scenario. This bounds cases that continue
+  /// making tiny amounts of progress (for example a one-byte backpressure
+  /// drain) without relying on wall-clock time.
+  static constexpr int kMaxDriveIterations = 512;
+
+  /// Consecutive no-progress budget for ordinary scenarios. Socketpair I/O is
+  /// local and should settle immediately, so a handful of extra performs is
+  /// enough to flush curl's state machine without sleeping.
+  static constexpr int kMaxIdleIterations = 8;
+
+  /// Explicit backpressure scenarios get a larger idle budget and may use the
+  /// short timed wait above. This keeps timeout/error branches reachable while
+  /// ensuring ordinary mutations never inherit their cost.
+  static constexpr int kMaxTimedIdleIterations = 256;
+
+  /// @return true when the scenario explicitly opted into socket backpressure.
+  static bool UsesTimedDrive(const curl::fuzzer::proto::Scenario& scenario);
 
   /// Apply the pending BackpressureConfig (set by DriveScenario from the
   /// Scenario proto) to the newly-created connection_. Subclasses call this

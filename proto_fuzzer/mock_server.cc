@@ -18,10 +18,12 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <string>
-#include <utility>
 #include <vector>
 
+#include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/ws_frame.h"
 
 namespace proto_fuzzer {
@@ -31,29 +33,6 @@ namespace {
 // fd_set can only represent file descriptors < FD_SETSIZE. Reject any pair that couldn't participate in select()
 // without memory corruption.
 bool FdFitsInFdSet(int fd) { return fd >= 0 && fd < FD_SETSIZE; }
-
-// Cap per-scenario response chunks so a mutator that creates thousands of
-// tiny on_readable entries can't dominate runtime.
-constexpr std::size_t kMaxResponseChunks = 16;
-
-/// Combine the scenario's raw on_readable strings with any serialised
-/// WebSocket frames into a single ordered chunk list, capped at
-/// kMaxResponseChunks. Historical behaviour: HTTP scenarios can carry
-/// server_frames too; the fuzzer just feeds those bytes to curl.
-std::vector<std::string> BuildChunkList(const curl::fuzzer::proto::Connection& conn) {
-  std::vector<std::string> chunks;
-  chunks.reserve(kMaxResponseChunks);
-  const std::size_t raw_budget = std::min<std::size_t>(kMaxResponseChunks, conn.on_readable_size());
-  for (std::size_t i = 0; i < raw_budget; ++i) {
-    chunks.emplace_back(conn.on_readable(i));
-  }
-  const std::size_t frame_budget = kMaxResponseChunks - chunks.size();
-  const std::size_t frame_count = std::min<std::size_t>(frame_budget, conn.server_frames_size());
-  for (std::size_t i = 0; i < frame_count; ++i) {
-    chunks.emplace_back(SerializeWebSocketFrame(conn.server_frames(static_cast<int>(i))));
-  }
-  return chunks;
-}
 
 }  // namespace
 
@@ -115,8 +94,11 @@ curl_socket_t MockConnection::take_client_fd() {
   return static_cast<curl_socket_t>(fd);
 }
 
-/// Write 'size' bytes from 'data' to the server fd, looping until the whole buffer is sent or a short/failed write
-/// occurs.
+/// Write 'size' bytes from 'data' to the server fd, looping until the whole
+/// buffer is sent or a short/failed write occurs. MSG_NOSIGNAL is a harness
+/// invariant rather than a curl behavior choice: a response race may leave the
+/// peer closed, and that must look like an ordinary failed mock write instead
+/// of terminating the fuzz process with SIGPIPE.
 /// @param data Buffer to send.
 /// @param size Number of bytes in 'data'.
 /// @return false on short or failed write (treat the connection as lost).
@@ -126,7 +108,7 @@ bool MockConnection::WriteAll(const unsigned char* data, std::size_t size) {
   }
   std::size_t written = 0;
   while (written < size) {
-    ssize_t n = ::write(server_fd_, data + written, size - written);
+    ssize_t n = ::send(server_fd_, data + written, size - written, MSG_NOSIGNAL);
     if (n <= 0) {
       return false;
     }
@@ -139,9 +121,10 @@ bool MockConnection::WriteAll(const unsigned char* data, std::size_t size) {
 /// applied (see ApplyBackpressure), stops after drain_limit_ bytes so the
 /// kernel recv buffer stays near-full and curl keeps seeing short writes.
 /// Otherwise drains until read() returns 0/EAGAIN, matching legacy behaviour.
-void MockConnection::DrainIncoming() {
+/// @return number of bytes consumed during this call.
+std::size_t MockConnection::DrainIncoming() {
   if (server_fd_ < 0) {
-    return;
+    return 0;
   }
   unsigned char scratch[4096];
   std::size_t drained = 0;
@@ -159,6 +142,7 @@ void MockConnection::DrainIncoming() {
     }
     drained += static_cast<std::size_t>(n);
   }
+  return drained;
 }
 
 /// Tighten both halves of the socketpair buffer and/or cap DrainIncoming's
@@ -207,30 +191,53 @@ void MockConnection::ShutdownWrite() {
 }
 
 /// @class proto_fuzzer::MockServer
-/// @brief Orchestrates a single mock HTTP exchange: installs the socket callbacks on an easy handle, then feeds queued
-/// responses as libcurl reads them.
+/// @brief Orchestrates a bounded sequence of mock HTTP exchanges: installs
+/// socket callbacks on an easy handle, assigns a response script to each new
+/// socket, and feeds queued chunks as libcurl reads them.
 
-/// Construct an idle MockServer with no scripted responses. Install() on the
-/// base class and DriveScenario() configure it from a Scenario proto.
-MockServer::MockServer() : next_chunk_(0), initial_sent_(false) {}
+/// Construct an idle MockServer with no scripted responses or open peers.
+/// DriveScenario() configures it from a Scenario before curl can open a socket.
+MockServer::MockServer() : script_count_(0), next_script_(0), active_script_(nullptr) {}
 
-/// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
+/// Default destructor; current and previous MockConnections clean up their
+/// server-side descriptors only after curl has been removed from the multi.
 MockServer::~MockServer() = default;
 
-/// Queue bytes to emit. initial_response is written synchronously in the
-/// OPENSOCKETFUNCTION callback (HandleOpenSocket); on_readable entries are
-/// written one-at-a-time when libcurl makes the fd readable.
-/// @param initial_response Bytes written immediately on connection open.
-/// @param on_readable      Additional chunks delivered one per iteration.
-void MockServer::SetScript(std::string initial_response, std::vector<std::string> on_readable) {
-  initial_response_ = std::move(initial_response);
-  on_readable_ = std::move(on_readable);
-  next_chunk_ = 0;
-  initial_sent_ = false;
+/// Build the complete borrowed script table before entering curl. The primary
+/// Connection always occupies slot zero for backwards compatibility; only
+/// three subsequent pointers are retained so protobuf mutations cannot
+/// allocate socketpairs or prolong redirects in proportion to repeated-field
+/// size. The Scenario passed by ScenarioRunner outlives this synchronous drive,
+/// which makes borrowing safe while avoiding response-byte copies.
+/// @param scenario Source of the primary and bounded follow-on scripts.
+void MockServer::SetScripts(const curl::fuzzer::proto::Scenario& scenario) {
+  script_count_ = 0;
+  next_script_ = 0;
+  active_script_ = nullptr;
+  connection_.reset();
+  previous_connections_.clear();
+
+  const auto append_script = [this](const curl::fuzzer::proto::Connection& connection) {
+    ConnectionScript& script = scripts_[script_count_++];
+    script.connection = &connection;
+    script.raw_chunk_count = std::min<std::size_t>(scenario_limits::kMaxResponseChunks, connection.on_readable_size());
+    const std::size_t frame_budget = scenario_limits::kMaxResponseChunks - script.raw_chunk_count;
+    script.frame_chunk_count = std::min<std::size_t>(frame_budget, connection.server_frames_size());
+    script.next_chunk = 0;
+  };
+
+  append_script(scenario.connection());
+  const std::size_t subsequent_count = std::min<std::size_t>(
+      scenario_limits::kMaxConnections - 1, static_cast<std::size_t>(scenario.subsequent_connections_size()));
+  for (std::size_t i = 0; i < subsequent_count; ++i) {
+    append_script(scenario.subsequent_connections(static_cast<int>(i)));
+  }
 }
 
 /// @return true if at least one on_readable chunk has not yet been sent.
-bool MockServer::has_more_chunks() const { return next_chunk_ < on_readable_.size(); }
+bool MockServer::has_more_chunks() const {
+  return active_script_ != nullptr && active_script_->next_chunk < active_script_->chunk_count();
+}
 
 /// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
 /// MockConnection, writes initial_response into it, and returns the
@@ -238,90 +245,167 @@ bool MockServer::has_more_chunks() const { return next_chunk_ < on_readable_.siz
 /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD on
 ///         failure.
 curl_socket_t MockServer::HandleOpenSocket() {
-  if (connection_) {
-    // This mock supports exactly one connection per scenario.
+  if (next_script_ >= script_count_) {
+    // Refusing a fifth socket keeps redirect loops bounded even if curl's own
+    // redirect limit is mutated upward or an authentication scheme retries.
     return CURL_SOCKET_BAD;
   }
+
+  if (connection_) {
+    // libcurl owns the corresponding client fd, so retain the server half
+    // until the easy handle leaves the multi instead of closing it at the
+    // moment a redirect or retry opens its replacement.
+    previous_connections_.push_back(std::move(connection_));
+  }
+
+  active_script_ = &scripts_[next_script_++];
+  const curl::fuzzer::proto::Connection& script_connection = *active_script_->connection;
   connection_ = std::make_unique<MockConnection>();
   if (!connection_->ok()) {
     connection_.reset();
+    active_script_ = nullptr;
     return CURL_SOCKET_BAD;
   }
-  ApplyPendingBackpressure();
-  if (!initial_response_.empty()) {
-    if (!connection_->WriteAll(reinterpret_cast<const unsigned char*>(initial_response_.data()),
-                               initial_response_.size())) {
+
+  // Target policies clamp/clear these values before execution. Saturating the
+  // compatibility lane's raw uint32 avoids implementation-defined narrowing
+  // while preserving its ability to request any representable socket size.
+  const std::uint32_t int_max = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+  const auto& backpressure = script_connection.backpressure();
+  const int recv_buf_bytes = static_cast<int>(std::min(backpressure.recv_buf_bytes(), int_max));
+  connection_->ApplyBackpressure(recv_buf_bytes, static_cast<std::size_t>(backpressure.drain_limit()));
+
+  const std::string& initial_response = script_connection.initial_response();
+  if (!initial_response.empty()) {
+    if (!connection_->WriteAll(reinterpret_cast<const unsigned char*>(initial_response.data()),
+                               initial_response.size())) {
       connection_.reset();
+      active_script_ = nullptr;
       return CURL_SOCKET_BAD;
     }
   }
-  initial_sent_ = true;
-  if (on_readable_.empty()) {
+  if (active_script_->chunk_count() == 0) {
     connection_->ShutdownWrite();
   }
   return connection_->take_client_fd();
 }
 
 /// Push the next queued chunk. Called by the drive loop when curl is ready
-/// for more data. No-op if the queue is empty or no connection is open.
-void MockServer::DeliverNextChunk() {
-  if (!connection_ || next_chunk_ >= on_readable_.size()) {
-    return;
+/// for more data.
+/// @return true when a chunk was consumed from the script.
+bool MockServer::DeliverNextChunk() {
+  if (!connection_ || !has_more_chunks()) {
+    return false;
   }
   connection_->DrainIncoming();
-  const std::string& chunk = on_readable_[next_chunk_++];
-  if (!chunk.empty()) {
-    connection_->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
+  const std::size_t chunk_index = active_script_->next_chunk++;
+  const auto& script_connection = *active_script_->connection;
+  if (chunk_index < active_script_->raw_chunk_count) {
+    const std::string& chunk = script_connection.on_readable(static_cast<int>(chunk_index));
+    if (!chunk.empty()) {
+      connection_->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
+    }
+  } else {
+    // HTTP scenarios historically accept structured WebSocket frames as raw
+    // response bytes after every on_readable chunk. Serialize only the frame
+    // curl is about to receive: follow-on scripts and capped suffix frames may
+    // never be consumed, so eagerly materialising all of them wastes mutations.
+    const std::size_t frame_index = chunk_index - active_script_->raw_chunk_count;
+    const std::string chunk = SerializeWebSocketFrame(script_connection.server_frames(static_cast<int>(frame_index)));
+    if (!chunk.empty()) {
+      connection_->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
+    }
   }
-  if (next_chunk_ >= on_readable_.size()) {
+  if (!has_more_chunks()) {
     connection_->ShutdownWrite();
   }
+  return true;
+}
+
+/// Drain every live mock peer. Previous connections are normally quiescent,
+/// but curl can finish sending a request body or close one after it has begun
+/// resolving/opening the redirect target. Servicing both sides makes that
+/// overlap deterministic without conflating their response scripts.
+std::size_t MockServer::DrainIncomingConnections() {
+  std::size_t drained = 0;
+  for (const auto& previous : previous_connections_) {
+    drained += previous->DrainIncoming();
+  }
+  if (connection_) {
+    drained += connection_->DrainIncoming();
+  }
+  return drained;
 }
 
 /// Seed the mock from the scenario, then drive the perform loop until curl is
-/// done or the idle-iteration cap is hit. Bounded by select() timeouts so a
-/// misbehaving scenario cannot spin forever.
+/// done or a deterministic operation/idle budget is hit. Ordinary scenarios
+/// never wait; explicit backpressure scenarios may use short select() waits.
 /// @param multi    caller-owned multi; 'easy' is already added.
 /// @param easy     the curl easy handle attached to this mock.
 /// @param scenario source of the initial_response and on_readable chunks.
 void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   (void)easy;
-  const auto& conn = scenario.connection();
-  SetScript(conn.initial_response(), BuildChunkList(conn));
+  SetScripts(scenario);
 
   int still_running = 1;
   int idle_iterations = 0;
+  int drive_iterations = 0;
+  bool pollset_probed = false;
+  // Each newly opened socket can carry its own pressure settings. Inspect only
+  // the borrowed, runtime-bounded scripts: ignored repeated protobuf entries must
+  // not opt a fast transfer into timed waits.
+  const bool timed_drive =
+      std::any_of(scripts_.begin(), scripts_.begin() + script_count_, [](const ConnectionScript& script) {
+        const auto& backpressure = script.connection->backpressure();
+        return backpressure.recv_buf_bytes() != 0 || backpressure.drain_limit() != 0;
+      });
+  const int idle_limit = timed_drive ? kMaxTimedIdleIterations : kMaxIdleIterations;
   CURLMcode rc = CURLM_OK;
 
-  while (still_running && idle_iterations < kMaxIdleIterations) {
+  while (still_running && idle_iterations < idle_limit && drive_iterations++ < kMaxDriveIterations) {
+    bool made_progress = false;
+    const int running_before = still_running;
     rc = curl_multi_perform(multi, &still_running);
     if (rc != CURLM_OK) {
       break;
+    }
+    made_progress = still_running != running_before;
+    if (timed_drive && still_running && !pollset_probed) {
+      // Probe only after curl has built the socket/filter chain. A zero-timeout
+      // poll adds no wall-clock wait; restricting it to the timing lane keeps
+      // the fixed HTTP target free of a per-input polling syscall.
+      ProbeMultiPollset(multi);
+      pollset_probed = true;
     }
     if (!still_running) {
       break;
     }
 
-    int ready = WaitOnMultiFdset(multi, &rc);
-    if (rc != CURLM_OK) {
-      break;
-    }
-
     // Always drain whatever curl has written. Under backpressure the kernel
     // recv buffer would otherwise stay full — curl short-writes, the mock
-    // never consumes, and the transfer wedges until kMaxIdleIterations. With
+    // never consumes, and the transfer wedges until the drive budget. With
     // drain_limit set this still honours the per-tick byte budget.
-    if (connection_) {
-      connection_->DrainIncoming();
-    }
+    made_progress = DrainIncomingConnections() != 0 || made_progress;
     if (has_more_chunks()) {
-      DeliverNextChunk();
-      idle_iterations = 0;
-    } else if (ready == 0) {
-      ++idle_iterations;
-    } else {
-      idle_iterations = 0;
+      made_progress = DeliverNextChunk() || made_progress;
     }
+
+    if (made_progress) {
+      idle_iterations = 0;
+      continue;
+    }
+
+    // Ordinary socketpair scenarios never sleep: repeated no-progress
+    // performs are enough to settle curl's local state machine. Only an
+    // explicit BackpressureConfig opts into short waits so timeout-related
+    // behaviour remains fuzzable without taxing every corpus entry.
+    if (timed_drive) {
+      (void)WaitOnMultiFdset(multi, &rc);
+      if (rc != CURLM_OK) {
+        break;
+      }
+    }
+    ++idle_iterations;
   }
 }
 

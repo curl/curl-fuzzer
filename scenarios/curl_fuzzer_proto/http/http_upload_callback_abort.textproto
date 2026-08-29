@@ -1,0 +1,18 @@
+# CURL_READFUNC_ABORT reaches the client-reader failure path without a giant
+# or blocking body. The final response is intentionally irrelevant: curl must
+# stop the transfer as soon as the scripted source reports its terminal state.
+scheme: SCHEME_HTTP
+host_path: "upload.test/callback/abort"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+request_headers: "Expect:"
+upload {
+  data: "abort"
+  read_sizes: 1
+  read_sizes: 2
+  terminal: UPLOAD_TERMINAL_ABORT
+  seek_result: UPLOAD_SEEK_CANTSEEK
+}
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

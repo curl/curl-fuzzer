@@ -1,0 +1,10 @@
+# A valid chunked response with extensions and declared trailers, split in the
+# middle of both the first extension and its data. This drives the incremental
+# chunk-size, extension, payload, terminal-extension, and trailer states.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/chunk-ext-trailers"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTrailer: X-Checksum, X-Extra\r\n\r\n4;foo="
+  on_readable: "bar;quoted=\"a b\"\r\nWi"
+  on_readable: "ki\r\n5;flag\r\npedia\r\n0;end=yes\r\nX-Checksum: 1234\r\nX-Extra: value\r\n\r\n"
+}

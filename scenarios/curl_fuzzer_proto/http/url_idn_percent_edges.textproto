@@ -1,0 +1,9 @@
+# Raw UTF-8 in a bytes host reaches IDN conversion while the path mixes UTF-8,
+# percent-encoded dot segments, a deliberately invalid escape, and repeated
+# query separators. Even when curl rejects a mutation before I/O, it has
+# traversed the authority and URL API validation paths this seed targets.
+scheme: SCHEME_HTTP
+host_path: "b\xc3\xbccher.example/caf\xc3\xa9/%2e%2e/%2F/%zz?x=1&&x=2;blank="
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

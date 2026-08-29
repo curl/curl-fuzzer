@@ -1,0 +1,13 @@
+# A protocol-relative Location changes authority while inheriting HTTP. This
+# takes redirect_url's // branch without allowing the scenario to select a
+# new transport or bypass the fixed CONNECT_TO route.
+scheme: SCHEME_HTTP
+host_path: "redirect-origin.test/start"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: //redirect-target.test/final?from=origin\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK"
+}

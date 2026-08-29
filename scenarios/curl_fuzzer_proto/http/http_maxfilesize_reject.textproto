@@ -1,0 +1,8 @@
+# A declared response larger than MAXFILESIZE lets curl reject the transfer at
+# header time, covering the limit path without storing or sending a large body.
+scheme: SCHEME_HTTP
+host_path: "limits.test/too-large"
+options { option_id: CURLOPT_MAXFILESIZE_LARGE uint_value: 3 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nContent-Type: application/octet-stream\r\n\r\n"
+}

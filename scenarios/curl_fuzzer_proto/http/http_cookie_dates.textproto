@@ -1,0 +1,20 @@
+# Preload curl's in-memory cookie engine, merge an explicit Cookie request
+# value, then feed several response-cookie forms. The date options make
+# Last-Modified participate in the transfer decision; Expires and Retry-After
+# independently drive the shared HTTP-date parser and its overflow/cap logic.
+scheme: SCHEME_HTTP
+host_path: "state.test/cookie/deep/path?mode=dates"
+options {
+  option_id: CURLOPT_COOKIELIST
+  string_value: ".state.test\tTRUE\t/cookie\tFALSE\t2147483647\tseed\told"
+}
+options {
+  option_id: CURLOPT_COOKIE
+  string_value: "manual=1; quoted=\"a b\""
+}
+options { option_id: CURLOPT_COOKIESESSION bool_value: true }
+options { option_id: CURLOPT_TIMECONDITION uint_value: 1 }
+options { option_id: CURLOPT_TIMEVALUE_LARGE uint_value: 1704067200 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nLast-Modified: Sun, 06 Nov 1994 08:49:37 GMT\r\nRetry-After: Wed, 09 Jun 2038 10:18:14 GMT\r\nSet-Cookie: sid=abc; Domain=.state.test; Path=/cookie; Expires=Wed, 09 Jun 2038 10:18:14 GMT; HttpOnly; SameSite=Lax\r\nSet-Cookie: short=lived; Path=/; Max-Age=60; SameSite=None; Secure\r\nSet-Cookie: expired=gone; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT\r\nSet-Cookie: __Host-token=protected; Path=/; Secure; HttpOnly\r\nContent-Length: 0\r\n\r\n"
+}

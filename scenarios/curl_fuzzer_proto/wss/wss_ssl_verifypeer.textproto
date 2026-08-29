@@ -1,0 +1,9 @@
+# Secure WebSocket counterpart to the HTTPS verification seed. It deliberately
+# overrides the harness's fast verification-off baseline to reach trust-store
+# verification through the proto option-dispatch path.
+scheme: SCHEME_WSS
+host_path: "127.0.0.1/"
+options {
+  option_id: CURLOPT_SSL_VERIFYPEER
+  bool_value: true
+}

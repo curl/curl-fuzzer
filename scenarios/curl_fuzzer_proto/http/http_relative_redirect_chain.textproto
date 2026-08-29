@@ -1,0 +1,20 @@
+# Exercise all same-origin relative URL shapes that fit before the four-socket
+# runtime cap: path-relative, query-only, and fragment-only. Closing each
+# response makes script consumption deterministic instead of relying on the
+# mock to predict when curl has issued the next request on a reused socket.
+scheme: SCHEME_HTTP
+host_path: "redirect.test/base/dir/start?old=1#old"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 4 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: child path\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: ?step=2\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: #done\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK"
+}

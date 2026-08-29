@@ -1,0 +1,14 @@
+# Disable both automatic decode layers while advertising support for transfer
+# codings. Ignoring the deliberately conflicting Content-Length fields lets
+# the chunk parser consume a complete response and exposes framing mutations
+# around all four controls without making the seed itself fail immediately.
+scheme: SCHEME_HTTP
+host_path: "decode.test/raw"
+options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "gzip" }
+options { option_id: CURLOPT_TRANSFER_ENCODING bool_value: true }
+options { option_id: CURLOPT_HTTP_TRANSFER_DECODING bool_value: false }
+options { option_id: CURLOPT_HTTP_CONTENT_DECODING bool_value: false }
+options { option_id: CURLOPT_IGNORE_CONTENT_LENGTH bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Encoding: gzip\r\nContent-Length: 999\r\nContent-Length: 5\r\n\r\n5\r\nhello\r\n0\r\nX-Trailer: done\r\n\r\n"
+}

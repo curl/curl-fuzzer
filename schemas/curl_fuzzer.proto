@@ -8,9 +8,9 @@ syntax = "proto3";
 
 package curl.fuzzer.proto;
 
-// Structured HTTP scenario description for the curl-fuzzer libprotobuf-mutator
-// driver. One scenario configures a single easy handle and feeds a single mock
-// connection.
+// Structured HTTP/WebSocket scenario description for the curl-fuzzer
+// libprotobuf-mutator targets. One scenario configures a single easy handle
+// and feeds one or more bounded mock connections.
 
 message Scenario {
   // Scheme + host_path compose the request URL. Splitting them keeps the
@@ -28,6 +28,123 @@ message Scenario {
   bytes host_path = 2;
   repeated SetOption options = 3;
   Connection connection = 4;
+  // Request headers need pointer-valued CURLOPT_HTTPHEADER state and cannot
+  // safely travel through the scalar SetOption path. The runner keeps the
+  // generated curl_slist alive until the transfer has completely stopped.
+  // A runtime entry/length budget prevents repeated-field mutations from
+  // turning header construction into the dominant cost of a fuzz iteration.
+  repeated bytes request_headers = 5;
+  // Schema-native MIME reaches curl's multipart generator without teaching
+  // the generic option layer about pointer ownership. This is a message (not
+  // a repeated field directly on Scenario) so presence can intentionally
+  // request an empty multipart body, which exercises a distinct curl path.
+  MimePost mime_post = 6;
+  // Fresh HTTP sockets opened by redirects, authentication retries, and
+  // connection-close responses consume these scripts in order. This is a
+  // repeated Connection rather than a recursive Scenario so mutations cannot
+  // create unbounded transfer trees or alter easy-handle options mid-flight.
+  // The HTTP runtime consumes only the first three entries (four sockets total
+  // including `connection`); WebSocket targets deliberately ignore this field
+  // because their manual-drive state is tied to one upgraded connection.
+  repeated Connection subsequent_connections = 7;
+  // Request-body callbacks need mutable cursor state that must outlive every
+  // redirect/authentication retry. Keeping that state schema-native lets LPM
+  // mutate short-read and rewind behaviour together with the server responses
+  // that provoke it; a fixed callback can only ever cover one happy path.
+  // When absent, the runtime preserves the historical deterministic 16 KiB
+  // stream so old corpus entries and WebSocket upload probes retain their
+  // behaviour.
+  UploadScript upload = 8;
+}
+
+// A bounded source for CURLOPT_READFUNCTION. The payload and read-limit list
+// are capped again by both the target postprocessor and runtime because proto
+// repeated/bytes fields have no intrinsic complexity limit.
+message UploadScript {
+  // Binary bytes returned to curl. Unlike POSTFIELDS this remains callback
+  // backed, so redirects and authentication retries exercise seek/rewind.
+  bytes data = 1;
+  // Per-callback maximums used in order. A zero entry means one byte: proto3
+  // makes zero especially easy to mutate into, and treating it as immediate
+  // EOF would hide the configured terminal outcome and all later steps.
+  // Once this list is exhausted, reads use curl's requested buffer capacity.
+  repeated uint32 read_sizes = 2;
+  UploadTerminal terminal = 3;
+  UploadSeekResult seek_result = 4;
+}
+
+// What the read callback reports after all scripted bytes have been consumed.
+// PAUSE is deliberately absent: without an asynchronous resume source it
+// converts a fast fuzz case into a wall-clock timeout rather than new parser
+// or state-machine coverage.
+enum UploadTerminal {
+  UPLOAD_TERMINAL_EOF = 0;
+  UPLOAD_TERMINAL_ABORT = 1;
+}
+
+// Results available to CURLOPT_SEEKFUNCTION. An OK result performs bounded
+// real seeks, including rewind-to-zero, while the other values enter curl's
+// fallback and terminal retry paths without consulting the filesystem.
+enum UploadSeekResult {
+  UPLOAD_SEEK_OK = 0;
+  UPLOAD_SEEK_CANTSEEK = 1;
+  UPLOAD_SEEK_FAIL = 2;
+}
+
+// A multipart request body. Runtime budgets cap both this list and the total
+// number of parts constructed, since protobuf itself does not bound repeated
+// field cardinality.
+message MimePost {
+  repeated MimePart parts = 1;
+}
+
+// One top-level MIME part. The content oneof makes mutations choose between
+// ordinary data and a nested multipart instead of constructing contradictory
+// content sources. Nesting is intentionally limited to one level in the
+// schema: that is enough to enter curl's recursive MIME paths while preventing
+// a recursively-shaped protobuf from consuming a fuzz iteration in parsing or
+// destruction before curl sees it.
+message MimePart {
+  bytes name = 1;
+  oneof content {
+    bytes data = 2;
+    MimeSubparts subparts = 7;
+  }
+  bytes filename = 3;
+  bytes content_type = 4;
+  MimeEncoder encoder = 5;
+  repeated bytes headers = 6;
+}
+
+// The bounded nested-multipart layer. Keeping this separate from MimePost is
+// what makes unbounded recursive part trees impossible at the schema level.
+message MimeSubparts {
+  repeated MimeDataPart parts = 1;
+}
+
+// A leaf MIME part. Leaf data is always applied, including an empty value;
+// empty-body form fields are valid and cover different size/encoder handling
+// from a part whose content source was never configured.
+message MimeDataPart {
+  bytes name = 1;
+  bytes data = 2;
+  bytes filename = 3;
+  bytes content_type = 4;
+  MimeEncoder encoder = 5;
+  repeated bytes headers = 6;
+}
+
+// Restrict mutations to curl's supported transfer encoders. Arbitrary strings
+// overwhelmingly exercise only curl_mime_encoder's rejection path, while an
+// enum gives each real encoder enough corpus energy to reach its read/size
+// implementation.
+enum MimeEncoder {
+  MIME_ENCODER_UNSPECIFIED = 0;
+  MIME_ENCODER_BINARY = 1;
+  MIME_ENCODER_8BIT = 2;
+  MIME_ENCODER_7BIT = 3;
+  MIME_ENCODER_BASE64 = 4;
+  MIME_ENCODER_QUOTED_PRINTABLE = 5;
 }
 
 enum Scheme {

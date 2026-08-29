@@ -10,14 +10,16 @@
 #include "proto_fuzzer/scenario_runner.h"
 
 #include <curl/curl.h>
+#include <curl/header.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 
 namespace proto_fuzzer {
@@ -31,6 +33,43 @@ struct CurlEasyDeleter {
   }
 };
 using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
+
+constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
+constexpr std::size_t kMaxResultHeaders = 16;
+
+/// Probe each public getinfo return family and the response-header API after
+/// curl has settled the transfer. Applications commonly inspect these APIs,
+/// but a harness that only drives I/O leaves their type dispatch and
+/// post-transfer state unexecuted even when the corresponding parser ran.
+/// The chosen values are handle-owned or scalar: notably CERTINFO exercises
+/// the pointer/slist dispatch family without materialising a separately-owned
+/// cookie/engine list. Header iteration is capped independently of response
+/// size so this unconditional coverage cannot dominate a fuzz iteration.
+void ProbeTransferResults(CURL* easy) {
+  char* string_result = nullptr;
+  long long_result = 0;
+  double double_result = 0;
+  curl_off_t offset_result = 0;
+  curl_socket_t socket_result = CURL_SOCKET_BAD;
+  struct curl_certinfo* certinfo_result = nullptr;
+
+  (void)curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &string_result);
+  (void)curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &long_result);
+  (void)curl_easy_getinfo(easy, CURLINFO_TOTAL_TIME, &double_result);
+  (void)curl_easy_getinfo(easy, CURLINFO_SIZE_DOWNLOAD_T, &offset_result);
+  (void)curl_easy_getinfo(easy, CURLINFO_ACTIVESOCKET, &socket_result);
+  (void)curl_easy_getinfo(easy, CURLINFO_CERTINFO, &certinfo_result);
+
+  struct curl_header* header = nullptr;
+  (void)curl_easy_header(easy, "Content-Type", 0, kAllHeaderOrigins, -1, &header);
+  header = nullptr;
+  for (std::size_t index = 0; index < kMaxResultHeaders; ++index) {
+    header = curl_easy_nextheader(easy, kAllHeaderOrigins, -1, header);
+    if (header == nullptr) {
+      break;
+    }
+  }
+}
 
 /// Map a Scheme enum to the URL scheme literal.
 const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
@@ -87,10 +126,13 @@ ScenarioRunner::~ScenarioRunner() = default;
 /// scenario.scheme + scenario.host_path, and drives the transfer via the
 /// mock's own DriveScenario.
 /// @param scenario The Scenario describing the curl operations to perform.
+/// @param probe_transfer_results Whether to exercise post-transfer easy-handle
+///        result APIs. The multi driver always consumes curl_multi_info_read;
+///        this flag controls only the separate getinfo/header probes here.
 /// @return 0 on normal completion (including curl errors that aren't harness
 ///         failures). The libFuzzer entrypoint doesn't care about the return
 ///         value; it's there for tests.
-int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario) {
+int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, bool probe_transfer_results) {
   const char* prefix = SchemePrefix(scenario.scheme());
   if (prefix == nullptr || scenario.host_path().empty()) {
     return 0;
@@ -106,9 +148,6 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario) {
     return 0;
   }
 
-  std::vector<std::string> string_storage;
-  string_storage.reserve(scenario.options_size());
-
   struct curl_slist* connect_to = ApplyBaselineOptions(easy.get());
 
   std::string url = std::string(prefix) + "://" + scenario.host_path();
@@ -116,13 +155,24 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario) {
 
   mock->Install(easy.get());
 
-  for (const auto& option : scenario.options()) {
-    // Intentionally ignore per-option CURLcode: the fuzzer's job is to stress
-    // curl, not to validate that every option is applied cleanly.
-    (void)ApplySetOption(easy.get(), option, &string_storage);
-  }
+  // Compatibility inputs deliberately bypass the mutating postprocessor, so
+  // enforce the shared option prefix again at the runtime boundary. The helper
+  // still ignores individual CURLcodes: the fuzzer stresses curl rather than
+  // treating rejected option combinations as harness failures.
+  (void)ApplyScenarioOptions(easy.get(), scenario);
 
-  mock->DriveScenario(easy.get(), scenario);
+  {
+    // HTTP headers and MIME bodies are pointer-valued options that libcurl
+    // does not copy. Keep their owner around the entire multi-handle drive,
+    // then let it detach them while `easy` is still valid. This inner scope is
+    // deliberate: easy.reset() below must never run before the owner's
+    // destructor tries to clear those options.
+    ScenarioRequestData request_data(easy.get(), scenario);
+    mock->DriveScenario(easy.get(), scenario);
+    if (probe_transfer_results) {
+      ProbeTransferResults(easy.get());
+    }
+  }
 
   easy.reset();
   curl_slist_free_all(connect_to);

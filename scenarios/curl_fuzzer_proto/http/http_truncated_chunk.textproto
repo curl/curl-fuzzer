@@ -1,0 +1,7 @@
+# The chunk header promises ten bytes but EOF arrives after five. This reaches
+# partial-body and premature-close handling without relying on a timeout.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/truncated-chunk"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\na\r\nshort"
+}

@@ -34,7 +34,6 @@ from curl_fuzzer_tools.corpus import BaseType, TLVDecoder
 # from BaseType.TYPEMAP. Tags outside the sets are reported as skipped.
 STRING_TAGS = frozenset(
     {
-        BaseType.TYPE_URL,
         BaseType.TYPE_CUSTOMREQUEST,
         BaseType.TYPE_USERAGENT,
         BaseType.TYPE_POSTFIELDS,
@@ -45,22 +44,22 @@ STRING_TAGS = frozenset(
 
 BOOL_TAGS = frozenset(
     {
-        BaseType.TYPE_FOLLOWLOCATION,
         BaseType.TYPE_NOBODY,
         BaseType.TYPE_POST,
         BaseType.TYPE_OPTHEADER,
         BaseType.TYPE_FAILONERROR,
         BaseType.TYPE_AUTOREFERER,
         BaseType.TYPE_HTTPGET,
+        BaseType.TYPE_SSL_VERIFYPEER,
+        BaseType.TYPE_HTTP09_ALLOWED,
     }
 )
 
 UINT_TAGS = frozenset(
     {
+        BaseType.TYPE_FOLLOWLOCATION,
         BaseType.TYPE_HTTP_VERSION,
-        BaseType.TYPE_HTTP09_ALLOWED,
         BaseType.TYPE_MAXREDIRS,
-        BaseType.TYPE_POSTFIELDSIZE_LARGE,
     }
 )
 
@@ -71,6 +70,8 @@ RESPONSE_CHUNK_TAGS = frozenset(range(BaseType.TYPE_RSP1, BaseType.TYPE_RSP10 + 
 class ProtoOutput:
     """Accumulated fields for a single Scenario textproto."""
 
+    scheme: Optional[str] = None
+    host_path: Optional[bytes] = None
     options: List[str] = field(default_factory=list)
     initial_response: Optional[bytes] = None
     response_chunks: List[tuple[int, bytes]] = field(default_factory=list)
@@ -136,8 +137,39 @@ def render_uint_option(tlv_type: int, value: bytes) -> str:
 def convert_stream(stream: bytes) -> ProtoOutput:
     """Decode a TLV corpus stream into accumulated Scenario fields."""
     out = ProtoOutput()
+    url_seen = False
     for tlv in TLVDecoder(stream):
-        if tlv.type == BaseType.TYPE_RSP0:
+        if tlv.type == BaseType.TYPE_URL:
+            if url_seen:
+                # The legacy parser rejects duplicate singleton options before
+                # starting a transfer. Leaving the runner fields empty keeps a
+                # malformed duplicate-URL seed non-runnable after conversion
+                # instead of silently granting it new proto coverage.
+                out.scheme = None
+                out.host_path = None
+                out.skipped.append(tlv.type)
+                continue
+            url_seen = True
+            # ScenarioRunner owns CURLOPT_URL: it composes it from these two
+            # fields and deliberately does not expose CURLOPT_URL through the
+            # generic option manifest. Preserve all bytes after the separator
+            # verbatim so malformed authorities and paths remain fuzzable.
+            scheme, separator, host_path = tlv.data.partition(b"://")
+            scheme_name = {
+                b"http": "SCHEME_HTTP",
+                b"https": "SCHEME_HTTPS",
+                b"ws": "SCHEME_WS",
+                b"wss": "SCHEME_WSS",
+            }.get(scheme.lower())
+            if separator and scheme_name is not None and host_path:
+                out.scheme = scheme_name
+                out.host_path = host_path
+            else:
+                # Unsupported schemes cannot be represented by the current
+                # proto schema. Make that loss visible instead of emitting an
+                # option that protoc or ScenarioRunner will ignore.
+                out.skipped.append(tlv.type)
+        elif tlv.type == BaseType.TYPE_RSP0:
             out.initial_response = tlv.data
         elif tlv.type in RESPONSE_CHUNK_TAGS:
             out.response_chunks.append((tlv.type, tlv.data))
@@ -158,6 +190,10 @@ def render_textproto(source_name: str, data: ProtoOutput) -> str:
     for tag in data.skipped:
         label = BaseType.TYPEMAP.get(tag, f"0x{tag:02x}")
         lines.append(f"# skipped TLV {label}")
+    if data.scheme is not None:
+        lines.append(f"scheme: {data.scheme}")
+    if data.host_path is not None:
+        lines.append(f"host_path: {escape_bytes(data.host_path)}")
     lines.extend(data.options)
 
     connection_lines: List[str] = []

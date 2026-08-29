@@ -29,11 +29,15 @@ libstandaloneengine.a
 /curl_fuzzer_smb
 /curl_fuzzer_smtp
 /curl_fuzzer_tftp
+/curl_fuzzer_proto
+/curl_fuzzer_proto_http
+/curl_fuzzer_proto_http_deep
+/curl_fuzzer_proto_https
+/curl_fuzzer_proto_ws
+/curl_fuzzer_proto_wss
+/curl_fuzzer_proto_timing
 *_seed_corpus.zip
 *.profraw
-
-# Generated at build time from scenarios/curl_fuzzer_proto/*.textproto
-/corpora/curl_fuzzer_proto/
 
 # Python
 .venv/

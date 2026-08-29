@@ -1,0 +1,28 @@
+# CURLOPT_COOKIELIST is more than a seed API: its control strings drive cookie
+# eviction, persistence, and reload state. Replacing the same tuple before the
+# commands reaches conflict-resolution code, while the harness's fixed
+# COOKIEJAR=/dev/null keeps FLUSH/RELOAD deterministic and filesystem-safe.
+scheme: SCHEME_HTTP
+host_path: "state.test/control/path"
+options {
+  option_id: CURLOPT_COOKIELIST
+  string_value: ".state.test\tTRUE\t/\tFALSE\t0\tsession\tfirst"
+}
+options {
+  option_id: CURLOPT_COOKIELIST
+  string_value: "Set-Cookie: replace=one; Domain=state.test; Path=/control"
+}
+options {
+  option_id: CURLOPT_COOKIELIST
+  string_value: "Set-Cookie: replace=two; Domain=state.test; Path=/control"
+}
+options { option_id: CURLOPT_COOKIELIST string_value: "SESS" }
+options { option_id: CURLOPT_COOKIELIST string_value: "FLUSH" }
+options { option_id: CURLOPT_COOKIELIST string_value: "RELOAD" }
+options {
+  option_id: CURLOPT_COOKIELIST
+  string_value: ".state.test\tTRUE\t/control\tFALSE\t2147483647\tfinal\tvalue"
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nSet-Cookie: replace=three; Domain=state.test; Path=/control\r\nSet-Cookie: replace=four; Domain=state.test; Path=/control\r\nContent-Length: 0\r\n\r\n"
+}

@@ -1,0 +1,40 @@
+# A fixed-depth multipart/alternative inside a top-level form. This reaches
+# curl's recursive MIME sizing, boundary, seek, and readback paths without a
+# recursively-shaped protobuf consuming unbounded mutation time.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/nested-mime"
+request_headers: "Expect:"
+request_headers: "X-Fuzzer-Request: nested-mime"
+mime_post {
+  parts {
+    name: "metadata"
+    data: "version=1"
+    encoder: MIME_ENCODER_7BIT
+  }
+  parts {
+    name: "message"
+    content_type: "multipart/alternative"
+    headers: "Content-Disposition: inline"
+    subparts {
+      parts {
+        name: "plain"
+        content_type: "text/plain; charset=utf-8"
+        encoder: MIME_ENCODER_QUOTED_PRINTABLE
+        data: "plain text with = and trailing space "
+        headers: "Content-Language: en"
+      }
+      parts {
+        name: "html"
+        filename: "message.html"
+        content_type: "text/html; charset=utf-8"
+        encoder: MIME_ENCODER_8BIT
+        data: "<p>hello \303\251</p>"
+        headers: "Content-ID: <html-part@curl-fuzzer>"
+      }
+    }
+  }
+}
+connection {
+  initial_response: "HTTP/1.1 100 Continue\r\n\r\n"
+  on_readable: "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}

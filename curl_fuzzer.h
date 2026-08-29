@@ -515,15 +515,35 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz);
           (SMAN)->responses[(INDEX)].data_len = tlv->length;                  \
           break
 
+/* curl_easy_setopt is variadic, so matching libcurl's declared scalar type is
+   required even though both option families retain the same four-byte TLV
+   representation. */
 #define FU32TLV(FUZZP, TLVNAME, OPTNAME)                                      \
         case TLVNAME:                                                         \
+          static_assert((OPTNAME) > CURLOPTTYPE_LONG &&                       \
+                        (OPTNAME) < CURLOPTTYPE_OBJECTPOINT,                   \
+                        "FU32TLV requires a CURLOPT long option");            \
           if(tlv->length != 4) {                                              \
             rc = 255;                                                         \
             goto EXIT_LABEL;                                                  \
           }                                                                   \
           FCHECK_OPTION_UNSET(FUZZP, OPTNAME);                                \
-          tmp_u32 = to_u32(tlv->value);                                       \
-          FSET_OPTION(FUZZP, OPTNAME, tmp_u32);                               \
+          tmp_long = (long)to_u32(tlv->value);                                \
+          FSET_OPTION(FUZZP, OPTNAME, tmp_long);                              \
+          break
+
+#define FU32TLV_OFF_T(FUZZP, TLVNAME, OPTNAME)                                \
+        case TLVNAME:                                                         \
+          static_assert((OPTNAME) > CURLOPTTYPE_OFF_T &&                      \
+                        (OPTNAME) < CURLOPTTYPE_BLOB,                          \
+                        "FU32TLV_OFF_T requires a CURLOPT off_t option");     \
+          if(tlv->length != 4) {                                              \
+            rc = 255;                                                         \
+            goto EXIT_LABEL;                                                  \
+          }                                                                   \
+          FCHECK_OPTION_UNSET(FUZZP, OPTNAME);                                \
+          tmp_off_t = (curl_off_t)to_u32(tlv->value);                         \
+          FSET_OPTION(FUZZP, OPTNAME, tmp_off_t);                             \
           break
 
 #define FV_PRINTF(FUZZP, ...)                                                 \

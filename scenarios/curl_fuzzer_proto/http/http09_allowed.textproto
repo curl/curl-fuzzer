@@ -1,0 +1,7 @@
+# HTTP/0.9 has no status line or response headers. Opting in turns these bytes
+# into a valid body and covers the legacy-response path rather than only the
+# modern parser's rejection branch.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/http09"
+options { option_id: CURLOPT_HTTP09_ALLOWED bool_value: true }
+connection { initial_response: "a headerless HTTP/0.9 body\n" }

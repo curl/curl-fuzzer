@@ -1,0 +1,19 @@
+# SigV4 canonicalizes the method, escaped path, query, selected request
+# headers, payload hash, region, and service before applying several SHA-256
+# HMAC rounds. Fixed example credentials are inert against the socketpair mock
+# but keep this otherwise isolated authentication surface mutation-reachable.
+scheme: SCHEME_HTTP
+host_path: "s3.us-east-1.amazonaws.com/example-bucket/test%20file.txt?partNumber=1&uploadId=example"
+request_headers: "X-Amz-Date: 20130524T000000Z"
+request_headers: "X-Amz-Content-Sha256: UNSIGNED-PAYLOAD"
+options {
+  option_id: CURLOPT_USERPWD
+  string_value: "AKIDEXAMPLE:wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
+}
+options {
+  option_id: CURLOPT_AWS_SIGV4
+  string_value: "aws:amz:us-east-1:s3"
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

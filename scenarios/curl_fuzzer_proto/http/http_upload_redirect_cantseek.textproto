@@ -1,0 +1,22 @@
+# A short-read body that has started streaming followed by 307 makes curl ask
+# the callback to rewind. CANTSEEK then enters curl's real retry failure path;
+# no follow-on response is needed because the retry cannot be prepared safely.
+scheme: SCHEME_HTTP
+host_path: "upload.test/redirect/cantseek"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 13 }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+request_headers: "Expect:"
+upload {
+  data: "cannot-rewind"
+  read_sizes: 1
+  read_sizes: 2
+  read_sizes: 3
+  terminal: UPLOAD_TERMINAL_EOF
+  seek_result: UPLOAD_SEEK_CANTSEEK
+}
+connection {
+  on_readable: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://upload.test/redirect/unreachable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}

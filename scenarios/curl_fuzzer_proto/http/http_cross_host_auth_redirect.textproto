@@ -1,0 +1,16 @@
+# Basic credentials are eligible on the first request but must not leak when a
+# redirect changes hosts. Completing the target exchange exercises curl's
+# per-request authentication cleanup and host-change comparison, rather than
+# stopping at the second OPENSOCKET callback.
+scheme: SCHEME_HTTP
+host_path: "auth-origin.test/private"
+options { option_id: CURLOPT_USERPWD string_value: "alice:secret" }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 1 }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: http://auth-target.test/public\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

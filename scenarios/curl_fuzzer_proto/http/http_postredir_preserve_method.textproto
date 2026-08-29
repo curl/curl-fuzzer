@@ -1,0 +1,20 @@
+# The ordinary redirect seed covers POST-to-GET rewriting. POSTREDIR=1 keeps
+# POST across a 301 instead, while the connection knobs make fresh/forbidden
+# reuse and age-policy setup part of the same completed two-socket flow.
+scheme: SCHEME_HTTP
+host_path: "redirect.test/source"
+options { option_id: CURLOPT_POST bool_value: true }
+options { option_id: CURLOPT_POSTFIELDS string_value: "preserve=this-body" }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { option_id: CURLOPT_POSTREDIR uint_value: 1 }
+options { option_id: CURLOPT_FRESH_CONNECT bool_value: true }
+options { option_id: CURLOPT_FORBID_REUSE bool_value: true }
+options { option_id: CURLOPT_MAXAGE_CONN uint_value: 1 }
+options { option_id: CURLOPT_MAXLIFETIME_CONN uint_value: 1 }
+connection {
+  initial_response: "HTTP/1.1 301 Moved Permanently\r\nLocation: http://redirect.test/destination\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\npreserved"
+}

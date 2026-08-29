@@ -75,5 +75,5 @@ jobs:
       - name: Install test dependencies
         run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[python-tests]'
 
-      - name: Run TLV constants sync test
-        run: pytest tests/test_tlv_constants_sync.py
+      - name: Run Python tests
+        run: pytest tests/test_*.py

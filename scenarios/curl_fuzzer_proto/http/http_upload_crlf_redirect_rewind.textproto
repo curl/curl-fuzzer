@@ -1,0 +1,25 @@
+# CRLF conversion inserts curl's line-conversion reader above the callback
+# reader. A completed 307 then asks every reader to rewind, covering the
+# wrapper's control dispatch as well as replaying the converted LF bytes.
+scheme: SCHEME_HTTP
+host_path: "upload.test/crlf/source"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 11 }
+options { option_id: CURLOPT_CRLF bool_value: true }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+request_headers: "Expect:"
+upload {
+  data: "alpha\nbeta\n"
+  read_sizes: 3
+  read_sizes: 2
+  terminal: UPLOAD_TERMINAL_EOF
+  seek_result: UPLOAD_SEEK_OK
+}
+connection {
+  on_readable: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://upload.test/crlf/destination\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK"
+}

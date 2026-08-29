@@ -23,6 +23,14 @@
 
 namespace proto_fuzzer {
 
+/// Determine whether the bounded, runtime-visible option prefix leaves curl in
+/// WebSocket connect-only mode. Later accepted CONNECT_ONLY entries override
+/// earlier ones, matching curl_easy_setopt rather than treating any historical
+/// value of 2 as permanently enabling manual delivery.
+/// @param scenario Structured input whose retained option prefix is inspected.
+/// @return True when the final accepted CONNECT_ONLY value is 2.
+bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario);
+
 /// @class proto_fuzzer::WebSocketMockServer
 /// @brief In-process WebSocket peer. Dynamically generates a 101 response
 ///        against curl's Upgrade request, then either pushes queued frame
@@ -49,7 +57,9 @@ class WebSocketMockServer : public MockServerBase {
   bool TryAdvanceHandshake();
   bool handshake_sent() const;
 
-  void DeliverNextChunk();
+  /// Deliver one queued frame chunk.
+  /// @return true when a chunk was consumed from the script.
+  bool DeliverNextChunk();
   bool has_more_chunks() const;
 
   std::size_t remaining_chunks() const;

@@ -1,0 +1,10 @@
+# Resume wins over an explicit range inside curl, so keep a separate seed that
+# builds the offset-derived Range header. Last-Modified makes FILETIME proceed
+# through date parsing while the matching 206 lets the transfer complete.
+scheme: SCHEME_HTTP
+host_path: "range.test/resume"
+options { option_id: CURLOPT_RESUME_FROM_LARGE uint_value: 8 }
+options { option_id: CURLOPT_FILETIME bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 8-12/13\r\nLast-Modified: Sun, 06 Nov 1994 08:49:37 GMT\r\nContent-Length: 5\r\n\r\ntail!"
+}

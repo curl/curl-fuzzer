@@ -1,0 +1,13 @@
+# A redirect after Alt-Svc parsing keeps the cache alive across request setup
+# and exercises cleanup/reconnect interactions. The wildcard CONNECT_TO rule
+# intentionally remains authoritative, so this does not claim to cover
+# Curl_altsvc_lookup: allowing mutations to bypass the loopback route would
+# turn arbitrary host bytes into real DNS traffic and damage fuzzer speed.
+scheme: SCHEME_HTTP
+host_path: "altsvc-origin.example/start"
+options { option_id: CURLOPT_ALTSVC_CTRL uint_value: 8 }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nAlt-Svc: h1=\"alt-destination.example:8080\"; ma=3600; persist=1\r\nLocation: http://altsvc-origin.example/next\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}

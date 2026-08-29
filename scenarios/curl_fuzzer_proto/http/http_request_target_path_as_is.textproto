@@ -1,0 +1,14 @@
+# Keep dot segments in the parsed URL while independently overriding the HTTP
+# request-target. Their interaction reaches both URL path preservation and the
+# request-line path without needing an unsafe proxy or routing option.
+scheme: SCHEME_HTTP
+host_path: "target.test/url/a/../b/%2e%2e/c?source=url"
+options { option_id: CURLOPT_PATH_AS_IS bool_value: true }
+options {
+  option_id: CURLOPT_REQUEST_TARGET
+  string_value: "/wire/../target?encoded=%2F"
+}
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "OPTIONS" }
+connection {
+  initial_response: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+}

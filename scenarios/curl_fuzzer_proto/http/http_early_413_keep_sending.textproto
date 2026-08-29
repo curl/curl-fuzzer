@@ -1,0 +1,16 @@
+# Keep-sending is only consulted when an error arrives before the upload is
+# done. Hold the peer's write side open for one drive tick so curl handles the
+# 413 before EOF and deliberately releases its Expect gate to send the body.
+scheme: SCHEME_HTTP
+host_path: "expect.test/too-large"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 8192 }
+options { option_id: CURLOPT_EXPECT_100_TIMEOUT_MS uint_value: 100 }
+options { option_id: CURLOPT_KEEP_SENDING_ON_ERROR bool_value: true }
+options { option_id: CURLOPT_UPLOAD_BUFFERSIZE uint_value: 16384 }
+request_headers: "Expect: 100-continue"
+connection {
+  initial_response: "HTTP/1.1 413 Content Too Large\r\nContent-Length: 0\r\n\r\n"
+  on_readable: ""
+}
