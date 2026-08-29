@@ -1,0 +1,9 @@
+# Prior-knowledge HTTP/2 with an immediately invalid peer preface. The valid
+# and truncated frame seeds enter nghttp2's normal decoder; this deliberately
+# reaches its error callback and curl's connection shutdown path instead.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/http2-invalid-preface"
+options { option_id: CURLOPT_HTTP_VERSION uint_value: 5 }
+connection {
+  initial_response: "this is not a valid HTTP/2 frame sequence"
+}

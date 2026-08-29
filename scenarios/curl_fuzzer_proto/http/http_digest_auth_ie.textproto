@@ -1,0 +1,11 @@
+# CURLAUTH_DIGEST_IE strips the query from the URI before hashing. A dedicated
+# query-bearing seed keeps that compatibility branch reachable without relying
+# on a uint mutation to discover the otherwise uncommon bit value.
+scheme: SCHEME_HTTP
+host_path: "auth.test/legacy/document?query-must-be-trimmed"
+options { option_id: CURLOPT_USERPWD string_value: "legacy:secret" }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 16 }
+connection {
+  initial_response: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"legacy\", nonce=\"abcdef\", algorithm=MD5, qop=\"auth\"\r\nContent-Length: 0\r\n\r\n"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

@@ -19,7 +19,7 @@ namespace proto_fuzzer {
 
 namespace {
 
-constexpr long kSelectTimeoutUs = 10 * 1000;  // 10 ms
+constexpr long kSelectTimeoutUs = 1000;  // 1 ms; explicit timing cases only.
 
 /// @brief Noop function to satisfy CURLOPT_SOCKOPTFUNCTION.
 /// @return CURL_SOCKOPT_ALREADY_CONNECTED: the socketpair is already connected.
@@ -57,9 +57,10 @@ void MockServerBase::Install(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, &SockOptTrampoline);
 }
 
-/// Allocate a multi, attach 'easy', delegate to the subclass RunLoop, clean
-/// up. Failures in multi_init / add_handle silently no-op: the fuzzer cares
-/// about what curl does when driven, not about harness-level errors.
+/// Allocate a multi, attach 'easy', delegate to the subclass RunLoop, consume
+/// its completion message, and clean up. Failures in multi_init / add_handle
+/// silently no-op: the fuzzer cares about what curl does when driven, not
+/// about harness-level errors.
 void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   // Cache backpressure knobs so HandleOpenSocket can apply them the moment
   // connection_ exists. Both default to 0, which matches the legacy "drain
@@ -74,6 +75,17 @@ void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenar
   }
   if (curl_multi_add_handle(multi, easy) == CURLM_OK) {
     RunLoop(multi, easy, scenario);
+
+    // Completion messages are the multi API's only durable record of the
+    // transfer result. Consume them while the easy handle is still attached:
+    // otherwise every scenario systematically skips curl_multi_info_read's
+    // result path and removal discards the opportunity. With one easy handle
+    // attached, this drain has at most one completion message regardless of
+    // fuzzed response size or redirect count.
+    int messages_remaining = 0;
+    while (curl_multi_info_read(multi, &messages_remaining) != nullptr) {
+    }
+
     curl_multi_remove_handle(multi, easy);
   }
   curl_multi_cleanup(multi);
@@ -86,6 +98,16 @@ void MockServerBase::ApplyPendingBackpressure() {
   if (connection_) {
     connection_->ApplyBackpressure(pending_recv_buf_bytes_, pending_drain_limit_);
   }
+}
+
+/// Treat a non-default BackpressureConfig as an explicit request for the
+/// slower, timed drive policy. Proto3 scalar defaults make this deterministic:
+/// a present-but-empty message remains on the ordinary fast path.
+/// @param scenario Scenario whose backpressure settings select the policy.
+/// @return true when the scenario explicitly opted into socket backpressure.
+bool MockServerBase::UsesTimedDrive(const curl::fuzzer::proto::Scenario& scenario) {
+  const auto& bp = scenario.connection().backpressure();
+  return bp.recv_buf_bytes() != 0 || bp.drain_limit() != 0;
 }
 
 /// Wait on curl's fdset with a short timeout. Returns select()'s result; on
@@ -109,6 +131,14 @@ int MockServerBase::WaitOnMultiFdset(CURLM* multi, CURLMcode* rc) {
   timeout.tv_sec = 0;
   timeout.tv_usec = kSelectTimeoutUs;
   return ::select(maxfd + 1, &readfds, &writefds, &excfds, &timeout);
+}
+
+/// Exercise curl_multi_poll's pollset/filter traversal once without sleeping.
+/// The result is deliberately ignored: this is an API/state probe, while the
+/// protocol-specific perform loop remains the authority on transfer progress.
+void MockServerBase::ProbeMultiPollset(CURLM* multi) {
+  int numfds = 0;
+  (void)curl_multi_poll(multi, nullptr, 0, 0, &numfds);
 }
 
 }  // namespace proto_fuzzer

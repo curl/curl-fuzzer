@@ -99,7 +99,8 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
 {
   int rc;
   char *tmp = NULL;
-  uint32_t tmp_u32;
+  long tmp_long;
+  curl_off_t tmp_off_t;
   curl_slist *new_list;
 
   switch(tlv->type) {
@@ -320,12 +321,17 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
     FU32TLV(fuzz, TLV_TYPE_SSL_OPTIONS, CURLOPT_SSL_OPTIONS);
     FU32TLV(fuzz, TLV_TYPE_HEADEROPT, CURLOPT_HEADEROPT);
     FU32TLV(fuzz, TLV_TYPE_PROXY_SSLVERSION, CURLOPT_PROXY_SSLVERSION);
-    FU32TLV(fuzz, TLV_TYPE_RESUME_FROM_LARGE, CURLOPT_RESUME_FROM_LARGE);
-    FU32TLV(fuzz, TLV_TYPE_MAXFILESIZE_LARGE, CURLOPT_MAXFILESIZE_LARGE);
-    // too easy for API misuse FU32TLV(fuzz, TLV_TYPE_POSTFIELDSIZE_LARGE, CURLOPT_POSTFIELDSIZE_LARGE);
-    FU32TLV(fuzz, TLV_TYPE_MAX_SEND_SPEED_LARGE, CURLOPT_MAX_SEND_SPEED_LARGE);
-    FU32TLV(fuzz, TLV_TYPE_MAX_RECV_SPEED_LARGE, CURLOPT_MAX_RECV_SPEED_LARGE);
-    FU32TLV(fuzz, TLV_TYPE_TIMEVALUE_LARGE, CURLOPT_TIMEVALUE_LARGE);
+    FU32TLV_OFF_T(fuzz, TLV_TYPE_RESUME_FROM_LARGE,
+                  CURLOPT_RESUME_FROM_LARGE);
+    FU32TLV_OFF_T(fuzz, TLV_TYPE_MAXFILESIZE_LARGE,
+                  CURLOPT_MAXFILESIZE_LARGE);
+    /* An arbitrary size can make libcurl read beyond POSTFIELDS' allocation,
+       so POSTFIELDSIZE_LARGE remains deliberately unavailable. */
+    FU32TLV_OFF_T(fuzz, TLV_TYPE_MAX_SEND_SPEED_LARGE,
+                  CURLOPT_MAX_SEND_SPEED_LARGE);
+    FU32TLV_OFF_T(fuzz, TLV_TYPE_MAX_RECV_SPEED_LARGE,
+                  CURLOPT_MAX_RECV_SPEED_LARGE);
+    FU32TLV_OFF_T(fuzz, TLV_TYPE_TIMEVALUE_LARGE, CURLOPT_TIMEVALUE_LARGE);
 
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */

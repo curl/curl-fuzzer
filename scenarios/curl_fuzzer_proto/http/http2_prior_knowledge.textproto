@@ -1,0 +1,16 @@
+# HTTP/2 cleartext prior-knowledge exchange. The mock first advertises an
+# empty SETTINGS frame, then acknowledges curl's SETTINGS and returns a
+# compact HPACK :status=200 plus content-type header block followed by
+# END_STREAM DATA. Keeping one ordinary response header matters because curl's
+# HTTP/2 callback handles pseudo headers and application-visible headers on
+# different branches.
+# Derived from the legacy test_basic_http2 seed, but intentionally reduced to
+# the smallest complete frame sequence so LPM can mutate the frame boundaries.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/http2-prior"
+options { option_id: CURLOPT_HTTP_VERSION uint_value: 5 }
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x0d\x01\x04\x00\x00\x00\x01\x88\x5f\x0atext/plain"
+  on_readable: "\x00\x00\x05\x00\x01\x00\x00\x00\x01hello"
+}

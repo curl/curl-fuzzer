@@ -31,3 +31,12 @@ export CPPFLAGS="$FUZZ_FLAG"
 export OPENSSLFLAGS="-fno-sanitize=alignment -lstdc++"
 
 "${SCRIPTDIR}"/compile_target.sh "${TARGET}"
+
+# Building fuzzers alone only checks that the regression tests compile. Run
+# the allocation-free TLV mutator and proto policy tests on every normal
+# mainline build so mutation invariants cannot regress behind a green CI job.
+if [[ "${TARGET}" == "fuzz" ]]; then
+  TEST_BUILD_DIR="${BUILD_DIR:-${BUILD_ROOT}/build}"
+  cmake --build "${TEST_BUILD_DIR}" --target fuzzer_unit_tests
+  ctest --test-dir "${TEST_BUILD_DIR}" --output-on-failure
+fi

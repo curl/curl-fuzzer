@@ -1,0 +1,25 @@
+# Digest cannot be sent until curl sees the challenge, so this guarantees an
+# authenticated callback-backed upload on the retry instead of merely setting
+# credential options. The redirect seeds separately exercise real rewind.
+scheme: SCHEME_HTTP
+host_path: "upload.test/auth/retry"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 11 }
+options { option_id: CURLOPT_USERPWD string_value: "user:password" }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 2 }
+request_headers: "Expect:"
+upload {
+  data: "auth-replay"
+  read_sizes: 2
+  read_sizes: 1
+  read_sizes: 4
+  terminal: UPLOAD_TERMINAL_EOF
+  seek_result: UPLOAD_SEEK_OK
+}
+connection {
+  on_readable: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"upload\", nonce=\"0123456789abcdef\", qop=\"auth\", algorithm=MD5\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

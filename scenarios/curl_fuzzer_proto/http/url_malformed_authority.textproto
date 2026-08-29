@@ -1,0 +1,8 @@
+# A missing IPv6 closing bracket is intentionally non-runnable: it holds a
+# compact seed inside the URL authority error paths instead of requiring the
+# protobuf mutator to rediscover malformed bracket/userinfo combinations.
+scheme: SCHEME_HTTP
+host_path: "user:pass@[2001:db8::1/path?query=value"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

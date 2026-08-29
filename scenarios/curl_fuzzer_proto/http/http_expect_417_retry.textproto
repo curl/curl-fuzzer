@@ -1,0 +1,18 @@
+# An unknown-length upload makes curl add Expect: 100-continue itself. A 417
+# received while that reader is selected causes a same-URL retry with the
+# generated Expect header disabled; using a custom header here would defeat
+# that suppression. Delay the successful response by one drive tick so the
+# retried upload can enter its chunked send path first.
+scheme: SCHEME_HTTP
+host_path: "expect.test/retry"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { option_id: CURLOPT_EXPECT_100_TIMEOUT_MS uint_value: 100 }
+options { option_id: CURLOPT_UPLOAD_BUFFERSIZE uint_value: 16384 }
+connection {
+  initial_response: "HTTP/1.1 417 Expectation Failed\r\nContent-Length: 0\r\n\r\n"
+  on_readable: ""
+}
+subsequent_connections {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

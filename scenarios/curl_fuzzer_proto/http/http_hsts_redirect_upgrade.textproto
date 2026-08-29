@@ -1,0 +1,12 @@
+# HSTS parsing and HSTS application are separate state transitions. A redirect
+# to an HTTP subdomain after includeSubDomains is cached makes curl consult the
+# new entry and upgrade the follow-up URL to HTTPS before the mock rejects its
+# intentionally unsupported second connection.
+scheme: SCHEME_HTTP
+host_path: "hsts.example/start"
+options { option_id: CURLOPT_HSTS_CTRL uint_value: 1 }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nStrict-Transport-Security: max-age=3600; includeSubDomains\r\nLocation: http://child.hsts.example/next\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}

@@ -1,0 +1,25 @@
+# A completed 307 retry couples the seek callback to real redirect state.
+# One-byte reads make curl revisit its client-reader path before the first
+# response, while SEEK_OK lets the second socket replay exactly the same body.
+scheme: SCHEME_HTTP
+host_path: "upload.test/redirect/source"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 13 }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+request_headers: "Expect:"
+upload {
+  data: "redirect-body"
+  read_sizes: 1
+  read_sizes: 2
+  read_sizes: 3
+  terminal: UPLOAD_TERMINAL_EOF
+  seek_result: UPLOAD_SEEK_OK
+}
+connection {
+  on_readable: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://upload.test/redirect/destination\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

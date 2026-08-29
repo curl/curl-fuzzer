@@ -1,0 +1,17 @@
+# CURLMIMEOPT_FORMESCAPE changes how names and filenames with quotes and
+# backslashes are serialized. Keeping those bytes correlated with a real MIME
+# body reaches the alternate escaping path that a scalar option seed cannot.
+scheme: SCHEME_HTTP
+host_path: "mime.test/formescape"
+options { option_id: CURLOPT_MIME_OPTIONS uint_value: 1 }
+mime_post {
+  parts {
+    name: "field\"\\name"
+    data: "form value"
+    filename: "file\"\\name.txt"
+    content_type: "text/plain"
+  }
+}
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

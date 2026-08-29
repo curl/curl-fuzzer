@@ -1,0 +1,9 @@
+# An explicitly disabled Host header is not equivalent to curl synthesizing
+# one from the URL. Keeping this as its own cheap seed reaches the empty custom
+# value path without a preceding Host entry winning curl's header lookup.
+scheme: SCHEME_HTTP
+host_path: "origin.test/empty-host"
+request_headers: "Host:"
+connection {
+  initial_response: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+}

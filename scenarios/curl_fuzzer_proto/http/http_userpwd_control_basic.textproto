@@ -1,0 +1,15 @@
+# HTTP deliberately permits control bytes in credentials because Basic auth
+# base64-encodes them before they become header bytes. This reaches the allowed
+# side of credential handling and the binary-safe encoder; str_has_ctrl's
+# rejection side belongs to non-HTTP protocols whose scheme flags disallow
+# controls, so this seed does not make a false rejection claim.
+scheme: SCHEME_HTTP
+host_path: "auth.test/control-basic?still=parse-query"
+options {
+  option_id: CURLOPT_USERPWD
+  string_value: "user\x01name:password"
+}
+options { option_id: CURLOPT_HTTPAUTH uint_value: 1 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

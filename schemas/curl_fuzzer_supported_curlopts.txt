@@ -1,4 +1,4 @@
-# Curated HTTP subset consumed by generate_option_manifest.py.
+# Curated HTTP/WebSocket subset consumed by generate_option_manifest.py.
 # One CURLOPT name per line. Blank lines and '#' comments are ignored.
 # Adding an entry here is enough to make it reachable by the fuzzer;
 # the numeric value and value kind are derived from curl.h at build time.
@@ -21,3 +21,49 @@ CURLOPT_CONNECT_ONLY
 CURLOPT_WS_OPTIONS
 CURLOPT_UPLOAD
 CURLOPT_INFILESIZE_LARGE
+CURLOPT_CRLF
+CURLOPT_SSL_VERIFYPEER
+CURLOPT_CERTINFO
+
+# Stateful HTTP parsers. Filename-bearing COOKIEFILE/COOKIEJAR/ALTSVC/HSTS
+# options intentionally stay out of this mutation surface; the baseline owns
+# their fixed /dev/null sinks while these options mutate only in-memory state.
+CURLOPT_COOKIE
+CURLOPT_COOKIELIST
+CURLOPT_COOKIESESSION
+CURLOPT_HTTPAUTH
+CURLOPT_USERPWD
+CURLOPT_USERNAME
+CURLOPT_PASSWORD
+CURLOPT_UNRESTRICTED_AUTH
+CURLOPT_XOAUTH2_BEARER
+CURLOPT_AWS_SIGV4
+CURLOPT_TIMECONDITION
+CURLOPT_TIMEVALUE_LARGE
+CURLOPT_ALTSVC_CTRL
+CURLOPT_HSTS_CTRL
+
+# Request shaping, response framing, and bounded connection-cache controls.
+# These are all scalar or copied string options: callbacks, slists, filesystem
+# paths, and resolver/routing pointers remain owned by the harness instead.
+CURLOPT_RANGE
+CURLOPT_RESUME_FROM_LARGE
+CURLOPT_FILETIME
+CURLOPT_REQUEST_TARGET
+CURLOPT_PATH_AS_IS
+CURLOPT_EXPECT_100_TIMEOUT_MS
+CURLOPT_KEEP_SENDING_ON_ERROR
+CURLOPT_POSTREDIR
+CURLOPT_TRANSFER_ENCODING
+CURLOPT_HTTP_TRANSFER_DECODING
+CURLOPT_HTTP_CONTENT_DECODING
+CURLOPT_IGNORE_CONTENT_LENGTH
+CURLOPT_DISALLOW_USERNAME_IN_URL
+CURLOPT_FRESH_CONNECT
+CURLOPT_FORBID_REUSE
+CURLOPT_MAXAGE_CONN
+CURLOPT_MAXLIFETIME_CONN
+CURLOPT_UPLOAD_BUFFERSIZE
+CURLOPT_MIME_OPTIONS
+CURLOPT_MAXFILESIZE_LARGE
+CURLOPT_BUFFERSIZE

@@ -86,6 +86,7 @@ def generate_corpus(args: argparse.Namespace) -> None:
         enc.maybe_write_u32(enc.TYPE_HTTP_VERSION, args.httpversion)
         enc.maybe_write_u32(enc.TYPE_NETRC, args.netrclevel)
         enc.maybe_write_u32(enc.TYPE_CONNECT_ONLY, args.connectonly)
+        enc.maybe_write_u32(enc.TYPE_SSL_VERIFYPEER, args.ssl_verifypeer)
 
         if args.httpauth:
             # translate a string HTTP auth name to an unsigned long bitmask
@@ -168,6 +169,13 @@ def main() -> None:
     parser.add_argument("--hostpksha256", type=str)
     parser.add_argument("--wsoptions", action="store_true")
     parser.add_argument("--connectonly", type=int)
+    parser.add_argument(
+        "--sslverifypeer",
+        "--ssl-verifypeer",
+        dest="ssl_verifypeer",
+        type=int,
+        choices=(0, 1),
+    )
     parser.add_argument("--post", action="store_true")
     parser.add_argument("--hsts")
 

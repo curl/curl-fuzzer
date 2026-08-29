@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <curl/curl.h>
 #include "curl_fuzzer.h"
+#include "legacy_tlv_mutator.h"
 
 /**
  * Fuzzing entry point. This function is passed a buffer containing a test
@@ -110,7 +111,13 @@ EXIT_LABEL:
 uint32_t to_u32(const uint8_t b[4])
 {
   uint32_t u;
-  u = (b[0] << 24) + (b[1] << 16) + (b[2] << 8) + b[3];
+  /* Promote into the unsigned result type before shifting. uint8_t otherwise
+     promotes to signed int, and values with the high bit set make the
+     left-shift undefined before curl ever observes the fuzzed boundary. */
+  u = (static_cast<uint32_t>(b[0]) << 24) |
+      (static_cast<uint32_t>(b[1]) << 16) |
+      (static_cast<uint32_t>(b[2]) << 8) |
+      static_cast<uint32_t>(b[3]);
   return u;
 }
 
@@ -164,11 +171,49 @@ EXIT_LABEL:
 }
 
 /**
+ * Reapply resolver-sensitive string options with their canonical loopback
+ * values before starting a transfer.
+ *
+ * Custom mutation and crossover already finalize generated buffers, but an
+ * initial corpus entry or standalone reproducer is executed without passing
+ * through either callback. The option tracker identifies only values that the
+ * TLV parser successfully applied, so this does not enable routing options that
+ * were absent from the input. DNS_INTERFACE is deliberately excluded: with
+ * c-ares it is a device name passed to ares_set_local_dev(), not a hostname.
+ */
+static int fuzz_finalize_routing_options(FUZZ_DATA *fuzz)
+{
+  int rc = 0;
+
+#define FFINALIZE_ROUTING_OPTION(TLVTYPE, CURLOPTNAME)                         \
+  if(fuzz->options[(CURLOPTNAME) % 1000]) {                                   \
+    const char *canonical =                                                   \
+      legacy_tlv_mutator::CanonicalRoutingValue((TLVTYPE));                   \
+    FCHECK(canonical != NULL);                                                 \
+    FTRY(curl_easy_setopt(fuzz->easy, (CURLOPTNAME), canonical));              \
+  }
+
+  FFINALIZE_ROUTING_OPTION(TLV_TYPE_PROXY, CURLOPT_PROXY);
+  FFINALIZE_ROUTING_OPTION(TLV_TYPE_FTPPORT, CURLOPT_FTPPORT);
+  FFINALIZE_ROUTING_OPTION(TLV_TYPE_INTERFACE, CURLOPT_INTERFACE);
+  FFINALIZE_ROUTING_OPTION(TLV_TYPE_PRE_PROXY, CURLOPT_PRE_PROXY);
+
+#undef FFINALIZE_ROUTING_OPTION
+
+EXIT_LABEL:
+  return rc;
+}
+
+/**
  * Set standard options on the curl easy.
  */
 int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 {
   int rc = 0;
+
+  /* Existing seeds and direct reproducers bypass the custom mutator. Close
+     that path before any transfer can resolve a corpus-provided endpoint. */
+  FTRY(fuzz_finalize_routing_options(fuzz));
 
   /* Set some standard options on the CURL easy handle. We need to override the
      socket function so that we create our own sockets to present to CURL. */
@@ -208,6 +253,18 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 
   /* Set the Certificate Revocation List file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CRLFILE, FUZZ_CRL_FILE_PATH));
+
+  /* Loading the host trust store for every WSS mutation dominates the
+     WebSocket target even when the in-process mock immediately ends the TLS
+     handshake. Keep this exception local to that target: the other legacy
+     fuzzers should retain libcurl's verification default so their ordinary
+     mutations continue to cover certificate setup. An explicit
+     SSL_VERIFYPEER TLV still restores verification in the WebSocket target. */
+#ifdef FUZZ_PROTOCOLS_WS
+  if(!fuzz->options[CURLOPT_SSL_VERIFYPEER % 1000]) {
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_SSL_VERIFYPEER, 0L));
+  }
+#endif
 
   /* Set the .netrc file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_NETRC_FILE, FUZZ_NETRC_FILE_PATH));

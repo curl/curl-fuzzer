@@ -13,19 +13,18 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 
+#include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/ws_accept_key.h"
 #include "proto_fuzzer/ws_frame.h"
 
 namespace proto_fuzzer {
 
 namespace {
-
-// Cap per-scenario frame chunks so a mutator that creates thousands of tiny
-// entries can't dominate runtime.
-constexpr std::size_t kMaxResponseChunks = 16;
 
 // Iteration caps for the post-handshake manual WS drive. Kept small because
 // every iteration makes a curl_ws_recv / curl_ws_send call.
@@ -96,34 +95,20 @@ std::string ComputeWebSocketAccept(const std::string& key) { return proto_fuzzer
 /// Build the ordered list of chunks to deliver once the 101 handshake has
 /// completed. Mixes raw `on_readable` bytes (fuzzer-controlled) with serialised
 /// `server_frames` (structured RFC 6455 frames from the proto) under a shared
-/// kMaxResponseChunks budget.
+/// shared response-chunk budget.
 std::vector<std::string> BuildFrameChunks(const curl::fuzzer::proto::Connection& conn) {
   std::vector<std::string> chunks;
-  chunks.reserve(kMaxResponseChunks);
-  const std::size_t raw_budget = std::min<std::size_t>(kMaxResponseChunks, conn.on_readable_size());
+  chunks.reserve(scenario_limits::kMaxResponseChunks);
+  const std::size_t raw_budget = std::min<std::size_t>(scenario_limits::kMaxResponseChunks, conn.on_readable_size());
   for (std::size_t i = 0; i < raw_budget; ++i) {
     chunks.emplace_back(conn.on_readable(i));
   }
-  const std::size_t frame_budget = kMaxResponseChunks - chunks.size();
+  const std::size_t frame_budget = scenario_limits::kMaxResponseChunks - chunks.size();
   const std::size_t frame_count = std::min<std::size_t>(frame_budget, conn.server_frames_size());
   for (std::size_t i = 0; i < frame_count; ++i) {
     chunks.emplace_back(SerializeWebSocketFrame(conn.server_frames(static_cast<int>(i))));
   }
   return chunks;
-}
-
-/// @return true if any scenario option sets CURLOPT_CONNECT_ONLY to 2, which
-///         is curl's "WebSocket connect-only, drive recv/send manually" mode.
-bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario) {
-  for (const auto& opt : scenario.options()) {
-    if (opt.option_id() != curl::fuzzer::proto::CURLOPT_CONNECT_ONLY) {
-      continue;
-    }
-    if (opt.value_case() == curl::fuzzer::proto::SetOption::ValueCase::kUintValue && opt.uint_value() == 2) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /// WRITEFUNCTION / HEADERFUNCTION installed on the easy handle by
@@ -175,6 +160,29 @@ void DrainWsRecv(CURL* easy) {
 }
 
 }  // namespace
+
+/// Mirror the sequential CURLOPT_CONNECT_ONLY setopts applied by
+/// ApplyScenarioOptions. Values above 2 are rejected by libcurl and therefore
+/// cannot replace the last accepted setting. Use the same descriptor-aware
+/// scalar decoder as ApplySetOption so compatibility inputs and cross-family
+/// mutations cannot make curl and its mock disagree about manual delivery.
+/// Restricting the scan to RuntimeOptionCount also prevents a compatibility-
+/// only suffix from changing mock delivery after curl stops observing options.
+bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario) {
+  bool manual_delivery = false;
+  const std::size_t option_count = RuntimeOptionCount(scenario);
+  for (std::size_t index = 0; index < option_count; ++index) {
+    const auto& option = scenario.options(static_cast<int>(index));
+    if (option.option_id() != curl::fuzzer::proto::CURLOPT_CONNECT_ONLY) {
+      continue;
+    }
+    const std::uint64_t value = DecodeIntegralOptionValue(option);
+    if (value <= 2) {
+      manual_delivery = value == 2;
+    }
+  }
+  return manual_delivery;
+}
 
 /// Construct an idle WebSocketMockServer with no queued frames. Install()
 /// on the base class and DriveScenario() configure it from a Scenario proto.
@@ -282,9 +290,10 @@ bool WebSocketMockServer::PushRawBytes(const unsigned char* data, std::size_t si
 /// Push the next queued frame when curl is ready. Used in streaming mode;
 /// the drive loop calls this after the handshake has been sent. Shuts
 /// the write side once the last chunk is delivered.
-void WebSocketMockServer::DeliverNextChunk() {
+/// @return true when a chunk was consumed from the script.
+bool WebSocketMockServer::DeliverNextChunk() {
   if (!connection_ || next_chunk_ >= frames_.size()) {
-    return;
+    return false;
   }
   connection_->DrainIncoming();
   const std::string& chunk = frames_[next_chunk_++];
@@ -294,6 +303,7 @@ void WebSocketMockServer::DeliverNextChunk() {
   if (next_chunk_ >= frames_.size()) {
     connection_->ShutdownWrite();
   }
+  return true;
 }
 
 /// Drive the WebSocket opening handshake: read whatever curl has written so
@@ -340,38 +350,60 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
 
   int still_running = 1;
   int idle_iterations = 0;
+  int drive_iterations = 0;
+  bool pollset_probed = false;
+  const bool timed_drive = UsesTimedDrive(scenario);
+  const int idle_limit = timed_drive ? kMaxTimedIdleIterations : kMaxIdleIterations;
   CURLMcode rc = CURLM_OK;
 
-  while (still_running && idle_iterations < kMaxIdleIterations) {
+  while (still_running && idle_iterations < idle_limit && drive_iterations++ < kMaxDriveIterations) {
+    bool made_progress = false;
+    const int running_before = still_running;
     rc = curl_multi_perform(multi, &still_running);
     if (rc != CURLM_OK) {
       break;
     }
+    made_progress = still_running != running_before;
+    if (timed_drive && still_running && !pollset_probed) {
+      // At this point curl has created the Upgrade connection but the mock has
+      // not necessarily replied, which gives curl_multi_poll a meaningful WS
+      // filter state without adding a timeout to fixed fast-lane inputs.
+      ProbeMultiPollset(multi);
+      pollset_probed = true;
+    }
     // Drive the 101 handshake on every iteration; no-op once sent.
     if (!handshake_sent()) {
       if (TryAdvanceHandshake()) {
-        idle_iterations = 0;
+        made_progress = true;
       }
     }
     if (!still_running) {
       break;
     }
 
-    int ready = WaitOnMultiFdset(multi, &rc);
-    if (rc != CURLM_OK) {
-      break;
-    }
-
     // Only push frame chunks in streaming mode — in manual mode the caller
     // will push them below after the handshake.
     if (!manual_delivery() && handshake_sent() && has_more_chunks()) {
-      DeliverNextChunk();
-      idle_iterations = 0;
-    } else if (ready == 0) {
-      ++idle_iterations;
-    } else {
-      idle_iterations = 0;
+      made_progress = DeliverNextChunk() || made_progress;
+    } else if (handshake_sent() && connection() != nullptr) {
+      // Uploading WS scenarios can have no server frames at all. Drain their
+      // encoded client data here so they make deterministic progress and do
+      // not have to wait for CURLOPT_TIMEOUT_MS just to exercise cr_ws_read.
+      made_progress = connection()->DrainIncoming() != 0 || made_progress;
     }
+
+    if (made_progress) {
+      idle_iterations = 0;
+      continue;
+    }
+
+    if (timed_drive) {
+      (void)WaitOnMultiFdset(multi, &rc);
+      if (rc != CURLM_OK) {
+        break;
+      }
+    }
+    ++idle_iterations;
   }
 
   if (!manual_delivery() || !handshake_sent()) {

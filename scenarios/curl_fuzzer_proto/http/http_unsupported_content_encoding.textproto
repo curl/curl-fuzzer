@@ -1,0 +1,8 @@
+# An advertised decoder chain with an unknown outer coding reaches curl's
+# deliberate CURLE_BAD_CONTENT_ENCODING path without needing a large body.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/unsupported-encoding"
+options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Encoding: x-curl-fuzzer-unknown\r\nContent-Length: 4\r\n\r\ndata"
+}

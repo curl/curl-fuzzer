@@ -8,7 +8,7 @@
 # sendf.c that the streaming response scenarios don't reach.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/chunked-upload"
-options { option_id: CURLOPT_UPLOAD uint_value: 1 }
+options { option_id: CURLOPT_UPLOAD bool_value: true }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
   backpressure {

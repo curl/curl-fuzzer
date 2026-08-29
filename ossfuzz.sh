@@ -53,7 +53,7 @@ if [[ "${CIFUZZ:-}" == "True" && -n "${OUT:-}" ]]; then
   rm -f "${BUILD_DIR}/curl-install/lib/libcurl.a"
   rm -f "${BUILD_DIR}"/curl_external-prefix/src/curl_external-stamp/curl_external-{configure,build,install,done}
 fi
-BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
+export BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 
 # Compile the fuzzers.
 "${SCRIPTDIR}"/compile_target.sh fuzz

@@ -27,6 +27,7 @@ LLVM_COV="${LLVM_COV:-llvm-cov}"
 # to iterate on a single binary without replaying everything else.
 # shellcheck disable=SC1091
 . "${SCRIPTDIR}/fuzz_targets"
+. "${SCRIPTDIR}/fuzz_corpus_helpers.sh"
 TARGETS="${TARGETS:-${FUZZ_TARGETS} curl_fuzzer_fnmatch}"
 
 mkdir -p "${PROFRAW_DIR}"
@@ -53,8 +54,7 @@ fi
 export LLVM_PROFILE_FILE="${PROFRAW_DIR}/%m-%p.profraw"
 
 for TARGET in ${TARGETS}; do
-  CORPUS_DIR="${BUILD_ROOT}/corpora/${TARGET}"
-  PUBLIC_CORPUS_DIR="${BUILD_ROOT}/ossfuzz_corpus/${TARGET}"
+  CORPUS_DIR=$(fuzz_local_corpus_dir "${TARGET}" "${BUILD_ROOT}" "${BUILD_DIR}")
   BIN="${BUILD_DIR}/${TARGET}"
   if [[ ! -x "${BIN}" ]]; then
     echo "Skipping ${TARGET}: binary not found at ${BIN}"
@@ -66,10 +66,16 @@ for TARGET in ${TARGETS}; do
     CORPUS_ARGS+=("${CORPUS_DIR}")
   fi
   # Public OSS-Fuzz corpus (if downloaded by scripts/download_public_corpus.sh)
-  # contributes additional coverage without being checked in.
-  if [[ -d "${PUBLIC_CORPUS_DIR}" ]]; then
-    CORPUS_ARGS+=("${PUBLIC_CORPUS_DIR}")
-  fi
+  # contributes additional coverage without being checked in. Fixed proto
+  # lanes also replay the compatibility target's historical mixed corpus; all
+  # inputs share the Scenario wire format and lane postprocessors normalize
+  # scheme/timing fields before execution.
+  while IFS= read -r PUBLIC_CORPUS_NAME; do
+    PUBLIC_CORPUS_DIR="${BUILD_ROOT}/ossfuzz_corpus/${PUBLIC_CORPUS_NAME}"
+    if [[ -d "${PUBLIC_CORPUS_DIR}" ]]; then
+      CORPUS_ARGS+=("${PUBLIC_CORPUS_DIR}")
+    fi
+  done < <(fuzz_public_corpus_names "${TARGET}")
   if [[ ${#CORPUS_ARGS[@]} -eq 0 ]]; then
     echo "Skipping ${TARGET}: no corpus dirs"
     continue

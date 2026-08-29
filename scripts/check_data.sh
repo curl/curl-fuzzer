@@ -12,6 +12,8 @@ fi
 
 # Exit if the build root has not been defined.
 . "${SCRIPTDIR}"/fuzz_targets
+. "${SCRIPTDIR}"/fuzz_corpus_helpers.sh
+ACTIVE_BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 
 if [[ ${DEBUG} == 1 ]]
 then
@@ -38,7 +40,8 @@ do
     # The standalone runner walks directories itself, so we just hand it the
     # corpus directory (plus any extra local corpus). One process per target,
     # and a non-zero exit from a crash still fails the run under `set -e`.
+    CORPUS_DIR=$(fuzz_local_corpus_dir "${TARGET}" "${BUILD_ROOT}" "${ACTIVE_BUILD_DIR}")
     # shellcheck disable=SC2248
-    "${BUILD_ROOT}/build/${TARGET}" "${BUILD_ROOT}/corpora/${TARGET}/" ${EXTRA_CORPUS}
+    "${ACTIVE_BUILD_DIR}/${TARGET}" "${CORPUS_DIR}/" ${EXTRA_CORPUS}
   fi
 done

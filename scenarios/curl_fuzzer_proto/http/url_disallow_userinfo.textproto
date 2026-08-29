@@ -1,0 +1,9 @@
+# This deliberately stops before opening a socket: the useful surface is the
+# URL-policy branch that rejects embedded credentials, which otherwise needs
+# a low-probability correlation between a mutated URL and option bit.
+scheme: SCHEME_HTTP
+host_path: "user:pass@userinfo.test/private"
+options { option_id: CURLOPT_DISALLOW_USERNAME_IN_URL bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

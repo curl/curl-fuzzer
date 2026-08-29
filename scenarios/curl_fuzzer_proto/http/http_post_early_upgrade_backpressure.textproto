@@ -1,0 +1,18 @@
+# Respond with 101 while curl still has a bounded callback-driven POST upload
+# to send. Tight socket buffers prevent all 16 KiB from being queued before the
+# response arrives, so curl must abort/clean up the request body as it enters
+# protocol-switch handling. The filename keeps this deliberately slower seed
+# in the timing and compatibility corpora, out of fixed fast lanes.
+scheme: SCHEME_HTTP
+host_path: "upgrade.test/stream"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+request_headers: "Connection: Upgrade"
+request_headers: "Upgrade: fuzzer-stream"
+connection {
+  initial_response: "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: fuzzer-stream\r\n\r\n"
+  backpressure {
+    recv_buf_bytes: 2048
+    drain_limit: 32
+  }
+}

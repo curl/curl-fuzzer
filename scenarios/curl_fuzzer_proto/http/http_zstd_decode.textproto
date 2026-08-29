@@ -1,0 +1,9 @@
+# Small zstd body from curl's upstream test 397. It expands past
+# CURL_MAX_WRITE_SIZE, covering both the zstd decoder and repeated delivery of
+# decompressed output while keeping the corpus entry compact.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/zstd"
+options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 47\r\nContent-Encoding: zstd\r\n\r\n\x28\xb5\x2f\xfd\x64\x80\x3f\x0d\x01\x00\x88\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x41\x42\x43\x44\x45\x46\n\x04\x00\x7c\x9f\x60\x78\x00\x04\x1a\x1d\xd2\xab\x4d\x3a\x97\x82\xaf\xb9\x9c"
+}

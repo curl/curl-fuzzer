@@ -1,0 +1,11 @@
+# curl accepts the three historical HTTP-date grammars plus numeric timezone
+# forms. Repeated metadata headers are unusual but legal input to the parser;
+# keeping the variants together cheaply exercises date tokenization, timezone
+# adjustment, two-digit years, and overflow rejection in one transfer.
+scheme: SCHEME_HTTP
+host_path: "date.test/formats"
+options { option_id: CURLOPT_TIMECONDITION uint_value: 2 }
+options { option_id: CURLOPT_TIMEVALUE_LARGE uint_value: 1704067200 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nLast-Modified: Sunday, 06-Nov-94 08:49:37 GMT\r\nLast-Modified: Sun Nov  6 08:49:37 1994\r\nLast-Modified: 06 Nov 1994 08:49:37 +0530\r\nLast-Modified: Thu, 01 Jan 1970 00:00:00 -0000\r\nRetry-After: 999999999999999999999999\r\nRetry-After: Fri, 31 Dec 9999 23:59:59 GMT\r\nSet-Cookie: rfc850=one; Path=/; Expires=Sunday, 06-Nov-94 08:49:37 GMT\r\nSet-Cookie: asctime=two; Path=/; Expires=Sun Nov  6 08:49:37 2038\r\nContent-Length: 0\r\n\r\n"
+}

@@ -1,0 +1,17 @@
+# A parent-domain cookie survives a redirect to a different host beneath that
+# domain. The second socket makes curl run cookie-domain/path selection during
+# request construction, then parses a host-only cookie in the new origin.
+scheme: SCHEME_HTTP
+host_path: "state.test/account/start"
+options {
+  option_id: CURLOPT_COOKIELIST
+  string_value: ".state.test\tTRUE\t/account\tFALSE\t2147483647\tseed\told"
+}
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nSet-Cookie: parent=fresh; Domain=.state.test; Path=/account; HttpOnly; SameSite=Lax\r\nLocation: http://child.state.test/account/landing\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nSet-Cookie: child=host-only; Path=/account; Max-Age=60\r\nContent-Length: 2\r\n\r\nOK"
+}

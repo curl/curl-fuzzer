@@ -1,13 +1,16 @@
-# POST with body; server replies 301 and curl should follow the Location
-# (redirect target is a second connection, which the mock server will reject
-# with CURL_SOCKET_BAD - this exercises curl's redirect failure path).
+# POST with body; server replies 301 and curl follows the Location over a fresh
+# socket. Completing the second exchange reaches request-method rewriting and
+# redirect bookkeeping beyond the historical second-socket failure path.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/post"
 options { option_id: CURLOPT_POST bool_value: true }
 options { option_id: CURLOPT_POSTFIELDS string_value: "key=value&x=1" }
-options { option_id: CURLOPT_FOLLOWLOCATION bool_value: true }
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
 options { option_id: CURLOPT_MAXREDIRS uint_value: 3 }
 options { option_id: CURLOPT_USERAGENT string_value: "curl-fuzzer-proto/0.1" }
 connection {
-  initial_response: "HTTP/1.1 301 Moved Permanently\r\nLocation: http://127.0.0.1/after\r\nContent-Length: 0\r\n\r\n"
+  initial_response: "HTTP/1.1 301 Moved Permanently\r\nLocation: http://127.0.0.1/after\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nredirect"
 }

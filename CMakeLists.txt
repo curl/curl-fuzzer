@@ -14,7 +14,7 @@ include(ExternalProject)
 # -fcoverage-mapping; third-party deps (openssl, zlib, zstd, nghttp2, libidn2,
 # openldap, libprotobuf-mutator + its bundled protobuf/abseil) are left un-
 # instrumented. Only curl is what we want covered, and leaving deps alone
-# keeps the link size of curl_fuzzer_proto in particular under the memory
+# keeps the link size of the curl_fuzzer_proto binaries under the memory
 # limits of a stock GitHub runner.
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
 set(COVERAGE_COMPILE_FLAGS "")
@@ -413,7 +413,12 @@ else()
 endif()
 
 # Common sources and flags
-set(COMMON_SOURCES curl_fuzzer.cc curl_fuzzer_tlv.cc curl_fuzzer_callback.cc)
+set(COMMON_SOURCES
+    curl_fuzzer.cc
+    curl_fuzzer_tlv.cc
+    curl_fuzzer_callback.cc
+    legacy_tlv_mutator.cc
+)
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
 set(COMMON_LINK_LIBS
     ${CURL_LIB_DIR}/libcurl.a
@@ -436,12 +441,29 @@ set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
     add_executable(${_name} ${COMMON_SOURCES})
-    target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto})
+    target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto}
+        -DLEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS)
     target_include_directories(${_name} PRIVATE ${CURL_INCLUDE_DIRS})
     target_link_libraries(${_name} PRIVATE ${COMMON_LINK_LIBS})
     target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
     add_dependencies(${_name} ${FUZZ_DEPS})
 endmacro()
+
+# The mutator is deliberately independent of libcurl so its framing, bounds,
+# repair, and crossover behavior can be tested without constructing a transfer.
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(legacy_tlv_mutator_test
+        legacy_tlv_mutator.cc
+        tests/legacy_tlv_mutator_test.cc
+    )
+    target_compile_features(legacy_tlv_mutator_test PRIVATE cxx_std_11)
+    target_include_directories(legacy_tlv_mutator_test PRIVATE ${CMAKE_SOURCE_DIR})
+    add_test(NAME legacy_tlv_mutator_test COMMAND legacy_tlv_mutator_test)
+    # Kept separate from `fuzz` so OSS-Fuzz packaging does not build test-only
+    # binaries. mainline.sh builds this target and then invokes CTest.
+    add_custom_target(fuzzer_unit_tests DEPENDS legacy_tlv_mutator_test)
+endif()
 
 # Main fuzzer and protocol-specific fuzzers
 curl_add_fuzzer(curl_fuzzer           ALL)
@@ -522,11 +544,11 @@ add_custom_target(fuzz
 )
 
 # -----------------------------------------------------------------------------
-# Structured (libprotobuf-mutator) HTTP fuzzer
+# Structured (libprotobuf-mutator) HTTP/WebSocket target suite
 #
-# This is a second fuzzer binary that lives entirely under proto_fuzzer/ and
-# shares no source with the TLV fuzzers above. It is skipped on 32-bit builds
-# so we don't have to drag LPM/protobuf through the i386 toolchain.
+# These binaries live entirely under proto_fuzzer/ and share no source with
+# the TLV fuzzers above. They are skipped on 32-bit builds so we don't have to
+# drag LPM/protobuf through the i386 toolchain.
 # -----------------------------------------------------------------------------
 if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -631,20 +653,24 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     )
     add_custom_target(lpm_link_rsp DEPENDS ${LPM_LINK_RSP})
 
-    add_executable(curl_fuzzer_proto
-        proto_fuzzer/fuzzer_main.cc
+    # The protocol runners and generated message are identical for every
+    # structured target. Compile them once; only fuzzer_main.cc carries a
+    # per-binary policy definition and therefore needs one object per lane.
+    add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/scenario_runner.cc
         proto_fuzzer/option_apply.cc
+        proto_fuzzer/request_data.cc
         proto_fuzzer/mock_server.cc
         proto_fuzzer/mock_server_base.cc
+        proto_fuzzer/target_policy.cc
         proto_fuzzer/websocket_mock_server.cc
         proto_fuzzer/ws_frame.cc
         ${GEN_PB_CC}
     )
-    target_compile_features(curl_fuzzer_proto PRIVATE cxx_std_17)
-    target_compile_options(curl_fuzzer_proto PRIVATE
+    target_compile_features(curl_fuzzer_proto_runtime PRIVATE cxx_std_17)
+    target_compile_options(curl_fuzzer_proto_runtime PRIVATE
         ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
-    target_include_directories(curl_fuzzer_proto PRIVATE
+    target_include_directories(curl_fuzzer_proto_runtime PRIVATE
         ${CURL_INCLUDE_DIRS}
         ${CMAKE_BINARY_DIR}
         ${CMAKE_SOURCE_DIR}
@@ -655,73 +681,349 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${LPM_INSTALL_DIR}/include/libprotobuf-mutator
         ${LPM_PB_INCLUDE}
     )
-    target_link_libraries(curl_fuzzer_proto PRIVATE
-        ${CURL_LIB_DIR}/libcurl.a
-        ${NGHTTP2_STATIC_LIB}
-        $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
-        ${ZLIB_STATIC_LIB}
-        ${ZSTD_STATIC_LIB}
-        ${LIBIDN2_STATIC_LIB}
-        ${OPENLDAP_STATIC_LIB_LDAP}
-        ${OPENLDAP_STATIC_LIB_LBER}
-        ${LIB_FUZZING_ENGINE}
-        # -Wl,@file: ld reads the response file and substitutes its
-        # contents — the absolute paths to every .a from LPM's install +
-        # its bundled protobuf/abseil, wrapped in one
-        # --start-group/--end-group. This has to come AFTER our object
-        # files in the final link line (so the archives see unresolved
-        # symbols to pull in), which means it belongs in
-        # target_link_libraries (LINK_LIBRARIES slot), not
-        # target_link_options (LINK_FLAGS slot, which is pre-objects).
-        # The -Wl, prefix is what keeps CMake from mangling "@file" into
-        # "-l@file" (treating it as a library name).
-        "-Wl,@${LPM_LINK_RSP}"
-        pthread
-        m
-    )
-    target_link_options(curl_fuzzer_proto PRIVATE ${COMMON_LINK_OPTIONS})
-    add_dependencies(curl_fuzzer_proto
+    add_dependencies(curl_fuzzer_proto_runtime
         ${FUZZ_DEPS}
         libprotobuf_mutator_external
         lpm_link_rsp
     )
-    add_dependencies(fuzz curl_fuzzer_proto)
+
+    # Build one compatibility binary plus fixed protocol/cost lanes. The
+    # compile definition is consumed only by fuzzer_main.cc. Fixed lanes
+    # register the matching LPM postprocessor before the first corpus input is
+    # decoded; the compatibility lane intentionally registers none.
+    function(curl_add_proto_fuzzer _name _policy_definition)
+        add_executable(${_name}
+            proto_fuzzer/fuzzer_main.cc
+            $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
+        )
+        target_compile_features(${_name} PRIVATE cxx_std_17)
+        target_compile_options(${_name} PRIVATE
+            ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+        target_compile_definitions(${_name} PRIVATE ${_policy_definition})
+        target_include_directories(${_name} PRIVATE
+            ${CURL_INCLUDE_DIRS}
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_INSTALL_DIR}/include
+            ${LPM_INSTALL_DIR}/include/libprotobuf-mutator
+            ${LPM_PB_INCLUDE}
+        )
+        target_link_libraries(${_name} PRIVATE
+            ${CURL_LIB_DIR}/libcurl.a
+            ${NGHTTP2_STATIC_LIB}
+            $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
+            ${ZLIB_STATIC_LIB}
+            ${ZSTD_STATIC_LIB}
+            ${LIBIDN2_STATIC_LIB}
+            ${OPENLDAP_STATIC_LIB_LDAP}
+            ${OPENLDAP_STATIC_LIB_LBER}
+            ${LIB_FUZZING_ENGINE}
+            # -Wl,@file: ld reads the response file and substitutes its
+            # contents — the absolute paths to every .a from LPM's install +
+            # its bundled protobuf/abseil, wrapped in one
+            # --start-group/--end-group. This has to come AFTER our object
+            # files in the final link line (so the archives see unresolved
+            # symbols to pull in), which means it belongs in
+            # target_link_libraries (LINK_LIBRARIES slot), not
+            # target_link_options (LINK_FLAGS slot, which is pre-objects).
+            # The -Wl, prefix is what keeps CMake from mangling "@file" into
+            # "-l@file" (treating it as a library name).
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
+        add_dependencies(${_name}
+            ${FUZZ_DEPS}
+            curl_fuzzer_proto_runtime
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_dependencies(fuzz ${_name})
+    endfunction()
+
+    # Preserve the original mixed target's behavior under its original name:
+    # OSS-Fuzz keys accumulated corpora and regression testcases by target
+    # basename, so changing its policy would silently change their semantics.
+    curl_add_proto_fuzzer(curl_fuzzer_proto PROTO_FUZZER_TARGET_COMPATIBILITY)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http PROTO_FUZZER_TARGET_FAST_HTTP)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep PROTO_FUZZER_TARGET_DEEP_HTTP)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_https PROTO_FUZZER_TARGET_FAST_HTTPS)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ws PROTO_FUZZER_TARGET_FAST_WEBSOCKET)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_wss PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_timing PROTO_FUZZER_TARGET_TIMING)
 
     # Compile textproto seed scenarios into binary corpus entries. These are
     # derived artefacts — the textprotos in scenarios/ are the source of truth,
-    # and corpora/curl_fuzzer_proto/ is gitignored.
+    # so outputs belong in the build tree rather than beside checked-in corpora.
     set(SCENARIO_SRC_DIR ${CMAKE_SOURCE_DIR}/scenarios/curl_fuzzer_proto)
-    set(SCENARIO_OUT_DIR ${CMAKE_SOURCE_DIR}/corpora/curl_fuzzer_proto)
-    # Scenarios are organised into protocol-specific subdirectories
-    # (http/, ws/, …). Output .scenario files still go into a flat
-    # corpora/curl_fuzzer_proto/ directory — libFuzzer doesn't care about
-    # source-side grouping. Name collisions across subdirs would clobber each
-    # other; keep stems unique.
-    file(GLOB_RECURSE SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
-         ${SCENARIO_SRC_DIR}/*.textproto)
-    set(SCENARIO_BINARIES)
-    foreach(textproto ${SCENARIO_TEXTPROTOS})
-        get_filename_component(name ${textproto} NAME_WE)
-        set(out ${SCENARIO_OUT_DIR}/${name}.scenario)
-        add_custom_command(
-            OUTPUT ${out}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${SCENARIO_OUT_DIR}
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
-                    ${LPM_PROTOC}
-                    ${PROTO_FUZZER_SCHEMA_DIR}
-                    ${GEN_PROTO}
-                    ${textproto}
-                    ${out}
-            DEPENDS ${textproto} ${GEN_PROTO} libprotobuf_mutator_external
-                    ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
-            COMMENT "Encoding ${name}.textproto"
-            VERBATIM
-        )
-        list(APPEND SCENARIO_BINARIES ${out})
+    file(GLOB HTTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/http/*.textproto)
+    file(GLOB HTTPS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/https/*.textproto)
+    file(GLOB WS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/ws/*.textproto)
+    file(GLOB WSS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/wss/*.textproto)
+    file(GLOB_RECURSE TIMING_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/*backpressure*.textproto)
+
+    # Backpressure seeds carry deliberately large uploads and make LPM spend a
+    # disproportionate share of mutations copying those messages. Keep them in
+    # the compatibility corpus and dedicated timing target. The deep HTTP lane
+    # retains every other HTTP seed so coverage-rich behavior remains available
+    # without imposing its mutation cost on the throughput-oriented lane.
+    set(DEEP_HTTP_SCENARIO_TEXTPROTOS ${HTTP_SCENARIO_TEXTPROTOS})
+    set(FAST_WS_SCENARIO_TEXTPROTOS ${WS_SCENARIO_TEXTPROTOS})
+    list(FILTER DEEP_HTTP_SCENARIO_TEXTPROTOS EXCLUDE REGEX "backpressure")
+    list(FILTER FAST_WS_SCENARIO_TEXTPROTOS EXCLUDE REGEX "backpressure")
+
+    # Keep the fast seed population deliberately small and explicit. LPM's
+    # seed choice materially affects executions per second even when the lane
+    # postprocessor later removes deep-only fields, so an unconstrained glob
+    # would quietly erode throughput whenever a coverage seed is added.
+    set(FAST_HTTP_SCENARIO_TEXTPROTOS
+        ${SCENARIO_SRC_DIR}/http/basic_get.textproto
+        ${SCENARIO_SRC_DIR}/http/chunked_response.textproto
+        ${SCENARIO_SRC_DIR}/http/http09_allowed.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_control_frames.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_invalid_preface.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_prior_knowledge.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_truncated_headers_frame.textproto
+        ${SCENARIO_SRC_DIR}/http/http_chunk_extensions_trailers.textproto
+        ${SCENARIO_SRC_DIR}/http/http_conflicting_framing.textproto
+        ${SCENARIO_SRC_DIR}/http/http_cookie_rejections.textproto
+        ${SCENARIO_SRC_DIR}/http/http_custom_request_headers.textproto
+        ${SCENARIO_SRC_DIR}/http/http_decoding_controls_conflicting_length.textproto
+        ${SCENARIO_SRC_DIR}/http/http_deflate_raw_fallback.textproto
+        ${SCENARIO_SRC_DIR}/http/http_deflate_zlib.textproto
+        ${SCENARIO_SRC_DIR}/http/http_empty_host_header.textproto
+        ${SCENARIO_SRC_DIR}/http/http_failonerror_418.textproto
+        ${SCENARIO_SRC_DIR}/http/http_gzip_decode.textproto
+        ${SCENARIO_SRC_DIR}/http/http_head_nobody.textproto
+        ${SCENARIO_SRC_DIR}/http/http_interim_1xx.textproto
+        ${SCENARIO_SRC_DIR}/http/http_maxfilesize_reject.textproto
+        ${SCENARIO_SRC_DIR}/http/http_range_206.textproto
+        ${SCENARIO_SRC_DIR}/http/http_request_target_path_as_is.textproto
+        ${SCENARIO_SRC_DIR}/http/http_resume_filetime_206.textproto
+        ${SCENARIO_SRC_DIR}/http/http_small_receive_buffer.textproto
+        ${SCENARIO_SRC_DIR}/http/http_truncated_chunk.textproto
+        ${SCENARIO_SRC_DIR}/http/http_unsupported_content_encoding.textproto
+        ${SCENARIO_SRC_DIR}/http/http_zstd_decode.textproto
+        ${SCENARIO_SRC_DIR}/http/url_authority_ipv6_zone.textproto
+        ${SCENARIO_SRC_DIR}/http/url_disallow_userinfo.textproto
+        ${SCENARIO_SRC_DIR}/http/url_idn_percent_edges.textproto
+        ${SCENARIO_SRC_DIR}/http/url_malformed_authority.textproto
+    )
+    list(LENGTH FAST_HTTP_SCENARIO_TEXTPROTOS FAST_HTTP_SCENARIO_COUNT)
+    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 31)
+        message(FATAL_ERROR
+            "The fast HTTP corpus must contain exactly 31 seed declarations")
+    endif()
+    foreach(fast_http_textproto ${FAST_HTTP_SCENARIO_TEXTPROTOS})
+        if(NOT EXISTS "${fast_http_textproto}")
+            message(FATAL_ERROR
+                "Fast HTTP corpus seed does not exist: ${fast_http_textproto}")
+        endif()
     endforeach()
-    add_custom_target(curl_fuzzer_proto_corpus
-        DEPENDS ${SCENARIO_BINARIES})
+
+    # Emit a flat, target-specific corpus. Keeping the generated directories
+    # distinct ensures packaging and coverage replay never feed WS-only seeds
+    # to HTTP or ordinary seeds to the intentionally slow timing lane.
+    set(PROTO_CORPUS_MANIFEST_DIR ${CMAKE_BINARY_DIR}/corpus_manifests)
+    file(MAKE_DIRECTORY ${PROTO_CORPUS_MANIFEST_DIR})
+    function(add_proto_fuzzer_corpus _corpus_target _output_name)
+        set(scenario_out_dir
+            ${CMAKE_BINARY_DIR}/generated_corpora/${_output_name})
+        file(MAKE_DIRECTORY ${scenario_out_dir})
+        set(scenario_binaries)
+        set(seed_manifest "")
+        foreach(textproto ${ARGN})
+            get_filename_component(name ${textproto} NAME_WE)
+            set(out ${scenario_out_dir}/${name}.scenario)
+            add_custom_command(
+                OUTPUT ${out}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${scenario_out_dir}
+                COMMAND ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
+                        ${LPM_PROTOC}
+                        ${PROTO_FUZZER_SCHEMA_DIR}
+                        ${GEN_PROTO}
+                        ${textproto}
+                        ${out}
+                DEPENDS ${textproto} ${GEN_PROTO} libprotobuf_mutator_external
+                        ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
+                COMMENT "Encoding ${name}.textproto for ${_output_name}"
+                VERBATIM
+            )
+            list(APPEND scenario_binaries ${out})
+            string(APPEND seed_manifest "${name}.scenario\n")
+        endforeach()
+
+        # Remove obsolete derived entries at configure time. Packaging still
+        # consumes the exact allowlist below as a second line of defence, but
+        # local replay and source-coverage tools walk this directory directly;
+        # retaining a renamed seed there would silently inflate their results.
+        file(GLOB previous_scenario_binaries "${scenario_out_dir}/*.scenario")
+        foreach(previous_scenario ${previous_scenario_binaries})
+            list(FIND scenario_binaries "${previous_scenario}" retained_index)
+            if(retained_index EQUAL -1)
+                file(REMOVE "${previous_scenario}")
+            endif()
+        endforeach()
+
+        # create_zip.sh consumes this exact allowlist rather than archiving the
+        # whole generated directory. This also guards packaging if an external
+        # process writes an unrelated file after CMake has configured.
+        # Keep both the allowlist and its generated inputs in the build tree so
+        # a container build cannot leave root-owned artefacts that break later
+        # host builds or masquerade as checked-in corpus entries.
+        # Keep the allowlist outside the corpus directory: standalone runners
+        # recursively treat every file below that directory as a fuzz input.
+        file(WRITE ${PROTO_CORPUS_MANIFEST_DIR}/${_output_name}.seed_manifest
+             "${seed_manifest}")
+        add_custom_target(${_corpus_target} DEPENDS ${scenario_binaries})
+    endfunction()
+
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_corpus
+        curl_fuzzer_proto
+        ${HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS}
+        ${WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_http_corpus
+        curl_fuzzer_proto_http ${FAST_HTTP_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_http_deep_corpus
+        curl_fuzzer_proto_http_deep ${DEEP_HTTP_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
+        curl_fuzzer_proto_https
+        ${DEEP_HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_ws_corpus
+        curl_fuzzer_proto_ws ${FAST_WS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_wss_corpus
+        curl_fuzzer_proto_wss
+        ${FAST_WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_timing_corpus
+        curl_fuzzer_proto_timing ${TIMING_SCENARIO_TEXTPROTOS})
     add_dependencies(curl_fuzzer_proto curl_fuzzer_proto_corpus)
+    add_dependencies(curl_fuzzer_proto_http curl_fuzzer_proto_http_corpus)
+    add_dependencies(curl_fuzzer_proto_http_deep
+        curl_fuzzer_proto_http_deep_corpus)
+    add_dependencies(curl_fuzzer_proto_https curl_fuzzer_proto_https_corpus)
+    add_dependencies(curl_fuzzer_proto_ws curl_fuzzer_proto_ws_corpus)
+    add_dependencies(curl_fuzzer_proto_wss curl_fuzzer_proto_wss_corpus)
+    add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
+
+    # Policy tests need only the generated message and protobuf runtime. Keep
+    # them separate from the full harness object library so CTest can validate
+    # normalization without linking curl or running a fuzzing engine.
+    if(BUILD_TESTING)
+        add_executable(target_policy_test
+            tests/target_policy_test.cc
+            proto_fuzzer/target_policy.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(target_policy_test PRIVATE cxx_std_17)
+        target_compile_options(target_policy_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(target_policy_test PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE}
+        )
+        target_link_libraries(target_policy_test PRIVATE
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(target_policy_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(target_policy_test
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME target_policy_test COMMAND target_policy_test)
+        add_dependencies(fuzzer_unit_tests target_policy_test)
+
+        # This test links the real public MIME/header/callback APIs so
+        # ownership, allocation budgets, and upload replay are checked under
+        # the same sanitizers as curl.
+        # Keeping it separate from the full runner avoids introducing mock
+        # socket timing into a resource-lifetime unit test.
+        add_executable(request_data_test
+            tests/request_data_test.cc
+            proto_fuzzer/option_apply.cc
+            proto_fuzzer/request_data.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(request_data_test PRIVATE cxx_std_17)
+        target_compile_options(request_data_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(request_data_test PRIVATE
+            ${CURL_INCLUDE_DIRS}
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE}
+        )
+        target_link_libraries(request_data_test PRIVATE
+            ${CURL_LIB_DIR}/libcurl.a
+            ${NGHTTP2_STATIC_LIB}
+            $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
+            ${ZLIB_STATIC_LIB}
+            ${ZSTD_STATIC_LIB}
+            ${LIBIDN2_STATIC_LIB}
+            ${OPENLDAP_STATIC_LIB_LDAP}
+            ${OPENLDAP_STATIC_LIB_LBER}
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(request_data_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(request_data_test
+            ${FUZZ_DEPS}
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME request_data_test COMMAND request_data_test)
+        add_dependencies(fuzzer_unit_tests request_data_test)
+
+        # Exercise the real socketpair implementation without involving DNS or
+        # wall-clock waits. This catches script-order, connection-budget, and
+        # old-peer lifetime regressions at the callback boundary where they
+        # would otherwise look like ordinary curl transfer failures.
+        add_executable(mock_server_test
+            tests/mock_server_test.cc
+            proto_fuzzer/mock_server.cc
+            proto_fuzzer/mock_server_base.cc
+            proto_fuzzer/option_apply.cc
+            proto_fuzzer/websocket_mock_server.cc
+            proto_fuzzer/ws_frame.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(mock_server_test PRIVATE cxx_std_17)
+        target_compile_options(mock_server_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(mock_server_test PRIVATE
+            ${CURL_INCLUDE_DIRS}
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE}
+        )
+        target_link_libraries(mock_server_test PRIVATE
+            ${CURL_LIB_DIR}/libcurl.a
+            ${NGHTTP2_STATIC_LIB}
+            $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
+            ${ZLIB_STATIC_LIB}
+            ${ZSTD_STATIC_LIB}
+            ${LIBIDN2_STATIC_LIB}
+            ${OPENLDAP_STATIC_LIB_LDAP}
+            ${OPENLDAP_STATIC_LIB_LBER}
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(mock_server_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(mock_server_test
+            ${FUZZ_DEPS}
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME mock_server_test COMMAND mock_server_test)
+        add_dependencies(fuzzer_unit_tests mock_server_test)
+    endif()
 
     # Documentation lint. `cmake --build build --target doxygen-check` runs
     # Doxygen over proto_fuzzer/ with FAIL_ON_WARNINGS; any undocumented

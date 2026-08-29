@@ -1,0 +1,13 @@
+# A complete Digest negotiation across fresh sockets. Closing the 401 response
+# forces curl to preserve the challenge/nonce state while rebuilding the
+# request and generating Authorization for a newly opened connection.
+scheme: SCHEME_HTTP
+host_path: "auth.test/private/resource?view=full"
+options { option_id: CURLOPT_USERPWD string_value: "Mufasa:Circle Of Life" }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"testrealm@host.com\", qop=\"auth,auth-int\", algorithm=MD5, nonce=\"dcd98b7102dd2f0e8b11d0f600bfb0c093\", opaque=\"5ccc069c403ebaf9f0171e9517f40e41\"\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nAuthentication-Info: nextnonce=\"abcdef0123456789\", qop=auth, rspauth=\"deadbeef\", cnonce=\"0a4f113b\", nc=00000001\r\nContent-Length: 2\r\n\r\nOK"
+}

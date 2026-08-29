@@ -1,0 +1,11 @@
+# The six-letter gopher scheme is long enough to take curl's dedicated fast
+# scheme classifier branch. FOLLOWLOCATION makes curl parse the target, while
+# REDIR_PROTOCOLS_STR rejects it before any non-mock protocol or network access
+# is possible.
+scheme: SCHEME_HTTP
+host_path: "redirect.test/start"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: gopher://127.0.0.1/1selector%09query\r\nContent-Length: 0\r\n\r\n"
+}

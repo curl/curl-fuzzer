@@ -1,0 +1,10 @@
+# Multiple informational responses followed by a normal final response.
+# Delivering each response separately exercises curl's incremental header
+# state reset for both Early Hints and the special 100 Continue case.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/interim"
+connection {
+  initial_response: "HTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload; as=style\r\n\r\n"
+  on_readable: "HTTP/1.1 100 Continue\r\nX-Interim: yes\r\n\r\n"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
+}

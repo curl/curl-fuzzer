@@ -1,0 +1,13 @@
+# CURLOPT_XOAUTH2_BEARER supplies HTTP's Bearer token as well as mail-protocol
+# OAuth. Selecting CURLAUTH_BEARER reaches the HTTP authorization formatter
+# without a challenge/retry round trip.
+scheme: SCHEME_HTTP
+host_path: "auth.test/bearer?scope=read"
+options {
+  option_id: CURLOPT_XOAUTH2_BEARER
+  string_value: "eyJhbGciOiJIUzI1NiJ9.payload.signature"
+}
+options { option_id: CURLOPT_HTTPAUTH uint_value: 64 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

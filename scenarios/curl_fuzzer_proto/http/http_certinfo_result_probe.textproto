@@ -1,0 +1,10 @@
+# CURLOPT_CERTINFO consults the active TLS backend's capability table even on
+# a plain HTTP transfer. Pair it with a completed response so the runner's
+# handle-owned CURLINFO_CERTINFO probe observes the corresponding result state
+# without allocating an application-owned certificate list.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/certinfo-probe"
+options { option_id: CURLOPT_CERTINFO bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
+}

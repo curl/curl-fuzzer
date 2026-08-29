@@ -1,0 +1,28 @@
+# A conventional multipart/form-data request with both a field and a
+# file-shaped in-memory part. The 100 response lets curl enter its Expect
+# handling before the final response arrives, while the explicit request and
+# part headers exercise the two independently-owned curl_slist paths.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/upload"
+request_headers: "Expect: 100-continue"
+request_headers: "X-Fuzzer-Request: multipart"
+mime_post {
+  parts {
+    name: "description"
+    data: "curl fuzzer multipart seed"
+    headers: "X-Part-Source: text-field"
+  }
+  parts {
+    name: "upload"
+    filename: "seed.bin"
+    content_type: "application/octet-stream"
+    encoder: MIME_ENCODER_BASE64
+    data: "\000\001\002curl\377payload\r\n"
+    headers: "Content-ID: <seed-upload@curl-fuzzer>"
+    headers: "X-Part-Source: memory-file"
+  }
+}
+connection {
+  initial_response: "HTTP/1.1 100 Continue\r\n\r\n"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+}

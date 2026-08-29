@@ -1,0 +1,8 @@
+# Transfer-Encoding and two disagreeing Content-Length fields exercise curl's
+# response-smuggling/framing conflict checks. A valid chunk stream follows so
+# mutations can retain or relax individual conflicts and proceed deeper.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/framing-conflict"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 999\r\nContent-Length: 5\r\n\r\n5\r\nhello\r\n0\r\n\r\n"
+}
