@@ -31,7 +31,7 @@ fuzz_local_corpus_dir() {
 fuzz_public_corpus_names() {
     echo "$1"
     case "$1" in
-        curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_timing)
+        curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_timing)
             echo "curl_fuzzer_proto"
             ;;
     esac

@@ -1,0 +1,11 @@
+# A non-empty peer read makes TELNET consult READFUNCTION once. With no payload
+# and ABORT as the terminal outcome, that deterministic call reaches curl's
+# callback-abort handling without waiting for stdin.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+upload {
+  terminal: UPLOAD_TERMINAL_ABORT
+}
+connection {
+  initial_response: "x"
+}

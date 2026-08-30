@@ -1,0 +1,6 @@
+# CURLOPT_TELNETOPTIONS requires NAME=VALUE. This compact seed reaches the
+# syntax-error cleanup path before the synchronous protocol loop starts.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "BINARY"
+connection { initial_response: "x" }

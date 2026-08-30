@@ -34,16 +34,18 @@ constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy:
 constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastWebSocket;
 #elif defined(PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
 constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastSecureWebSocket;
+#elif defined(PROTO_FUZZER_TARGET_FAST_TELNET)
+constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastTelnet;
 #elif defined(PROTO_FUZZER_TARGET_TIMING)
 constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kTiming;
 #else
 #error "A proto fuzzer target policy must be selected"
 #endif
 
-// The fast HTTP binary trades the post-transfer getinfo/header probes for
-// throughput. Every other compiled lane retains them, so the aggregate proto
-// suite still covers those APIs without charging the hottest mutation loop.
-#if defined(PROTO_FUZZER_TARGET_FAST_HTTP)
+// The fast HTTP and TELNET binaries trade generic post-transfer getinfo/header
+// probes for throughput. Every other compiled lane retains them, so aggregate
+// coverage does not charge every HTTP or TELNET mutation for those APIs.
+#if defined(PROTO_FUZZER_TARGET_FAST_HTTP) || defined(PROTO_FUZZER_TARGET_FAST_TELNET)
 constexpr bool kProbeTransferResults = false;
 #else
 constexpr bool kProbeTransferResults = true;

@@ -22,6 +22,7 @@
 namespace proto_fuzzer {
 
 class MockConnection;
+class ScenarioRequestData;
 
 /// @class proto_fuzzer::MockServerBase
 /// @brief Abstract base for protocol-specific in-process mock servers. Owns a
@@ -45,6 +46,14 @@ class MockServerBase {
   /// from inside a curl callback).
   /// @param easy The curl easy handle to configure.
   virtual void Install(CURL* easy);
+
+  /// Bind protocol-specific work to the request-data callbacks after their
+  /// per-scenario state has been constructed. Ordinary HTTP and WebSocket
+  /// mocks drain from their outer perform loops, so they do not need work at
+  /// the upload-callback boundary. Most mocks need no hook; TELNET uses this
+  /// boundary to drain client replies while curl owns the thread.
+  /// @param request_data Callback state that outlives the subsequent drive.
+  virtual void ConfigureRequestData(ScenarioRequestData* request_data);
 
   /// Run 'scenario' to completion on 'easy'. Allocates a curl_multi handle,
   /// attaches 'easy', delegates the protocol-specific drive to RunLoop, and

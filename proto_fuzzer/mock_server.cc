@@ -85,6 +85,38 @@ bool MockConnection::ok() const { return server_fd_ >= 0; }
 /// @return the server-side fd (still owned by this MockConnection).
 int MockConnection::server_fd() const { return server_fd_; }
 
+/// Query the client endpoint while this object still owns it. A zero result is
+/// deliberately ambiguous between an invalid fd and a platform query failure:
+/// callers need only distinguish a verified capacity from every unsafe case.
+std::size_t MockConnection::client_send_buffer_size() const {
+  if (client_fd_ < 0) {
+    return 0;
+  }
+  int size = 0;
+  socklen_t length = sizeof(size);
+  if (getsockopt(client_fd_, SOL_SOCKET, SO_SNDBUF, &size, &length) != 0 || size <= 0) {
+    return 0;
+  }
+  return static_cast<std::size_t>(size);
+}
+
+/// Establish and verify the capacity required by a synchronous protocol
+/// driver. Linux may transform socket-buffer requests, so the post-set query
+/// is the contract rather than assuming setsockopt accepted the exact value.
+bool MockConnection::EnsureClientSendBufferSize(std::size_t minimum) {
+  if (client_send_buffer_size() >= minimum) {
+    return true;
+  }
+  if (client_fd_ < 0 || minimum > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    return false;
+  }
+  const int requested = static_cast<int>(minimum);
+  if (setsockopt(client_fd_, SOL_SOCKET, SO_SNDBUF, &requested, sizeof(requested)) != 0) {
+    return false;
+  }
+  return client_send_buffer_size() >= minimum;
+}
+
 /// Hand the client-side fd to libcurl. After this call the caller owns the fd and the MockConnection will not close it
 /// on destruction.
 /// @return the client-side socket fd as a curl_socket_t.

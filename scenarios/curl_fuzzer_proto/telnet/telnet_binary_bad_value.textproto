@@ -1,0 +1,6 @@
+# An invalid BINARY value must retain curl's safe default preferences. This
+# covers the numeric parser failure without adding any peer control bytes.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "BINARY=not-a-bit"
+connection { initial_response: "x" }

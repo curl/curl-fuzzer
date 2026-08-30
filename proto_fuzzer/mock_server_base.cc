@@ -57,6 +57,10 @@ void MockServerBase::Install(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, &SockOptTrampoline);
 }
 
+/// Ordinary event-driven mocks need no upload-callback hook; their RunLoop
+/// regains control after each perform and drains client traffic there.
+void MockServerBase::ConfigureRequestData(ScenarioRequestData* /*request_data*/) {}
+
 /// Allocate a multi, attach 'easy', delegate to the subclass RunLoop, consume
 /// its completion message, and clean up. Failures in multi_init / add_handle
 /// silently no-op: the fuzzer cares about what curl does when driven, not

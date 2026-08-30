@@ -1,0 +1,7 @@
+# TELNET rejects credentials containing non-ASCII bytes before constructing
+# the implicit NEW_ENV USER variable. Use valid UTF-8 so the protobuf string
+# remains well formed while curl still observes high-bit bytes.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz-\303\251" }
+connection { initial_response: "x" }

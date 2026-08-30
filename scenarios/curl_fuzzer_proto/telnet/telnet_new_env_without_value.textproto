@@ -1,0 +1,6 @@
+# NEW_ENV also accepts a name without a comma-separated value. A SEND request
+# exercises the name-only serializer with two bounded IAC markers.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "NEW_ENV=TERM"
+connection { initial_response: "\xff\xfa\x27\x01\xff\xf0" }

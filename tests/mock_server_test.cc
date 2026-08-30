@@ -15,7 +15,9 @@
 #include <vector>
 
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
+#include "proto_fuzzer/telnet_mock_server.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 #include "proto_fuzzer/ws_frame.h"
 
@@ -62,6 +64,23 @@ std::string ReadResponse(curl_socket_t fd) {
     response.append(buffer, static_cast<std::size_t>(count));
   }
   return response;
+}
+
+/// Count the negotiation bytes waiting immediately before TELNET returns an
+/// upload callback result. This mirrors the production pre-read drain while
+/// letting the amplification test prove that curl produced the large replies
+/// it was designed to exercise.
+struct TelnetDrainCounter {
+  proto_fuzzer::TelnetMockServer *server;
+  std::size_t bytes = 0;
+};
+
+void CountTelnetDrain(void *userdata) {
+  auto *counter = static_cast<TelnetDrainCounter *>(userdata);
+  if (counter != nullptr && counter->server != nullptr &&
+      counter->server->connection() != nullptr) {
+    counter->bytes += counter->server->connection()->DrainIncoming();
+  }
 }
 
 void TestFollowOnScriptsAndOldConnectionLifetime() {
@@ -263,7 +282,8 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
 
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "Brotli test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(easy);
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://127.0.0.1/brotli");
   curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
 
@@ -290,6 +310,127 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
   curl_slist_free_all(connect_to);
 }
 
+void TestTelnetPreloadsChunksAndNeverReadsStdin() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+  scenario.set_host_path("127.0.0.1/");
+  scenario.add_telnet_options("WS=255x65535");
+
+  auto *connection = scenario.mutable_connection();
+  // Putting CR-NUL and an IAC negotiation before a separate tail field
+  // verifies that the synchronous mock presents one ordered byte stream before
+  // curl enters telnet_do(), rather than relying on an outer loop that cannot
+  // run then.
+  connection->set_initial_response(std::string("banner\r\0", 8) +
+                                   std::string("\xff\xfd\x1f", 3));
+  connection->add_on_readable("tail\r\n");
+
+  // These knobs are useful for event-driven protocol lanes, but applying
+  // either to TELNET can deadlock its blocking send path. Keep them tiny so
+  // this test fails by timeout if the TELNET mock ever starts honoring them.
+  connection->mutable_backpressure()->set_recv_buf_bytes(1);
+  connection->mutable_backpressure()->set_drain_limit(1);
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "TELNET test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_TELNET);
+  curl_easy_setopt(easy, CURLOPT_URL, "telnet://127.0.0.1/");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  proto_fuzzer::TelnetMockServer server;
+  server.Install(easy);
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    // An absent TELNET upload must be an immediate in-memory EOF. Installing
+    // the callback even here is what prevents curl from falling back to stdin.
+    Expect(request_data.upload_callbacks_installed(),
+           "TELNET did not replace stdin with an upload callback");
+    Expect(!request_data.upload_state().scripted() &&
+               request_data.upload_state().data_size() == 0,
+           "absent TELNET upload did not become immediate EOF");
+    server.ConfigureRequestData(&request_data);
+    server.DriveScenario(easy, scenario);
+  }
+
+  Expect(response == "banner\rtail\r\n",
+         "TELNET did not flatten chunks or normalize CR-NUL data");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+void TestTelnetMaximumAmplificationCannotBlock() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+  scenario.set_host_path("127.0.0.1/");
+
+  // Two of these variables nearly fill curl's 2048-byte NEW_ENV response;
+  // the third reaches the capacity check on every repeated SEND request.
+  scenario.add_telnet_options("NEW_ENV=A," + std::string(990, 'a'));
+  scenario.add_telnet_options("NEW_ENV=B," + std::string(990, 'b'));
+  scenario.add_telnet_options("NEW_ENV=C," + std::string(990, 'c'));
+
+  constexpr char kNewEnvSend[] = "\xff\xfa\x27\x01\xff\xf0";
+  std::string peer_response = "x";
+  const std::size_t request_count =
+      proto_fuzzer::scenario_limits::kMaxTelnetControlBytes / 2;
+  for (std::size_t index = 0; index < request_count; ++index) {
+    peer_response.append(kNewEnvSend, sizeof(kNewEnvSend) - 1);
+  }
+  scenario.mutable_connection()->set_initial_response(peer_response);
+
+  // send_telnet_data doubles every IAC, making this the largest upload the
+  // TELNET runtime permits between peer drains.
+  scenario.mutable_upload()->set_data(std::string(
+      proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes, '\xff'));
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "TELNET amplification test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_TELNET);
+  curl_easy_setopt(easy, CURLOPT_URL, "telnet://127.0.0.1/");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  proto_fuzzer::TelnetMockServer server;
+  server.Install(easy);
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    TelnetDrainCounter counter{&server};
+    request_data.SetBeforeUploadReadCallback(&CountTelnetDrain, &counter);
+    server.DriveScenario(easy, scenario);
+
+    // Each response is about 1992 bytes. Keep the lower bound independent of
+    // curl's exact formatting while proving all repeated large replies ran.
+    Expect(counter.bytes >= request_count * 1900,
+           "TELNET did not produce every amplified NEW_ENV reply");
+    Expect(request_data.upload_state().offset() ==
+               proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes,
+           "TELNET did not consume the maximum all-IAC upload");
+    curl_off_t uploaded = 0;
+    Expect(curl_easy_getinfo(easy, CURLINFO_SIZE_UPLOAD_T, &uploaded) ==
+                   CURLE_OK &&
+               uploaded ==
+                   static_cast<curl_off_t>(
+                       proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes),
+           "TELNET did not finish sending the doubled-IAC upload");
+  }
+
+  Expect(response == "x",
+         "TELNET amplification controls leaked into response data");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 } // namespace
 
 int main() {
@@ -300,5 +441,7 @@ int main() {
   TestClosedPeerIsAnOrdinaryWriteFailure();
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
+  TestTelnetPreloadsChunksAndNeverReadsStdin();
+  TestTelnetMaximumAmplificationCannotBlock();
   return 0;
 }

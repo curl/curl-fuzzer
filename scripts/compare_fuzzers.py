@@ -40,6 +40,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_https",
     "curl_fuzzer_proto_ws",
     "curl_fuzzer_proto_wss",
+    "curl_fuzzer_proto_telnet",
     "curl_fuzzer_proto_timing",
 )
 HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
@@ -49,6 +50,7 @@ HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
         "curl_fuzzer_proto_https",
         "curl_fuzzer_proto_ws",
         "curl_fuzzer_proto_wss",
+        "curl_fuzzer_proto_telnet",
         "curl_fuzzer_proto_timing",
     }
 )

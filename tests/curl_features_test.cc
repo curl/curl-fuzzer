@@ -7,6 +7,7 @@
 #include <curl/curl.h>
 
 #include <cstdio>
+#include <cstring>
 
 int main() {
   const curl_version_info_data *const info = curl_version_info(CURLVERSION_NOW);
@@ -20,6 +21,22 @@ int main() {
   }
   if (!info->brotli_version || info->brotli_ver_num == 0) {
     std::fputs("libcurl did not report its linked Brotli version\n", stderr);
+    return 1;
+  }
+  bool has_telnet = false;
+  if (info->protocols) {
+    for (const char *const *protocol = info->protocols; *protocol; ++protocol) {
+      if (std::strcmp(*protocol, "telnet") == 0) {
+        has_telnet = true;
+        break;
+      }
+    }
+  }
+  // curl exposes no CURL_VERSION_TELNET feature bit. Its advertised protocol
+  // list is therefore the only runtime guard against a future build-default
+  // change silently turning the dedicated proto fuzzer into a no-op error path.
+  if (!has_telnet) {
+    std::fputs("libcurl was built without TELNET support\n", stderr);
     return 1;
   }
   return 0;

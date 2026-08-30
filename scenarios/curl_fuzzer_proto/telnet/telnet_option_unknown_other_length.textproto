@@ -1,0 +1,6 @@
+# A three-byte name reaches the generic unknown-option arm rather than one of
+# the recognized-name-length buckets.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "ABC=1"
+connection { initial_response: "x" }

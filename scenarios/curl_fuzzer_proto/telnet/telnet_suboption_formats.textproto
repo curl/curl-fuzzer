@@ -1,0 +1,13 @@
+# NEW_ENVIRON's IS, INFO, and NAME qualifiers take distinct formatter arms;
+# the IS payload also distinguishes variable/value delimiters from ordinary
+# bytes. Full and short incoming NAWS payloads cover both dimension-display
+# outcomes. Combining them keeps this diagnostic coverage compact without
+# adding negotiation or socket-timing work.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "NEW_ENV=A,B"
+connection {
+  initial_response: "\xff\xfa\x27\x00\x00A\x01B\x00C\x01Dz\xff\xf0"
+  on_readable: "\xff\xfa\x27\x02X\xff\xf0\xff\xfa\x27\x03X\xff\xf0"
+  on_readable: "\xff\xfa\x1f\x00\x50\x00\x18\xff\xf0\xff\xfa\x1f\x00\xff\xf0"
+}
