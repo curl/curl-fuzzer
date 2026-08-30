@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.24)
 project(curl_fuzzer_deps)
 
 if(NOT "$ENV{MAKE}" STREQUAL "")
@@ -11,11 +11,11 @@ include(ExternalProject)
 
 # LLVM source-based coverage, driven by codecoverage.sh. When ON, libcurl and
 # the fuzzer binaries are compiled with -fprofile-instr-generate
-# -fcoverage-mapping; third-party deps (openssl, zlib, zstd, nghttp2, libidn2,
-# openldap, libprotobuf-mutator + its bundled protobuf/abseil) are left un-
-# instrumented. Only curl is what we want covered, and leaving deps alone
-# keeps the link size of the curl_fuzzer_proto binaries under the memory
-# limits of a stock GitHub runner.
+# -fcoverage-mapping; third-party deps (openssl, zlib, zstd, brotli, nghttp2,
+# libidn2, openldap, libprotobuf-mutator + its bundled protobuf/abseil) are
+# left uninstrumented. Only curl is what we want covered, and leaving deps
+# alone keeps the link size of the curl_fuzzer_proto binaries under the
+# memory limits of a stock GitHub runner.
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
@@ -74,6 +74,35 @@ if(NOT EXISTS ${ZSTD_STATIC_LIB})
 else()
     message(STATUS "zstd already installed at ${ZSTD_INSTALL_DIR}, skipping build")
     add_custom_target(zstd_external)
+endif()
+
+# Install Brotli
+#
+# renovate: datasource=github-tags depName=google/brotli
+set(BROTLI_VERSION 1.2.0)
+set(BROTLI_URL https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz)
+set(BROTLI_BUILD_NAME brotli-${BROTLI_VERSION})
+set(BROTLI_INSTALL_DIR ${CMAKE_BINARY_DIR}/${BROTLI_BUILD_NAME}-install)
+set(BROTLI_DEC_STATIC_LIB ${BROTLI_INSTALL_DIR}/lib/libbrotlidec.a)
+set(BROTLI_COMMON_STATIC_LIB ${BROTLI_INSTALL_DIR}/lib/libbrotlicommon.a)
+set(BROTLI_STATIC_LIBS ${BROTLI_DEC_STATIC_LIB} ${BROTLI_COMMON_STATIC_LIB})
+
+if(NOT EXISTS ${BROTLI_DEC_STATIC_LIB} OR NOT EXISTS ${BROTLI_COMMON_STATIC_LIB})
+    ExternalProject_Add(brotli_external
+        URL ${BROTLI_URL}
+        PREFIX ${CMAKE_BINARY_DIR}/${BROTLI_BUILD_NAME}
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${BROTLI_INSTALL_DIR}
+            -DCMAKE_INSTALL_LIBDIR=lib
+            -DBUILD_SHARED_LIBS=OFF
+            -DBROTLI_BUILD_TOOLS=OFF
+            -DBROTLI_DISABLE_TESTS=ON
+        BUILD_BYPRODUCTS ${BROTLI_STATIC_LIBS}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+else()
+    message(STATUS "Brotli already installed at ${BROTLI_INSTALL_DIR}, skipping build")
+    add_custom_target(brotli_external)
 endif()
 
 # For the memory sanitizer build, turn off OpenSSL as it causes bugs we can't
@@ -275,6 +304,7 @@ add_custom_target(deps
         ${OPENSSL_DEP}
         nghttp2_external
         zstd_external
+        brotli_external
         libidn2_external
         openldap_external
 )
@@ -306,6 +336,11 @@ set(CURL_CMAKE_ARGS
     -DNGHTTP2_LIBRARY=${NGHTTP2_STATIC_LIB}
     -DZSTD_INCLUDE_DIR=${ZSTD_INSTALL_DIR}/include
     -DZSTD_LIBRARY=${ZSTD_STATIC_LIB}
+    -DCURL_BROTLI=ON
+    -DBROTLI_INCLUDE_DIR=${BROTLI_INSTALL_DIR}/include
+    -DBROTLIDEC_LIBRARY=${BROTLI_DEC_STATIC_LIB}
+    -DBROTLICOMMON_LIBRARY=${BROTLI_COMMON_STATIC_LIB}
+    -DBROTLI_USE_STATIC_LIBS=ON
     -DLIBIDN2_INCLUDE_DIR=${LIBIDN2_INSTALL_DIR}/include
     -DLIBIDN2_LIBRARY=${LIBIDN2_STATIC_LIB}
     -DLDAP_INCLUDE_DIR=${OPENLDAP_INSTALL_DIR}/include
@@ -375,6 +410,7 @@ set(CURL_DEPS
     ${OPENSSL_DEP}
     zlib_external
     zstd_external
+    brotli_external
     libidn2_external
     openldap_external
 )
@@ -420,15 +456,19 @@ set(COMMON_SOURCES
     legacy_tlv_mutator.cc
 )
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
-set(COMMON_LINK_LIBS
-    ${CURL_LIB_DIR}/libcurl.a
+set(CURL_STATIC_DEPENDENCY_LIBS
     ${NGHTTP2_STATIC_LIB}
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
     ${ZSTD_STATIC_LIB}
+    ${BROTLI_STATIC_LIBS}
     ${LIBIDN2_STATIC_LIB}
     ${OPENLDAP_STATIC_LIB_LDAP}
     ${OPENLDAP_STATIC_LIB_LBER}
+)
+set(COMMON_LINK_LIBS
+    ${CURL_LIB_DIR}/libcurl.a
+    ${CURL_STATIC_DEPENDENCY_LIBS}
     ${LIB_FUZZING_ENGINE}
     pthread
     m
@@ -463,6 +503,24 @@ if(BUILD_TESTING)
     # Kept separate from `fuzz` so OSS-Fuzz packaging does not build test-only
     # binaries. mainline.sh builds this target and then invokes CTest.
     add_custom_target(fuzzer_unit_tests DEPENDS legacy_tlv_mutator_test)
+
+    # CURL_BROTLI=ON makes a missing library a configure error; this runtime
+    # check also prevents a future curl/CMake change from silently producing a
+    # library whose advertised feature set no longer matches the seeded corpus.
+    add_executable(curl_features_test tests/curl_features_test.cc)
+    target_compile_features(curl_features_test PRIVATE cxx_std_11)
+    target_compile_options(curl_features_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(curl_features_test PRIVATE ${CURL_INCLUDE_DIRS})
+    target_link_libraries(curl_features_test PRIVATE
+        ${CURL_LIB_DIR}/libcurl.a
+        ${CURL_STATIC_DEPENDENCY_LIBS}
+        pthread
+        m
+    )
+    target_link_options(curl_features_test PRIVATE ${COVERAGE_LINK_FLAGS})
+    add_dependencies(curl_features_test curl_external ${CURL_DEPS})
+    add_test(NAME curl_features_test COMMAND curl_features_test)
+    add_dependencies(fuzzer_unit_tests curl_features_test)
 endif()
 
 # Main fuzzer and protocol-specific fuzzers
@@ -710,13 +768,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         )
         target_link_libraries(${_name} PRIVATE
             ${CURL_LIB_DIR}/libcurl.a
-            ${NGHTTP2_STATIC_LIB}
-            $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
-            ${ZLIB_STATIC_LIB}
-            ${ZSTD_STATIC_LIB}
-            ${LIBIDN2_STATIC_LIB}
-            ${OPENLDAP_STATIC_LIB_LDAP}
-            ${OPENLDAP_STATIC_LIB_LBER}
+            ${CURL_STATIC_DEPENDENCY_LIBS}
             ${LIB_FUZZING_ENGINE}
             # -Wl,@file: ld reads the response file and substitutes its
             # contents — the absolute paths to every .a from LPM's install +
@@ -790,6 +842,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/http2_invalid_preface.textproto
         ${SCENARIO_SRC_DIR}/http/http2_prior_knowledge.textproto
         ${SCENARIO_SRC_DIR}/http/http2_truncated_headers_frame.textproto
+        ${SCENARIO_SRC_DIR}/http/http_brotli_decode.textproto
         ${SCENARIO_SRC_DIR}/http/http_chunk_extensions_trailers.textproto
         ${SCENARIO_SRC_DIR}/http/http_conflicting_framing.textproto
         ${SCENARIO_SRC_DIR}/http/http_cookie_rejections.textproto
@@ -816,9 +869,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/url_malformed_authority.textproto
     )
     list(LENGTH FAST_HTTP_SCENARIO_TEXTPROTOS FAST_HTTP_SCENARIO_COUNT)
-    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 31)
+    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 32)
         message(FATAL_ERROR
-            "The fast HTTP corpus must contain exactly 31 seed declarations")
+            "The fast HTTP corpus must contain exactly 32 seed declarations")
     endif()
     foreach(fast_http_textproto ${FAST_HTTP_SCENARIO_TEXTPROTOS})
         if(NOT EXISTS "${fast_http_textproto}")
@@ -961,13 +1014,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         )
         target_link_libraries(request_data_test PRIVATE
             ${CURL_LIB_DIR}/libcurl.a
-            ${NGHTTP2_STATIC_LIB}
-            $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
-            ${ZLIB_STATIC_LIB}
-            ${ZSTD_STATIC_LIB}
-            ${LIBIDN2_STATIC_LIB}
-            ${OPENLDAP_STATIC_LIB_LDAP}
-            ${OPENLDAP_STATIC_LIB_LBER}
+            ${CURL_STATIC_DEPENDENCY_LIBS}
             "-Wl,@${LPM_LINK_RSP}"
             pthread
             m
@@ -1004,13 +1051,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         )
         target_link_libraries(mock_server_test PRIVATE
             ${CURL_LIB_DIR}/libcurl.a
-            ${NGHTTP2_STATIC_LIB}
-            $<$<BOOL:${OPENSSL_STATIC_LIB}>:${OPENSSL_STATIC_LIB}>
-            ${ZLIB_STATIC_LIB}
-            ${ZSTD_STATIC_LIB}
-            ${LIBIDN2_STATIC_LIB}
-            ${OPENLDAP_STATIC_LIB_LDAP}
-            ${OPENLDAP_STATIC_LIB_LBER}
+            ${CURL_STATIC_DEPENDENCY_LIBS}
             "-Wl,@${LPM_LINK_RSP}"
             pthread
             m
