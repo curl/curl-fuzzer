@@ -105,6 +105,11 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
             "CURLOPT_HTTP_TRANSFER_DECODING",
             "Content-Length: 999",
         ),
+        "http_brotli_decode.textproto": (
+            "CURLOPT_ACCEPT_ENCODING",
+            "Content-Encoding: br",
+            "Content-Length: 31",
+        ),
         "url_disallow_userinfo.textproto": (
             "CURLOPT_DISALLOW_USERNAME_IN_URL",
             "user:pass@userinfo.test",

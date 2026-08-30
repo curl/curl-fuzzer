@@ -1,0 +1,10 @@
+# This compact stream expands beyond CURL_MAX_WRITE_SIZE, forcing curl's
+# Brotli writer to drain its fixed-size output buffer before the decoder has
+# consumed the whole response. It comes from curl's upstream test 316 so the
+# seed stays tied to a decoder behavior curl itself considers important.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/brotli"
+options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 31\r\nContent-Encoding: br\r\n\r\n\x1b\x7f\x40\x00\x64\xf1\x98\xcf\x28\x1a\xeb\xaf\xc7\x12\xac\x41\xab\x42\x62\x51\xf3\xc8\xea\xd9\x7b\x9f\xdc\x1b\x00\x48\x00"
+}

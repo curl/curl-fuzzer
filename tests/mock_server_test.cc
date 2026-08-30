@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 #include "proto_fuzzer/ws_frame.h"
@@ -31,6 +32,13 @@ void Expect(bool condition, const char *message) {
   if (!condition) {
     Fail(message);
   }
+}
+
+size_t CollectResponse(char *contents, size_t size, size_t nmemb,
+                       void *userdata) {
+  const size_t bytes = size * nmemb;
+  static_cast<std::string *>(userdata)->append(contents, bytes);
+  return bytes;
 }
 
 /// Expose only the protected socket callback for deterministic unit tests. The
@@ -237,6 +245,51 @@ void TestManualWebSocketDriveUsesBoundedLastOption() {
          "rejected CONNECT_ONLY value replaced the last accepted setting");
 }
 
+void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
+  // Keep this wire payload synchronized with http_brotli_decode.textproto.
+  // Its unusually high expansion ratio lets a small seed exercise curl's
+  // decoder loop after the fixed-size output buffer fills.
+  constexpr char kCompressed[] =
+      "\x1b\x7f\x40\x00\x64\xf1\x98\xcf\x28\x1a\xeb\xaf\xc7\x12\xac\x41"
+      "\xab\x42\x62\x51\xf3\xc8\xea\xd9\x7b\x9f\xdc\x1b\x00\x48\x00";
+  static_assert(sizeof(kCompressed) - 1 == 31,
+                "Brotli payload and Content-Length must stay synchronized");
+
+  Scenario scenario;
+  scenario.mutable_connection()->set_initial_response(
+      std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                  "Content-Length: 31\r\nContent-Encoding: br\r\n\r\n") +
+      std::string(kCompressed, sizeof(kCompressed) - 1));
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "Brotli test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(easy);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://127.0.0.1/brotli");
+  curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
+
+  std::string decoded;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &decoded);
+
+  TestMockServer server;
+  server.SetScripts(scenario);
+  server.Install(easy);
+  server.DriveScenario(easy, scenario);
+
+  const std::string line =
+      "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
+      "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF\n";
+  std::string expected;
+  for (int i = 0; i < 128; ++i) {
+    expected += line;
+  }
+  Expect(decoded == expected,
+         "Brotli response did not decode across CURL_MAX_WRITE_SIZE");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 } // namespace
 
 int main() {
@@ -246,5 +299,6 @@ int main() {
   TestEachBorrowedConnectionKeepsItsBackpressure();
   TestClosedPeerIsAnOrdinaryWriteFailure();
   TestManualWebSocketDriveUsesBoundedLastOption();
+  TestBrotliResponseExpandsAcrossWriteBufferBoundary();
   return 0;
 }

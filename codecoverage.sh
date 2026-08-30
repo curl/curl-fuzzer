@@ -5,10 +5,11 @@
 # through them to produce a coverage summary and HTML report restricted to
 # curl's own sources.
 #
-# Deps (openssl, zlib, zstd, nghttp2, libidn2, openldap, LPM + protobuf +
-# abseil) are intentionally built without coverage flags: they'd add no signal
-# to the report and their combined instrumented link-time footprint was big
-# enough to OOM the linker on a stock 16 GB runner for curl_fuzzer_proto.
+# Deps (openssl, zlib, zstd, brotli, nghttp2, libidn2, openldap, LPM +
+# protobuf + abseil) are intentionally built without coverage flags: they'd
+# add no signal to the report and their combined instrumented link-time
+# footprint was big enough to OOM the linker on a stock 16 GB runner for
+# curl_fuzzer_proto.
 #
 # Output:
 #   build-coverage/coverage/summary.txt  - llvm-cov report (curl lib/ + src/)
