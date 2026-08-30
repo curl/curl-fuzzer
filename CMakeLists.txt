@@ -112,7 +112,7 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
     # Install openssl
     #
     # renovate: datasource=github-tags depName=openssl/openssl
-    set(OPENSSL_VERSION 4.0.1)
+    set(OPENSSL_VERSION 4.0.2)
     set(OPENSSL_URL
         https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_BUILD_NAME openssl-${OPENSSL_VERSION})
