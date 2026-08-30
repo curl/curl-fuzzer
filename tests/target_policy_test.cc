@@ -18,6 +18,7 @@ namespace {
 using curl::fuzzer::proto::Scenario;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
+using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
@@ -166,6 +167,154 @@ void TestFastSecureWebSocketPolicy() {
   ExpectFixedPolicy(TargetPolicy::kFastSecureWebSocket, SCHEME_WSS,
                     "fast secure WebSocket policy did not force WSS",
                     "fast secure WebSocket policy retained backpressure", true);
+}
+
+void TestFastTelnetPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.mutable_connection()->set_initial_response("peer sentinel");
+  scenario.mutable_connection()->add_on_readable("raw sentinel");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.mutable_connection()->mutable_manual_probes()->set_flag_matrix(true);
+  scenario.add_subsequent_connections()->set_initial_response("follow-on");
+  scenario.add_request_headers("X-Ignored: telnet");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.mutable_upload()->set_data(std::string(
+      proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes + 17, 'u'));
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxTelnetUploadReadSteps + 3;
+       ++index) {
+    scenario.mutable_upload()->add_read_sizes(
+        std::numeric_limits<std::uint32_t>::max());
+  }
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxTelnetOptions + 3; ++index) {
+    scenario.add_telnet_options(std::string(
+        proto_fuzzer::scenario_limits::kMaxTelnetOptionBytes + 17, 't'));
+  }
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_HTTPGET);
+  constexpr curl::fuzzer::proto::CurlOptionId kRetained[] = {
+      curl::fuzzer::proto::CURLOPT_CRLF,
+      curl::fuzzer::proto::CURLOPT_USERNAME,
+      curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE,
+  };
+  for (const auto option : kRetained) {
+    scenario.add_options()->set_option_id(option);
+  }
+
+  ApplyTargetPolicy(&scenario, TargetPolicy::kFastTelnet);
+
+  Expect(scenario.scheme() == SCHEME_TELNET,
+         "fast TELNET policy did not force TELNET");
+  Expect(!scenario.connection().has_backpressure(),
+         "fast TELNET policy retained unserviceable backpressure");
+  Expect(scenario.connection().server_frames_size() == 0,
+         "fast TELNET policy retained structured WebSocket frames");
+  Expect(!scenario.connection().has_manual_probes(),
+         "fast TELNET policy retained WebSocket manual probes");
+  Expect(scenario.connection().initial_response() == "peer sentinel" &&
+             scenario.connection().on_readable(0) == "raw sentinel",
+         "fast TELNET policy removed preloaded raw peer bytes");
+  Expect(scenario.subsequent_connections_size() == 0,
+         "fast TELNET policy retained follow-on sockets");
+  Expect(scenario.request_headers_size() == 0,
+         "fast TELNET policy retained HTTP request headers");
+  Expect(!scenario.has_mime_post(),
+         "fast TELNET policy retained an HTTP MIME body");
+  Expect(scenario.upload().data().size() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes,
+         "fast TELNET policy retained upload bytes beyond its work budget");
+  Expect(scenario.upload().read_sizes(0) ==
+             proto_fuzzer::scenario_limits::kMaxTelnetUploadReadSize,
+         "fast TELNET policy retained an unsafe callback write size");
+  Expect(static_cast<std::size_t>(scenario.upload().read_sizes_size()) ==
+             proto_fuzzer::scenario_limits::kMaxTelnetUploadReadSteps,
+         "fast TELNET policy exceeded its fragmentation-step budget");
+  Expect(static_cast<std::size_t>(scenario.telnet_options_size()) ==
+             proto_fuzzer::scenario_limits::kMaxTelnetOptions,
+         "fast TELNET policy retained options beyond its list budget");
+  Expect(scenario.telnet_options(0).size() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetOptionBytes,
+         "fast TELNET policy retained an invisible option suffix");
+  Expect(scenario.options_size() ==
+             static_cast<int>(sizeof(kRetained) / sizeof(kRetained[0])),
+         "fast TELNET policy retained an unrelated scalar option");
+  for (int index = 0; index < scenario.options_size(); ++index) {
+    Expect(scenario.options(index).option_id() == kRetained[index],
+           "fast TELNET policy changed retained option order");
+  }
+}
+
+void TestPauseTerminalIsTelnetOnly() {
+  Scenario telnet;
+  telnet.mutable_upload()->set_terminal(
+      curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
+  ApplyTargetPolicy(&telnet, TargetPolicy::kFastTelnet);
+  Expect(telnet.upload().terminal() ==
+             curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE,
+         "TELNET policy removed its synchronous pause outcome");
+
+  Scenario http;
+  http.mutable_upload()->set_terminal(
+      curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
+  http.add_telnet_options("TTYPE=must-be-discarded");
+  ApplyTargetPolicy(&http, TargetPolicy::kDeepHttp);
+  Expect(http.upload().terminal() == curl::fuzzer::proto::UPLOAD_TERMINAL_EOF,
+         "non-TELNET policy retained a callback pause without a resume source");
+  Expect(http.telnet_options_size() == 0,
+         "non-TELNET policy retained TELNET-only options");
+}
+
+void TestNonTelnetPolicySelectsUploadBudgetBeforeBounding() {
+  Scenario scenario;
+  // The incoming scheme is fuzz-controlled and must not select the budget of
+  // a different protocol before the fixed lane restores its own invariant.
+  scenario.set_scheme(SCHEME_TELNET);
+  scenario.mutable_upload()->set_data(std::string(
+      proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes + 1, 'u'));
+
+  ApplyTargetPolicy(&scenario, TargetPolicy::kDeepHttp);
+
+  Expect(scenario.scheme() == SCHEME_HTTP,
+         "deep HTTP policy did not restore its fixed scheme");
+  Expect(scenario.upload().data().size() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes + 1,
+         "input TELNET scheme incorrectly selected TELNET's upload budget");
+}
+
+void TestFastTelnetResponseBudgets() {
+  Scenario byte_budget;
+  byte_budget.mutable_connection()->set_initial_response(std::string(
+      proto_fuzzer::scenario_limits::kMaxTelnetResponseBytes - 1, 'a'));
+  byte_budget.mutable_connection()->add_on_readable("bc");
+  byte_budget.mutable_connection()->add_on_readable("invisible");
+  ApplyTargetPolicy(&byte_budget, TargetPolicy::kFastTelnet);
+  Expect(byte_budget.connection().initial_response().size() +
+                 byte_budget.connection().on_readable(0).size() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetResponseBytes,
+         "fast TELNET policy did not enforce its total peer-byte budget");
+  Expect(byte_budget.connection().on_readable_size() == 1,
+         "fast TELNET policy retained chunks after a truncated response");
+
+  Scenario exact_budget;
+  exact_budget.mutable_connection()->set_initial_response(
+      std::string(proto_fuzzer::scenario_limits::kMaxTelnetResponseBytes, 'a'));
+  exact_budget.mutable_connection()->add_on_readable("invisible");
+  ApplyTargetPolicy(&exact_budget, TargetPolicy::kFastTelnet);
+  Expect(exact_budget.connection().on_readable_size() == 0,
+         "fast TELNET policy retained an empty budget-exhausted chunk");
+
+  Scenario control_budget;
+  control_budget.mutable_connection()->set_initial_response(
+      std::string(proto_fuzzer::scenario_limits::kMaxTelnetControlBytes,
+                  '\xff') +
+      "prefix");
+  control_budget.mutable_connection()->add_on_readable("\xffsuffix");
+  ApplyTargetPolicy(&control_budget, TargetPolicy::kFastTelnet);
+  Expect(control_budget.connection().initial_response().size() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetControlBytes + 6,
+         "fast TELNET policy retained reply-amplifying control bytes");
+  Expect(control_budget.connection().on_readable_size() == 0,
+         "fast TELNET policy retained bytes after the control budget");
 }
 
 void TestTimingPolicyMapsSecureSchemesToPlaintext() {
@@ -426,6 +575,10 @@ int main() {
   TestFastHttpsPolicy();
   TestFastWebSocketPolicy();
   TestFastSecureWebSocketPolicy();
+  TestFastTelnetPolicy();
+  TestPauseTerminalIsTelnetOnly();
+  TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();
+  TestFastTelnetResponseBudgets();
   TestTimingPolicyMapsSecureSchemesToPlaintext();
   TestTimingPolicySuppliesBackpressureForZeroConfig();
   TestTimingPolicyPreservesMeaningfulBoundaries();

@@ -1,0 +1,13 @@
+# Cover ordinary data normalization, escaped IAC, enable/disable commands,
+# ignored commands, empty subnegotiation, and doubled IAC inside an unknown
+# suboption. Error and EOF-only terminal states have separate compact seeds so
+# one early parser result cannot hide the rest of this stream.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "BINARY=0"
+connection {
+  initial_response: "A\r\x00B\rC\xff\xff\xff\xf1\xff\xf2\xff\xf9"
+  on_readable: "\xff\xfb\x00\xff\xfc\x00\xff\xfd\x00\xff\xfe\x00"
+  on_readable: "\xff\xfa\xff\xf0"
+  on_readable: "\xff\xfa\x2a\x01\xff\xffX\xff\xf0"
+}

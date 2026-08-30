@@ -1,0 +1,8 @@
+# End while the receiver is waiting to disambiguate IAC inside SB. Keeping this
+# terminal state in its own seed makes EOF-state mutations cheap and prevents a
+# preceding malformed command from ending the parser first.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+connection {
+  initial_response: "\xff\xfa\x18\x01\xff"
+}

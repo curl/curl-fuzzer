@@ -20,6 +20,7 @@
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
+#include "proto_fuzzer/telnet_mock_server.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 
 namespace proto_fuzzer {
@@ -82,6 +83,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "ws";
     case curl::fuzzer::proto::SCHEME_WSS:
       return "wss";
+    case curl::fuzzer::proto::SCHEME_TELNET:
+      return "telnet";
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -89,9 +92,9 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
 }
 
 /// Pick the MockServerBase subclass to use for 'scenario'. The scheme is the
-/// sole classifier today: WS / WSS → WebSocketMockServer, HTTP / HTTPS →
-/// MockServer. Returns nullptr for unsupported / unspecified schemes so the
-/// runner can skip the scenario cleanly.
+/// sole classifier today: WS / WSS → WebSocketMockServer, TELNET → the
+/// synchronous TelnetMockServer, HTTP / HTTPS → MockServer. Returns nullptr
+/// for unsupported / unspecified schemes so the runner can skip cleanly.
 std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::proto::Scenario& scenario) {
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
@@ -100,6 +103,8 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
       return std::make_unique<WebSocketMockServer>();
+    case curl::fuzzer::proto::SCHEME_TELNET:
+      return std::make_unique<TelnetMockServer>();
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -148,7 +153,7 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, bool prob
     return 0;
   }
 
-  struct curl_slist* connect_to = ApplyBaselineOptions(easy.get());
+  struct curl_slist* connect_to = ApplyBaselineOptions(easy.get(), scenario.scheme());
 
   std::string url = std::string(prefix) + "://" + scenario.host_path();
   curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str());
@@ -162,12 +167,13 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, bool prob
   (void)ApplyScenarioOptions(easy.get(), scenario);
 
   {
-    // HTTP headers and MIME bodies are pointer-valued options that libcurl
-    // does not copy. Keep their owner around the entire multi-handle drive,
-    // then let it detach them while `easy` is still valid. This inner scope is
-    // deliberate: easy.reset() below must never run before the owner's
-    // destructor tries to clear those options.
+    // HTTP headers, MIME bodies, TELNET options, and callback userdata are
+    // pointer-valued state that libcurl does not copy. Keep their owner around
+    // the entire multi-handle drive, then let it detach them while `easy` is
+    // still valid. This inner scope is deliberate: easy.reset() below must
+    // never run before the owner's destructor clears those options.
     ScenarioRequestData request_data(easy.get(), scenario);
+    mock->ConfigureRequestData(&request_data);
     mock->DriveScenario(easy.get(), scenario);
     if (probe_transfer_results) {
       ProbeTransferResults(easy.get());

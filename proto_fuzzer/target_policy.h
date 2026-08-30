@@ -33,6 +33,9 @@ enum class TargetPolicy {
   kFastWebSocket,
   /// Exercise secure WebSocket setup without wall-clock waits.
   kFastSecureWebSocket,
+  /// Exercise TELNET negotiation with a preloaded peer and callback-backed
+  /// input without permitting terminal or socket waits.
+  kFastTelnet,
   /// Isolate deterministic backpressure and timed-wait behavior.
   kTiming,
 };

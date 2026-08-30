@@ -29,11 +29,11 @@ namespace {
 /// so neither pointer escapes the call. Embedded NUL bytes deliberately remain:
 /// curl observes the same prefix as before while an oversized invisible suffix
 /// cannot dominate allocation.
-const char* BoundedCString(const std::string& value, std::string* truncated) {
-  if (value.size() <= scenario_limits::kMaxMetadataBytes) {
+const char* BoundedCString(const std::string& value, std::size_t limit, std::string* truncated) {
+  if (value.size() <= limit) {
     return value.c_str();
   }
-  truncated->assign(value.data(), scenario_limits::kMaxMetadataBytes);
+  truncated->assign(value.data(), limit);
   return truncated->c_str();
 }
 
@@ -44,7 +44,10 @@ const char* BoundedCString(const std::string& value, std::string* truncated) {
 /// calls across setup and teardown, while any potentially body-reading option
 /// retains the non-blocking fallback regardless of its mutated value.
 bool NeedsUploadCallbacks(const curl::fuzzer::proto::Scenario& scenario) {
-  if (scenario.has_upload()) {
+  // curl's TELNET implementation polls stdin unless a READFUNCTION was
+  // explicitly installed. Always provide the bounded per-scenario source,
+  // even when there is no upload payload to send.
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET || scenario.has_upload()) {
     return true;
   }
   const std::size_t option_count = RuntimeOptionCount(scenario);
@@ -84,20 +87,21 @@ const char* MimeEncoderName(curl::fuzzer::proto::MimeEncoder encoder) {
 /// after a successful append and stop rather than burning the rest of the
 /// iteration on allocations that are already failing.
 template <typename RepeatedBytes>
-curl_slist* BuildHeaderList(const RepeatedBytes& values, std::size_t limit, std::size_t* applied) {
-  curl_slist* headers = nullptr;
+curl_slist* BuildStringList(const RepeatedBytes& values, std::size_t count_limit, std::size_t value_limit,
+                            std::size_t* applied) {
+  curl_slist* list = nullptr;
   std::string truncated;
-  const std::size_t count = std::min<std::size_t>(limit, values.size());
+  const std::size_t count = std::min<std::size_t>(count_limit, values.size());
   for (std::size_t i = 0; i < count; ++i) {
-    const std::string& header = values.Get(static_cast<int>(i));
-    curl_slist* appended = curl_slist_append(headers, BoundedCString(header, &truncated));
+    const std::string& value = values.Get(static_cast<int>(i));
+    curl_slist* appended = curl_slist_append(list, BoundedCString(value, value_limit, &truncated));
     if (appended == nullptr) {
       break;
     }
-    headers = appended;
+    list = appended;
     ++*applied;
   }
-  return headers;
+  return list;
 }
 
 /// Apply the metadata shared by top-level and nested protobuf part types. The
@@ -109,20 +113,21 @@ void ApplyPartMetadata(curl_mimepart* part, const ProtoPart& source, RequestBuil
   // ordinary postprocessed metadata never writes this scratch string.
   std::string truncated;
   if (!source.name().empty()) {
-    (void)curl_mime_name(part, BoundedCString(source.name(), &truncated));
+    (void)curl_mime_name(part, BoundedCString(source.name(), scenario_limits::kMaxMetadataBytes, &truncated));
   }
   if (!source.filename().empty()) {
-    (void)curl_mime_filename(part, BoundedCString(source.filename(), &truncated));
+    (void)curl_mime_filename(part, BoundedCString(source.filename(), scenario_limits::kMaxMetadataBytes, &truncated));
   }
   if (!source.content_type().empty()) {
-    (void)curl_mime_type(part, BoundedCString(source.content_type(), &truncated));
+    (void)curl_mime_type(part, BoundedCString(source.content_type(), scenario_limits::kMaxMetadataBytes, &truncated));
   }
   if (const char* encoder = MimeEncoderName(source.encoder())) {
     (void)curl_mime_encoder(part, encoder);
   }
 
   std::size_t header_count = 0;
-  curl_slist* headers = BuildHeaderList(source.headers(), scenario_limits::kMaxMimeHeadersPerPart, &header_count);
+  curl_slist* headers = BuildStringList(source.headers(), scenario_limits::kMaxMimeHeadersPerPart,
+                                        scenario_limits::kMaxMetadataBytes, &header_count);
   if (headers != nullptr) {
     // take_ownership=1 is crucial: unlike the strings above, MIME retains the
     // list pointer. Once attached, the root curl_mime_free call recursively
@@ -213,35 +218,51 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
 /// Borrow and cap the immutable upload shape once, before libcurl receives a
 /// userdata pointer. ScenarioRunner keeps the protobuf alive for the complete
 /// drive, so a view removes a per-input body copy without weakening callback
-/// lifetime. The absent-message fallback deliberately avoids a 16 KiB
-/// allocation: Read() synthesizes the same `U` bytes the old global callback
-/// produced while retaining per-run cursor isolation.
+/// lifetime. For non-TELNET schemes, the absent-message fallback avoids a
+/// 16 KiB allocation by synthesizing the same `U` bytes as the old callback.
+/// TELNET deliberately starts at EOF so an absent script cannot become input.
 UploadScriptState::UploadScriptState(const curl::fuzzer::proto::Scenario& scenario)
     : data_(),
       read_step_count_(0),
-      total_size_(scenario_limits::kMaxUploadBytes),
+      total_size_(scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET ? 0 : scenario_limits::kMaxUploadBytes),
+      max_read_size_(scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET ? scenario_limits::kMaxTelnetUploadReadSize
+                                                                             : scenario_limits::kMaxUploadReadSize),
       offset_(0),
       next_read_size_(0),
       terminal_(curl::fuzzer::proto::UPLOAD_TERMINAL_EOF),
       seek_result_(curl::fuzzer::proto::UPLOAD_SEEK_CANTSEEK),
+      before_read_callback_(nullptr),
+      before_read_userdata_(nullptr),
       scripted_(scenario.has_upload()) {
   if (!scripted_) {
     return;
   }
 
   const auto& upload = scenario.upload();
-  const std::size_t data_size = std::min(upload.data().size(), scenario_limits::kMaxUploadBytes);
+  const std::size_t data_limit = scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET
+                                     ? scenario_limits::kMaxTelnetUploadBytes
+                                     : scenario_limits::kMaxUploadBytes;
+  const std::size_t data_size = std::min(upload.data().size(), data_limit);
   data_ = std::string_view(upload.data().data(), data_size);
   total_size_ = data_.size();
   terminal_ = upload.terminal();
+  if (scenario.scheme() != curl::fuzzer::proto::SCHEME_TELNET &&
+      terminal_ == curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE) {
+    // Event-driven protocols need an external resume source. Interpret this
+    // TELNET-specific outcome as EOF before curl can retain a paused transfer.
+    terminal_ = curl::fuzzer::proto::UPLOAD_TERMINAL_EOF;
+  }
   seek_result_ = upload.seek_result();
 
-  read_step_count_ = std::min<std::size_t>(upload.read_sizes_size(), scenario_limits::kMaxUploadReadSteps);
+  const std::size_t read_step_limit = scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET
+                                          ? scenario_limits::kMaxTelnetUploadReadSteps
+                                          : scenario_limits::kMaxUploadReadSteps;
+  read_step_count_ = std::min<std::size_t>(upload.read_sizes_size(), read_step_limit);
   for (std::size_t i = 0; i < read_step_count_; ++i) {
     const std::size_t requested = upload.read_sizes(static_cast<int>(i));
     // Zero-as-one ensures every retained step makes progress; see the schema
     // comment for why zero is not treated as an early EOF sentinel.
-    read_sizes_[i] = std::max<std::size_t>(1, std::min(requested, scenario_limits::kMaxUploadReadSize));
+    read_sizes_[i] = std::max<std::size_t>(1, std::min(requested, max_read_size_));
   }
 }
 
@@ -249,14 +270,29 @@ UploadScriptState::UploadScriptState(const curl::fuzzer::proto::Scenario& scenar
 /// fallback. Terminal outcomes are emitted only after all data is consumed so
 /// a mutation can independently control fragmentation and completion policy.
 std::size_t UploadScriptState::Read(char* buffer, std::size_t capacity) {
+  // TELNET can produce negotiation replies while one curl_multi_perform call
+  // owns the thread. Empty them before returning more callback bytes;
+  // otherwise send_telnet_data() can consume the whole bounded transfer
+  // timeout while the synchronous path waits for socket capacity.
+  if (before_read_callback_ != nullptr) {
+    before_read_callback_(before_read_userdata_);
+  }
   if (offset_ >= total_size_) {
-    return terminal_ == curl::fuzzer::proto::UPLOAD_TERMINAL_ABORT ? CURL_READFUNC_ABORT : 0;
+    switch (terminal_) {
+      case curl::fuzzer::proto::UPLOAD_TERMINAL_ABORT:
+        return CURL_READFUNC_ABORT;
+      case curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE:
+        return CURL_READFUNC_PAUSE;
+      case curl::fuzzer::proto::UPLOAD_TERMINAL_EOF:
+      default:
+        return 0;
+    }
   }
   if (buffer == nullptr || capacity == 0) {
     return 0;
   }
 
-  std::size_t chunk_limit = capacity;
+  std::size_t chunk_limit = std::min(capacity, max_read_size_);
   if (next_read_size_ < read_step_count_) {
     chunk_limit = std::min(chunk_limit, read_sizes_[next_read_size_++]);
   }
@@ -343,12 +379,19 @@ std::size_t UploadScriptState::offset() const { return offset_; }
 
 bool UploadScriptState::scripted() const { return scripted_; }
 
-/// Build both pointer-valued request features and attach them to the easy
-/// handle. Setup errors are deliberately non-fatal: malformed or partially
-/// allocated scenarios should still exercise whatever curl state was built.
+void UploadScriptState::SetBeforeReadCallback(BeforeReadCallback callback, void* userdata) {
+  before_read_callback_ = callback;
+  before_read_userdata_ = userdata;
+}
+
+/// Build the protocol-specific pointer-valued request features and attach them
+/// to the easy handle. Setup errors are deliberately non-fatal: malformed or
+/// partially allocated scenarios should still exercise whatever curl state
+/// was built.
 ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario)
     : easy_(easy),
       request_headers_(nullptr),
+      telnet_options_(nullptr),
       mime_post_(nullptr),
       upload_state_(scenario),
       upload_callbacks_installed_(false) {
@@ -358,9 +401,10 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
 
   if (NeedsUploadCallbacks(scenario)) {
     // Install a per-run memory source even when Scenario.upload is absent but
-    // CURLOPT_UPLOAD may enable reads. Without the fallback, curl would read
-    // stdin and could block OSS-Fuzz. The state remains scoped to the complete
-    // multi-handle drive so retries cannot share a cursor across iterations.
+    // CURLOPT_UPLOAD or TELNET may request caller input. Non-TELNET schemes
+    // retain the historical fallback bytes; TELNET returns EOF. Either result
+    // replaces stdin and cannot block OSS-Fuzz. The state remains scoped to
+    // the complete drive so retries cannot share a cursor across iterations.
     upload_callbacks_installed_ = true;
     (void)curl_easy_setopt(easy_, CURLOPT_READFUNCTION, &UploadScriptState::ReadCallback);
     (void)curl_easy_setopt(easy_, CURLOPT_READDATA, &upload_state_);
@@ -368,16 +412,27 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     (void)curl_easy_setopt(easy_, CURLOPT_SEEKDATA, &upload_state_);
   }
 
-  request_headers_ =
-      BuildHeaderList(scenario.request_headers(), scenario_limits::kMaxRequestHeaders, &stats_.request_headers);
-  if (request_headers_ != nullptr) {
-    (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, request_headers_);
-  }
+  // HTTP headers/MIME and TELNET options are mutually exclusive because only
+  // the selected protocol can observe them. Avoid allocating protocol-inert
+  // lists and trees in compatibility inputs that bypass target policy.
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET) {
+    telnet_options_ = BuildStringList(scenario.telnet_options(), scenario_limits::kMaxTelnetOptions,
+                                      scenario_limits::kMaxTelnetOptionBytes, &stats_.telnet_options);
+    if (telnet_options_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, telnet_options_);
+    }
+  } else {
+    request_headers_ = BuildStringList(scenario.request_headers(), scenario_limits::kMaxRequestHeaders,
+                                       scenario_limits::kMaxMetadataBytes, &stats_.request_headers);
+    if (request_headers_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, request_headers_);
+    }
 
-  if (scenario.has_mime_post()) {
-    mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &stats_);
-    if (mime_post_ != nullptr) {
-      (void)curl_easy_setopt(easy_, CURLOPT_MIMEPOST, mime_post_);
+    if (scenario.has_mime_post()) {
+      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &stats_);
+      if (mime_post_ != nullptr) {
+        (void)curl_easy_setopt(easy_, CURLOPT_MIMEPOST, mime_post_);
+      }
     }
   }
 }
@@ -403,8 +458,12 @@ ScenarioRequestData::~ScenarioRequestData() {
     if (request_headers_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, nullptr);
     }
+    if (telnet_options_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, nullptr);
+    }
   }
   curl_mime_free(mime_post_);
+  curl_slist_free_all(telnet_options_);
   curl_slist_free_all(request_headers_);
 }
 
@@ -415,5 +474,9 @@ const RequestBuildStats& ScenarioRequestData::stats() const { return stats_; }
 const UploadScriptState& ScenarioRequestData::upload_state() const { return upload_state_; }
 
 bool ScenarioRequestData::upload_callbacks_installed() const { return upload_callbacks_installed_; }
+
+void ScenarioRequestData::SetBeforeUploadReadCallback(UploadScriptState::BeforeReadCallback callback, void* userdata) {
+  upload_state_.SetBeforeReadCallback(callback, userdata);
+}
 
 }  // namespace proto_fuzzer

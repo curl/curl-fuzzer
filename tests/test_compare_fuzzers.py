@@ -276,6 +276,13 @@ def test_deep_http_lane_is_a_default_fixed_proto_target() -> None:
     assert "curl_fuzzer_proto_http_deep" in module.HISTORICAL_PROTO_CORPUS_TARGETS
 
 
+def test_telnet_lane_is_a_default_fixed_proto_target() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_proto_telnet" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_telnet" in module.HISTORICAL_PROTO_CORPUS_TARGETS
+
+
 def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
     tmp_path: Path,
 ) -> None:

@@ -1,0 +1,7 @@
+# A high-bit TELNET option argument is ignored by the option parser. Asking
+# for that suboption afterwards verifies that curl rejects the absent value
+# instead of dereferencing it. The response uses only two IAC markers.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "TTYPE=bad\xff"
+connection { initial_response: "\xff\xfa\x18\x01\xff\xf0" }

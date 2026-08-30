@@ -329,6 +329,9 @@ set(CURL_CMAKE_ARGS
     -DCURL_HIDDEN_SYMBOLS=OFF
     -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
     -DCURL_USE_LIBPSL=OFF
+    # TELNET has no feature bit, so make the coverage dependency explicit and
+    # verify the advertised protocol list in curl_features_test as well.
+    -DCURL_DISABLE_TELNET=OFF
     ${CURL_SSL_OPTION}
     -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
     -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
@@ -602,7 +605,7 @@ add_custom_target(fuzz
 )
 
 # -----------------------------------------------------------------------------
-# Structured (libprotobuf-mutator) HTTP/WebSocket target suite
+# Structured (libprotobuf-mutator) network target suite
 #
 # These binaries live entirely under proto_fuzzer/ and share no source with
 # the TLV fuzzers above. They are skipped on 32-bit builds so we don't have to
@@ -721,6 +724,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/mock_server.cc
         proto_fuzzer/mock_server_base.cc
         proto_fuzzer/target_policy.cc
+        proto_fuzzer/telnet_mock_server.cc
+        proto_fuzzer/telnet_scenario.cc
         proto_fuzzer/websocket_mock_server.cc
         proto_fuzzer/ws_frame.cc
         ${GEN_PB_CC}
@@ -803,6 +808,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_https PROTO_FUZZER_TARGET_FAST_HTTPS)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ws PROTO_FUZZER_TARGET_FAST_WEBSOCKET)
     curl_add_proto_fuzzer(curl_fuzzer_proto_wss PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_telnet PROTO_FUZZER_TARGET_FAST_TELNET)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing PROTO_FUZZER_TARGET_TIMING)
 
     # Compile textproto seed scenarios into binary corpus entries. These are
@@ -817,6 +823,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/ws/*.textproto)
     file(GLOB WSS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/wss/*.textproto)
+    file(GLOB TELNET_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/telnet/*.textproto)
     file(GLOB_RECURSE TIMING_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/*backpressure*.textproto)
 
@@ -940,7 +948,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_proto_fuzzer_corpus(curl_fuzzer_proto_corpus
         curl_fuzzer_proto
         ${HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS}
-        ${WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS})
+        ${WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS}
+        ${TELNET_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http_corpus
         curl_fuzzer_proto_http ${FAST_HTTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http_deep_corpus
@@ -953,6 +962,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_proto_fuzzer_corpus(curl_fuzzer_proto_wss_corpus
         curl_fuzzer_proto_wss
         ${FAST_WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_telnet_corpus
+        curl_fuzzer_proto_telnet ${TELNET_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_timing_corpus
         curl_fuzzer_proto_timing ${TIMING_SCENARIO_TEXTPROTOS})
     add_dependencies(curl_fuzzer_proto curl_fuzzer_proto_corpus)
@@ -962,6 +973,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_https curl_fuzzer_proto_https_corpus)
     add_dependencies(curl_fuzzer_proto_ws curl_fuzzer_proto_ws_corpus)
     add_dependencies(curl_fuzzer_proto_wss curl_fuzzer_proto_wss_corpus)
+    add_dependencies(curl_fuzzer_proto_telnet
+        curl_fuzzer_proto_telnet_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
 
     # Policy tests need only the generated message and protobuf runtime. Keep
@@ -971,6 +984,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_executable(target_policy_test
             tests/target_policy_test.cc
             proto_fuzzer/target_policy.cc
+            proto_fuzzer/telnet_scenario.cc
             ${GEN_PB_CC}
         )
         target_compile_features(target_policy_test PRIVATE cxx_std_17)
@@ -1037,6 +1051,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/option_apply.cc
+            proto_fuzzer/request_data.cc
+            proto_fuzzer/telnet_mock_server.cc
+            proto_fuzzer/telnet_scenario.cc
             proto_fuzzer/websocket_mock_server.cc
             proto_fuzzer/ws_frame.cc
             ${GEN_PB_CC}
@@ -1063,6 +1080,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             lpm_link_rsp
         )
         add_test(NAME mock_server_test COMMAND mock_server_test)
+        set_tests_properties(mock_server_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests mock_server_test)
     endif()
 

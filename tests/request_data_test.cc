@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -106,6 +107,116 @@ void TestFallbackUploadRemainsDeterministic() {
          "fallback upload byte pattern changed");
   Expect(state.Seek(0, SEEK_SET) == CURL_SEEKFUNC_CANTSEEK,
          "fallback upload unexpectedly became rewindable");
+}
+
+void TestTelnetWithoutUploadUsesImmediateEof() {
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for TELNET callback policy");
+
+  curl::fuzzer::proto::Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    Expect(request_data.upload_callbacks_installed(),
+           "TELNET did not replace curl's stdin read path");
+    Expect(!request_data.upload_state().scripted(),
+           "absent TELNET upload unexpectedly became scripted");
+    Expect(request_data.upload_state().data_size() == 0,
+           "absent TELNET upload retained compatibility fallback bytes");
+  }
+
+  proto_fuzzer::UploadScriptState state(scenario);
+  char byte = 0;
+  Expect(state.Read(&byte, 1) == 0,
+         "absent TELNET upload did not report immediate EOF");
+  curl_easy_cleanup(easy);
+}
+
+void TestPauseTerminalIsTelnetOnly() {
+  curl::fuzzer::proto::Scenario telnet;
+  telnet.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+  telnet.mutable_upload()->set_terminal(
+      curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
+  proto_fuzzer::UploadScriptState telnet_state(telnet);
+  char byte = 0;
+  Expect(telnet_state.Read(&byte, 1) == CURL_READFUNC_PAUSE,
+         "TELNET pause terminal was not surfaced");
+
+  curl::fuzzer::proto::Scenario http;
+  http.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  http.mutable_upload()->set_terminal(
+      curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
+  proto_fuzzer::UploadScriptState http_state(http);
+  Expect(http_state.Read(&byte, 1) == 0,
+         "non-TELNET pause survived the runtime safety boundary");
+}
+
+void TestTelnetUploadUsesWorkAndWriteCaps() {
+  curl::fuzzer::proto::Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+  auto *upload = scenario.mutable_upload();
+  upload->set_data(std::string(
+      proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes + 17, '\xff'));
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxTelnetUploadReadSteps + 3;
+       ++index) {
+    upload->add_read_sizes(std::numeric_limits<std::uint32_t>::max());
+  }
+
+  proto_fuzzer::UploadScriptState state(scenario);
+  Expect(state.scripted(), "TELNET upload did not select scripted bytes");
+  Expect(state.data_size() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes,
+         "TELNET upload exceeded its total work cap");
+  Expect(state.read_step_count() ==
+             proto_fuzzer::scenario_limits::kMaxTelnetUploadReadSteps,
+         "TELNET runtime exceeded its fragmentation-step budget");
+
+  std::vector<char> retained(
+      proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes + 17);
+  const std::size_t first = state.Read(retained.data(), retained.size());
+  Expect(first <= proto_fuzzer::scenario_limits::kMaxTelnetUploadReadSize,
+         "TELNET callback exceeded its per-write cap");
+  Expect(first == proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes,
+         "unfragmented TELNET upload retained callback-invisible work");
+  Expect(std::memcmp(retained.data(), upload->data().data(), first) == 0,
+         "TELNET upload cap changed the retained prefix");
+  Expect(state.Read(retained.data(), retained.size()) == 0,
+         "TELNET upload exposed bytes beyond its total work cap");
+}
+
+void TestTelnetOptionConstructionBudgetsAndOwnership() {
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for TELNET options");
+
+  curl::fuzzer::proto::Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxTelnetOptions + 3; ++index) {
+    scenario.add_telnet_options(std::string(
+        proto_fuzzer::scenario_limits::kMaxTelnetOptionBytes + 17, 't'));
+  }
+  {
+    // libcurl has no CURLINFO getter for CURLOPT_TELNETOPTIONS, so sanitizers
+    // enforce the ownership contract while the cap is checked via stats.
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    Expect(request_data.stats().telnet_options ==
+               proto_fuzzer::scenario_limits::kMaxTelnetOptions,
+           "TELNET option list exceeded its runtime count budget");
+  }
+
+  curl::fuzzer::proto::Scenario http;
+  http.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  http.add_telnet_options("TTYPE=must-not-be-applied");
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, http);
+    Expect(request_data.stats().telnet_options == 0,
+           "non-TELNET scenario built a protocol-inert retained slist");
+  }
+
+  // Destruction must detach CURLOPT_TELNETOPTIONS before freeing the slist;
+  // easy cleanup under ASan catches a dangling pointer regression.
+  curl_easy_cleanup(easy);
 }
 
 void TestScriptedReadSequenceCapsAndAbort() {
@@ -460,6 +571,10 @@ int main() {
   TestEmptyAndNullInputsRemainCheap();
   TestUploadCallbackInstallationIsDemandDriven();
   TestFallbackUploadRemainsDeterministic();
+  TestTelnetWithoutUploadUsesImmediateEof();
+  TestPauseTerminalIsTelnetOnly();
+  TestTelnetUploadUsesWorkAndWriteCaps();
+  TestTelnetOptionConstructionBudgetsAndOwnership();
   TestScriptedReadSequenceCapsAndAbort();
   TestScriptedUploadBorrowsScenarioStorage();
   TestScriptedSeekOutcomes();

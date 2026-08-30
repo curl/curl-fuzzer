@@ -1,0 +1,22 @@
+# Exercise each supported TELNET suboption against the negotiation state
+# machine. The dedicated mock preloads these bytes and half-closes before curl
+# enters telnet_do(), so this remains deterministic without terminal input.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz-user" }
+telnet_options: "TTYPE=vt100"
+telnet_options: "XDISPLOC=:0"
+telnet_options: "NEW_ENV=TERM,vt100"
+telnet_options: "WS=255x65535"
+telnet_options: "BINARY=1"
+upload {
+  data: "client\xffpayload\r\n"
+  # TELNET reaches one callback after each non-empty socket read. Return the
+  # complete small body on the first call so its embedded IAC reaches curl's
+  # doubling path before the preloaded peer reports EOF.
+  read_sizes: 64
+  terminal: UPLOAD_TERMINAL_EOF
+}
+connection {
+  initial_response: "banner\r\x00ready\r\n\xff\xfd\x1f\xff\xfd\x18\xff\xfa\x18\x01\xff\xf0\xff\xfd\x23\xff\xfa\x23\x01\xff\xf0\xff\xfd\x27\xff\xfa\x27\x01\xff\xf0\xff\xfb\x00\xff\xfd\x00"
+}

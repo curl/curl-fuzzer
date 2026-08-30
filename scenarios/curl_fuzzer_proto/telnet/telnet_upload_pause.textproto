@@ -1,0 +1,7 @@
+# TELNET treats the pause sentinel as no input for its current poll. The mock's
+# preloaded, half-closed peer then supplies EOF on the next poll, reaching the
+# real callback outcome without an external unpause event or wall-clock wait.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+upload { terminal: UPLOAD_TERMINAL_PAUSE }
+connection { initial_response: "x" }

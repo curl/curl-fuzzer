@@ -14,6 +14,7 @@
 #include <string>
 
 #include "proto_fuzzer/scenario_limits.h"
+#include "proto_fuzzer/telnet_scenario.h"
 
 namespace proto_fuzzer {
 
@@ -51,11 +52,18 @@ void TrimMetadata(std::string* value) {
 }
 
 template <typename RepeatedBytes>
-void BoundHeaderValues(RepeatedBytes* headers, std::size_t limit) {
-  TrimRepeated(headers, limit);
-  for (std::string& header : *headers) {
-    TrimMetadata(&header);
+void BoundStringValues(RepeatedBytes* values, std::size_t count_limit, std::size_t value_limit) {
+  TrimRepeated(values, count_limit);
+  for (std::string& value : *values) {
+    if (value.size() > value_limit) {
+      value.resize(value_limit);
+    }
   }
+}
+
+template <typename RepeatedBytes>
+void BoundHeaderValues(RepeatedBytes* headers, std::size_t limit) {
+  BoundStringValues(headers, limit, scenario_limits::kMaxMetadataBytes);
 }
 
 /// Keep one response script identical to the prefix MockServer and
@@ -121,19 +129,20 @@ void BoundMimeShape(curl::fuzzer::proto::MimePost* post) {
 /// Remove upload bytes and read steps the callback cannot observe. Clamping
 /// individual limits also keeps mutations concentrated on short reads instead
 /// of many distinct uint32 values that all collapse to the same 16 KiB cap.
-void BoundUploadShape(curl::fuzzer::proto::UploadScript* upload) {
-  if (upload->data().size() > scenario_limits::kMaxUploadBytes) {
-    upload->mutable_data()->resize(scenario_limits::kMaxUploadBytes);
+void BoundUploadShape(curl::fuzzer::proto::UploadScript* upload, std::size_t data_limit, std::size_t read_step_limit,
+                      std::size_t read_size_limit) {
+  if (upload->data().size() > data_limit) {
+    upload->mutable_data()->resize(data_limit);
   }
   // RepeatedField<uint32_t> lacks RepeatedPtrField's DeleteSubrange helper;
   // removing the ignored suffix from the end is constant-time per element and
   // preserves the mutation-significant prefix exactly.
-  while (static_cast<std::size_t>(upload->read_sizes_size()) > scenario_limits::kMaxUploadReadSteps) {
+  while (static_cast<std::size_t>(upload->read_sizes_size()) > read_step_limit) {
     upload->mutable_read_sizes()->RemoveLast();
   }
   for (int i = 0; i < upload->read_sizes_size(); ++i) {
-    if (upload->read_sizes(i) > scenario_limits::kMaxUploadReadSize) {
-      upload->set_read_sizes(i, scenario_limits::kMaxUploadReadSize);
+    if (upload->read_sizes(i) > read_size_limit) {
+      upload->set_read_sizes(i, static_cast<std::uint32_t>(read_size_limit));
     }
   }
 }
@@ -150,11 +159,19 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   }
 
   BoundHeaderValues(scenario->mutable_request_headers(), scenario_limits::kMaxRequestHeaders);
+  BoundStringValues(scenario->mutable_telnet_options(), scenario_limits::kMaxTelnetOptions,
+                    scenario_limits::kMaxTelnetOptionBytes);
   if (scenario->has_mime_post()) {
     BoundMimeShape(scenario->mutable_mime_post());
   }
   if (scenario->has_upload()) {
-    BoundUploadShape(scenario->mutable_upload());
+    const bool telnet = scenario->scheme() == curl::fuzzer::proto::SCHEME_TELNET;
+    const std::size_t data_limit = telnet ? scenario_limits::kMaxTelnetUploadBytes : scenario_limits::kMaxUploadBytes;
+    const std::size_t read_step_limit =
+        telnet ? scenario_limits::kMaxTelnetUploadReadSteps : scenario_limits::kMaxUploadReadSteps;
+    const std::size_t read_size_limit =
+        telnet ? scenario_limits::kMaxTelnetUploadReadSize : scenario_limits::kMaxUploadReadSize;
+    BoundUploadShape(scenario->mutable_upload(), data_limit, read_step_limit, read_size_limit);
   }
 
   BoundConnectionShape(scenario->mutable_connection());
@@ -218,6 +235,42 @@ void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
   options->DeleteSubrange(retained, options->size() - retained);
 }
 
+/// Return whether a scalar option can influence TELNET without selecting an
+/// incompatible transfer mode or introducing external state. Protocol-
+/// specific negotiation preferences use Scenario.telnet_options instead.
+bool IsCheapTelnetOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Compact the TELNET option prefix so unrelated HTTP mutations cannot crowd
+/// useful credentials, CRLF handling, and transfer-size controls out of the
+/// fixed target's general option budget.
+void RetainCheapTelnetOptions(curl::fuzzer::proto::Scenario* scenario) {
+  auto* options = scenario->mutable_options();
+  int retained = 0;
+  for (int index = 0; index < options->size(); ++index) {
+    if (!IsCheapTelnetOption(options->Get(index).option_id())) {
+      continue;
+    }
+    if (retained != index) {
+      options->SwapElements(retained, index);
+    }
+    ++retained;
+  }
+  options->DeleteSubrange(retained, options->size() - retained);
+}
+
 /// Remove the stateful shapes assigned to the deep HTTP target. This happens
 /// before BoundScenarioShape so a fast iteration never walks or normalizes a
 /// MIME tree, upload script, or follow-on connection that it will discard.
@@ -244,6 +297,32 @@ void RemoveIgnoredWebSocketShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_mime_post();
 }
 
+/// Remove fields whose only effect in a TELNET lane would be protobuf work or
+/// unsafe socket timing. TELNET's curl driver owns the thread until the peer
+/// closes, so response backpressure and follow-on sockets cannot be serviced
+/// by the outer event loop. Raw response fragments and the bounded upload stay
+/// mutation-controlled because the dedicated mock can preload and drain them.
+void RemoveNonTelnetShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+
+  auto* connection = scenario->mutable_connection();
+  connection->clear_server_frames();
+  connection->clear_manual_probes();
+  connection->clear_backpressure();
+}
+
+/// Remove the TELNET-only list and pause outcome from fixed event-driven
+/// targets. The compatibility target skips postprocessing, so the runtime
+/// repeats the pause-to-EOF guard before installing callbacks.
+void RemoveTelnetOnlyShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_telnet_options();
+  if (scenario->has_upload() && scenario->upload().terminal() == curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE) {
+    scenario->mutable_upload()->set_terminal(curl::fuzzer::proto::UPLOAD_TERMINAL_EOF);
+  }
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -264,6 +343,7 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
       return curl::fuzzer::proto::SCHEME_WS;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
+    case curl::fuzzer::proto::SCHEME_TELNET:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return curl::fuzzer::proto::SCHEME_HTTP;
@@ -311,14 +391,57 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetPolicy pol
     return;
   }
 
+  if (policy == TargetPolicy::kFastTelnet) {
+    // Set the scheme before general bounds so the TELNET-specific upload and
+    // PAUSE budgets are selected rather than event-driven compatibility ones.
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+    RemoveNonTelnetShape(scenario);
+    RetainCheapTelnetOptions(scenario);
+    BoundScenarioShape(scenario);
+    BoundTelnetResponse(scenario->mutable_connection());
+    return;
+  }
+
   if (policy == TargetPolicy::kFastHttp) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
     RetainCheapHttpOptions(scenario);
     BoundScenarioShape(scenario);
     return;
   }
 
+  // Select the lane's scheme before applying scheme-sensitive upload bounds.
+  // The scheme field is itself mutable, so bounding first could accidentally
+  // give an HTTP/WS case TELNET's smaller payload budget merely because that
+  // was the input's pre-policy value.
+  switch (policy) {
+    case TargetPolicy::kDeepHttp:
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+      break;
+    case TargetPolicy::kFastHttps:
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+      break;
+    case TargetPolicy::kFastWebSocket:
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_WS);
+      break;
+    case TargetPolicy::kFastSecureWebSocket:
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_WSS);
+      break;
+    case TargetPolicy::kTiming:
+      scenario->set_scheme(PlaintextScheme(scenario->scheme()));
+      break;
+    case TargetPolicy::kFastHttp:
+    case TargetPolicy::kFastTelnet:
+      // Both early-return paths selected their scheme above.
+      return;
+  }
+
+  // TELNET's retained slist and synchronous pause have no observable, safe
+  // meaning in the fixed event-driven lanes. Clear them before walking the
+  // general shape so only the compatibility and TELNET targets can retain
+  // those values.
+  RemoveTelnetOnlyShape(scenario);
   BoundScenarioShape(scenario);
 
   switch (policy) {
@@ -328,29 +451,29 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetPolicy pol
       return;
 
     case TargetPolicy::kDeepHttp:
-      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
       ClearAllBackpressure(scenario);
       return;
 
     case TargetPolicy::kFastHttps:
-      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       ClearAllBackpressure(scenario);
       return;
 
     case TargetPolicy::kFastWebSocket:
-      scenario->set_scheme(curl::fuzzer::proto::SCHEME_WS);
       ClearAllBackpressure(scenario);
       RemoveIgnoredWebSocketShape(scenario);
       return;
 
     case TargetPolicy::kFastSecureWebSocket:
-      scenario->set_scheme(curl::fuzzer::proto::SCHEME_WSS);
       ClearAllBackpressure(scenario);
       RemoveIgnoredWebSocketShape(scenario);
       return;
 
+    case TargetPolicy::kFastTelnet:
+      // Handled before the general bounds so its protocol-specific limits are
+      // selected from the start.
+      return;
+
     case TargetPolicy::kTiming: {
-      scenario->set_scheme(PlaintextScheme(scenario->scheme()));
       if (scenario->scheme() == curl::fuzzer::proto::SCHEME_WS) {
         RemoveIgnoredWebSocketShape(scenario);
       }

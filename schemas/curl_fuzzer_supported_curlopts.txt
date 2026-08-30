@@ -1,4 +1,4 @@
-# Curated HTTP/WebSocket subset consumed by generate_option_manifest.py.
+# Curated structured-network subset consumed by generate_option_manifest.py.
 # One CURLOPT name per line. Blank lines and '#' comments are ignored.
 # Adding an entry here is enough to make it reachable by the fuzzer;
 # the numeric value and value kind are derived from curl.h at build time.

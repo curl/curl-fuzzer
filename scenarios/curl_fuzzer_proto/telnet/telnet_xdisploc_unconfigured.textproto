@@ -1,0 +1,5 @@
+# Request XDISPLOC without configuring it. curl should reject the missing
+# value through bad_option(); the response has only two IAC markers.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+connection { initial_response: "\xff\xfa\x23\x01\xff\xf0" }

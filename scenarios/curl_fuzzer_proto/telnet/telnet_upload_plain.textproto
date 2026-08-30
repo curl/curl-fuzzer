@@ -1,0 +1,7 @@
+# Keep a non-IAC body separate from the negotiation seed so send_telnet_data's
+# direct-buffer branch is not hidden by its escaped-IAC path. One peer byte
+# makes TELNET invoke the callback before the preloaded socket reaches EOF.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+upload { data: "plain\r\n" }
+connection { initial_response: "x" }

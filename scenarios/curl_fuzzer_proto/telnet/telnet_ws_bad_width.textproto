@@ -1,0 +1,6 @@
+# Fail the first number in WS=widthxheight. Keeping each parser stage in a
+# separate transfer prevents the first short-circuited error hiding the next.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "WS=wide x 24"
+connection { initial_response: "x" }

@@ -1,0 +1,7 @@
+# Option dispatch first groups names by length, so each recognized length has
+# a distinct rejection arm. An invalid option ends parsing immediately and
+# therefore cannot share a transfer with the other length-specific seeds.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "AB=1"
+connection { initial_response: "x" }

@@ -24,8 +24,9 @@ class ScenarioRunner {
   ScenarioRunner& operator=(const ScenarioRunner&) = delete;
 
   /// Execute one scenario and optionally inspect public post-transfer result
-  /// APIs. The compiled fast HTTP target disables those probes to keep them
-  /// out of its hot loop; every coverage-oriented lane leaves them enabled.
+  /// APIs. The compiled fast HTTP and TELNET targets disable those probes to
+  /// keep them out of their hot loops; every coverage-oriented lane leaves
+  /// them enabled.
   int Run(const curl::fuzzer::proto::Scenario& scenario, bool probe_transfer_results = true);
 };
 

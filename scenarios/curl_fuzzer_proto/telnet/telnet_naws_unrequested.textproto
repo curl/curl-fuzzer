@@ -1,0 +1,7 @@
+# NAWS is special: curl can answer DO NAWS even when the caller did not set a
+# window size, using the RFC-valid default of 0x0. This reaches the unsolicited
+# subnegotiation path rather than the preferred-option negotiation used by the
+# configured-window seeds.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+connection { initial_response: "\xff\xfd\x1f" }

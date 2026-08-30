@@ -1,0 +1,8 @@
+# TS_SE accepts only SE or a doubled IAC. Feeding WILL at that boundary reaches
+# curl's explicit malformed-suboption error instead of merely ending in an
+# incomplete state at EOF.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+connection {
+  initial_response: "\xff\xfa\x18\x01\xff\xfb"
+}

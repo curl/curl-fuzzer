@@ -1,0 +1,5 @@
+# Cover rejection in the seven-byte NEW_ENV dispatch bucket.
+scheme: SCHEME_TELNET
+host_path: "127.0.0.1/"
+telnet_options: "ABCDEFG=1"
+connection { initial_response: "x" }

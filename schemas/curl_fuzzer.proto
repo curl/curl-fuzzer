@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package curl.fuzzer.proto;
 
-// Structured HTTP/WebSocket scenario description for the curl-fuzzer
+// Structured network scenario description for the curl-fuzzer
 // libprotobuf-mutator targets. One scenario configures a single easy handle
 // and feeds one or more bounded mock connections.
 
@@ -51,10 +51,17 @@ message Scenario {
   // redirect/authentication retry. Keeping that state schema-native lets LPM
   // mutate short-read and rewind behaviour together with the server responses
   // that provoke it; a fixed callback can only ever cover one happy path.
-  // When absent, the runtime preserves the historical deterministic 16 KiB
-  // stream so old corpus entries and WebSocket upload probes retain their
-  // behaviour.
+  // When absent, non-TELNET runtimes preserve the historical deterministic
+  // 16 KiB stream so old corpus entries and WebSocket upload probes retain
+  // their behaviour. TELNET instead reports immediate EOF because any
+  // fallback bytes would turn an absent input into unsolicited terminal data.
   UploadScript upload = 8;
+  // CURLOPT_TELNETOPTIONS is a curl_slist whose strings must outlive the
+  // transfer, so it cannot use the scalar SetOption path. Keeping the list
+  // schema-native also lets mutations correlate local preferences such as
+  // TTYPE/NAWS with the peer negotiation bytes that request those values.
+  // Non-TELNET target policies discard this field before execution.
+  repeated bytes telnet_options = 9;
 }
 
 // A bounded source for CURLOPT_READFUNCTION. The payload and read-limit list
@@ -74,12 +81,15 @@ message UploadScript {
 }
 
 // What the read callback reports after all scripted bytes have been consumed.
-// PAUSE is deliberately absent: without an asynchronous resume source it
-// converts a fast fuzz case into a wall-clock timeout rather than new parser
-// or state-machine coverage.
+// PAUSE is honored only by TELNET, whose synchronous loop treats it as no
+// input for the current poll. The TELNET mock has already half-closed its peer,
+// so the next poll observes EOF without requiring an asynchronous resume
+// source. Other schemes canonicalize it to EOF so it cannot turn a fast
+// event-driven fuzz case into a wall-clock timeout.
 enum UploadTerminal {
   UPLOAD_TERMINAL_EOF = 0;
   UPLOAD_TERMINAL_ABORT = 1;
+  UPLOAD_TERMINAL_PAUSE = 2;
 }
 
 // Results available to CURLOPT_SEEKFUNCTION. An OK result performs bounded
@@ -153,6 +163,7 @@ enum Scheme {
   SCHEME_HTTPS = 2;
   SCHEME_WS = 3;
   SCHEME_WSS = 4;
+  SCHEME_TELNET = 5;
 }
 
 message SetOption {

@@ -46,7 +46,8 @@ struct OptionDescriptor {
 
 namespace {
 
-constexpr char kProtocolsAllowed[] = "http,https,ws,wss";
+constexpr char kEventDrivenProtocolsAllowed[] = "http,https,ws,wss";
+constexpr char kTelnetProtocolAllowed[] = "telnet";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
 constexpr char kVerboseEnvVar[] = "FUZZ_VERBOSE";
@@ -61,6 +62,14 @@ constexpr long kTimeoutMs = 200;
 /// own WRITEFUNCTION afterwards if they need to poke protocol APIs while
 /// inside a curl callback.
 size_t SilentWriteCallback(void* /*contents*/, size_t size, size_t nmemb, void* /*userdata*/) { return size * nmemb; }
+
+/// Consume libcurl's verbose records without emitting per-input diagnostics.
+/// TELNET's debug build keeps its negotiation/suboption formatters behind the
+/// verbose switch, so the protocol lane uses this sink to make that reachable
+/// code fuzzable without turning millions of iterations into log traffic.
+int SilentDebugCallback(CURL* /*handle*/, curl_infotype /*type*/, char* /*data*/, size_t /*size*/, void* /*userdata*/) {
+  return 0;
+}
 
 /// Let curl's debug build accept transport-security response headers over the
 /// plaintext HTTP mock. The structured secure lane currently covers TLS setup
@@ -158,19 +167,34 @@ void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario) {
 /// protocol restrictions, DNS overrides, timeouts. Call before applying any
 /// scenario options.
 /// @param easy The curl easy handle to configure.
+/// @param scheme Protocol whose dedicated in-process mock will service it.
 /// @return the curl_slist owned by the caller (for CURLOPT_CONNECT_TO), which
 ///         must be freed with curl_slist_free_all after curl_easy_cleanup.
-struct curl_slist* ApplyBaselineOptions(CURL* easy) {
+struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme) {
   EnableDebugHttpTransportMetadata();
 
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &SilentWriteCallback);
   curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &SilentWriteCallback);
 
-  // Confine the easy handle to the protocols backed by in-process mocks;
-  // refuse redirects to any other scheme. CURLOPT_PROTOCOLS_STR arrived in
-  // 7.85.0.
-  curl_easy_setopt(easy, CURLOPT_PROTOCOLS_STR, kProtocolsAllowed);
-  curl_easy_setopt(easy, CURLOPT_REDIR_PROTOCOLS_STR, kProtocolsAllowed);
+  const bool user_requested_verbose = std::getenv(kVerboseEnvVar) != nullptr;
+  if (scheme == curl::fuzzer::proto::SCHEME_TELNET && !user_requested_verbose) {
+    // printoption() and printsub() contain a substantial part of curl's TELNET
+    // parser diagnostics but run only in verbose mode. Keep those paths in the
+    // ordinary TELNET coverage lane while suppressing their high-volume text.
+    // An explicit FUZZ_VERBOSE still skips the sink so reproductions remain
+    // inspectable from the terminal.
+    curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &SilentDebugCallback);
+    curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+  }
+
+  // A TELNET transfer must use TelnetMockServer's preload/drain invariants.
+  // Keep it out of the redirect allowlist so an HTTP mock can never redirect
+  // into curl's synchronous TELNET driver with event-driven peer semantics.
+  // CURLOPT_PROTOCOLS_STR arrived in 7.85.0.
+  const char* direct_protocols =
+      scheme == curl::fuzzer::proto::SCHEME_TELNET ? kTelnetProtocolAllowed : kEventDrivenProtocolsAllowed;
+  curl_easy_setopt(easy, CURLOPT_PROTOCOLS_STR, direct_protocols);
+  curl_easy_setopt(easy, CURLOPT_REDIR_PROTOCOLS_STR, kEventDrivenProtocolsAllowed);
 
   // CONNECT_TO confines direct connections, but an ambient http_proxy or
   // ALL_PROXY can select a proxy before curl asks the harness for a socket.
@@ -213,7 +237,7 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy) {
 
   // Match the legacy TLV fuzzer: FUZZ_VERBOSE in the environment flips curl's
   // own verbose logging on. Useful when reproducing a crashing corpus entry.
-  if (std::getenv(kVerboseEnvVar) != nullptr) {
+  if (user_requested_verbose) {
     curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
   }
   return connect_to;

@@ -37,6 +37,18 @@ class MockConnection {
   curl_socket_t take_client_fd();
   int server_fd() const;
 
+  /// Return the capacity curl's endpoint reports for queued client writes.
+  /// Protocol mocks use this before transferring fd ownership when their
+  /// synchronous send path cannot rely on the outer driver to make room.
+  /// @return SO_SNDBUF in bytes, or zero when it cannot be queried.
+  std::size_t client_send_buffer_size() const;
+
+  /// Ensure curl's endpoint reports at least `minimum` bytes of send buffer,
+  /// requesting a larger SO_SNDBUF when the platform default is smaller.
+  /// @param minimum Smallest acceptable reported capacity in bytes.
+  /// @return true when the queried postcondition holds.
+  bool EnsureClientSendBufferSize(std::size_t minimum);
+
   bool WriteAll(const unsigned char* data, std::size_t size);
   /// Drain bytes curl has written according to the configured per-call limit.
   /// @return number of bytes consumed during this call.
