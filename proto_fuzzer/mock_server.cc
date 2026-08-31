@@ -244,11 +244,9 @@ MockServer::~MockServer() = default;
 /// which makes borrowing safe while avoiding response-byte copies.
 /// @param scenario Source of the primary and bounded follow-on scripts.
 void MockServer::SetScripts(const curl::fuzzer::proto::Scenario& scenario) {
+  ResetConnections();
   script_count_ = 0;
   next_script_ = 0;
-  active_script_ = nullptr;
-  connection_.reset();
-  previous_connections_.clear();
 
   const auto append_script = [this](const curl::fuzzer::proto::Connection& connection) {
     ConnectionScript& script = scripts_[script_count_++];
@@ -272,6 +270,23 @@ bool MockServer::has_more_chunks() const {
   return active_script_ != nullptr && active_script_->next_chunk < active_script_->chunk_count();
 }
 
+/// Keep plaintext transport construction behind a virtual boundary so the
+/// HTTPS lane can add TLS without copying the HTTP script state machine.
+std::unique_ptr<MockConnection> MockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
+
+/// Release all socketpairs while the dynamic transport type is still alive.
+/// This is separate from SetScripts because a derived destructor may need to
+/// enforce a stricter order than C++'s derived-member-before-base teardown.
+void MockServer::ResetConnections() {
+  active_script_ = nullptr;
+  connection_.reset();
+  previous_connections_.clear();
+}
+
+/// Plain HTTP has no connection-filter result that must be observed live.
+/// @param easy Active easy handle, unused by the plaintext transport.
+void MockServer::ObserveActiveTransfer(CURL* /*easy*/) {}
+
 /// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
 /// MockConnection, writes initial_response into it, and returns the
 /// client-side fd to hand to libcurl.
@@ -293,8 +308,8 @@ curl_socket_t MockServer::HandleOpenSocket() {
 
   active_script_ = &scripts_[next_script_++];
   const curl::fuzzer::proto::Connection& script_connection = *active_script_->connection;
-  connection_ = std::make_unique<MockConnection>();
-  if (!connection_->ok()) {
+  connection_ = CreateConnection();
+  if (!connection_ || !connection_->ok()) {
     connection_.reset();
     active_script_ = nullptr;
     return CURL_SOCKET_BAD;
@@ -410,7 +425,7 @@ bool MockServer::ServiceConnections() {
 /// Positive timers are deliberately not slept: the API lane clears timing
 /// controls and exists to cover event-driven dispatch, while the dedicated
 /// timing lane remains responsible for clock-dependent behavior.
-void MockServer::RunSocketActionLoop(CURLM* multi) {
+void MockServer::RunSocketActionLoop(CURLM* multi, CURL* easy) {
   MultiSocketDriver* driver = multi_socket_driver();
   if (driver == nullptr) {
     return;
@@ -418,6 +433,7 @@ void MockServer::RunSocketActionLoop(CURLM* multi) {
 
   int still_running = 1;
   CURLMcode rc = driver->Start(&still_running);
+  ObserveActiveTransfer(easy);
   int idle_iterations = 0;
   int drive_iterations = 0;
   while (rc == CURLM_OK && still_running && idle_iterations < kMaxIdleIterations &&
@@ -425,6 +441,7 @@ void MockServer::RunSocketActionLoop(CURLM* multi) {
     bool made_progress = ServiceConnections();
     const MultiSocketDriver::DriveResult drive_result = driver->DriveReady(&still_running);
     rc = drive_result.code;
+    ObserveActiveTransfer(easy);
     made_progress = drive_result.made_progress || made_progress;
     if (made_progress) {
       idle_iterations = 0;
@@ -441,11 +458,10 @@ void MockServer::RunSocketActionLoop(CURLM* multi) {
 /// @param easy     the curl easy handle attached to this mock.
 /// @param scenario source of the initial_response and on_readable chunks.
 void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
-  (void)easy;
   SetScripts(scenario);
 
   if (multi_socket_driver() != nullptr) {
-    RunSocketActionLoop(multi);
+    RunSocketActionLoop(multi, easy);
     return;
   }
 
@@ -471,6 +487,7 @@ void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Sc
     if (rc != CURLM_OK) {
       break;
     }
+    ObserveActiveTransfer(easy);
     made_progress = still_running != running_before;
     if (timed_drive && still_running && !pollset_probed) {
       // Probe only after curl has built the socket/filter chain. A zero-timeout

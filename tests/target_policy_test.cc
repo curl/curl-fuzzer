@@ -155,9 +155,17 @@ void TestDeepHttpPolicy() {
 }
 
 void TestFastHttpsPolicy() {
-  ExpectFixedPolicy(TargetProfile::kFastHttps, SCHEME_HTTPS,
-                    "fast HTTPS policy did not force HTTPS",
-                    "fast HTTPS policy retained backpressure", false);
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttps);
+
+  Expect(scenario.scheme() == SCHEME_HTTPS,
+         "fast HTTPS policy did not force HTTPS");
+  Expect(!scenario.connection().has_backpressure(),
+         "fast HTTPS policy retained backpressure");
+  Expect(scenario.host_path() == "tls.test/a/path?query#fragment",
+         "fast HTTPS policy did not retain URL suffix under the trusted host");
 }
 
 void TestFastWebSocketPolicy() {
@@ -675,10 +683,13 @@ void TestProfileRunModes() {
          "fast TELNET profile gained coverage-probe overhead");
   Expect(RunModeFor(TargetProfile::kApi) == ScenarioRunMode::kApiLifecycle,
          "API profile does not authorize its lifecycle plan");
+  Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
+         "fast HTTPS profile does not authorize the real TLS peer");
 
   constexpr TargetProfile kCoverageProfiles[] = {
-      TargetProfile::kDeepHttp,      TargetProfile::kFastHttps,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
       TargetProfile::kTiming,
   };
   for (const TargetProfile profile : kCoverageProfiles) {

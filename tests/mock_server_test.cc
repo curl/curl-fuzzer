@@ -24,6 +24,13 @@
 #include "proto_fuzzer/websocket_mock_server.h"
 #include "proto_fuzzer/ws_frame.h"
 
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include <openssl/ssl.h>
+
+#include "proto_fuzzer/tls_mock_server.h"
+#include "proto_fuzzer/tls_test_credentials.h"
+#endif
+
 namespace {
 
 using curl::fuzzer::proto::Scenario;
@@ -313,6 +320,210 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
   curl_slist_free_all(connect_to);
 }
 
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+/// Values retained from a completed TLS drive after its easy handle and peer
+/// have been safely dismantled. Tests assert these public/client and
+/// server-side views together so a successful HTTP body cannot mask the TLS
+/// behavior the corresponding seed promises to cover.
+struct TlsTransferResult {
+  CURLcode code = CURLE_FAILED_INIT;
+  std::string response;
+  long verify_result = -1;
+  int certificate_count = 0;
+  bool saw_live_tls_session = false;
+  int negotiated_version = 0;
+  std::size_t handshake_count = 0;
+  std::size_t reused_session_count = 0;
+  std::size_t write_retry_count = 0;
+};
+
+/// Add a typed option without spelling protobuf oneof plumbing in each TLS
+/// regression. The runtime still consumes it through ApplySetOption.
+void AddBoolOption(Scenario *scenario,
+                   curl::fuzzer::proto::CurlOptionId option_id, bool value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_bool_value(value);
+}
+
+void AddUintOption(Scenario *scenario,
+                   curl::fuzzer::proto::CurlOptionId option_id,
+                   std::uint64_t value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_uint_value(value);
+}
+
+void AddStringOption(Scenario *scenario,
+                     curl::fuzzer::proto::CurlOptionId option_id,
+                     const std::string &value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_string_value(value);
+}
+
+/// Construct the common complete-response shape used by TLS behavior tests.
+Scenario MakeTlsScenario(const std::string &path, const std::string &body) {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/" + path);
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(body.size()) +
+      "\r\n\r\n" + body);
+  return scenario;
+}
+
+/// Apply options in ScenarioRunner's production order and retain the exact
+/// completion result. This keeps the tests on the same socketpair/multi path
+/// as fuzz inputs while making failure-path assertions deterministic.
+TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
+  TlsTransferResult result;
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "TLS test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTPS);
+  const std::string url = "https://" + scenario.host_path();
+  curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
+
+  proto_fuzzer::TlsMockServer server;
+  server.Install(easy);
+  for (const auto &option : scenario.options()) {
+    Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
+           "TLS scenario option was rejected by curl");
+  }
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
+
+  result.code = server.DriveScenario(easy, scenario);
+  struct curl_certinfo *certificate_info = nullptr;
+  (void)curl_easy_getinfo(easy, CURLINFO_SSL_VERIFYRESULT,
+                          &result.verify_result);
+  if (curl_easy_getinfo(easy, CURLINFO_CERTINFO, &certificate_info) ==
+          CURLE_OK &&
+      certificate_info != nullptr) {
+    result.certificate_count = certificate_info->num_of_certs;
+  }
+  result.saw_live_tls_session = server.saw_live_tls_session();
+  result.negotiated_version = server.negotiated_tls_version();
+  result.handshake_count = server.completed_handshake_count();
+  result.reused_session_count = server.reused_session_count();
+  result.write_retry_count = server.write_retry_count();
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+  return result;
+}
+
+void TestTlsServerCompletesVerifiedTransfer() {
+  Scenario scenario = MakeTlsScenario("tls13", "tls");
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_CERTINFO, true);
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK, "verified TLS transfer did not complete");
+  Expect(result.response == "tls",
+         "verified TLS peer did not deliver decrypted HTTP data");
+  Expect(result.verify_result == 0,
+         "TLS peer certificate did not verify against the in-memory CA");
+  Expect(result.certificate_count >= 1,
+         "TLS transfer did not materialize certificate-chain information");
+  Expect(result.saw_live_tls_session,
+         "TLS transfer did not expose its backend session through getinfo");
+  Expect(result.negotiated_version == TLS1_3_VERSION,
+         "default TLS seed no longer negotiates TLS 1.3");
+  Expect(result.handshake_count == 1,
+         "single TLS transfer completed an unexpected number of handshakes");
+}
+
+void TestTls12OptionsForceNegotiatedVersion() {
+  Scenario scenario = MakeTlsScenario("tls12", "tls12");
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSLVERSION,
+                CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
+                  "ECDHE-ECDSA-AES128-GCM-SHA256");
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_EC_CURVES,
+                  "P-256");
+  AddStringOption(&scenario,
+                  curl::fuzzer::proto::CURLOPT_SSL_SIGNATURE_ALGORITHMS,
+                  "ecdsa_secp256r1_sha256");
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK && result.response == "tls12",
+         "forced TLS 1.2 seed did not complete");
+  Expect(result.negotiated_version == TLS1_2_VERSION,
+         "SSLVERSION limits did not force TLS 1.2");
+  Expect(result.handshake_count == 1,
+         "TLS 1.2 transfer completed an unexpected number of handshakes");
+}
+
+void TestTlsPublicKeyPins() {
+  Scenario matching = MakeTlsScenario("matching-pin", "pinned");
+  AddStringOption(&matching, curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY,
+                  proto_fuzzer::tls_test_credentials::kPublicKeyPin);
+  const TlsTransferResult matching_result = DriveTlsScenario(matching);
+  Expect(matching_result.code == CURLE_OK &&
+             matching_result.response == "pinned",
+         "matching in-memory public-key pin was rejected");
+
+  Scenario mismatch = MakeTlsScenario("mismatched-pin", "unreachable");
+  AddStringOption(&mismatch, curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY,
+                  "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+  const TlsTransferResult mismatch_result = DriveTlsScenario(mismatch);
+  Expect(
+      mismatch_result.code == CURLE_SSL_PINNEDPUBKEYNOTMATCH,
+      "mismatched in-memory public-key pin did not reach curl's pin failure");
+  Expect(mismatch_result.response.empty(),
+         "curl delivered HTTP data after rejecting the peer's public key");
+  Expect(mismatch_result.verify_result == 0,
+         "ordinary certificate verification failed before the pin comparison");
+}
+
+void TestTlsRedirectReusesSession() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/start");
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION, 1);
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_MAXREDIRS, 2);
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_SESSIONID_CACHE,
+                true);
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 302 Found\r\nLocation: https://tls.test/final\r\nConnection: "
+      "close\r\nContent-Length: 0\r\n\r\n");
+  scenario.add_subsequent_connections()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nresumed");
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK && result.response == "resumed",
+         "TLS redirect did not reach its final response");
+  Expect(result.handshake_count == 2,
+         "TLS redirect did not complete exactly two handshakes");
+  Expect(result.reused_session_count == 1,
+         "TLS redirect's second connection did not resume its session");
+}
+
+void TestTlsWriteRetryKeepsItsOriginalBoundary() {
+  constexpr std::size_t kInitialBodySize = 1024 * 1024;
+  constexpr std::size_t kChunkCount =
+      proto_fuzzer::scenario_limits::kMaxResponseChunks;
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/write-retry");
+  std::string expected(kInitialBodySize, 'a');
+  for (std::size_t index = 0; index < kChunkCount; ++index) {
+    scenario.mutable_connection()->add_on_readable("b");
+    expected.push_back('b');
+  }
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(expected.size()) +
+      "\r\n\r\n" + std::string(kInitialBodySize, 'a'));
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.write_retry_count > 0,
+         "large TLS response did not exercise SSL_write_ex retry handling");
+  Expect(result.code == CURLE_OK && result.response == expected,
+         "appending a response chunk corrupted an outstanding TLS write retry");
+}
+#endif
+
 void TestApiLifecycleCompletesSocketActionTransfer() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
@@ -531,6 +742,13 @@ int main() {
   TestClosedPeerIsAnOrdinaryWriteFailure();
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  TestTlsServerCompletesVerifiedTransfer();
+  TestTls12OptionsForceNegotiatedVersion();
+  TestTlsPublicKeyPins();
+  TestTlsRedirectReusesSession();
+  TestTlsWriteRetryKeepsItsOriginalBoundary();
+#endif
   TestApiLifecycleCompletesSocketActionTransfer();
   TestEasyPerformPreloadsIncrementalResponse();
   TestTelnetPreloadsChunksAndNeverReadsStdin();

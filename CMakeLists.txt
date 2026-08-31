@@ -809,6 +809,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # structured target. Compile them once; fuzzer_main.cc carries the
     # per-binary profile while a same-named thin entrypoint gives Introspector
     # an unambiguous static-profile-to-coverage mapping.
+    set(PROTO_FUZZER_TLS_SOURCES)
+    if(TARGET openssl_external)
+        list(APPEND PROTO_FUZZER_TLS_SOURCES proto_fuzzer/tls_mock_server.cc)
+    endif()
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/api_lifecycle.cc
         proto_fuzzer/scenario_runner.cc
@@ -820,6 +824,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/target_policy.cc
         proto_fuzzer/telnet_mock_server.cc
         proto_fuzzer/telnet_scenario.cc
+        ${PROTO_FUZZER_TLS_SOURCES}
         proto_fuzzer/websocket_mock_server.cc
         proto_fuzzer/ws_frame.cc
         ${GEN_PB_CC}
@@ -838,6 +843,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${LPM_INSTALL_DIR}/include/libprotobuf-mutator
         ${LPM_PB_INCLUDE}
     )
+    if(TARGET openssl_external)
+        target_compile_definitions(curl_fuzzer_proto_runtime PRIVATE
+            PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+        target_include_directories(curl_fuzzer_proto_runtime PRIVATE
+            ${OPENSSL_INSTALL_DIR}/include)
+    endif()
     add_dependencies(curl_fuzzer_proto_runtime
         ${FUZZ_DEPS}
         libprotobuf_mutator_external
@@ -1158,6 +1169,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/request_data.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
+            ${PROTO_FUZZER_TLS_SOURCES}
             proto_fuzzer/websocket_mock_server.cc
             proto_fuzzer/ws_frame.cc
             ${GEN_PB_CC}
@@ -1170,6 +1182,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             ${CMAKE_SOURCE_DIR}
             ${LPM_PB_INCLUDE}
         )
+        if(TARGET openssl_external)
+            target_compile_definitions(mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(mock_server_test PRIVATE
+                ${OPENSSL_INSTALL_DIR}/include)
+        endif()
         target_link_libraries(mock_server_test PRIVATE
             ${CURL_LIB_DIR}/libcurl.a
             ${CURL_STATIC_DEPENDENCY_LIBS}

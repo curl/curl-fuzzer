@@ -1,0 +1,12 @@
+# The dedicated HTTPS target turns this plaintext script into TLS records.
+# Default negotiation selects TLS 1.3, while CERTINFO makes curl retain and
+# format the verified peer chain for its post-transfer result probe.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/tls13-certinfo"
+options { option_id: CURLOPT_SSL_VERIFYPEER bool_value: true }
+options { option_id: CURLOPT_SSL_VERIFYHOST uint_value: 2 }
+options { option_id: CURLOPT_CERTINFO bool_value: true }
+options { option_id: CURLOPT_SSL_SESSIONID_CACHE bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\ntls13"
+}

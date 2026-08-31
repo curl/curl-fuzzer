@@ -406,6 +406,61 @@ void TestIntegralOptionDecoderUsesGeneratedKinds() {
          "string descriptor unexpectedly acquired an integral value");
 }
 
+void TestPinnedPublicKeyValuesCannotBecomeFilenames() {
+  const std::string valid_pin =
+      "sha256//ohF20oHrdt/MM3YpyIewiTdtTbgZwq3qatd40TjMtYg=";
+  curl::fuzzer::proto::Scenario scenario;
+
+  auto *valid = scenario.add_options();
+  valid->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
+  valid->set_string_value(valid_pin);
+
+  auto *relative = scenario.add_options();
+  relative->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
+  relative->set_string_value("relative/path/to/pin.pem");
+
+  auto *absolute = scenario.add_options();
+  absolute->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
+  absolute->set_string_value("/etc/passwd");
+
+  auto *empty = scenario.add_options();
+  empty->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
+  empty->set_string_value("");
+
+  auto *binary = scenario.add_options();
+  binary->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
+  binary->set_string_value("\0pin.pem", 8);
+
+  proto_fuzzer::CanonicalizeOptionValueCases(&scenario);
+
+  Expect(scenario.options(0).string_value() == valid_pin,
+         "valid public-key pin was changed");
+  Expect(scenario.options(1).string_value() ==
+             "sha256//relative/path/to/pin.pem",
+         "relative public-key path remained filename syntax");
+  Expect(scenario.options(2).string_value() == "sha256///etc/passwd",
+         "absolute public-key path remained filename syntax");
+  Expect(scenario.options(3).string_value() == "sha256//",
+         "empty public-key pin remained filename syntax");
+  const std::string &binary_value = scenario.options(4).string_value();
+  Expect(binary_value.size() == 16 &&
+             binary_value.compare(0, 8, "sha256//") == 0 &&
+             binary_value.compare(8, 8, std::string("\0pin.pem", 8)) == 0,
+         "binary public-key mutation was not safely prefixed");
+
+  // Compatibility inputs do not run the protobuf postprocessor. The runtime
+  // application path must therefore accept and constrain a path-like value on
+  // its own instead of relying on canonicalization.
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for pin constraint");
+  curl::fuzzer::proto::SetOption pin;
+  pin.set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
+  pin.set_string_value("pin.pem");
+  Expect(proto_fuzzer::ApplySetOption(easy, pin) == CURLE_OK,
+         "constrained public-key pin was rejected");
+  curl_easy_cleanup(easy);
+}
+
 void TestSetOptionDecodesIntegralRepresentations() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "curl_easy_init failed for scalar option decoding");
@@ -580,6 +635,7 @@ int main() {
   TestScriptedSeekOutcomes();
   TestOptionValueCasesFollowTheGeneratedManifest();
   TestIntegralOptionDecoderUsesGeneratedKinds();
+  TestPinnedPublicKeyValuesCannotBecomeFilenames();
   TestSetOptionDecodesIntegralRepresentations();
   TestSetOptionBorrowsBinaryPostFields();
   TestCompatibilityOptionSuffixIsRuntimeInvisible();

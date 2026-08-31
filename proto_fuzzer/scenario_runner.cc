@@ -24,6 +24,10 @@
 #include "proto_fuzzer/telnet_mock_server.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include "proto_fuzzer/tls_mock_server.h"
+#endif
+
 namespace proto_fuzzer {
 
 namespace {
@@ -98,14 +102,24 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
   }
 }
 
-/// Pick the MockServerBase subclass to use for 'scenario'. The scheme is the
-/// sole classifier today: WS / WSS → WebSocketMockServer, TELNET → the
-/// synchronous TelnetMockServer, HTTP / HTTPS → MockServer. Returns nullptr
-/// for unsupported / unspecified schemes so the runner can skip cleanly.
-std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::proto::Scenario& scenario) {
+/// Pick the peer implementation authorized by both protocol and target mode.
+/// The compatibility target must keep treating HTTPS response bytes as raw TLS
+/// records, while the dedicated HTTPS lane interprets them as decrypted HTTP.
+/// Keeping that semantic boundary in the closed run-mode enum prevents a new
+/// protobuf field from silently changing old OSS-Fuzz reproducers.
+std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::proto::Scenario& scenario,
+                                                          ScenarioRunMode mode) {
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
+      return std::make_unique<MockServer>();
     case curl::fuzzer::proto::SCHEME_HTTPS:
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kTlsCoverage) {
+        return std::make_unique<TlsMockServer>();
+      }
+#else
+      (void)mode;
+#endif
       return std::make_unique<MockServer>();
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
@@ -141,7 +155,7 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioR
     return 0;
   }
 
-  std::unique_ptr<MockServerBase> mock = MakeMockServerForScenario(scenario);
+  std::unique_ptr<MockServerBase> mock = MakeMockServerForScenario(scenario, mode);
   if (!mock) {
     return 0;
   }
