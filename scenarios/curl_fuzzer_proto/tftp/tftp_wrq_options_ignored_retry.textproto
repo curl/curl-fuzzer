@@ -1,0 +1,16 @@
+# ACK0 makes an option-bearing WRQ fall back to the default block size. A
+# mismatched ACK then makes curl retransmit DATA1 before the correct ACK1.
+# The request-driven peer can faithfully model this retry; recovery after an
+# unsolicited out-of-order DATA packet or a foreign transfer ID needs packet
+# source/timing metadata that the current Connection script does not carry.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/options-ignored-retry"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 8 }
+options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+upload { data: "abcdefgh" terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "\000\004\000\000"
+  on_readable: "\000\004\000\002"
+  on_readable: "\000\004\000\001"
+}

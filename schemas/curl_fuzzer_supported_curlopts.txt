@@ -77,3 +77,23 @@ CURLOPT_UPLOAD_BUFFERSIZE
 CURLOPT_MIME_OPTIONS
 CURLOPT_MAXFILESIZE_LARGE
 CURLOPT_BUFFERSIZE
+
+# Plain FTP control/data state. Active-mode FTPPORT/EPRT, FTPS knobs, and
+# slist-backed QUOTE variants stay out until their transports and ownership
+# have protocol-specific peers rather than relying on scalar setopt dispatch.
+CURLOPT_DIRLISTONLY
+CURLOPT_APPEND
+CURLOPT_TRANSFERTEXT
+CURLOPT_FTP_USE_EPSV
+CURLOPT_FTP_CREATE_MISSING_DIRS
+CURLOPT_FTP_ACCOUNT
+CURLOPT_FTP_SKIP_PASV_IP
+CURLOPT_FTP_FILEMETHOD
+CURLOPT_FTP_ALTERNATIVE_TO_USER
+CURLOPT_FTP_USE_PRET
+CURLOPT_WILDCARDMATCH
+
+# TFTP uses the existing upload body and size options. These two switches
+# reach its option-negotiation and raw RRQ/WRQ construction paths.
+CURLOPT_TFTP_BLKSIZE
+CURLOPT_TFTP_NO_OPTIONS

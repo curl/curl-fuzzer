@@ -1,0 +1,17 @@
+# A rejected USER makes curl issue the configured alternative login command;
+# accepting that command resumes the ordinary PWD and download state machine.
+scheme: SCHEME_FTP
+host_path: "ftp.test/alternative.bin"
+options { option_id: CURLOPT_FTP_ALTERNATIVE_TO_USER string_value: "SITE LOGIN" }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "530 USER rejected\r\n"
+  on_readable: "230 alternative accepted\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary type selected\r\n"
+  on_readable: "213 3\r\n"
+  on_readable: "150 opening data\r\n"
+  on_readable: "226 transfer complete\r\n"
+}
+subsequent_connections { initial_response: "alt" }

@@ -1,0 +1,10 @@
+# Duplicate DATA1 must be acknowledged without delivering its body twice.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/duplicate"
+options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+connection {
+  initial_response: "\000\006blksize\0008\000"
+  on_readable: "\000\003\000\001abcdefgh"
+  on_readable: "\000\003\000\001abcdefgh"
+  on_readable: "\000\003\000\002z"
+}

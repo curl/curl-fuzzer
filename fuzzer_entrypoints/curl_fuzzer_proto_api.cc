@@ -6,9 +6,35 @@
 
 #include "proto_fuzzer/fuzzer_main.h"
 
-// Keep this entrypoint in a same-named source so Fuzz Introspector attributes
-// the API lifecycle lane independently from the protocol-focused proto lanes.
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data,
+namespace {
+
+// Bind this source's visible target identity once so mutation, crossover, and
+// execution cannot drift onto different policies as the shared runner evolves.
+using Fuzzer =
+    proto_fuzzer::ProtoFuzzerEntrypoint<proto_fuzzer::TargetProfile::kApi>;
+
+} // namespace
+
+// Keep all three libFuzzer ABI hooks in the same-named source. Besides making
+// the selected profile explicit, this lets Fuzz Introspector attribute the
+// API lifecycle lane independently while the implementation remains shared.
+extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t *data,
+                                               std::size_t size,
+                                               std::size_t max_size,
+                                               unsigned int seed) {
+  return Fuzzer::CustomMutator(data, size, max_size, seed);
+}
+
+extern "C" std::size_t
+LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
+                          const std::uint8_t *data2, std::size_t size2,
+                          std::uint8_t *out, std::size_t max_out_size,
+                          unsigned int seed) {
+  return Fuzzer::CustomCrossOver(data1, size1, data2, size2, out, max_out_size,
+                                 seed);
+}
+
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
-  return proto_fuzzer::ProtoFuzzerTestOneInput(data, size);
+  return Fuzzer::TestOneInput(data, size);
 }

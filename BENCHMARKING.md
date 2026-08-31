@@ -20,8 +20,9 @@ scripts/compare_fuzzers.py \
   --output build/measurements/comparison.json
 ```
 
-The defaults cover the legacy HTTP/HTTPS/WS targets and the fixed structured
-fast HTTP, deep HTTP, HTTPS, WS, WSS, and timing lanes. The deep HTTP target
+The defaults cover the legacy FTP/HTTP/HTTPS/TFTP/WS targets and the fixed
+structured fast HTTP, deep HTTP, HTTPS, WS, WSS, TELNET, FTP, TFTP, API, and
+timing lanes. The deep HTTP target
 retains stateful authentication, redirect, upload, MIME, and result-probe
 work so the ordinary HTTP lane can concentrate its CPU budget on single-request
 URL and response parsing. The original mixed-semantics
@@ -49,6 +50,8 @@ scripts/compare_fuzzers.py \
   --candidate-dir /path/to/proto/out/curl \
   --target-pair curl_fuzzer_http=curl_fuzzer_proto_http \
   --target-pair curl_fuzzer_https=curl_fuzzer_proto_https \
+  --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp \
+  --target-pair curl_fuzzer_tftp=curl_fuzzer_proto_tftp \
   --target-pair curl_fuzzer_ws=curl_fuzzer_proto_ws
 ```
 

@@ -335,9 +335,13 @@ set(CURL_CMAKE_ARGS
     -DCURL_HIDDEN_SYMBOLS=OFF
     -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
     -DCURL_USE_LIBPSL=OFF
-    # TELNET has no feature bit, so make the coverage dependency explicit and
-    # verify the advertised protocol list in curl_features_test as well.
+    # These protocol parsers have no feature bits. Make their coverage
+    # dependencies explicit and verify curl's advertised protocol list too,
+    # so a default change cannot silently turn a dedicated target into a URL
+    # rejection benchmark.
     -DCURL_DISABLE_TELNET=OFF
+    -DCURL_DISABLE_FTP=OFF
+    -DCURL_DISABLE_TFTP=OFF
     ${CURL_SSL_OPTION}
     -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
     -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
@@ -805,16 +809,19 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     )
     add_custom_target(lpm_link_rsp DEPENDS ${LPM_LINK_RSP})
 
-    # The protocol runners and generated message are identical for every
-    # structured target. Compile them once; fuzzer_main.cc carries the
-    # per-binary profile while a same-named thin entrypoint gives Introspector
-    # an unambiguous static-profile-to-coverage mapping.
+    # The protocol runners, LPM adapter, and generated message are identical
+    # for every structured target. Compile them once; each same-named thin
+    # entrypoint passes its profile explicitly, giving Introspector an
+    # unambiguous static-profile-to-coverage mapping without target-specific
+    # compiler definitions.
     set(PROTO_FUZZER_TLS_SOURCES)
     if(TARGET openssl_external)
         list(APPEND PROTO_FUZZER_TLS_SOURCES proto_fuzzer/tls_mock_server.cc)
     endif()
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/api_lifecycle.cc
+        proto_fuzzer/fuzzer_main.cc
+        proto_fuzzer/ftp_mock_server.cc
         proto_fuzzer/scenario_runner.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/request_data.cc
@@ -824,6 +831,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/target_policy.cc
         proto_fuzzer/telnet_mock_server.cc
         proto_fuzzer/telnet_scenario.cc
+        proto_fuzzer/tftp_mock_server.cc
         ${PROTO_FUZZER_TLS_SOURCES}
         proto_fuzzer/websocket_mock_server.cc
         proto_fuzzer/ws_frame.cc
@@ -855,20 +863,17 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         lpm_link_rsp
     )
 
-    # Build one compatibility binary plus fixed protocol/cost lanes. The
-    # compile definition is consumed only by fuzzer_main.cc. Fixed lanes
-    # register the matching LPM postprocessor before the first corpus input is
-    # decoded; the compatibility lane intentionally registers none.
-    function(curl_add_proto_fuzzer _name _profile_definition)
+    # Build one compatibility binary plus fixed protocol/cost lanes. Each
+    # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
+    # wiring independent of mutation and execution behaviour.
+    function(curl_add_proto_fuzzer _name)
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
-            proto_fuzzer/fuzzer_main.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
         )
         target_compile_features(${_name} PRIVATE cxx_std_17)
         target_compile_options(${_name} PRIVATE
             ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
-        target_compile_definitions(${_name} PRIVATE ${_profile_definition})
         target_include_directories(${_name} PRIVATE
             ${CURL_INCLUDE_DIRS}
             ${CMAKE_BINARY_DIR}
@@ -908,15 +913,17 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # Preserve the original mixed target's behavior under its original name:
     # OSS-Fuzz keys accumulated corpora and regression testcases by target
     # basename, so changing its profile would silently change their semantics.
-    curl_add_proto_fuzzer(curl_fuzzer_proto PROTO_FUZZER_TARGET_COMPATIBILITY)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_http PROTO_FUZZER_TARGET_FAST_HTTP)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep PROTO_FUZZER_TARGET_DEEP_HTTP)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_https PROTO_FUZZER_TARGET_FAST_HTTPS)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_ws PROTO_FUZZER_TARGET_FAST_WEBSOCKET)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_wss PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_telnet PROTO_FUZZER_TARGET_FAST_TELNET)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_api PROTO_FUZZER_TARGET_API)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_timing PROTO_FUZZER_TARGET_TIMING)
+    curl_add_proto_fuzzer(curl_fuzzer_proto)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_https)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ws)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_wss)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_telnet)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ftp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_tftp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_api)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
 
     # Compile textproto seed scenarios into binary corpus entries. These are
     # derived artefacts — the textprotos in scenarios/ are the source of truth,
@@ -932,6 +939,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/wss/*.textproto)
     file(GLOB TELNET_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/telnet/*.textproto)
+    file(GLOB FTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/ftp/*.textproto)
+    file(GLOB TFTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/tftp/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/api/*.textproto)
     file(GLOB_RECURSE TIMING_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -1074,6 +1085,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${FAST_WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_telnet_corpus
         curl_fuzzer_proto_telnet ${TELNET_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_ftp_corpus
+        curl_fuzzer_proto_ftp ${FTP_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_tftp_corpus
+        curl_fuzzer_proto_tftp ${TFTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
         curl_fuzzer_proto_api ${API_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_timing_corpus
@@ -1087,6 +1102,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_wss curl_fuzzer_proto_wss_corpus)
     add_dependencies(curl_fuzzer_proto_telnet
         curl_fuzzer_proto_telnet_corpus)
+    add_dependencies(curl_fuzzer_proto_ftp curl_fuzzer_proto_ftp_corpus)
+    add_dependencies(curl_fuzzer_proto_tftp curl_fuzzer_proto_tftp_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
 
@@ -1204,6 +1221,55 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_test(NAME mock_server_test COMMAND mock_server_test)
         set_tests_properties(mock_server_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests mock_server_test)
+
+        # Protocol peers that need multi-socket coordination have focused
+        # executable tests. Keeping them outside mock_server_test makes their
+        # real FTP/TFTP transfers independently attributable and keeps the
+        # generic stream-mock test from becoming a protocol integration suite.
+        function(curl_add_proto_peer_test _name _test_source _peer_source)
+            add_executable(${_name}
+                ${_test_source}
+                ${_peer_source}
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC}
+            )
+            target_compile_features(${_name} PRIVATE cxx_std_17)
+            target_compile_options(${_name} PRIVATE ${COMMON_FLAGS})
+            target_include_directories(${_name} PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+            )
+            target_link_libraries(${_name} PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m
+            )
+            target_link_options(${_name} PRIVATE ${COVERAGE_LINK_FLAGS})
+            add_dependencies(${_name}
+                ${FUZZ_DEPS}
+                libprotobuf_mutator_external
+                lpm_link_rsp
+            )
+            add_test(NAME ${_name} COMMAND ${_name})
+            set_tests_properties(${_name} PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests ${_name})
+        endfunction()
+
+        curl_add_proto_peer_test(tftp_mock_server_test
+            tests/tftp_mock_server_test.cc
+            proto_fuzzer/tftp_mock_server.cc)
+        curl_add_proto_peer_test(ftp_mock_server_test
+            tests/ftp_mock_server_test.cc
+            proto_fuzzer/ftp_mock_server.cc)
     endif()
 
     # Documentation lint. `cmake --build build --target doxygen-check` runs

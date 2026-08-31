@@ -40,7 +40,8 @@ class TelnetMockServer final : public MockServerBase {
   void ConfigureRequestData(ScenarioRequestData* request_data) override;
 
  protected:
-  curl_socket_t HandleOpenSocket() override;
+  curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
+                                 struct curl_sockaddr* address = nullptr) override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:

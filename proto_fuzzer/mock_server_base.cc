@@ -12,6 +12,7 @@
 #include "proto_fuzzer/mock_server_base.h"
 
 #include <sys/select.h>
+#include <sys/socket.h>
 
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/multi_socket_driver.h"
@@ -22,10 +23,23 @@ namespace {
 
 constexpr long kSelectTimeoutUs = 1000;  // 1 ms; explicit timing cases only.
 
-/// @brief Noop function to satisfy CURLOPT_SOCKOPTFUNCTION.
-/// @return CURL_SOCKOPT_ALREADY_CONNECTED: the socketpair is already connected.
-int SockOptTrampoline(void* /*clientp*/, curl_socket_t /*curlfd*/, curlsocktype /*purpose*/) {
-  return CURL_SOCKOPT_ALREADY_CONNECTED;
+/// Tell curl whether the peer supplied an already-connected socketpair or a
+/// real datagram socket that still needs protocol-owned setup. Returning the
+/// socketpair answer unconditionally made the old TFTP harness skip the wrong
+/// setup assumptions and eventually call IP operations on an AF_UNIX stream.
+/// Accepted sockets are already established by curl itself, where the callback
+/// contract treats any non-zero result as an error rather than as a shortcut.
+int SockOptTrampoline(void* /*clientp*/, curl_socket_t curlfd, curlsocktype purpose) {
+  if (purpose == CURLSOCKTYPE_ACCEPT) {
+    return CURL_SOCKOPT_OK;
+  }
+
+  int socket_type = 0;
+  socklen_t socket_type_size = sizeof(socket_type);
+  if (getsockopt(curlfd, SOL_SOCKET, SO_TYPE, &socket_type, &socket_type_size) != 0) {
+    return CURL_SOCKOPT_ERROR;
+  }
+  return socket_type == SOCK_DGRAM ? CURL_SOCKOPT_OK : CURL_SOCKOPT_ALREADY_CONNECTED;
 }
 
 }  // namespace
@@ -33,10 +47,11 @@ int SockOptTrampoline(void* /*clientp*/, curl_socket_t /*curlfd*/, curlsocktype 
 /// @brief C trampoline for CURLOPT_OPENSOCKETFUNCTION. Declared at namespace
 ///        scope so it can be a friend of MockServerBase.
 /// @param clientp Pointer to the MockServerBase instance.
+/// @param purpose The socket role curl is asking the mock to provide.
+/// @param address Curl's mutable description of the intended destination.
 /// @return The client-side socket fd as a curl_socket_t.
-curl_socket_t MockServerBaseOpenSocketTrampoline(void* clientp, curlsocktype /*purpose*/,
-                                                 struct curl_sockaddr* /*address*/) {
-  return static_cast<MockServerBase*>(clientp)->HandleOpenSocket();
+curl_socket_t MockServerBaseOpenSocketTrampoline(void* clientp, curlsocktype purpose, struct curl_sockaddr* address) {
+  return static_cast<MockServerBase*>(clientp)->HandleOpenSocket(purpose, address);
 }
 
 /// Default-construct an empty base instance with no connection.

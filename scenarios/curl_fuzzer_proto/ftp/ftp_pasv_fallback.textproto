@@ -1,0 +1,16 @@
+# Reject EPSV so curl falls back through its PASV parser before downloading.
+scheme: SCHEME_FTP
+host_path: "ftp.test/fallback"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 welcome\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "500 EPSV unsupported\r\n"
+  on_readable: "227 Entering Passive Mode (127,0,0,1,48,57)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "213 8\r\n"
+  on_readable: "150 data follows\r\n"
+  on_readable: "226 done\r\n"
+}
+subsequent_connections { initial_response: "fallback" }

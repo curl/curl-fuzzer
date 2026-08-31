@@ -32,8 +32,10 @@ from typing import IO, Callable, Iterable, Sequence, TypeVar
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TARGETS = (
+    "curl_fuzzer_ftp",
     "curl_fuzzer_http",
     "curl_fuzzer_https",
+    "curl_fuzzer_tftp",
     "curl_fuzzer_ws",
     "curl_fuzzer_proto_http",
     "curl_fuzzer_proto_http_deep",
@@ -41,6 +43,8 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_ws",
     "curl_fuzzer_proto_wss",
     "curl_fuzzer_proto_telnet",
+    "curl_fuzzer_proto_ftp",
+    "curl_fuzzer_proto_tftp",
     "curl_fuzzer_proto_api",
     "curl_fuzzer_proto_timing",
 )
@@ -52,6 +56,8 @@ HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
         "curl_fuzzer_proto_ws",
         "curl_fuzzer_proto_wss",
         "curl_fuzzer_proto_telnet",
+        "curl_fuzzer_proto_ftp",
+        "curl_fuzzer_proto_tftp",
         "curl_fuzzer_proto_api",
         "curl_fuzzer_proto_timing",
     }

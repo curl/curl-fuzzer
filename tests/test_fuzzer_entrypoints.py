@@ -10,6 +10,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENTRYPOINT_PATTERN = re.compile(r'extern\s+"C"\s+int\s+LLVMFuzzerTestOneInput\s*\(')
+CUSTOM_MUTATOR_PATTERN = re.compile(
+    r'extern\s+"C"\s+std::size_t\s+LLVMFuzzerCustomMutator\s*\('
+)
+CUSTOM_CROSSOVER_PATTERN = re.compile(
+    r'extern\s+"C"\s+std::size_t\s+LLVMFuzzerCustomCrossOver\s*\('
+)
 LEGACY_TARGET_PATTERN = re.compile(
     r"^\s*curl_add_fuzzer\(\s*([a-z0-9_]+)", re.MULTILINE
 )
@@ -17,6 +23,19 @@ PROTO_TARGET_PATTERN = re.compile(
     r"^\s*curl_add_proto_fuzzer\(\s*([a-z0-9_]+)", re.MULTILINE
 )
 STANDALONE_TARGETS = {"fuzz_bufq", "fuzz_doh", "fuzz_url"}
+PROTO_TARGET_PROFILES = {
+    "curl_fuzzer_proto": "kCompatibility",
+    "curl_fuzzer_proto_http": "kFastHttp",
+    "curl_fuzzer_proto_http_deep": "kDeepHttp",
+    "curl_fuzzer_proto_https": "kFastHttps",
+    "curl_fuzzer_proto_ws": "kFastWebSocket",
+    "curl_fuzzer_proto_wss": "kFastSecureWebSocket",
+    "curl_fuzzer_proto_telnet": "kFastTelnet",
+    "curl_fuzzer_proto_ftp": "kFastFtp",
+    "curl_fuzzer_proto_tftp": "kFastTftp",
+    "curl_fuzzer_proto_api": "kApi",
+    "curl_fuzzer_proto_timing": "kTiming",
+}
 
 
 def _packaged_targets() -> set[str]:
@@ -73,3 +92,22 @@ def test_cmake_builds_every_packaged_entrypoint() -> None:
 
     assert cmake_targets == _packaged_targets()
     assert cmake.count("fuzzer_entrypoints/${_name}.cc") == 2
+
+
+def test_proto_entrypoints_bind_profiles_in_source() -> None:
+    """Keep target behaviour visible in C++, including mutation callbacks."""
+    for target, profile in PROTO_TARGET_PROFILES.items():
+        source = REPO_ROOT / "fuzzer_entrypoints" / f"{target}.cc"
+        contents = source.read_text(encoding="utf-8")
+
+        assert contents.count(f"TargetProfile::{profile}") == 1
+        assert len(ENTRYPOINT_PATTERN.findall(contents)) == 1
+        assert len(CUSTOM_MUTATOR_PATTERN.findall(contents)) == 1
+        assert len(CUSTOM_CROSSOVER_PATTERN.findall(contents)) == 1
+
+    shared_main = (REPO_ROOT / "proto_fuzzer" / "fuzzer_main.cc").read_text(
+        encoding="utf-8"
+    )
+    cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "PROTO_FUZZER_TARGET_" not in shared_main
+    assert "PROTO_FUZZER_TARGET_" not in cmake

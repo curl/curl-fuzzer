@@ -1,0 +1,17 @@
+# A custom directory command keeps CURLOPT_CUSTOMREQUEST mutations on the
+# passive-data path even when the verb is not one of curl's usual LIST forms.
+scheme: SCHEME_FTP
+host_path: "ftp.test/"
+options { option_id: CURLOPT_DIRLISTONLY bool_value: true }
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "X-LIST" }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "150 custom listing\r\n"
+  on_readable: "226 listed\r\n"
+}
+subsequent_connections { initial_response: "custom-entry\r\n" }

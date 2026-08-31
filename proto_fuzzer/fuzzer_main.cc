@@ -12,6 +12,7 @@
 #include <curl/curl.h>
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
 
+#include <cassert>
 #include <csignal>
 
 #include "curl_fuzzer.pb.h"
@@ -23,49 +24,35 @@ namespace {
 
 constexpr bool kUseBinaryFormat = true;
 
-/// Return the one profile compiled into this binary. Keeping target selection
-/// behind a function avoids accumulating namespace-scope behaviour flags; all
-/// mutation and execution choices are derived from this identity.
-constexpr proto_fuzzer::TargetProfile CompiledTargetProfile() {
-#if defined(PROTO_FUZZER_TARGET_COMPATIBILITY)
-  // The original target deliberately has no mutation policy. Its OSS-Fuzz
-  // corpus contains mixed schemes and timing controls whose semantics must
-  // remain stable across the target split.
-  return proto_fuzzer::TargetProfile::kCompatibility;
-#elif defined(PROTO_FUZZER_TARGET_FAST_HTTP)
-  return proto_fuzzer::TargetProfile::kFastHttp;
-#elif defined(PROTO_FUZZER_TARGET_DEEP_HTTP)
-  return proto_fuzzer::TargetProfile::kDeepHttp;
-#elif defined(PROTO_FUZZER_TARGET_FAST_HTTPS)
-  return proto_fuzzer::TargetProfile::kFastHttps;
-#elif defined(PROTO_FUZZER_TARGET_FAST_WEBSOCKET)
-  return proto_fuzzer::TargetProfile::kFastWebSocket;
-#elif defined(PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
-  return proto_fuzzer::TargetProfile::kFastSecureWebSocket;
-#elif defined(PROTO_FUZZER_TARGET_FAST_TELNET)
-  return proto_fuzzer::TargetProfile::kFastTelnet;
-#elif defined(PROTO_FUZZER_TARGET_API)
-  return proto_fuzzer::TargetProfile::kApi;
-#elif defined(PROTO_FUZZER_TARGET_TIMING)
-  return proto_fuzzer::TargetProfile::kTiming;
-#else
-#error "A proto fuzzer target profile must be selected"
-#endif
-}
+/// Register the fixed lane's normalizer before asking LPM to parse or mutate
+/// its first input. LoadProtoInput runs LPM's Fix() only for direct corpus
+/// loads; a just-mutated input is recovered from LPM's cache and has already
+/// passed the same postprocessor. Ordering the registration here therefore
+/// covers both paths without normalizing cached mutations twice.
+///
+/// One libFuzzer process exposes exactly one entrypoint and therefore one
+/// profile. Capturing the first profile lets the shared runtime use LPM's
+/// process-wide postprocessor registry without hiding target selection in a
+/// compiler definition. The compatibility target deliberately registers
+/// nothing, preserving its historical mixed-corpus mutation semantics.
+void EnsureTargetPostProcessor(proto_fuzzer::TargetProfile profile) {
+  if (profile == proto_fuzzer::TargetProfile::kCompatibility) {
+    return;
+  }
 
-#if !defined(PROTO_FUZZER_TARGET_COMPATIBILITY)
-/// Restore the target's protocol and timing invariants after every mutation.
-/// Registering this during static initialization matters: corpus inputs pass
-/// through LPM's Fix() before the first fuzz callback, so a function-local
-/// registration would let the first input bypass the target policy.
-void PostProcessScenario(curl::fuzzer::proto::Scenario* scenario, unsigned int /*seed*/) {
-  proto_fuzzer::ApplyTargetPolicy(scenario, CompiledTargetProfile());
-  proto_fuzzer::CanonicalizeOptionValueCases(scenario);
-}
+  static const proto_fuzzer::TargetProfile registered_profile = profile;
+  static const protobuf_mutator::libfuzzer::PostProcessorRegistration<curl::fuzzer::proto::Scenario>
+      policy_registration([](curl::fuzzer::proto::Scenario* scenario, unsigned int /*seed*/) {
+        proto_fuzzer::ApplyTargetPolicy(scenario, registered_profile);
+        proto_fuzzer::CanonicalizeOptionValueCases(scenario);
+      });
 
-const protobuf_mutator::libfuzzer::PostProcessorRegistration<curl::fuzzer::proto::Scenario> kPolicyRegistration(
-    &PostProcessScenario);
-#endif
+  // A second profile in one process would cause LPM's global registry to
+  // enforce the wrong lane. Real fuzz binaries cannot do this; keep the
+  // assertion to make misuse by future in-process callers immediately clear.
+  assert(profile == registered_profile);
+  (void)policy_registration;
+}
 
 // Wire curl_global_init once so repeated fuzz iterations don't pay for it on every call. libFuzzer reuses the process;
 // static ctors run once.
@@ -83,45 +70,30 @@ const CurlGlobalBootstrap kGlobalBootstrap;
 
 }  // namespace
 
-/// Mutate a binary Scenario through LPM. This symbol deliberately remains in
-/// the shared implementation: mutation policy is identical within one binary,
-/// while only the test entrypoint needs a unique source basename for static
-/// coverage attribution.
-/// @param data Mutable serialized Scenario storage.
-/// @param size Current serialized size.
-/// @param max_size Capacity of data.
-/// @param seed Mutation random seed supplied by libFuzzer.
-/// @return Serialized size after mutation.
-extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t* data, std::size_t size, std::size_t max_size,
-                                               unsigned int seed) {
+namespace proto_fuzzer {
+
+std::size_t ProtoFuzzerCustomMutator(TargetProfile profile, std::uint8_t* data, std::size_t size, std::size_t max_size,
+                                     unsigned int seed) {
+  EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario;
   return protobuf_mutator::libfuzzer::CustomProtoMutator(kUseBinaryFormat, data, size, max_size, seed, &scenario);
 }
 
-/// Cross two binary Scenarios through LPM while preserving target policy.
-/// @param data1 First serialized parent.
-/// @param size1 Size of data1.
-/// @param data2 Second serialized parent.
-/// @param size2 Size of data2.
-/// @param out Destination storage.
-/// @param max_out_size Capacity of out.
-/// @param seed Crossover random seed supplied by libFuzzer.
-/// @return Serialized child size.
-extern "C" std::size_t LLVMFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t size1,
-                                                 const std::uint8_t* data2, std::size_t size2, std::uint8_t* out,
-                                                 std::size_t max_out_size, unsigned int seed) {
+std::size_t ProtoFuzzerCustomCrossOver(TargetProfile profile, const std::uint8_t* data1, std::size_t size1,
+                                       const std::uint8_t* data2, std::size_t size2, std::uint8_t* out,
+                                       std::size_t max_out_size, unsigned int seed) {
+  EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario1;
   curl::fuzzer::proto::Scenario scenario2;
   return protobuf_mutator::libfuzzer::CustomProtoCrossOver(kUseBinaryFormat, data1, size1, data2, size2, out,
                                                            max_out_size, seed, &scenario1, &scenario2);
 }
 
-namespace proto_fuzzer {
-
-int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+int ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t* data, std::size_t size) {
+  EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario;
   if (protobuf_mutator::libfuzzer::LoadProtoInput(kUseBinaryFormat, data, size, &scenario)) {
-    ScenarioRunner().Run(scenario, RunModeFor(CompiledTargetProfile()));
+    ScenarioRunner().Run(scenario, RunModeFor(profile));
   }
   return 0;
 }

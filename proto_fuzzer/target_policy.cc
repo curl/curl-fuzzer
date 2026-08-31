@@ -66,6 +66,36 @@ void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("tls.test" + host_path.substr(suffix_start));
 }
 
+/// Give the TFTP lane a parseable filename-bearing URL while retaining the
+/// fuzz-controlled path, query, and fragment. The UDP peer rewrites curl's
+/// destination after URL parsing, so authority mutations cannot reach another
+/// host; canonicalizing them here avoids spending most iterations on failures
+/// before curl constructs a TFTP request. An explicit slash is preserved so
+/// the missing-filename error remains reachable.
+void CanonicalizeTftpAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("tftp.test/file");
+    return;
+  }
+  scenario->set_host_path("tftp.test" + host_path.substr(suffix_start));
+}
+
+/// Keep the FTP lane inside the same parseable authority while leaving every
+/// path segment and wildcard under mutation control. CONNECT_TO already
+/// confines networking, but rejecting malformed authorities before USER/PWD
+/// would waste the control/data peer this target uniquely provides.
+void CanonicalizeFtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("ftp.test/file");
+    return;
+  }
+  scenario->set_host_path("ftp.test" + host_path.substr(suffix_start));
+}
+
 template <typename RepeatedBytes>
 void BoundStringValues(RepeatedBytes* values, std::size_t count_limit, std::size_t value_limit) {
   TrimRepeated(values, count_limit);
@@ -264,15 +294,16 @@ bool IsCheapHttpOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
-/// Compact the option list before applying the general option-count bound.
-/// Keeping an allowed option that appears after a long rejected prefix is
-/// important for mutation density: bounding first would let expensive options
-/// crowd cheap ones out of the only lane intended to approach legacy speed.
-void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
+/// Compact an option list before applying the general option-count bound.
+/// Keeping a relevant option that appears after a long rejected prefix is
+/// important for mutation density: bounding first would let unrelated options
+/// crowd useful ones out of a protocol-specific lane.
+template <typename Predicate>
+void RetainMatchingOptions(curl::fuzzer::proto::Scenario* scenario, Predicate predicate) {
   auto* options = scenario->mutable_options();
   int retained = 0;
   for (int index = 0; index < options->size(); ++index) {
-    if (!IsCheapHttpOption(options->Get(index).option_id())) {
+    if (!predicate(options->Get(index).option_id())) {
       continue;
     }
     if (retained != index) {
@@ -281,6 +312,12 @@ void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
     ++retained;
   }
   options->DeleteSubrange(retained, options->size() - retained);
+}
+
+/// Keep the high-throughput HTTP lane free of options whose setup or state is
+/// assigned to a deeper or protocol-specific target.
+void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario, &IsCheapHttpOption);
 }
 
 /// Return whether a scalar option can influence TELNET without selecting an
@@ -305,18 +342,161 @@ bool IsCheapTelnetOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// useful credentials, CRLF handling, and transfer-size controls out of the
 /// fixed target's general option budget.
 void RetainCheapTelnetOptions(curl::fuzzer::proto::Scenario* scenario) {
-  auto* options = scenario->mutable_options();
-  int retained = 0;
-  for (int index = 0; index < options->size(); ++index) {
-    if (!IsCheapTelnetOption(options->Get(index).option_id())) {
+  RetainMatchingOptions(scenario, &IsCheapTelnetOption);
+}
+
+/// Return whether an option can change a plaintext FTP transfer serviced by
+/// the bounded control/data peer. Active mode and FTPS settings are omitted:
+/// retaining them would select socket and TLS behavior this target does not
+/// provide, turning otherwise-useful mutations into early setup failures.
+bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_APPEND:
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
+    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
+    case curl::fuzzer::proto::CURLOPT_FILETIME:
+    case curl::fuzzer::proto::CURLOPT_FTP_ACCOUNT:
+    case curl::fuzzer::proto::CURLOPT_FTP_ALTERNATIVE_TO_USER:
+    case curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS:
+    case curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD:
+    case curl::fuzzer::proto::CURLOPT_FTP_SKIP_PASV_IP:
+    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV:
+    case curl::fuzzer::proto::CURLOPT_FTP_USE_PRET:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_RANGE:
+    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
+    case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
+    case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_WILDCARDMATCH:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the FTP target's general option budget focused on states its passive
+/// peer can actually advance.
+void RetainFtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFtpOption); }
+
+/// Return whether an option affects TFTP request construction, option
+/// negotiation, transfer direction, or bounded body delivery. TFTP has no
+/// connection reuse or stream-level controls, so retaining those settings
+/// would add protobuf work without another state-machine edge in curl.
+bool IsTftpOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE:
+    case curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS:
+    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the datagram lane from spending mutations on stream-only options.
+void RetainTftpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsTftpOption); }
+
+/// Decode an integral oneof locally before the generated option canonicalizer
+/// runs. Protocol mode bounds are policy, not setopt mechanics: folding them
+/// here keeps nearly every mutation on a real FTP/TFTP state while the shared
+/// option layer remains unaware of protocol-specific numeric ranges.
+std::uint64_t IntegralMutationValue(const curl::fuzzer::proto::SetOption& option) {
+  switch (option.value_case()) {
+    case curl::fuzzer::proto::SetOption::kUintValue:
+      return option.uint_value();
+    case curl::fuzzer::proto::SetOption::kBoolValue:
+      return option.bool_value() ? 1U : 0U;
+    case curl::fuzzer::proto::SetOption::kStringValue:
+    case curl::fuzzer::proto::SetOption::VALUE_NOT_SET:
+      return 0;
+  }
+  return 0;
+}
+
+/// Fold small FTP enums onto curl's documented domains so random uint64 values
+/// do not overwhelmingly stop at setopt validation before issuing a command.
+void CanonicalizeFtpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
+  for (auto& option : *scenario->mutable_options()) {
+    switch (option.option_id()) {
+      case curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS:
+        option.set_uint_value(IntegralMutationValue(option) % 3U);
+        break;
+      case curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD:
+        option.set_uint_value(IntegralMutationValue(option) % 4U);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+/// TFTP accepts block sizes from 8 through 65464. Mapping zero or a mismatched
+/// oneof to the default 512 preserves a common valid request, while saturating
+/// other values retains both lower/upper parser boundaries under mutation.
+void CanonicalizeTftpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
+  for (auto& option : *scenario->mutable_options()) {
+    if (option.option_id() != curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE) {
       continue;
     }
-    if (retained != index) {
-      options->SwapElements(retained, index);
+    std::uint64_t value = IntegralMutationValue(option);
+    if (value == 0) {
+      value = 512;
     }
-    ++retained;
+    option.set_uint_value(std::max<std::uint64_t>(8, std::min<std::uint64_t>(value, 65464)));
   }
-  options->DeleteSubrange(retained, options->size() - retained);
+}
+
+/// Identify options introduced for FTP/TFTP so existing fixed lanes do not
+/// silently inherit dead mutations when the shared generated manifest grows.
+/// Generic options retained by the FTP/TFTP allowlists are deliberately absent
+/// here because they remain useful to HTTP, WebSocket, API, or timing targets.
+bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_APPEND:
+    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
+    case curl::fuzzer::proto::CURLOPT_FTP_ACCOUNT:
+    case curl::fuzzer::proto::CURLOPT_FTP_ALTERNATIVE_TO_USER:
+    case curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS:
+    case curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD:
+    case curl::fuzzer::proto::CURLOPT_FTP_SKIP_PASV_IP:
+    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV:
+    case curl::fuzzer::proto::CURLOPT_FTP_USE_PRET:
+    case curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE:
+    case curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS:
+    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
+    case curl::fuzzer::proto::CURLOPT_WILDCARDMATCH:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Remove FTP/TFTP-only options while preserving the relative order of every
+/// generic option an existing fixed target already consumed.
+void RemoveFileTransferOnlyOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(
+      scenario, [](curl::fuzzer::proto::CurlOptionId option_id) { return !IsFileTransferOnlyOption(option_id); });
 }
 
 /// Remove the stateful shapes assigned to the deep HTTP target. This happens
@@ -376,6 +556,45 @@ void RemoveTelnetOnlyShape(curl::fuzzer::proto::Scenario* scenario) {
 /// existing reproducers keep their historical serialized meaning.
 void RemoveApiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->clear_api_plan(); }
 
+/// Remove stream-driver controls that neither file-transfer peer interprets.
+/// FTP consumes raw byte chunks as control/data replies, while TFTP preserves
+/// them as individual datagrams; structured WebSocket frames, manual probes,
+/// and event-loop backpressure therefore cannot affect either curl protocol.
+void RemoveUnusedFileTransferConnectionShape(curl::fuzzer::proto::Connection* connection) {
+  connection->clear_server_frames();
+  connection->clear_manual_probes();
+  connection->clear_backpressure();
+}
+
+/// Retain only the reusable shapes consumed by the FTP peer: one raw control
+/// script, a bounded sequence of passive-data scripts, and optional upload
+/// input. HTTP, TELNET, WebSocket, and public-API fields would otherwise absorb
+/// mutations despite having no representation in an FTP exchange.
+void RemoveIgnoredFtpShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+  TrimRepeated(scenario->mutable_subsequent_connections(), scenario_limits::kMaxConnections - 1);
+  for (auto& connection : *scenario->mutable_subsequent_connections()) {
+    RemoveUnusedFileTransferConnectionShape(&connection);
+  }
+}
+
+/// Retain the primary raw response script because its entries are the ordered
+/// UDP datagrams seen by curl, plus optional upload input for WRQ. TFTP cannot
+/// consume follow-on stream connections or any higher-level protocol shape.
+void RemoveIgnoredTftpShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -397,6 +616,8 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:
+    case curl::fuzzer::proto::SCHEME_FTP:
+    case curl::fuzzer::proto::SCHEME_TFTP:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return curl::fuzzer::proto::SCHEME_HTTP;
@@ -447,7 +668,8 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   if (profile == TargetProfile::kCompatibility) {
     // The original target's existing corpus predates profile splitting. A
     // no-op here makes the type safe to pass around while its binary continues
-    // to omit postprocessor registration altogether.
+    // to omit postprocessor registration altogether. The append-only FTP/TFTP
+    // scheme values do not justify rewriting historical mixed-lane inputs.
     return;
   }
 
@@ -470,6 +692,26 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     RemoveDeepHttpShape(scenario);
     RetainCheapHttpOptions(scenario);
     BoundScenarioShape(scenario);
+    return;
+  }
+
+  if (profile == TargetProfile::kFastFtp) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+    RemoveIgnoredFtpShape(scenario);
+    RetainFtpOptions(scenario);
+    CanonicalizeFtpOptionModes(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeFtpAuthority(scenario);
+    return;
+  }
+
+  if (profile == TargetProfile::kFastTftp) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_TFTP);
+    RemoveIgnoredTftpShape(scenario);
+    RetainTftpOptions(scenario);
+    CanonicalizeTftpOptionModes(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeTftpAuthority(scenario);
     return;
   }
 
@@ -500,7 +742,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
       break;
     case TargetProfile::kFastHttp:
     case TargetProfile::kFastTelnet:
-      // Both early-return paths selected their scheme above.
+    case TargetProfile::kFastFtp:
+    case TargetProfile::kFastTftp:
+      // Protocol-specific early-return paths selected their scheme above.
       return;
   }
 
@@ -512,6 +756,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   if (profile != TargetProfile::kApi) {
     RemoveApiOnlyShape(scenario);
   }
+  RemoveFileTransferOnlyOptions(scenario);
   BoundScenarioShape(scenario);
 
   switch (profile) {
@@ -554,6 +799,12 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastTelnet:
       // Handled before the general bounds so its protocol-specific limits are
       // selected from the start.
+      return;
+
+    case TargetProfile::kFastFtp:
+    case TargetProfile::kFastTftp:
+      // Their peers consume narrower raw-script shapes, pruned before general
+      // bounds so ignored fields never tax these fast paths.
       return;
 
     case TargetProfile::kTiming: {

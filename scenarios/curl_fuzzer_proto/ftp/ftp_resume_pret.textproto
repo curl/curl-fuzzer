@@ -1,0 +1,20 @@
+# PRET, SIZE and REST are command-generating branches that need correlated
+# success replies before RETR can reach the data state.
+scheme: SCHEME_FTP
+host_path: "ftp.test/resume.bin"
+options { option_id: CURLOPT_FTP_USE_PRET bool_value: true }
+options { option_id: CURLOPT_RESUME_FROM_LARGE uint_value: 4 }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 ok\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "200 PRET accepted\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "213 12\r\n"
+  on_readable: "350 restart accepted\r\n"
+  on_readable: "150 partial data\r\n"
+  on_readable: "226 complete\r\n"
+}
+subsequent_connections { initial_response: "56789012" }

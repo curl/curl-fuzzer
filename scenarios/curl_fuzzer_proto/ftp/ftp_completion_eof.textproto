@@ -1,0 +1,16 @@
+# An explicitly empty final response half-closes the control peer after data
+# EOF, reaching curl's missing-transfer-completion handling without a timeout.
+scheme: SCHEME_FTP
+host_path: "ftp.test/file"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "213 4\r\n"
+  on_readable: "150 data\r\n"
+  on_readable: ""
+}
+subsequent_connections { initial_response: "body" }

@@ -1,0 +1,4 @@
+# ERROR code 1 maps to CURLE_TFTP_NOTFOUND and exercises message parsing.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/missing"
+connection { initial_response: "\000\005\000\001not found\000" }

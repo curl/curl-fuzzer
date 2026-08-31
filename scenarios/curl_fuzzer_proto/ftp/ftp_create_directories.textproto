@@ -1,0 +1,24 @@
+# CWD failure followed by MKD/CWD drives missing-directory recovery.
+scheme: SCHEME_FTP
+host_path: "ftp.test/a/b/file"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 1 }
+options { option_id: CURLOPT_FTP_CREATE_MISSING_DIRS uint_value: 2 }
+upload { data: "x" terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 ok\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "550 missing a\r\n"
+  on_readable: "257 a created\r\n"
+  on_readable: "250 cwd a\r\n"
+  on_readable: "550 missing b\r\n"
+  on_readable: "257 b created\r\n"
+  on_readable: "250 cwd b\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "150 storing\r\n"
+  on_readable: "226 stored\r\n"
+}
+subsequent_connections {}

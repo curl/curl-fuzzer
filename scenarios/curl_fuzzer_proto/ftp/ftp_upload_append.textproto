@@ -1,0 +1,18 @@
+# APPE takes a distinct command/state path from ordinary STOR.
+scheme: SCHEME_FTP
+host_path: "ftp.test/log.txt"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_APPEND bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 6 }
+upload { data: "append" terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 ok\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 ascii\r\n"
+  on_readable: "150 append data\r\n"
+  on_readable: "226 appended\r\n"
+}
+subsequent_connections {}

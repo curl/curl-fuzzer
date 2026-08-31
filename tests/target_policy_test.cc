@@ -17,9 +17,11 @@
 namespace {
 
 using curl::fuzzer::proto::Scenario;
+using curl::fuzzer::proto::SCHEME_FTP;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_TELNET;
+using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
@@ -253,6 +255,108 @@ void TestFastTelnetPolicy() {
     Expect(scenario.options(index).option_id() == kRetained[index],
            "fast TELNET policy changed retained option order");
   }
+}
+
+void TestFastFtpPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path("mutated.invalid:9999/a/b/file");
+  scenario.add_request_headers("X-Ignored: ftp");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_upload()->set_data("upload sentinel");
+  scenario.mutable_connection()->add_on_readable("control reply");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxConnections + 2; ++index) {
+    auto *data = scenario.add_subsequent_connections();
+    data->set_initial_response("data-" + std::to_string(index));
+    data->mutable_backpressure()->set_drain_limit(1);
+    data->add_server_frames()->set_payload("ignored frame");
+  }
+
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *create_dirs = scenario.add_options();
+  create_dirs->set_option_id(
+      curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS);
+  create_dirs->set_uint_value(std::numeric_limits<std::uint64_t>::max());
+  auto *file_method = scenario.add_options();
+  file_method->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD);
+  file_method->set_uint_value(99);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastFtp);
+
+  Expect(scenario.scheme() == SCHEME_FTP, "fast FTP policy did not force FTP");
+  Expect(scenario.host_path() == "ftp.test/a/b/file",
+         "fast FTP policy did not retain only the URL path");
+  Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
+             scenario.telnet_options_size() == 0 && !scenario.has_api_plan(),
+         "fast FTP policy retained another protocol's shape");
+  Expect(scenario.has_upload() && scenario.upload().data() == "upload sentinel",
+         "fast FTP policy removed callback-backed upload data");
+  Expect(scenario.connection().on_readable(0) == "control reply" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast FTP policy changed raw control data or retained stream-only "
+         "controls");
+  Expect(static_cast<std::size_t>(scenario.subsequent_connections_size()) ==
+             proto_fuzzer::scenario_limits::kMaxConnections - 1,
+         "fast FTP policy exceeded its passive data-channel budget");
+  Expect(!scenario.subsequent_connections(0).has_backpressure() &&
+             scenario.subsequent_connections(0).server_frames_size() == 0,
+         "fast FTP policy retained ignored data-channel controls");
+  Expect(scenario.options_size() == 3,
+         "fast FTP policy retained a non-FTP option");
+  Expect(scenario.options(0).uint_value() < 3 &&
+             scenario.options(1).uint_value() < 4,
+         "fast FTP policy left small enums outside curl's valid domains");
+}
+
+void TestFastTftpPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("untrusted.invalid:1234/path;mode=netascii?query");
+  scenario.mutable_connection()->add_on_readable("packet one");
+  scenario.mutable_connection()->add_on_readable("");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+  scenario.add_request_headers("X-Ignored: tftp");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_upload()->set_data("upload sentinel");
+
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
+  auto *block_size = scenario.add_options();
+  block_size->set_option_id(curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE);
+  block_size->set_uint_value(std::numeric_limits<std::uint64_t>::max());
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS);
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastTftp);
+
+  Expect(scenario.scheme() == SCHEME_TFTP,
+         "fast TFTP policy did not force TFTP");
+  Expect(scenario.host_path() == "tftp.test/path;mode=netascii?query",
+         "fast TFTP policy did not retain the filename/mode suffix");
+  Expect(scenario.subsequent_connections_size() == 0 &&
+             scenario.request_headers_size() == 0 &&
+             !scenario.has_mime_post() && scenario.telnet_options_size() == 0 &&
+             !scenario.has_api_plan(),
+         "fast TFTP policy retained stream or another protocol's shape");
+  Expect(scenario.has_upload() && scenario.upload().data() == "upload sentinel",
+         "fast TFTP policy removed WRQ upload data");
+  Expect(scenario.connection().on_readable_size() == 2 &&
+             scenario.connection().on_readable(1).empty(),
+         "fast TFTP policy lost a UDP packet boundary");
+  Expect(!scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast TFTP policy retained stream-only connection controls");
+  Expect(scenario.options_size() == 2,
+         "fast TFTP policy retained a non-TFTP option");
+  Expect(scenario.options(0).uint_value() == 65464,
+         "fast TFTP policy did not clamp block size to curl's upper boundary");
 }
 
 void TestPauseTerminalIsTelnetOnly() {
@@ -641,6 +745,8 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
       TargetProfile::kTiming,
   };
 
@@ -685,6 +791,10 @@ void TestProfileRunModes() {
          "API profile does not authorize its lifecycle plan");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
+  Expect(RunModeFor(TargetProfile::kFastFtp) == ScenarioRunMode::kFtpCoverage,
+         "fast FTP profile does not authorize the two-channel peer");
+  Expect(RunModeFor(TargetProfile::kFastTftp) == ScenarioRunMode::kTftpCoverage,
+         "fast TFTP profile does not authorize the UDP peer");
 
   constexpr TargetProfile kCoverageProfiles[] = {
       TargetProfile::kDeepHttp,
@@ -720,6 +830,8 @@ int main() {
   TestFastWebSocketPolicy();
   TestFastSecureWebSocketPolicy();
   TestFastTelnetPolicy();
+  TestFastFtpPolicy();
+  TestFastTftpPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();
   TestFastTelnetResponseBudgets();

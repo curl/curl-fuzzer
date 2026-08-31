@@ -1,0 +1,22 @@
+# Callback-backed STOR covers the FTP upload state machine and data drain.
+scheme: SCHEME_FTP
+host_path: "ftp.test/upload.bin"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 12 }
+upload {
+  data: "upload-bytes"
+  read_sizes: 3
+  read_sizes: 4
+  terminal: UPLOAD_TERMINAL_EOF
+}
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 ok\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||12345|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "150 receive data\r\n"
+  on_readable: "226 stored\r\n"
+}
+subsequent_connections {}

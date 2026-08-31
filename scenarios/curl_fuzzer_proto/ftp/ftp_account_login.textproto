@@ -1,0 +1,17 @@
+# A 332 PASS response makes curl issue ACCT using the copied account option.
+scheme: SCHEME_FTP
+host_path: "ftp.test/accounted"
+options { option_id: CURLOPT_FTP_ACCOUNT string_value: "project" }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "332 account required\r\n"
+  on_readable: "230 account accepted\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "213 1\r\n"
+  on_readable: "150 data\r\n"
+  on_readable: "226 done\r\n"
+}
+subsequent_connections { initial_response: "x" }

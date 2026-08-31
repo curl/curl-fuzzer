@@ -1,0 +1,16 @@
+# A metadata-only request traverses MDTM date parsing, TYPE/SIZE handling and
+# REST capability probing without opening a passive data connection.
+scheme: SCHEME_FTP
+host_path: "ftp.test/metadata.bin"
+options { option_id: CURLOPT_NOBODY bool_value: true }
+options { option_id: CURLOPT_FILETIME bool_value: true }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "213 20260830123456\r\n"
+  on_readable: "200 binary type selected\r\n"
+  on_readable: "213 42\r\n"
+  on_readable: "350 restart supported\r\n"
+}
