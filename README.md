@@ -171,8 +171,10 @@ To add a new TLV:
 - Add support for it in the Python scripts: `generate_corpus.py`, `corpus.py`.
   This means adding options for reading the value of the TLV from the user (or
   from a file, or from test data)
-- Add support for it in the fuzzer: `curl_fuzzer.cc`, `curl_fuzzer.h`. This
-  likely means adding handling of the TLV to `fuzz_parse_tlv()`.
+- Add support for it in the shared legacy fuzzer: `legacy_fuzzer.cc`,
+  `curl_fuzzer.h`. The files under `fuzzer_entrypoints/` remain thin wrappers
+  so each packaged binary retains an independently attributable entrypoint.
+  This likely means adding handling of the TLV to `fuzz_parse_tlv()`.
 - Ensure that `FUZZ_CURLOPT_TRACKER_SPACE` can encompass your additional TLVs!
 - If you decide to change a TLV number after you have created it and have
   generated test cases before you changed the TLV, rerun the test case

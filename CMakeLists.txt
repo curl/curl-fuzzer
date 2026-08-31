@@ -326,6 +326,11 @@ set(CURL_CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
     -DCMAKE_INSTALL_LIBDIR=lib
     -DBUILD_SHARED_LIBS=OFF
+    # curl's tests and examples are not part of any packaged fuzz target. In
+    # addition to saving build time, disabling them keeps the build inputs in
+    # line with the libcurl surface described by the Introspector report.
+    -DBUILD_TESTING=OFF
+    -DBUILD_EXAMPLES=OFF
     -DENABLE_DEBUG=ON
     -DCURL_HIDDEN_SYMBOLS=OFF
     -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
@@ -377,7 +382,6 @@ list(APPEND CURL_CMAKE_ARGS
 
 set(CURL_POST_INSTALL_COMMAND
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/curl_fnmatch.h ${CURL_INSTALL_DIR}/utfuzzer/
     COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
     COMMAND ${CMAKE_COMMAND} -E touch ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
 )
@@ -454,9 +458,10 @@ endif()
 
 # Common sources and flags
 set(COMMON_SOURCES
-    curl_fuzzer.cc
+    legacy_fuzzer.cc
     curl_fuzzer_tlv.cc
     curl_fuzzer_callback.cc
+    legacy_protocol_allowlist.cc
     legacy_tlv_mutator.cc
 )
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
@@ -484,10 +489,16 @@ set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
 
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
-    add_executable(${_name} ${COMMON_SOURCES})
+    add_executable(${_name}
+        fuzzer_entrypoints/${_name}.cc
+        ${COMMON_SOURCES}
+    )
     target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto}
         -DLEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS)
-    target_include_directories(${_name} PRIVATE ${CURL_INCLUDE_DIRS})
+    target_include_directories(${_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CURL_INCLUDE_DIRS}
+    )
     target_link_libraries(${_name} PRIVATE ${COMMON_LINK_LIBS})
     target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
     add_dependencies(${_name} ${FUZZ_DEPS})
@@ -525,6 +536,29 @@ if(BUILD_TESTING)
     add_dependencies(curl_features_test curl_external ${CURL_DEPS})
     add_test(NAME curl_features_test COMMAND curl_features_test)
     add_dependencies(fuzzer_unit_tests curl_features_test)
+
+    add_executable(legacy_protocol_allowlist_test
+        legacy_protocol_allowlist.cc
+        tests/legacy_protocol_allowlist_test.cc
+    )
+    target_compile_features(legacy_protocol_allowlist_test PRIVATE cxx_std_11)
+    target_compile_options(legacy_protocol_allowlist_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(legacy_protocol_allowlist_test PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CURL_INCLUDE_DIRS}
+    )
+    target_link_libraries(legacy_protocol_allowlist_test PRIVATE
+        ${CURL_LIB_DIR}/libcurl.a
+        ${CURL_STATIC_DEPENDENCY_LIBS}
+        pthread
+        m
+    )
+    target_link_options(legacy_protocol_allowlist_test PRIVATE
+        ${COVERAGE_LINK_FLAGS})
+    add_dependencies(legacy_protocol_allowlist_test curl_external ${CURL_DEPS})
+    add_test(NAME legacy_protocol_allowlist_test
+        COMMAND legacy_protocol_allowlist_test)
+    add_dependencies(fuzzer_unit_tests legacy_protocol_allowlist_test)
 endif()
 
 # Main fuzzer and protocol-specific fuzzers
@@ -572,14 +606,6 @@ target_link_libraries(fuzz_doh PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(fuzz_doh PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(fuzz_doh ${FUZZ_DEPS})
 
-# Unit test fuzzer
-add_executable(curl_fuzzer_fnmatch fuzz_fnmatch.cc)
-target_compile_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_FLAGS})
-target_include_directories(curl_fuzzer_fnmatch PRIVATE ${CURL_INCLUDE_DIRS})
-target_link_libraries(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_LIBS})
-target_link_options(curl_fuzzer_fnmatch PRIVATE ${COMMON_LINK_OPTIONS})
-add_dependencies(curl_fuzzer_fnmatch ${FUZZ_DEPS})
-
 # Create a custom target for all fuzzers
 add_custom_target(fuzz
     DEPENDS
@@ -602,7 +628,6 @@ add_custom_target(fuzz
         fuzz_bufq
         fuzz_url
         fuzz_doh
-        curl_fuzzer_fnmatch
 )
 
 # -----------------------------------------------------------------------------
@@ -781,8 +806,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_custom_target(lpm_link_rsp DEPENDS ${LPM_LINK_RSP})
 
     # The protocol runners and generated message are identical for every
-    # structured target. Compile them once; only fuzzer_main.cc carries a
-    # per-binary policy definition and therefore needs one object per lane.
+    # structured target. Compile them once; fuzzer_main.cc carries the
+    # per-binary policy while a same-named thin entrypoint gives Introspector
+    # an unambiguous static-profile-to-coverage mapping.
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/scenario_runner.cc
         proto_fuzzer/option_apply.cc
@@ -822,6 +848,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # decoded; the compatibility lane intentionally registers none.
     function(curl_add_proto_fuzzer _name _policy_definition)
         add_executable(${_name}
+            fuzzer_entrypoints/${_name}.cc
             proto_fuzzer/fuzzer_main.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
         )

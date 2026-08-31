@@ -17,8 +17,6 @@ TLVHeader(type='Server banner (sent on connection)' (2), length=82, data='  \x00
 ```
 This example shows a testcase consisting of a configured URL (`CURLOPT_URL`) and a message sent to libcurl when it connects to that URL for the first time. There are many other options available; check `generate_corpus.py` for a comprehensive list.
 
-The fnmatch fuzzer uses a special format of two null terminated strings, representing the pattern and string passed to Curl_fnmatch. This can be examined in your favourite text editor.
-
 ## Determining how to reproduce
 Assuming the previous step didn't immediately reveal the problem, you can run the testcase against the fuzzer. OSS-Fuzz uses lots of different types of fuzzing engine, so it's worth checking if you can run against the mainline fuzzer.
 

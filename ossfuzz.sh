@@ -27,6 +27,11 @@ set -eu
 export BUILD_ROOT=$PWD
 SCRIPTDIR=${BUILD_ROOT}/scripts
 
+# Keep Fuzz Introspector focused on the libcurl and harness code that these
+# binaries can actually reach. The setting must be exported before compiling:
+# Introspector's compiler wrappers consume it while producing their metadata.
+export FUZZ_INTROSPECTOR_CONFIG=${BUILD_ROOT}/fuzz_introspector_exclusion.config
+
 . "${SCRIPTDIR}"/fuzz_targets
 
 echo "BUILD_ROOT: $BUILD_ROOT"
