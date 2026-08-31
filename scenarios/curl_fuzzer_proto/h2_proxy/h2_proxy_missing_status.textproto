@@ -1,0 +1,9 @@
+# A response header block without :status reaches curl's defensive no-response
+# path rather than nghttp2's ordinary frame decoder failures.
+scheme: SCHEME_HTTP
+host_path: "origin.test/missing-status"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  # SETTINGS ack followed by the literal header x: y on stream 1.
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x05\x01\x04\x00\x00\x00\x01\x00\x01x\x01y"
+}

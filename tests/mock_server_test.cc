@@ -27,6 +27,7 @@
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #include <openssl/ssl.h>
 
+#include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #include "proto_fuzzer/tls_test_credentials.h"
 #endif
@@ -522,6 +523,53 @@ void TestTlsWriteRetryKeepsItsOriginalBoundary() {
   Expect(result.code == CURLE_OK && result.response == expected,
          "appending a response chunk corrupted an outstanding TLS write retry");
 }
+
+void TestH2ProxyCarriesAnHttpOriginResponse() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("origin.test/h2-proxy");
+  auto *connection = scenario.mutable_connection();
+  // An empty SETTINGS frame establishes the server side of the HTTP/2
+  // session before curl submits CONNECT on stream 1.
+  connection->set_initial_response(
+      std::string("\x00\x00\x00\x04\x00\x00\x00\x00\x00", 9));
+  // Acknowledge curl's settings and accept CONNECT with indexed :status=200.
+  connection->add_on_readable(
+      std::string("\x00\x00\x00\x04\x01\x00\x00\x00\x00"
+                  "\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88",
+                  19));
+  // The DATA payload is the byte stream seen by curl's inner HTTP/1.1
+  // filter. END_STREAM also proves the proxy maps stream closure to EOF.
+  connection->add_on_readable(
+      std::string("\x00\x00\x28\x00\x01\x00\x00\x00\x01", 9) +
+      "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "HTTP/2 proxy test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h2-proxy");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  proto_fuzzer::H2ProxyMockServer server;
+  server.Install(easy);
+  const CURLcode code = server.DriveScenario(easy, scenario);
+
+  Expect(code == CURLE_OK, "HTTP/2 CONNECT proxy transfer did not complete");
+  Expect(server.negotiated_alpn() == "h2",
+         "HTTP/2 proxy TLS handshake did not negotiate h2");
+  Expect(server.completed_handshake_count() == 1,
+         "HTTP/2 proxy completed an unexpected number of TLS handshakes");
+  Expect(response == "OK",
+         "HTTP/2 proxy did not preserve the tunneled HTTP response");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
 #endif
 
 void TestApiLifecycleCompletesSocketActionTransfer() {
@@ -748,6 +796,7 @@ int main() {
   TestTlsPublicKeyPins();
   TestTlsRedirectReusesSession();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
+  TestH2ProxyCarriesAnHttpOriginResponse();
 #endif
   TestApiLifecycleCompletesSocketActionTransfer();
   TestEasyPerformPreloadsIncrementalResponse();

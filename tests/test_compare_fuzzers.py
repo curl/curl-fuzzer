@@ -283,6 +283,13 @@ def test_telnet_lane_is_a_default_fixed_proto_target() -> None:
     assert "curl_fuzzer_proto_telnet" in module.HISTORICAL_PROTO_CORPUS_TARGETS
 
 
+def test_h2_proxy_lane_uses_only_its_frame_aware_corpus() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_proto_h2_proxy" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_h2_proxy" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
+
+
 def test_ftp_and_tftp_lanes_keep_legacy_speed_baselines() -> None:
     module = _load_module()
 

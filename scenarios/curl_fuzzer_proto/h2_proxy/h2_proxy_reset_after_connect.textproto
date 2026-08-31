@@ -1,0 +1,10 @@
+# Close an established tunnel with CANCEL after delivering a close-delimited
+# origin response. The earlier reset seed covers CONNECT setup; this ordering
+# reaches the distinct error-to-EOF mapping used by active proxy streams.
+scheme: SCHEME_HTTP
+host_path: "origin.test/reset-after-connect"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
+  on_readable: "\x00\x00\x15\x00\x00\x00\x00\x00\x01HTTP/1.1 200 OK\r\n\r\nOK\x00\x00\x04\x03\x00\x00\x00\x00\x01\x00\x00\x00\x08"
+}

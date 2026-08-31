@@ -37,19 +37,24 @@ class OpenSslErrorQueueGuard {
   OpenSslErrorQueueGuard& operator=(const OpenSslErrorQueueGuard&) = delete;
 };
 
-/// Select HTTP/1.1 when curl offers it. Keeping the server preference fixed
-/// lets the existing HTTP corpus reach successful application traffic; seeds
-/// that force HTTP/2 still exercise negotiation and failure handling.
+/// Select the one protocol owned by this peer. A fixed server preference keeps
+/// ordinary HTTPS scripts on HTTP/1.1 while allowing the proxy lane to prove
+/// curl installed its HTTP/2 connection filter after TLS.
 int SelectAlpn(SSL* /*ssl*/, const unsigned char** selected, unsigned char* selected_length,
-               const unsigned char* client_protocols, unsigned int client_protocols_length, void* /*userdata*/) {
+               const unsigned char* client_protocols, unsigned int client_protocols_length, void* userdata) {
+  const auto protocol = *static_cast<const TlsApplicationProtocol*>(userdata);
   // OpenSSL may return a pointer into the server preference list. Function-
   // local static storage keeps that result valid for the rest of the
-  // handshake without reintroducing transport policy as a namespace global.
+  // handshake without reintroducing mutable transport policy as a global.
   static constexpr unsigned char http11_alpn[] = {8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
+  static constexpr unsigned char http2_alpn[] = {2, 'h', '2'};
+  const unsigned char* server_protocols = protocol == TlsApplicationProtocol::kHttp2 ? http2_alpn : http11_alpn;
+  const unsigned int server_protocols_length =
+      protocol == TlsApplicationProtocol::kHttp2 ? sizeof(http2_alpn) : sizeof(http11_alpn);
   unsigned char* match = nullptr;
   unsigned char match_length = 0;
-  const int result = SSL_select_next_proto(&match, &match_length, http11_alpn, sizeof(http11_alpn), client_protocols,
-                                           client_protocols_length);
+  const int result = SSL_select_next_proto(&match, &match_length, server_protocols, server_protocols_length,
+                                           client_protocols, client_protocols_length);
   if (result != OPENSSL_NPN_NEGOTIATED) {
     return SSL_TLSEXT_ERR_NOACK;
   }
@@ -66,8 +71,9 @@ int SelectAlpn(SSL* /*ssl*/, const unsigned char** selected, unsigned char* sele
 /// one fuzz input from affecting the next.
 class TlsServerContext {
  public:
-  TlsServerContext()
+  explicit TlsServerContext(TlsApplicationProtocol protocol)
       : context_(nullptr),
+        protocol_(protocol),
         negotiated_tls_version_(0),
         completed_handshake_count_(0),
         reused_session_count_(0),
@@ -85,7 +91,7 @@ class TlsServerContext {
     (void)SSL_CTX_set_session_cache_mode(context_, SSL_SESS_CACHE_SERVER);
     constexpr unsigned char session_id_context[] = "curl-fuzzer";
     (void)SSL_CTX_set_session_id_context(context_, session_id_context, sizeof(session_id_context) - 1);
-    SSL_CTX_set_alpn_select_cb(context_, &SelectAlpn, nullptr);
+    SSL_CTX_set_alpn_select_cb(context_, &SelectAlpn, &protocol_);
   }
 
   ~TlsServerContext() {
@@ -106,6 +112,14 @@ class TlsServerContext {
       return;
     }
     negotiated_tls_version_ = SSL_version(ssl);
+    const unsigned char* alpn = nullptr;
+    unsigned int alpn_length = 0;
+    SSL_get0_alpn_selected(ssl, &alpn, &alpn_length);
+    if (alpn != nullptr && alpn_length != 0) {
+      negotiated_alpn_.assign(reinterpret_cast<const char*>(alpn), alpn_length);
+    } else {
+      negotiated_alpn_.clear();
+    }
     ++completed_handshake_count_;
     if (SSL_session_reused(ssl) == 1) {
       ++reused_session_count_;
@@ -123,6 +137,10 @@ class TlsServerContext {
   std::size_t reused_session_count() const { return reused_session_count_; }
   /// @return number of application writes that OpenSSL asked to retry.
   std::size_t write_retry_count() const { return write_retry_count_; }
+  /// @return ALPN protocol from the most recent completed handshake.
+  const std::string& negotiated_alpn() const { return negotiated_alpn_; }
+  /// @return fixed application protocol this context offers.
+  TlsApplicationProtocol protocol() const { return protocol_; }
 
  private:
   /// Parse the checked-in test-only PEM values entirely in memory.
@@ -153,6 +171,8 @@ class TlsServerContext {
   }
 
   SSL_CTX* context_;
+  TlsApplicationProtocol protocol_;
+  std::string negotiated_alpn_;
   int negotiated_tls_version_;
   std::size_t completed_handshake_count_;
   std::size_t reused_session_count_;
@@ -295,6 +315,13 @@ class TlsMockConnection final : public MockConnection {
 
   /// Defer close_notify until every queued plaintext byte has become a record.
   void ShutdownWrite() override {
+    // An HTTP/2 proxy connection outlives the scripted origin response inside
+    // its CONNECT stream. Half-closing TLS when the last script chunk is
+    // queued would make curl observe a dead proxy rather than exercise its
+    // own stream/session shutdown and GOAWAY handling.
+    if (context_ != nullptr && context_->protocol() == TlsApplicationProtocol::kHttp2) {
+      return;
+    }
     shutdown_requested_ = true;
     (void)DrainIncoming();
   }
@@ -360,7 +387,11 @@ class TlsMockConnection final : public MockConnection {
 }  // namespace
 
 /// Build one reusable in-process server context per fuzz iteration.
-TlsMockServer::TlsMockServer() : context_(std::make_unique<TlsServerContext>()), saw_live_tls_session_(false) {}
+TlsMockServer::TlsMockServer() : TlsMockServer(TlsApplicationProtocol::kHttp11) {}
+
+/// Construct the shared TLS transport with one fixed ALPN outcome.
+TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol)
+    : context_(std::make_unique<TlsServerContext>(protocol)), saw_live_tls_session_(false) {}
 
 /// Release SSL objects before their owning server context. OpenSSL reference
 /// counting makes the reverse order legal, but making the ownership order
@@ -399,6 +430,11 @@ std::size_t TlsMockServer::reused_session_count() const {
 
 /// Report how often response delivery reached OpenSSL's exact-retry path.
 std::size_t TlsMockServer::write_retry_count() const { return context_ == nullptr ? 0 : context_->write_retry_count(); }
+
+/// Return the latest negotiated application protocol without exposing SSL.
+std::string TlsMockServer::negotiated_alpn() const {
+  return context_ == nullptr ? std::string() : context_->negotiated_alpn();
+}
 
 /// Create the polymorphic record-layer connection consumed by MockServer.
 std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() {

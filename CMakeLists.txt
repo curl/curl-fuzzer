@@ -816,7 +816,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # compiler definitions.
     set(PROTO_FUZZER_TLS_SOURCES)
     if(TARGET openssl_external)
-        list(APPEND PROTO_FUZZER_TLS_SOURCES proto_fuzzer/tls_mock_server.cc)
+        list(APPEND PROTO_FUZZER_TLS_SOURCES
+            proto_fuzzer/h2_proxy_mock_server.cc
+            proto_fuzzer/tls_mock_server.cc)
     endif()
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/api_lifecycle.cc
@@ -917,6 +919,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_http)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
     curl_add_proto_fuzzer(curl_fuzzer_proto_https)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_h2_proxy)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ws)
     curl_add_proto_fuzzer(curl_fuzzer_proto_wss)
     curl_add_proto_fuzzer(curl_fuzzer_proto_telnet)
@@ -933,6 +936,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/http/*.textproto)
     file(GLOB HTTPS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/https/*.textproto)
+    file(GLOB H2_PROXY_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/h2_proxy/*.textproto)
     file(GLOB WS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/ws/*.textproto)
     file(GLOB WSS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -1078,6 +1083,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
         curl_fuzzer_proto_https
         ${DEEP_HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_h2_proxy_corpus
+        curl_fuzzer_proto_h2_proxy ${H2_PROXY_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_ws_corpus
         curl_fuzzer_proto_ws ${FAST_WS_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_wss_corpus
@@ -1098,6 +1105,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_http_deep
         curl_fuzzer_proto_http_deep_corpus)
     add_dependencies(curl_fuzzer_proto_https curl_fuzzer_proto_https_corpus)
+    add_dependencies(curl_fuzzer_proto_h2_proxy
+        curl_fuzzer_proto_h2_proxy_corpus)
     add_dependencies(curl_fuzzer_proto_ws curl_fuzzer_proto_ws_corpus)
     add_dependencies(curl_fuzzer_proto_wss curl_fuzzer_proto_wss_corpus)
     add_dependencies(curl_fuzzer_proto_telnet

@@ -1,0 +1,12 @@
+# GOAWAY permits stream 1 to finish, and is therefore followed by its DATA in
+# a later read. This valid ordering is distinct from coalesced control/data and
+# keeps curl's active-stream GOAWAY handling under mutation pressure.
+scheme: SCHEME_HTTP
+host_path: "origin.test/goaway-active"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
+  # last_stream_id=1 includes the active CONNECT stream.
+  on_readable: "\x00\x00\x08\x07\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x28\x00\x01\x00\x00\x00\x01HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}
