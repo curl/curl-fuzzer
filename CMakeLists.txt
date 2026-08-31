@@ -256,6 +256,7 @@ if(BUILD_GDB)
     # clean flags so sanitizer/fuzzer flags don't break its build.
     ExternalProject_Add(gdb_external
         URL ${GDB_URL}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         PREFIX ${CMAKE_BINARY_DIR}/${GDB_BUILD_NAME}
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
             "CC=gcc" "CXX=g++"
