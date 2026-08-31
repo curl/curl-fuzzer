@@ -1,0 +1,8 @@
+# Reset CONNECT before a response arrives. CANCEL is nonzero so both the frame
+# callback and the stream-close error mapping take their failure branches.
+scheme: SCHEME_HTTP
+host_path: "origin.test/reset"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x04\x03\x00\x00\x00\x00\x01\x00\x00\x00\x08"
+}

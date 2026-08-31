@@ -1,0 +1,14 @@
+# A close-delimited origin response followed by RST_STREAM(NO_ERROR) makes
+# curl consume the CONNECT stream's clean close rather than finishing as soon
+# as a Content-Length is met. This keeps the proxy filter's zero-error stream-
+# close mapping reachable without closing the persistent TLS connection.
+scheme: SCHEME_HTTP
+host_path: "origin.test/clean-eof"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
+  # No length or transfer coding: the following zero-error reset is the inner
+  # response's EOF.
+  on_readable: "\x00\x00\x22\x00\x00\x00\x00\x00\x01HTTP/1.1 200 OK\r\n\r\nclose-delimited"
+  on_readable: "\x00\x00\x04\x03\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+}

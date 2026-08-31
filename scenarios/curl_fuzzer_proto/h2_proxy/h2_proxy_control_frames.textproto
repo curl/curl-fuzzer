@@ -1,0 +1,12 @@
+# Flow-control and graceful-session frames surrounding a successful tunnel.
+# Keeping GOAWAY and the final DATA readable together demonstrates that an
+# already-accepted stream may finish after the proxy stops accepting new work.
+scheme: SCHEME_HTTP
+host_path: "origin.test/controls"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
+  # Connection and stream WINDOW_UPDATE, GOAWAY(last_stream_id=1, NO_ERROR),
+  # then the complete inner response in END_STREAM DATA.
+  on_readable: "\x00\x00\x04\x08\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x04\x08\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x08\x07\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x28\x00\x01\x00\x00\x00\x01HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

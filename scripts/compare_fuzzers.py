@@ -40,6 +40,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_http",
     "curl_fuzzer_proto_http_deep",
     "curl_fuzzer_proto_https",
+    "curl_fuzzer_proto_h2_proxy",
     "curl_fuzzer_proto_ws",
     "curl_fuzzer_proto_wss",
     "curl_fuzzer_proto_telnet",

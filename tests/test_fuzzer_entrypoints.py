@@ -28,6 +28,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_http": "kFastHttp",
     "curl_fuzzer_proto_http_deep": "kDeepHttp",
     "curl_fuzzer_proto_https": "kFastHttps",
+    "curl_fuzzer_proto_h2_proxy": "kH2Proxy",
     "curl_fuzzer_proto_ws": "kFastWebSocket",
     "curl_fuzzer_proto_wss": "kFastSecureWebSocket",
     "curl_fuzzer_proto_telnet": "kFastTelnet",

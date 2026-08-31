@@ -1,0 +1,15 @@
+# A complete HTTP/1.1 exchange carried through an HTTPS proxy's HTTP/2
+# CONNECT stream. Keeping the outer SETTINGS, CONNECT response, and tunneled
+# origin response in separate chunks lets mutations disturb each state
+# transition without first having to rediscover the TLS/ALPN setup.
+scheme: SCHEME_HTTP
+host_path: "origin.test/h2-proxy"
+connection {
+  # Empty server SETTINGS.
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  # ACK curl's SETTINGS, then accept CONNECT on stream 1 with :status=200.
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
+  # END_STREAM DATA is the byte stream curl presents to its inner HTTP/1.1
+  # filter, not an HTTP/2 response body interpreted by the proxy filter.
+  on_readable: "\x00\x00\x28\x00\x01\x00\x00\x00\x01HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

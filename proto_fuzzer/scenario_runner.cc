@@ -27,6 +27,7 @@
 #include "proto_fuzzer/websocket_mock_server.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #endif
 
@@ -115,6 +116,17 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
 /// protobuf field from silently changing old OSS-Fuzz reproducers.
 std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::proto::Scenario& scenario,
                                                           ScenarioRunMode mode) {
+  if (mode == ScenarioRunMode::kH2ProxyCoverage) {
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+    return std::make_unique<H2ProxyMockServer>();
+#else
+    // MemorySanitizer builds deliberately omit OpenSSL. Keep the target
+    // binary available to OSS-Fuzz, but do not pretend a plaintext mock can
+    // negotiate the ALPN gate required to enter cf-h2-proxy.
+    return nullptr;
+#endif
+  }
+
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
       return std::make_unique<MockServer>();

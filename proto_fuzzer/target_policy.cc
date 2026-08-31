@@ -66,6 +66,20 @@ void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("tls.test" + host_path.substr(suffix_start));
 }
 
+/// Keep the tunneled origin parseable while retaining every path, query, and
+/// fragment byte. The fixed numeric proxy endpoint handles routing separately;
+/// mutating the origin authority would therefore buy only early URL failures,
+/// not additional HTTP/2 proxy behavior.
+void CanonicalizeH2ProxyOriginAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("origin.test/");
+    return;
+  }
+  scenario->set_host_path("origin.test" + host_path.substr(suffix_start));
+}
+
 /// Give the TFTP lane a parseable filename-bearing URL while retaining the
 /// fuzz-controlled path, query, and fragment. The UDP peer rewrites curl's
 /// destination after URL parsing, so authority mutations cannot reach another
@@ -294,6 +308,73 @@ bool IsCheapHttpOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
+/// Return whether an option can affect the HTTP/1.1 request carried inside the
+/// fixed HTTP/2 CONNECT tunnel. Proxy routing, ALPN, and TLS verification are
+/// owned by H2ProxyMockServer and must not be mutation-controlled; HTTP/2 as an
+/// inner origin protocol is also excluded because it would require a second
+/// frame script and obscure coverage of the outer proxy filter. Stateful HTTP
+/// options remain useful here because their wire effects traverse cf-h2-proxy.
+bool IsH2ProxyOriginOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING:
+    case curl::fuzzer::proto::CURLOPT_ALTSVC_CTRL:
+    case curl::fuzzer::proto::CURLOPT_AUTOREFERER:
+    case curl::fuzzer::proto::CURLOPT_AWS_SIGV4:
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_COOKIE:
+    case curl::fuzzer::proto::CURLOPT_COOKIELIST:
+    case curl::fuzzer::proto::CURLOPT_COOKIESESSION:
+    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
+    case curl::fuzzer::proto::CURLOPT_DISALLOW_USERNAME_IN_URL:
+    case curl::fuzzer::proto::CURLOPT_EXPECT_100_TIMEOUT_MS:
+    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
+    case curl::fuzzer::proto::CURLOPT_FILETIME:
+    case curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION:
+    case curl::fuzzer::proto::CURLOPT_FORBID_REUSE:
+    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_HEADER:
+    case curl::fuzzer::proto::CURLOPT_HSTS_CTRL:
+    case curl::fuzzer::proto::CURLOPT_HTTP09_ALLOWED:
+    case curl::fuzzer::proto::CURLOPT_HTTPAUTH:
+    case curl::fuzzer::proto::CURLOPT_HTTPGET:
+    case curl::fuzzer::proto::CURLOPT_HTTP_CONTENT_DECODING:
+    case curl::fuzzer::proto::CURLOPT_HTTP_TRANSFER_DECODING:
+    case curl::fuzzer::proto::CURLOPT_IGNORE_CONTENT_LENGTH:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_KEEP_SENDING_ON_ERROR:
+    case curl::fuzzer::proto::CURLOPT_MAXAGE_CONN:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_MAXLIFETIME_CONN:
+    case curl::fuzzer::proto::CURLOPT_MAXREDIRS:
+    case curl::fuzzer::proto::CURLOPT_MIME_OPTIONS:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_PATH_AS_IS:
+    case curl::fuzzer::proto::CURLOPT_POST:
+    case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
+    case curl::fuzzer::proto::CURLOPT_POSTREDIR:
+    case curl::fuzzer::proto::CURLOPT_RANGE:
+    case curl::fuzzer::proto::CURLOPT_REFERER:
+    case curl::fuzzer::proto::CURLOPT_REQUEST_TARGET:
+    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
+    case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
+    case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_TRANSFER_ENCODING:
+    case curl::fuzzer::proto::CURLOPT_UNRESTRICTED_AUTH:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_USERAGENT:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
 /// Compact an option list before applying the general option-count bound.
 /// Keeping a relevant option that appears after a long rejected prefix is
 /// important for mutation density: bounding first would let unrelated options
@@ -318,6 +399,12 @@ void RetainMatchingOptions(curl::fuzzer::proto::Scenario* scenario, Predicate pr
 /// assigned to a deeper or protocol-specific target.
 void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(scenario, &IsCheapHttpOption);
+}
+
+/// Compact the option list before its shared cap so irrelevant TLS, WebSocket,
+/// and file-transfer entries cannot crowd out origin traffic mutations.
+void RetainH2ProxyOriginOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario, &IsH2ProxyOriginOption);
 }
 
 /// Return whether a scalar option can influence TELNET without selecting an
@@ -515,6 +602,18 @@ void RemoveDeepHttpShape(curl::fuzzer::proto::Scenario* scenario) {
   connection->clear_backpressure();
 }
 
+/// Remove response forms the proxy peer cannot interpret. Raw chunks are the
+/// HTTP/2 frame stream; WebSocket frames would merely add a second unrelated
+/// binary grammar, and follow-on Connection messages cannot describe later
+/// streams multiplexed on the already-open proxy socket.
+void RemoveIgnoredH2ProxyShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  auto* connection = scenario->mutable_connection();
+  connection->clear_server_frames();
+  connection->clear_manual_probes();
+  connection->clear_backpressure();
+}
+
 /// Remove fields the single-socket WebSocket driver cannot consume. MIME also
 /// changes the HTTP request away from a useful Upgrade handshake, so retaining
 /// either shape in fixed WS lanes gives LPM mutation work with no WS coverage
@@ -695,6 +794,17 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
+  if (profile == TargetProfile::kH2Proxy) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    RemoveApiOnlyShape(scenario);
+    RemoveTelnetOnlyShape(scenario);
+    RemoveIgnoredH2ProxyShape(scenario);
+    RetainH2ProxyOriginOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeH2ProxyOriginAuthority(scenario);
+    return;
+  }
+
   if (profile == TargetProfile::kFastFtp) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_FTP);
     RemoveIgnoredFtpShape(scenario);
@@ -731,6 +841,10 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastHttps:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       break;
+    case TargetProfile::kH2Proxy:
+      // The early path removes proxy-incompatible fields before general
+      // bounds, keeping raw frame mutation dense.
+      return;
     case TargetProfile::kFastWebSocket:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_WS);
       break;
@@ -784,6 +898,10 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastHttps:
       ClearAllBackpressure(scenario);
       CanonicalizeTlsAuthority(scenario);
+      return;
+
+    case TargetProfile::kH2Proxy:
+      // Handled by the protocol-specific early path above.
       return;
 
     case TargetProfile::kFastWebSocket:

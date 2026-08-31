@@ -1,0 +1,16 @@
+# Start CONNECT with a zero stream send window, then release it after curl has
+# queued the tunneled POST. This makes a proxy WINDOW_UPDATE wake deferred
+# origin traffic instead of merely adjusting an otherwise idle counter.
+scheme: SCHEME_HTTP
+host_path: "origin.test/flow-control"
+options { option_id: CURLOPT_POST bool_value: true }
+options { option_id: CURLOPT_POSTFIELDS string_value: "queued-body" }
+connection {
+  # SETTINGS_INITIAL_WINDOW_SIZE=0 keeps CONNECT headers sendable while
+  # preventing the later HTTP/1.1 request bytes from leaving stream 1.
+  initial_response: "\x00\x00\x06\x04\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
+  # Release stream 1 only after its tunneled request is pending.
+  on_readable: "\x00\x00\x04\x08\x00\x00\x00\x00\x01\x00\x00\xff\xff"
+  on_readable: "\x00\x00\x28\x00\x01\x00\x00\x00\x01HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

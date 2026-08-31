@@ -1,0 +1,9 @@
+# A syntactically valid final CONNECT response that the proxy inspector must
+# reject. Literal status encoding keeps non-static status values near the
+# corpus even though the happy path can use HPACK's indexed 200 entry.
+scheme: SCHEME_HTTP
+host_path: "origin.test/refused"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x05\x01\x04\x00\x00\x00\x01\x08\x03\x34\x30\x33"
+}

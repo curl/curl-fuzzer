@@ -1,0 +1,16 @@
+# Exercise proxy response bookkeeping around an interim response, an ordinary
+# CONNECT header, and a trailer. These are deliberately outer HTTP/2 headers;
+# the DATA payload still carries a separate HTTP/1.1 origin exchange.
+scheme: SCHEME_HTTP
+host_path: "origin.test/interim"
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  # SETTINGS ack followed by a literal :status=100 block.
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x05\x01\x04\x00\x00\x00\x01\x08\x03\x31\x30\x30"
+  # Final :status=200 and proxy-agent: fuzz.
+  on_readable: "\x00\x00\x13\x01\x04\x00\x00\x00\x01\x88\x00\x0bproxy-agent\x04fuzz"
+  # A close-delimited response makes curl keep reading long enough for the
+  # outer trailer to be inspected. RST_STREAM(NO_ERROR) then closes both
+  # directions of the CONNECT stream without closing the reusable proxy TLS.
+  on_readable: "\x00\x00\x15\x00\x00\x00\x00\x00\x01HTTP/1.1 200 OK\r\n\r\nOK\x00\x00\x05\x01\x05\x00\x00\x00\x01\x00\x01x\x01y\x00\x00\x04\x03\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+}

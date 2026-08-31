@@ -170,6 +170,56 @@ void TestFastHttpsPolicy() {
          "fast HTTPS policy did not retain URL suffix under the trusted host");
 }
 
+void TestH2ProxyPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("mutated.invalid:8443/path?query#fragment");
+  scenario.add_request_headers("X-Origin: retained");
+  scenario.mutable_connection()->add_on_readable("raw HTTP/2 frames");
+  scenario.mutable_connection()->add_server_frames()->set_payload(
+      "WebSocket-only frame");
+  scenario.mutable_connection()->mutable_manual_probes()->set_flag_matrix(true);
+  scenario.add_subsequent_connections()->set_initial_response(
+      "unrepresentable second proxy stream");
+  scenario.mutable_mime_post()->add_parts()->set_data("MIME body");
+  scenario.mutable_upload()->set_data("upload body");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_CONNECT_ONLY);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kH2Proxy);
+
+  Expect(scenario.scheme() == SCHEME_HTTP,
+         "HTTP/2 proxy policy did not force a plaintext origin");
+  Expect(scenario.host_path() == "origin.test/path?query#fragment",
+         "HTTP/2 proxy policy did not isolate the origin authority");
+  Expect(!scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0 &&
+             !scenario.connection().has_manual_probes() &&
+             scenario.subsequent_connections_size() == 0,
+         "HTTP/2 proxy policy retained transport shapes its peer cannot use");
+  Expect(scenario.connection().on_readable(0) == "raw HTTP/2 frames",
+         "HTTP/2 proxy policy removed the raw outer frame stream");
+  Expect(scenario.request_headers(0) == "X-Origin: retained" &&
+             scenario.has_mime_post() && scenario.has_upload(),
+         "HTTP/2 proxy policy removed state visible to the tunneled request");
+  Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan(),
+         "HTTP/2 proxy policy retained another target's work");
+  Expect(scenario.options_size() == 2 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_POST &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION,
+         "HTTP/2 proxy policy retained an option that can bypass its fixed "
+         "transport");
+}
+
 void TestFastWebSocketPolicy() {
   ExpectFixedPolicy(TargetProfile::kFastWebSocket, SCHEME_WS,
                     "fast WebSocket policy did not force WS",
@@ -739,15 +789,11 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
 
 void TestProtocolPoliciesDiscardApiPlans() {
   constexpr TargetProfile kProtocolPolicies[] = {
-      TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,
-      TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,
-      TargetProfile::kTiming,
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kProtocolPolicies) {
@@ -791,6 +837,9 @@ void TestProfileRunModes() {
          "API profile does not authorize its lifecycle plan");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
+  Expect(RunModeFor(TargetProfile::kH2Proxy) ==
+             ScenarioRunMode::kH2ProxyCoverage,
+         "HTTP/2 proxy profile does not authorize its CONNECT peer");
   Expect(RunModeFor(TargetProfile::kFastFtp) == ScenarioRunMode::kFtpCoverage,
          "fast FTP profile does not authorize the two-channel peer");
   Expect(RunModeFor(TargetProfile::kFastTftp) == ScenarioRunMode::kTftpCoverage,
@@ -827,6 +876,7 @@ int main() {
   TestFastHttpPolicy();
   TestDeepHttpPolicy();
   TestFastHttpsPolicy();
+  TestH2ProxyPolicy();
   TestFastWebSocketPolicy();
   TestFastSecureWebSocketPolicy();
   TestFastTelnetPolicy();
