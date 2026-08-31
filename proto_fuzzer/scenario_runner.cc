@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 
+#include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/option_apply.h"
@@ -34,6 +35,12 @@ struct CurlEasyDeleter {
   }
 };
 using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
+
+/// @brief RAII wrapper for caller-owned curl_slist option data.
+struct CurlSlistDeleter {
+  void operator()(curl_slist* list) const noexcept { curl_slist_free_all(list); }
+};
+using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
 
 constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
 constexpr std::size_t kMaxResultHeaders = 16;
@@ -126,18 +133,9 @@ ScenarioRunner::ScenarioRunner() = default;
 /// down at instance scope.
 ScenarioRunner::~ScenarioRunner() = default;
 
-/// Run the scenario. Classifies the scheme to pick a MockServer subclass,
-/// applies baseline + per-option setopt calls, builds the URL from
-/// scenario.scheme + scenario.host_path, and drives the transfer via the
-/// mock's own DriveScenario.
-/// @param scenario The Scenario describing the curl operations to perform.
-/// @param probe_transfer_results Whether to exercise post-transfer easy-handle
-///        result APIs. The multi driver always consumes curl_multi_info_read;
-///        this flag controls only the separate getinfo/header probes here.
-/// @return 0 on normal completion (including curl errors that aren't harness
-///         failures). The libFuzzer entrypoint doesn't care about the return
-///         value; it's there for tests.
-int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, bool probe_transfer_results) {
+/// Implement the bounded orchestration contract documented on Run's public
+/// declaration; keeping argument docs there avoids two drifting descriptions.
+int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
   const char* prefix = SchemePrefix(scenario.scheme());
   if (prefix == nullptr || scenario.host_path().empty()) {
     return 0;
@@ -148,23 +146,46 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, bool prob
     return 0;
   }
 
+  // Declaration order is an ownership invariant: reverse destruction keeps
+  // CONNECT_TO storage and share callback userdata alive through easy cleanup.
+  // This matters for incomplete transfers, where an explicit share detach can
+  // be rejected while easy cleanup can still release the reference safely.
+  std::unique_ptr<ApiLifecycle> api_lifecycle;
+  CurlSlistPtr connect_to;
   CurlEasyPtr easy(curl_easy_init());
   if (!easy) {
     return 0;
   }
 
-  struct curl_slist* connect_to = ApplyBaselineOptions(easy.get(), scenario.scheme());
-
   std::string url = std::string(prefix) + "://" + scenario.host_path();
-  curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str());
+  const auto configure_easy = [&] {
+    connect_to.reset(ApplyBaselineOptions(easy.get(), scenario.scheme()));
+    curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str());
+    mock->Install(easy.get());
 
-  mock->Install(easy.get());
+    // Compatibility inputs deliberately bypass the mutating postprocessor,
+    // so enforce the shared option prefix again at the runtime boundary. The
+    // helper still ignores individual CURLcodes: the fuzzer stresses curl
+    // rather than treating rejected combinations as harness failures.
+    (void)ApplyScenarioOptions(easy.get(), scenario);
+  };
+  configure_easy();
 
-  // Compatibility inputs deliberately bypass the mutating postprocessor, so
-  // enforce the shared option prefix again at the runtime boundary. The helper
-  // still ignores individual CURLcodes: the fuzzer stresses curl rather than
-  // treating rejected option combinations as harness failures.
-  (void)ApplyScenarioOptions(easy.get(), scenario);
+  const curl::fuzzer::proto::ApiPlan* api_plan =
+      mode == ScenarioRunMode::kApiLifecycle && scenario.has_api_plan() ? &scenario.api_plan() : nullptr;
+  if (api_plan != nullptr && api_plan->reset_easy()) {
+    // Reset deliberately drops every pointer-valued option before its backing
+    // list is freed. Reapplying the exact scenario then lets the transfer
+    // populate post-reset state instead of turning reset coverage into a
+    // guaranteed malformed request.
+    curl_easy_reset(easy.get());
+    connect_to.reset();
+    configure_easy();
+  }
+
+  if (api_plan != nullptr) {
+    api_lifecycle = std::make_unique<ApiLifecycle>(easy.get(), *api_plan, url);
+  }
 
   {
     // HTTP headers, MIME bodies, TELNET options, and callback userdata are
@@ -174,14 +195,27 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, bool prob
     // never run before the owner's destructor clears those options.
     ScenarioRequestData request_data(easy.get(), scenario);
     mock->ConfigureRequestData(&request_data);
-    mock->DriveScenario(easy.get(), scenario);
-    if (probe_transfer_results) {
+    const auto drive_mode = api_plan == nullptr ? curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM : api_plan->drive_mode();
+    if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM) {
+      mock->DriveEasyScenario(easy.get(), scenario);
+    } else {
+      mock->DriveScenario(easy.get(), scenario, drive_mode == curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
+                          api_plan != nullptr && api_plan->wake_multi());
+    }
+    if (api_lifecycle != nullptr) {
+      api_lifecycle->ProbeTransferResults(drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
+      api_lifecycle->ProbeEasyDuplication();
+    } else if (mode != ScenarioRunMode::kFastProtocol) {
       ProbeTransferResults(easy.get());
     }
   }
 
+  // Easy cleanup is the reliable share-detach boundary even if the bounded
+  // drive stopped with a connection attached. The lifecycle object—and thus
+  // lock callback userdata—outlives it, then releases share-owned caches.
   easy.reset();
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
+  api_lifecycle.reset();
   return 0;
 }
 

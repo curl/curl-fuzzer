@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
 
 namespace {
 
@@ -23,7 +24,9 @@ using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
 using proto_fuzzer::ApplyTargetPolicy;
-using proto_fuzzer::TargetPolicy;
+using proto_fuzzer::RunModeFor;
+using proto_fuzzer::ScenarioRunMode;
+using proto_fuzzer::TargetProfile;
 
 void Fail(const char *message) {
   std::cerr << message << '\n';
@@ -48,7 +51,7 @@ Scenario ScenarioWithBackpressure(curl::fuzzer::proto::Scheme scheme,
   return scenario;
 }
 
-void ExpectFixedPolicy(TargetPolicy policy,
+void ExpectFixedPolicy(TargetProfile profile,
                        curl::fuzzer::proto::Scheme expected_scheme,
                        const char *scheme_message,
                        const char *backpressure_message,
@@ -61,7 +64,7 @@ void ExpectFixedPolicy(TargetPolicy policy,
   follow_on->mutable_backpressure()->set_drain_limit(1);
   scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
 
-  ApplyTargetPolicy(&scenario, policy);
+  ApplyTargetPolicy(&scenario, profile);
 
   Expect(scenario.scheme() == expected_scheme, scheme_message);
   Expect(!scenario.connection().has_backpressure(), backpressure_message);
@@ -95,7 +98,7 @@ void TestFastHttpPolicy() {
   scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
   scenario.mutable_upload()->set_data("upload sentinel");
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kFastHttp);
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp);
 
   Expect(scenario.scheme() == SCHEME_HTTP,
          "fast HTTP policy did not force HTTP");
@@ -117,7 +120,7 @@ void TestFastHttpPolicy() {
 }
 
 void TestDeepHttpPolicy() {
-  ExpectFixedPolicy(TargetPolicy::kDeepHttp, SCHEME_HTTP,
+  ExpectFixedPolicy(TargetProfile::kDeepHttp, SCHEME_HTTP,
                     "deep HTTP policy did not force HTTP",
                     "deep HTTP policy retained backpressure", false);
 
@@ -133,7 +136,7 @@ void TestDeepHttpPolicy() {
   scenario.mutable_upload()->set_data("upload sentinel");
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kDeepHttp);
+  ApplyTargetPolicy(&scenario, TargetProfile::kDeepHttp);
 
   Expect(scenario.connection().server_frames_size() == 1,
          "deep HTTP policy removed structured response frames");
@@ -152,19 +155,19 @@ void TestDeepHttpPolicy() {
 }
 
 void TestFastHttpsPolicy() {
-  ExpectFixedPolicy(TargetPolicy::kFastHttps, SCHEME_HTTPS,
+  ExpectFixedPolicy(TargetProfile::kFastHttps, SCHEME_HTTPS,
                     "fast HTTPS policy did not force HTTPS",
                     "fast HTTPS policy retained backpressure", false);
 }
 
 void TestFastWebSocketPolicy() {
-  ExpectFixedPolicy(TargetPolicy::kFastWebSocket, SCHEME_WS,
+  ExpectFixedPolicy(TargetProfile::kFastWebSocket, SCHEME_WS,
                     "fast WebSocket policy did not force WS",
                     "fast WebSocket policy retained backpressure", true);
 }
 
 void TestFastSecureWebSocketPolicy() {
-  ExpectFixedPolicy(TargetPolicy::kFastSecureWebSocket, SCHEME_WSS,
+  ExpectFixedPolicy(TargetProfile::kFastSecureWebSocket, SCHEME_WSS,
                     "fast secure WebSocket policy did not force WSS",
                     "fast secure WebSocket policy retained backpressure", true);
 }
@@ -201,7 +204,7 @@ void TestFastTelnetPolicy() {
     scenario.add_options()->set_option_id(option);
   }
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kFastTelnet);
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastTelnet);
 
   Expect(scenario.scheme() == SCHEME_TELNET,
          "fast TELNET policy did not force TELNET");
@@ -248,7 +251,7 @@ void TestPauseTerminalIsTelnetOnly() {
   Scenario telnet;
   telnet.mutable_upload()->set_terminal(
       curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
-  ApplyTargetPolicy(&telnet, TargetPolicy::kFastTelnet);
+  ApplyTargetPolicy(&telnet, TargetProfile::kFastTelnet);
   Expect(telnet.upload().terminal() ==
              curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE,
          "TELNET policy removed its synchronous pause outcome");
@@ -257,7 +260,7 @@ void TestPauseTerminalIsTelnetOnly() {
   http.mutable_upload()->set_terminal(
       curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
   http.add_telnet_options("TTYPE=must-be-discarded");
-  ApplyTargetPolicy(&http, TargetPolicy::kDeepHttp);
+  ApplyTargetPolicy(&http, TargetProfile::kDeepHttp);
   Expect(http.upload().terminal() == curl::fuzzer::proto::UPLOAD_TERMINAL_EOF,
          "non-TELNET policy retained a callback pause without a resume source");
   Expect(http.telnet_options_size() == 0,
@@ -272,7 +275,7 @@ void TestNonTelnetPolicySelectsUploadBudgetBeforeBounding() {
   scenario.mutable_upload()->set_data(std::string(
       proto_fuzzer::scenario_limits::kMaxTelnetUploadBytes + 1, 'u'));
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kDeepHttp);
+  ApplyTargetPolicy(&scenario, TargetProfile::kDeepHttp);
 
   Expect(scenario.scheme() == SCHEME_HTTP,
          "deep HTTP policy did not restore its fixed scheme");
@@ -287,7 +290,7 @@ void TestFastTelnetResponseBudgets() {
       proto_fuzzer::scenario_limits::kMaxTelnetResponseBytes - 1, 'a'));
   byte_budget.mutable_connection()->add_on_readable("bc");
   byte_budget.mutable_connection()->add_on_readable("invisible");
-  ApplyTargetPolicy(&byte_budget, TargetPolicy::kFastTelnet);
+  ApplyTargetPolicy(&byte_budget, TargetProfile::kFastTelnet);
   Expect(byte_budget.connection().initial_response().size() +
                  byte_budget.connection().on_readable(0).size() ==
              proto_fuzzer::scenario_limits::kMaxTelnetResponseBytes,
@@ -299,7 +302,7 @@ void TestFastTelnetResponseBudgets() {
   exact_budget.mutable_connection()->set_initial_response(
       std::string(proto_fuzzer::scenario_limits::kMaxTelnetResponseBytes, 'a'));
   exact_budget.mutable_connection()->add_on_readable("invisible");
-  ApplyTargetPolicy(&exact_budget, TargetPolicy::kFastTelnet);
+  ApplyTargetPolicy(&exact_budget, TargetProfile::kFastTelnet);
   Expect(exact_budget.connection().on_readable_size() == 0,
          "fast TELNET policy retained an empty budget-exhausted chunk");
 
@@ -309,7 +312,7 @@ void TestFastTelnetResponseBudgets() {
                   '\xff') +
       "prefix");
   control_budget.mutable_connection()->add_on_readable("\xffsuffix");
-  ApplyTargetPolicy(&control_budget, TargetPolicy::kFastTelnet);
+  ApplyTargetPolicy(&control_budget, TargetProfile::kFastTelnet);
   Expect(control_budget.connection().initial_response().size() ==
              proto_fuzzer::scenario_limits::kMaxTelnetControlBytes + 6,
          "fast TELNET policy retained reply-amplifying control bytes");
@@ -319,19 +322,19 @@ void TestFastTelnetResponseBudgets() {
 
 void TestTimingPolicyMapsSecureSchemesToPlaintext() {
   Scenario https = ScenarioWithBackpressure(SCHEME_HTTPS, 2048, 1);
-  ApplyTargetPolicy(&https, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&https, TargetProfile::kTiming);
   Expect(https.scheme() == SCHEME_HTTP,
          "timing policy did not map HTTPS to HTTP");
 
   Scenario wss = ScenarioWithBackpressure(SCHEME_WSS, 2048, 1);
-  ApplyTargetPolicy(&wss, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&wss, TargetProfile::kTiming);
   Expect(wss.scheme() == SCHEME_WS, "timing policy did not map WSS to WS");
 }
 
 void TestTimingPolicySuppliesBackpressureForZeroConfig() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 0, 0);
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&scenario, TargetProfile::kTiming);
 
   Expect(scenario.connection().backpressure().recv_buf_bytes() == 2048,
          "timing policy did not supply the minimum receive buffer");
@@ -341,21 +344,21 @@ void TestTimingPolicySuppliesBackpressureForZeroConfig() {
 
 void TestTimingPolicyPreservesMeaningfulBoundaries() {
   Scenario minimum = ScenarioWithBackpressure(SCHEME_HTTP, 2048, 1);
-  ApplyTargetPolicy(&minimum, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&minimum, TargetProfile::kTiming);
   Expect(minimum.connection().backpressure().recv_buf_bytes() == 2048,
          "timing policy changed the minimum effective receive buffer");
   Expect(minimum.connection().backpressure().drain_limit() == 1,
          "timing policy changed the minimum drain limit");
 
   Scenario maximum = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 1024);
-  ApplyTargetPolicy(&maximum, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&maximum, TargetProfile::kTiming);
   Expect(maximum.connection().backpressure().recv_buf_bytes() == 4096,
          "timing policy changed the maximum receive buffer");
   Expect(maximum.connection().backpressure().drain_limit() == 1024,
          "timing policy changed the maximum drain limit");
 
   Scenario drain_only = ScenarioWithBackpressure(SCHEME_HTTP, 0, 512);
-  ApplyTargetPolicy(&drain_only, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&drain_only, TargetProfile::kTiming);
   Expect(drain_only.connection().backpressure().recv_buf_bytes() == 2048,
          "timing policy did not make a drain-only config exert pressure");
   Expect(drain_only.connection().backpressure().drain_limit() == 512,
@@ -364,7 +367,7 @@ void TestTimingPolicyPreservesMeaningfulBoundaries() {
 
 void TestTimingPolicyClampsIneffectiveValues() {
   Scenario too_small = ScenarioWithBackpressure(SCHEME_HTTP, 1, 0);
-  ApplyTargetPolicy(&too_small, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&too_small, TargetProfile::kTiming);
   Expect(too_small.connection().backpressure().recv_buf_bytes() == 2048,
          "timing policy retained a receive buffer below the platform floor");
   Expect(too_small.connection().backpressure().drain_limit() == 0,
@@ -374,7 +377,7 @@ void TestTimingPolicyClampsIneffectiveValues() {
       static_cast<std::uint32_t>(std::numeric_limits<int>::max()) + 1U;
   Scenario too_large = ScenarioWithBackpressure(
       SCHEME_HTTP, kAboveIntMax, std::numeric_limits<std::uint32_t>::max());
-  ApplyTargetPolicy(&too_large, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&too_large, TargetProfile::kTiming);
   Expect(too_large.connection().backpressure().recv_buf_bytes() == 4096,
          "timing policy retained a receive buffer that overflows int");
   Expect(too_large.connection().backpressure().drain_limit() == 1024,
@@ -389,7 +392,7 @@ void TestTimingPolicyCanonicalizesOnlyConfiguredFollowOns() {
   scenario.add_subsequent_connections()->set_initial_response(
       "ordinary redirect response");
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kTiming);
+  ApplyTargetPolicy(&scenario, TargetProfile::kTiming);
 
   Expect(scenario.subsequent_connections(0).backpressure().recv_buf_bytes() ==
              2048,
@@ -451,7 +454,7 @@ void TestDeepPoliciesRemoveRuntimeInvisibleSuffixes() {
     upload->add_read_sizes(std::numeric_limits<std::uint32_t>::max());
   }
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kDeepHttp);
+  ApplyTargetPolicy(&scenario, TargetProfile::kDeepHttp);
 
   Expect(static_cast<std::size_t>(scenario.options_size()) ==
              proto_fuzzer::scenario_limits::kMaxOptions,
@@ -534,8 +537,8 @@ void TestFastHttpOptionAllowlist() {
       static_cast<curl::fuzzer::proto::CurlOptionId>(123456789));
 
   Scenario deep = scenario;
-  ApplyTargetPolicy(&scenario, TargetPolicy::kFastHttp);
-  ApplyTargetPolicy(&deep, TargetPolicy::kDeepHttp);
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp);
+  ApplyTargetPolicy(&deep, TargetProfile::kDeepHttp);
 
   Expect(scenario.options_size() ==
              static_cast<int>(sizeof(kCheapOptions) / sizeof(kCheapOptions[0])),
@@ -558,13 +561,143 @@ void TestFastHttpFiltersBeforeApplyingOptionBound() {
   }
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
 
-  ApplyTargetPolicy(&scenario, TargetPolicy::kFastHttp);
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp);
 
   Expect(scenario.options_size() == 1,
          "fast HTTP bounded options before removing deep-only entries");
   Expect(scenario.options(0).option_id() ==
              curl::fuzzer::proto::CURLOPT_USERAGENT,
          "fast HTTP lost a cheap option behind a rejected prefix");
+}
+
+void TestApiPolicyRetainsAndBoundsItsPlan() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path(
+      std::string(proto_fuzzer::scenario_limits::kMaxApiStringBytes + 7, 'u'));
+  scenario.mutable_mime_post()->add_parts()->set_data("deep HTTP sentinel");
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
+
+  auto *plan = scenario.mutable_api_plan();
+  plan->set_duplicate_easy(true);
+  plan->set_reset_easy(true);
+  plan->set_attach_share(true);
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
+  plan->set_wake_multi(true);
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxApiShareDataSelectors + 3;
+       ++index) {
+    plan->add_share_data_selectors(static_cast<std::uint32_t>(index + 100));
+  }
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxApiInfoSelectors + 3;
+       ++index) {
+    plan->add_easy_info_selectors(static_cast<std::uint32_t>(index + 200));
+  }
+  ApplyTargetPolicy(&scenario, TargetProfile::kApi);
+
+  Expect(scenario.scheme() == SCHEME_HTTP,
+         "API policy did not force plaintext HTTP");
+  Expect(scenario.host_path().size() ==
+             proto_fuzzer::scenario_limits::kMaxApiStringBytes,
+         "API policy retained URL bytes its convenience probes cannot use");
+  Expect(!scenario.connection().has_backpressure(),
+         "API policy retained timed backpressure");
+  Expect(scenario.has_mime_post() && scenario.options_size() == 1,
+         "API policy discarded the HTTP state used to populate query results");
+  Expect(scenario.has_api_plan(), "API policy discarded its lifecycle plan");
+  Expect(scenario.api_plan().duplicate_easy() &&
+             scenario.api_plan().reset_easy() &&
+             scenario.api_plan().attach_share() &&
+             scenario.api_plan().drive_mode() ==
+                 curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET &&
+             scenario.api_plan().wake_multi(),
+         "API policy changed mutation-controlled lifecycle choices");
+  Expect(static_cast<std::size_t>(
+             scenario.api_plan().share_data_selectors_size()) ==
+             proto_fuzzer::scenario_limits::kMaxApiShareDataSelectors,
+         "API policy retained too many share-data selectors");
+  Expect(static_cast<std::size_t>(
+             scenario.api_plan().easy_info_selectors_size()) ==
+             proto_fuzzer::scenario_limits::kMaxApiInfoSelectors,
+         "API policy retained too many typed getinfo selectors");
+  Expect(scenario.api_plan().share_data_selectors(0) == 100 &&
+             scenario.api_plan().easy_info_selectors(0) == 200,
+         "API policy changed the retained selector prefix");
+}
+
+void TestProtocolPoliciesDiscardApiPlans() {
+  constexpr TargetProfile kProtocolPolicies[] = {
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kProtocolPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("example.test/");
+    scenario.mutable_api_plan()->set_duplicate_easy(true);
+    scenario.mutable_api_plan()->add_easy_info_selectors(7);
+
+    ApplyTargetPolicy(&scenario, profile);
+
+    Expect(!scenario.has_api_plan(),
+           "a protocol-focused policy retained API-only lifecycle work");
+  }
+}
+
+void TestApiEasyDriveDropsMultiOnlyWakeup() {
+  Scenario scenario;
+  scenario.mutable_api_plan()->set_drive_mode(
+      curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
+  scenario.mutable_api_plan()->set_wake_multi(true);
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kApi);
+
+  Expect(scenario.api_plan().drive_mode() ==
+             curl::fuzzer::proto::API_DRIVE_EASY_PERFORM,
+         "API policy changed the selected easy entrypoint");
+  Expect(!scenario.api_plan().wake_multi(),
+         "easy drive retained a multi-only wakeup mutation");
+}
+
+void TestProfileRunModes() {
+  Expect(RunModeFor(TargetProfile::kCompatibility) ==
+             ScenarioRunMode::kProtocolCoverage,
+         "compatibility profile lost its ordinary result probes");
+  Expect(RunModeFor(TargetProfile::kFastHttp) == ScenarioRunMode::kFastProtocol,
+         "fast HTTP profile gained coverage-probe overhead");
+  Expect(RunModeFor(TargetProfile::kFastTelnet) ==
+             ScenarioRunMode::kFastProtocol,
+         "fast TELNET profile gained coverage-probe overhead");
+  Expect(RunModeFor(TargetProfile::kApi) == ScenarioRunMode::kApiLifecycle,
+         "API profile does not authorize its lifecycle plan");
+
+  constexpr TargetProfile kCoverageProfiles[] = {
+      TargetProfile::kDeepHttp,      TargetProfile::kFastHttps,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kTiming,
+  };
+  for (const TargetProfile profile : kCoverageProfiles) {
+    Expect(RunModeFor(profile) == ScenarioRunMode::kProtocolCoverage,
+           "coverage profile does not retain ordinary result probes");
+  }
+}
+
+void TestCompatibilityProfileIsNoOp() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("compatibility.example/");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.add_request_headers("X-Compatibility: retained");
+  const std::string before = scenario.SerializeAsString();
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kCompatibility);
+
+  Expect(scenario.SerializeAsString() == before,
+         "compatibility profile changed an accumulated-corpus input");
 }
 
 } // namespace
@@ -587,5 +720,10 @@ int main() {
   TestDeepPoliciesRemoveRuntimeInvisibleSuffixes();
   TestFastHttpOptionAllowlist();
   TestFastHttpFiltersBeforeApplyingOptionBound();
+  TestApiPolicyRetainsAndBoundsItsPlan();
+  TestProtocolPoliciesDiscardApiPlans();
+  TestApiEasyDriveDropsMultiOnlyWakeup();
+  TestProfileRunModes();
+  TestCompatibilityProfileIsNoOp();
   return 0;
 }

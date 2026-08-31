@@ -14,6 +14,7 @@
 #include <sys/select.h>
 
 #include "proto_fuzzer/mock_server.h"
+#include "proto_fuzzer/multi_socket_driver.h"
 
 namespace proto_fuzzer {
 
@@ -39,7 +40,8 @@ curl_socket_t MockServerBaseOpenSocketTrampoline(void* clientp, curlsocktype /*p
 }
 
 /// Default-construct an empty base instance with no connection.
-MockServerBase::MockServerBase() : connection_(nullptr), pending_recv_buf_bytes_(0), pending_drain_limit_(0) {}
+MockServerBase::MockServerBase()
+    : connection_(nullptr), pending_recv_buf_bytes_(0), pending_drain_limit_(0), multi_socket_driver_(nullptr) {}
 
 /// Out-of-line destructor so MockConnection can stay forward-declared in the
 /// base header (its complete type is only needed where unique_ptr is
@@ -65,7 +67,8 @@ void MockServerBase::ConfigureRequestData(ScenarioRequestData* /*request_data*/)
 /// its completion message, and clean up. Failures in multi_init / add_handle
 /// silently no-op: the fuzzer cares about what curl does when driven, not
 /// about harness-level errors.
-void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket,
+                                   bool wake_multi) {
   // Cache backpressure knobs so HandleOpenSocket can apply them the moment
   // connection_ exists. Both default to 0, which matches the legacy "drain
   // greedily, kernel-default buffers" behaviour exactly.
@@ -77,7 +80,24 @@ void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenar
   if (multi == nullptr) {
     return;
   }
+
+  // Callback data must survive both remove_handle and multi_cleanup, since
+  // either may emit CURL_POLL_REMOVE. Keeping it in this outer scope provides
+  // that lifetime without allocating per-watch state.
+  MultiSocketDriver socket_driver;
+  if (use_multi_socket && socket_driver.Install(multi)) {
+    multi_socket_driver_ = &socket_driver;
+  }
   if (curl_multi_add_handle(multi, easy) == CURLM_OK) {
+    if (wake_multi) {
+      if (multi_socket_driver_ != nullptr) {
+        multi_socket_driver_->ProbeControlApis();
+      } else {
+        long timeout_ms = -1;
+        (void)curl_multi_timeout(multi, &timeout_ms);
+        (void)curl_multi_wakeup(multi);
+      }
+    }
     RunLoop(multi, easy, scenario);
 
     // Completion messages are the multi API's only durable record of the
@@ -93,7 +113,19 @@ void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenar
     curl_multi_remove_handle(multi, easy);
   }
   curl_multi_cleanup(multi);
+  multi_socket_driver_ = nullptr;
 }
+
+/// Preserve a safe fallback for protocol mocks that require an outer driver
+/// to make progress. The API policy currently forces HTTP, whose override can
+/// preload its bounded response and call curl_easy_perform without a thread.
+void MockServerBase::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  DriveScenario(easy, scenario);
+}
+
+/// Expose only the current callback state to protocol drive loops. Ownership
+/// remains in DriveScenario so no subclass can accidentally shorten it.
+MultiSocketDriver* MockServerBase::multi_socket_driver() { return multi_socket_driver_; }
 
 /// Hand the cached backpressure config to the connection. Safe to call when
 /// connection_ is null (no-op) or when both knobs are 0 (ApplyBackpressure

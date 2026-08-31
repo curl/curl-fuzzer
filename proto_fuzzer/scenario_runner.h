@@ -12,6 +12,7 @@
 #define PROTO_FUZZER_SCENARIO_RUNNER_H_
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/target_profile.h"
 
 namespace proto_fuzzer {
 
@@ -23,11 +24,13 @@ class ScenarioRunner {
   ScenarioRunner(const ScenarioRunner&) = delete;
   ScenarioRunner& operator=(const ScenarioRunner&) = delete;
 
-  /// Execute one scenario and optionally inspect public post-transfer result
-  /// APIs. The compiled fast HTTP and TELNET targets disable those probes to
-  /// keep them out of their hot loops; every coverage-oriented lane leaves
-  /// them enabled.
-  int Run(const curl::fuzzer::proto::Scenario& scenario, bool probe_transfer_results = true);
+  /// Execute one scenario under a complete target behaviour. An enum makes
+  /// the supported fast, coverage, and API paths explicit and prevents callers
+  /// from constructing meaningless combinations of independent switches.
+  /// @param scenario Structured transfer and optional API plan.
+  /// @param mode Runtime coverage and lifecycle policy for this invocation.
+  /// @return zero after either a bounded run or an ignored invalid scenario.
+  int Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode);
 };
 
 }  // namespace proto_fuzzer

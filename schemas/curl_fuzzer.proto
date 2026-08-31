@@ -62,6 +62,49 @@ message Scenario {
   // TTYPE/NAWS with the peer negotiation bytes that request those values.
   // Non-TELNET target policies discard this field before execution.
   repeated bytes telnet_options = 9;
+  // Public API lifecycle calls are kept in a dedicated coverage lane because
+  // duplicating/resetting handles, share-handle bookkeeping, and socket-mode
+  // multi driving add useful reachability but would tax every protocol parser
+  // iteration if they were unconditional. Fixed non-API target policies clear
+  // this plan; curl_fuzzer_proto_api retains and bounds it after mutation.
+  ApiPlan api_plan = 10;
+}
+
+// A bounded plan for public libcurl APIs that are adjacent to, rather than
+// required by, a transfer. Selectors are interpreted through typed runtime
+// tables instead of being cast directly to CURLINFO or CURL_LOCK_DATA values:
+// those APIs use type-dependent varargs and accepting a raw mutation would be
+// undefined behaviour. Repeated fields let one transfer populate enough state
+// for several probes while the API target policy removes any ignored suffix.
+message ApiPlan {
+  // Duplicate the configured easy handle so ownership and copied option state
+  // cross curl_easy_duphandle's success and cleanup paths.
+  bool duplicate_easy = 1;
+  // Reset the selected easy handle and restore the scenario's configuration
+  // before transfer, exercising reset without turning the request accidental.
+  bool reset_easy = 2;
+  // Create and attach a CURLSH. An empty selector list still exercises the
+  // share handle's init/setopt/cleanup lifecycle.
+  bool attach_share = 3;
+  repeated uint32 share_data_selectors = 4;
+  // Select one valid transfer entrypoint. The runtime owns sequencing and
+  // translates readiness from its in-process peer; arbitrary raw call lists
+  // would overwhelmingly describe invalid or non-progressing event loops.
+  ApiDriveMode drive_mode = 5;
+  // Probe curl_multi_wakeup while the multi handle is live.
+  bool wake_multi = 6;
+  // Each selector indexes a runtime descriptor carrying both a CURLINFO value
+  // and its required output type.
+  repeated uint32 easy_info_selectors = 7;
+}
+
+// Public transfer entrypoints covered by the API lane. An enum prevents
+// contradictory easy/multi flags and leaves zero as the existing multi-
+// perform behavior used by every historical structured scenario.
+enum ApiDriveMode {
+  API_DRIVE_MULTI_PERFORM = 0;
+  API_DRIVE_MULTI_SOCKET = 1;
+  API_DRIVE_EASY_PERFORM = 2;
 }
 
 // A bounded source for CURLOPT_READFUNCTION. The payload and read-limit list

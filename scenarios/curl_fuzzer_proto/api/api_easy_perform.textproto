@@ -1,0 +1,16 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/easy"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\n"
+  on_readable: "easy"
+}
+api_plan {
+  drive_mode: API_DRIVE_EASY_PERFORM
+  attach_share: true
+  share_data_selectors: 1
+  easy_info_selectors: 0
+  easy_info_selectors: 1
+  easy_info_selectors: 2
+  easy_info_selectors: 3
+  easy_info_selectors: 4
+}

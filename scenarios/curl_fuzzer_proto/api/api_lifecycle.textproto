@@ -1,0 +1,58 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\n"
+  on_readable: "ok"
+}
+options {
+  option_id: CURLOPT_REFERER
+  string_value: "https://referrer.test/"
+}
+api_plan {
+  duplicate_easy: true
+  reset_easy: true
+  attach_share: true
+  share_data_selectors: 0
+  share_data_selectors: 1
+  share_data_selectors: 2
+  share_data_selectors: 3
+  share_data_selectors: 4
+  share_data_selectors: 5
+  share_data_selectors: 6
+  share_data_selectors: 7
+  share_data_selectors: 8
+  drive_mode: API_DRIVE_MULTI_SOCKET
+  wake_multi: true
+  easy_info_selectors: 0
+  easy_info_selectors: 1
+  easy_info_selectors: 2
+  easy_info_selectors: 3
+  easy_info_selectors: 4
+  easy_info_selectors: 5
+  easy_info_selectors: 6
+  easy_info_selectors: 7
+  easy_info_selectors: 8
+  easy_info_selectors: 9
+  easy_info_selectors: 10
+  easy_info_selectors: 11
+  easy_info_selectors: 12
+  easy_info_selectors: 13
+  easy_info_selectors: 14
+  easy_info_selectors: 15
+  easy_info_selectors: 16
+  easy_info_selectors: 17
+  easy_info_selectors: 18
+  easy_info_selectors: 19
+  easy_info_selectors: 20
+  easy_info_selectors: 21
+  easy_info_selectors: 22
+  easy_info_selectors: 23
+  easy_info_selectors: 24
+  easy_info_selectors: 25
+  easy_info_selectors: 26
+  easy_info_selectors: 27
+  easy_info_selectors: 28
+  easy_info_selectors: 29
+  easy_info_selectors: 30
+  easy_info_selectors: 31
+}

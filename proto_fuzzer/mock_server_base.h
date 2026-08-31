@@ -22,6 +22,7 @@
 namespace proto_fuzzer {
 
 class MockConnection;
+class MultiSocketDriver;
 class ScenarioRequestData;
 
 /// @class proto_fuzzer::MockServerBase
@@ -63,7 +64,17 @@ class MockServerBase {
   /// specific behaviour still lives inside the subclass.
   /// @param easy     curl easy handle already Install()ed on this mock.
   /// @param scenario the Scenario proto to drive.
-  void DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
+  /// @param use_multi_socket Select the callback-driven socket-action loop.
+  /// @param wake_multi Probe wakeup/timeout control APIs while multi is live.
+  void DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket = false,
+                     bool wake_multi = false);
+
+  /// Run through the public easy entrypoint when a protocol mock can preload
+  /// all peer work before curl takes control. The base falls back to the
+  /// ordinary multi drive; HTTP overrides this with a true easy perform.
+  /// @param easy curl easy handle already Install()ed on this mock.
+  /// @param scenario Scenario whose response the mock must prepare.
+  virtual void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
   /// @return the active MockConnection, or nullptr if none has been opened.
   MockConnection* connection();
@@ -100,6 +111,13 @@ class MockServerBase {
   /// @param multi The active multi handle after at least one perform call.
   static void ProbeMultiPollset(CURLM* multi);
 
+  /// Return the callback state installed for the current socket-action drive.
+  /// HTTP's RunLoop uses this instead of reading the proto directly so only
+  /// the dedicated API binary can opt into lifecycle work; compatibility
+  /// inputs containing the newly-added field retain their old behavior.
+  /// @return active driver, or nullptr for the ordinary perform path.
+  MultiSocketDriver* multi_socket_driver();
+
   /// Hard operation budget for one scenario. This bounds cases that continue
   /// making tiny amounts of progress (for example a one-byte backpressure
   /// drain) without relying on wall-clock time.
@@ -135,6 +153,11 @@ class MockServerBase {
   /// Cached per-call DrainIncoming byte budget. Same population timing as
   /// pending_recv_buf_bytes_; 0 means unlimited (legacy drain behaviour).
   std::size_t pending_drain_limit_;
+
+  /// Non-owning pointer into DriveScenario's stack. That scope encloses easy
+  /// removal and multi cleanup, the complete interval in which callbacks may
+  /// still fire.
+  MultiSocketDriver* multi_socket_driver_;
 
  private:
   friend curl_socket_t MockServerBaseOpenSocketTrampoline(void*, curlsocktype, struct curl_sockaddr*);

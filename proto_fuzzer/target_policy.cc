@@ -147,6 +147,39 @@ void BoundUploadShape(curl::fuzzer::proto::UploadScript* upload, std::size_t dat
   }
 }
 
+/// Trim a protobuf repeated scalar without depending on the container's
+/// pointer-field-only DeleteSubrange API. Keeping the mutation-significant
+/// prefix matches every runtime selector loop.
+template <typename RepeatedScalar>
+void TrimRepeatedScalar(RepeatedScalar* values, std::size_t limit) {
+  while (static_cast<std::size_t>(values->size()) > limit) {
+    values->RemoveLast();
+  }
+}
+
+/// Keep API work proportional to the fixed descriptor tables used by the
+/// runtime. Selector magnitudes stay mutation-controlled because the runtime
+/// folds them into the relevant typed table; only suffixes it cannot execute
+/// are dead and therefore removed here.
+void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
+  TrimRepeatedScalar(plan->mutable_share_data_selectors(), scenario_limits::kMaxApiShareDataSelectors);
+  TrimRepeatedScalar(plan->mutable_easy_info_selectors(), scenario_limits::kMaxApiInfoSelectors);
+
+  switch (plan->drive_mode()) {
+    case curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM:
+    case curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET:
+      break;
+    case curl::fuzzer::proto::API_DRIVE_EASY_PERFORM:
+      // Wakeup is a multi-handle API and has no live object in easy mode.
+      // Clearing it keeps every retained mutation observable.
+      plan->set_wake_multi(false);
+      break;
+    default:
+      plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
+      break;
+  }
+}
+
 /// Canonicalize all shape limits enforced by the runtime. This runs only in
 /// fixed policy targets; the compatibility binary deliberately retains its
 /// historical no-postprocessor semantics for existing OSS-Fuzz reproducers.
@@ -323,6 +356,11 @@ void RemoveTelnetOnlyShape(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep lifecycle work out of protocol-focused lanes. The API binary retains
+/// this message explicitly; compatibility inputs have no postprocessor so
+/// existing reproducers keep their historical serialized meaning.
+void RemoveApiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->clear_api_plan(); }
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -386,15 +424,23 @@ void CanonicalizeOptionalBackpressure(curl::fuzzer::proto::Connection* connectio
 /// scalar otherwise opts an ordinary input into hundreds of timed waits. The
 /// timing target does the inverse: it guarantees a non-default buffer setting
 /// so its CPU allocation remains focused on the intentionally slower paths.
-void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetPolicy policy) {
+void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile) {
   if (scenario == nullptr) {
     return;
   }
 
-  if (policy == TargetPolicy::kFastTelnet) {
+  if (profile == TargetProfile::kCompatibility) {
+    // The original target's existing corpus predates profile splitting. A
+    // no-op here makes the type safe to pass around while its binary continues
+    // to omit postprocessor registration altogether.
+    return;
+  }
+
+  if (profile == TargetProfile::kFastTelnet) {
     // Set the scheme before general bounds so the TELNET-specific upload and
     // PAUSE budgets are selected rather than event-driven compatibility ones.
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
+    RemoveApiOnlyShape(scenario);
     RemoveNonTelnetShape(scenario);
     RetainCheapTelnetOptions(scenario);
     BoundScenarioShape(scenario);
@@ -402,8 +448,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetPolicy pol
     return;
   }
 
-  if (policy == TargetPolicy::kFastHttp) {
+  if (profile == TargetProfile::kFastHttp) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    RemoveApiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
     RetainCheapHttpOptions(scenario);
@@ -415,24 +462,29 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetPolicy pol
   // The scheme field is itself mutable, so bounding first could accidentally
   // give an HTTP/WS case TELNET's smaller payload budget merely because that
   // was the input's pre-policy value.
-  switch (policy) {
-    case TargetPolicy::kDeepHttp:
+  switch (profile) {
+    case TargetProfile::kCompatibility:
+      return;
+    case TargetProfile::kDeepHttp:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
       break;
-    case TargetPolicy::kFastHttps:
+    case TargetProfile::kApi:
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+      break;
+    case TargetProfile::kFastHttps:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       break;
-    case TargetPolicy::kFastWebSocket:
+    case TargetProfile::kFastWebSocket:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_WS);
       break;
-    case TargetPolicy::kFastSecureWebSocket:
+    case TargetProfile::kFastSecureWebSocket:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_WSS);
       break;
-    case TargetPolicy::kTiming:
+    case TargetProfile::kTiming:
       scenario->set_scheme(PlaintextScheme(scenario->scheme()));
       break;
-    case TargetPolicy::kFastHttp:
-    case TargetPolicy::kFastTelnet:
+    case TargetProfile::kFastHttp:
+    case TargetProfile::kFastTelnet:
       // Both early-return paths selected their scheme above.
       return;
   }
@@ -442,38 +494,53 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetPolicy pol
   // general shape so only the compatibility and TELNET targets can retain
   // those values.
   RemoveTelnetOnlyShape(scenario);
+  if (profile != TargetProfile::kApi) {
+    RemoveApiOnlyShape(scenario);
+  }
   BoundScenarioShape(scenario);
 
-  switch (policy) {
-    case TargetPolicy::kFastHttp:
+  switch (profile) {
+    case TargetProfile::kCompatibility:
+      return;
+    case TargetProfile::kFastHttp:
       // Handled before the general bounds so discarded deep shapes are never
       // traversed on the fast path.
       return;
 
-    case TargetPolicy::kDeepHttp:
+    case TargetProfile::kDeepHttp:
       ClearAllBackpressure(scenario);
       return;
 
-    case TargetPolicy::kFastHttps:
+    case TargetProfile::kApi:
+      ClearAllBackpressure(scenario);
+      if (scenario->host_path().size() > scenario_limits::kMaxApiStringBytes) {
+        scenario->mutable_host_path()->resize(scenario_limits::kMaxApiStringBytes);
+      }
+      if (scenario->has_api_plan()) {
+        BoundApiPlanShape(scenario->mutable_api_plan());
+      }
+      return;
+
+    case TargetProfile::kFastHttps:
       ClearAllBackpressure(scenario);
       return;
 
-    case TargetPolicy::kFastWebSocket:
+    case TargetProfile::kFastWebSocket:
       ClearAllBackpressure(scenario);
       RemoveIgnoredWebSocketShape(scenario);
       return;
 
-    case TargetPolicy::kFastSecureWebSocket:
+    case TargetProfile::kFastSecureWebSocket:
       ClearAllBackpressure(scenario);
       RemoveIgnoredWebSocketShape(scenario);
       return;
 
-    case TargetPolicy::kFastTelnet:
+    case TargetProfile::kFastTelnet:
       // Handled before the general bounds so its protocol-specific limits are
       // selected from the start.
       return;
 
-    case TargetPolicy::kTiming: {
+    case TargetProfile::kTiming: {
       if (scenario->scheme() == curl::fuzzer::proto::SCHEME_WS) {
         RemoveIgnoredWebSocketShape(scenario);
       }
