@@ -9,11 +9,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
@@ -310,6 +313,93 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
   curl_slist_free_all(connect_to);
 }
 
+void TestApiLifecycleCompletesSocketActionTransfer() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: "
+      "6\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("socket");
+
+  auto *plan = scenario.mutable_api_plan();
+  plan->set_duplicate_easy(true);
+  plan->set_attach_share(true);
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
+  plan->set_wake_multi(true);
+  for (std::uint32_t selector = 0; selector < 9; ++selector) {
+    plan->add_share_data_selectors(selector);
+  }
+  for (std::uint32_t selector = 0;
+       selector < proto_fuzzer::scenario_limits::kMaxApiInfoSelectors;
+       ++selector) {
+    plan->add_easy_info_selectors(selector);
+  }
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "API lifecycle test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  TestMockServer server;
+  server.Install(easy);
+  auto lifecycle = std::make_unique<proto_fuzzer::ApiLifecycle>(
+      easy, *plan, "http://api.test/");
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    server.DriveScenario(easy, scenario,
+                         plan->drive_mode() ==
+                             curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
+                         plan->wake_multi());
+    lifecycle->ProbeTransferResults(false);
+    lifecycle->ProbeEasyDuplication();
+  }
+
+  Expect(response == "socket",
+         "socket-action API drive did not complete the scripted HTTP response");
+
+  curl_easy_cleanup(easy);
+  lifecycle.reset();
+  curl_slist_free_all(connect_to);
+}
+
+void TestEasyPerformPreloadsIncrementalResponse() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/easy");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("easy");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "easy-perform test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/easy");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  TestMockServer server;
+  server.Install(easy);
+  server.DriveEasyScenario(easy, scenario);
+
+  Expect(
+      response == "easy",
+      "curl_easy_perform did not consume the preloaded incremental response");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 void TestTelnetPreloadsChunksAndNeverReadsStdin() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
@@ -441,6 +531,8 @@ int main() {
   TestClosedPeerIsAnOrdinaryWriteFailure();
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
+  TestApiLifecycleCompletesSocketActionTransfer();
+  TestEasyPerformPreloadsIncrementalResponse();
   TestTelnetPreloadsChunksAndNeverReadsStdin();
   TestTelnetMaximumAmplificationCannotBlock();
   return 0;

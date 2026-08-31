@@ -807,14 +807,16 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
 
     # The protocol runners and generated message are identical for every
     # structured target. Compile them once; fuzzer_main.cc carries the
-    # per-binary policy while a same-named thin entrypoint gives Introspector
+    # per-binary profile while a same-named thin entrypoint gives Introspector
     # an unambiguous static-profile-to-coverage mapping.
     add_library(curl_fuzzer_proto_runtime OBJECT
+        proto_fuzzer/api_lifecycle.cc
         proto_fuzzer/scenario_runner.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/mock_server.cc
         proto_fuzzer/mock_server_base.cc
+        proto_fuzzer/multi_socket_driver.cc
         proto_fuzzer/target_policy.cc
         proto_fuzzer/telnet_mock_server.cc
         proto_fuzzer/telnet_scenario.cc
@@ -846,7 +848,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # compile definition is consumed only by fuzzer_main.cc. Fixed lanes
     # register the matching LPM postprocessor before the first corpus input is
     # decoded; the compatibility lane intentionally registers none.
-    function(curl_add_proto_fuzzer _name _policy_definition)
+    function(curl_add_proto_fuzzer _name _profile_definition)
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
             proto_fuzzer/fuzzer_main.cc
@@ -855,7 +857,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         target_compile_features(${_name} PRIVATE cxx_std_17)
         target_compile_options(${_name} PRIVATE
             ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
-        target_compile_definitions(${_name} PRIVATE ${_policy_definition})
+        target_compile_definitions(${_name} PRIVATE ${_profile_definition})
         target_include_directories(${_name} PRIVATE
             ${CURL_INCLUDE_DIRS}
             ${CMAKE_BINARY_DIR}
@@ -894,7 +896,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
 
     # Preserve the original mixed target's behavior under its original name:
     # OSS-Fuzz keys accumulated corpora and regression testcases by target
-    # basename, so changing its policy would silently change their semantics.
+    # basename, so changing its profile would silently change their semantics.
     curl_add_proto_fuzzer(curl_fuzzer_proto PROTO_FUZZER_TARGET_COMPATIBILITY)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http PROTO_FUZZER_TARGET_FAST_HTTP)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep PROTO_FUZZER_TARGET_DEEP_HTTP)
@@ -902,6 +904,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_ws PROTO_FUZZER_TARGET_FAST_WEBSOCKET)
     curl_add_proto_fuzzer(curl_fuzzer_proto_wss PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
     curl_add_proto_fuzzer(curl_fuzzer_proto_telnet PROTO_FUZZER_TARGET_FAST_TELNET)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_api PROTO_FUZZER_TARGET_API)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing PROTO_FUZZER_TARGET_TIMING)
 
     # Compile textproto seed scenarios into binary corpus entries. These are
@@ -918,6 +921,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/wss/*.textproto)
     file(GLOB TELNET_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/telnet/*.textproto)
+    file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/api/*.textproto)
     file(GLOB_RECURSE TIMING_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/*backpressure*.textproto)
 
@@ -1058,6 +1063,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${FAST_WS_SCENARIO_TEXTPROTOS} ${WSS_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_telnet_corpus
         curl_fuzzer_proto_telnet ${TELNET_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
+        curl_fuzzer_proto_api ${API_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_timing_corpus
         curl_fuzzer_proto_timing ${TIMING_SCENARIO_TEXTPROTOS})
     add_dependencies(curl_fuzzer_proto curl_fuzzer_proto_corpus)
@@ -1069,6 +1076,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_wss curl_fuzzer_proto_wss_corpus)
     add_dependencies(curl_fuzzer_proto_telnet
         curl_fuzzer_proto_telnet_corpus)
+    add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
 
     # Policy tests need only the generated message and protobuf runtime. Keep
@@ -1142,8 +1150,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # would otherwise look like ordinary curl transfer failures.
         add_executable(mock_server_test
             tests/mock_server_test.cc
+            proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
+            proto_fuzzer/multi_socket_driver.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/request_data.cc
             proto_fuzzer/telnet_mock_server.cc

@@ -5,7 +5,7 @@
  */
 
 /// @file
-/// @brief Shared LPM mutation and execution for policy-split protobuf targets.
+/// @brief Shared LPM mutation and execution for profile-split protobuf targets.
 
 #include "proto_fuzzer/fuzzer_main.h"
 
@@ -23,36 +23,35 @@ namespace {
 
 constexpr bool kUseBinaryFormat = true;
 
+/// Return the one profile compiled into this binary. Keeping target selection
+/// behind a function avoids accumulating namespace-scope behaviour flags; all
+/// mutation and execution choices are derived from this identity.
+constexpr proto_fuzzer::TargetProfile CompiledTargetProfile() {
 #if defined(PROTO_FUZZER_TARGET_COMPATIBILITY)
-// The original target deliberately has no policy. Its OSS-Fuzz corpus and
-// regression testcases contain mixed schemes and timing controls whose exact
-// semantics must remain stable across the target split.
+  // The original target deliberately has no mutation policy. Its OSS-Fuzz
+  // corpus contains mixed schemes and timing controls whose semantics must
+  // remain stable across the target split.
+  return proto_fuzzer::TargetProfile::kCompatibility;
 #elif defined(PROTO_FUZZER_TARGET_FAST_HTTP)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastHttp;
+  return proto_fuzzer::TargetProfile::kFastHttp;
 #elif defined(PROTO_FUZZER_TARGET_DEEP_HTTP)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kDeepHttp;
+  return proto_fuzzer::TargetProfile::kDeepHttp;
 #elif defined(PROTO_FUZZER_TARGET_FAST_HTTPS)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastHttps;
+  return proto_fuzzer::TargetProfile::kFastHttps;
 #elif defined(PROTO_FUZZER_TARGET_FAST_WEBSOCKET)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastWebSocket;
+  return proto_fuzzer::TargetProfile::kFastWebSocket;
 #elif defined(PROTO_FUZZER_TARGET_FAST_SECURE_WEBSOCKET)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastSecureWebSocket;
+  return proto_fuzzer::TargetProfile::kFastSecureWebSocket;
 #elif defined(PROTO_FUZZER_TARGET_FAST_TELNET)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kFastTelnet;
+  return proto_fuzzer::TargetProfile::kFastTelnet;
+#elif defined(PROTO_FUZZER_TARGET_API)
+  return proto_fuzzer::TargetProfile::kApi;
 #elif defined(PROTO_FUZZER_TARGET_TIMING)
-constexpr proto_fuzzer::TargetPolicy kTargetPolicy = proto_fuzzer::TargetPolicy::kTiming;
+  return proto_fuzzer::TargetProfile::kTiming;
 #else
-#error "A proto fuzzer target policy must be selected"
+#error "A proto fuzzer target profile must be selected"
 #endif
-
-// The fast HTTP and TELNET binaries trade generic post-transfer getinfo/header
-// probes for throughput. Every other compiled lane retains them, so aggregate
-// coverage does not charge every HTTP or TELNET mutation for those APIs.
-#if defined(PROTO_FUZZER_TARGET_FAST_HTTP) || defined(PROTO_FUZZER_TARGET_FAST_TELNET)
-constexpr bool kProbeTransferResults = false;
-#else
-constexpr bool kProbeTransferResults = true;
-#endif
+}
 
 #if !defined(PROTO_FUZZER_TARGET_COMPATIBILITY)
 /// Restore the target's protocol and timing invariants after every mutation.
@@ -60,7 +59,7 @@ constexpr bool kProbeTransferResults = true;
 /// through LPM's Fix() before the first fuzz callback, so a function-local
 /// registration would let the first input bypass the target policy.
 void PostProcessScenario(curl::fuzzer::proto::Scenario* scenario, unsigned int /*seed*/) {
-  proto_fuzzer::ApplyTargetPolicy(scenario, kTargetPolicy);
+  proto_fuzzer::ApplyTargetPolicy(scenario, CompiledTargetProfile());
   proto_fuzzer::CanonicalizeOptionValueCases(scenario);
 }
 
@@ -122,7 +121,7 @@ namespace proto_fuzzer {
 int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   curl::fuzzer::proto::Scenario scenario;
   if (protobuf_mutator::libfuzzer::LoadProtoInput(kUseBinaryFormat, data, size, &scenario)) {
-    ScenarioRunner().Run(scenario, kProbeTransferResults);
+    ScenarioRunner().Run(scenario, RunModeFor(CompiledTargetProfile()));
   }
   return 0;
 }

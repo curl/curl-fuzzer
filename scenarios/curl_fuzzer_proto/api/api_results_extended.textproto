@@ -1,0 +1,39 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/redirected"
+connection {
+  initial_response: "HTTP/1.1 204 No Content\r\nX-Api-Probe: extended\r\nRetry-After: 12\r\n\r\n"
+}
+api_plan {
+  easy_info_selectors: 32
+  easy_info_selectors: 33
+  easy_info_selectors: 34
+  easy_info_selectors: 35
+  easy_info_selectors: 36
+  easy_info_selectors: 37
+  easy_info_selectors: 38
+  easy_info_selectors: 39
+  easy_info_selectors: 40
+  easy_info_selectors: 41
+  easy_info_selectors: 42
+  easy_info_selectors: 43
+  easy_info_selectors: 44
+  easy_info_selectors: 45
+  easy_info_selectors: 46
+  easy_info_selectors: 47
+  easy_info_selectors: 48
+  easy_info_selectors: 49
+  easy_info_selectors: 50
+  easy_info_selectors: 51
+  easy_info_selectors: 52
+  easy_info_selectors: 53
+  easy_info_selectors: 54
+  easy_info_selectors: 55
+  easy_info_selectors: 56
+  easy_info_selectors: 57
+  easy_info_selectors: 58
+  easy_info_selectors: 59
+  easy_info_selectors: 60
+  easy_info_selectors: 61
+  easy_info_selectors: 62
+  easy_info_selectors: 63
+}

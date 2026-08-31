@@ -82,6 +82,16 @@ inline constexpr std::size_t kMaxTelnetUploadReadSteps = 2;
 inline constexpr std::size_t kMaxUploadReadSteps = 32;
 /// Larger read requests are indistinguishable once the whole body fits.
 inline constexpr std::size_t kMaxUploadReadSize = kMaxUploadBytes;
+/// A share handle has only a small fixed set of shareable data families. The
+/// extra slots retain duplicate/unshare transitions without allowing a list
+/// of identical selectors to dominate a lifecycle iteration.
+inline constexpr std::size_t kMaxApiShareDataSelectors = 16;
+/// One API iteration can cheaply inspect several result families, but an
+/// unbounded list would repeatedly query identical handle-owned state.
+inline constexpr std::size_t kMaxApiInfoSelectors = 32;
+/// URL escaping can expand input threefold. Four KiB crosses parser buffer
+/// boundaries without letting one convenience-API probe dominate a transfer.
+inline constexpr std::size_t kMaxApiStringBytes = 4 * 1024;
 
 }  // namespace proto_fuzzer::scenario_limits
 

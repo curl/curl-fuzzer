@@ -1,0 +1,41 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/recent"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nRetry-After: 12\r\n\r\n"
+}
+api_plan {
+  duplicate_easy: true
+  drive_mode: API_DRIVE_MULTI_SOCKET
+  easy_info_selectors: 64
+  easy_info_selectors: 65
+  easy_info_selectors: 66
+  easy_info_selectors: 67
+  easy_info_selectors: 68
+  easy_info_selectors: 69
+  easy_info_selectors: 70
+  easy_info_selectors: 71
+  easy_info_selectors: 72
+  easy_info_selectors: 73
+  easy_info_selectors: 74
+  easy_info_selectors: 75
+  easy_info_selectors: 76
+  easy_info_selectors: 77
+  easy_info_selectors: 78
+  easy_info_selectors: 79
+  easy_info_selectors: 80
+  easy_info_selectors: 81
+  easy_info_selectors: 82
+  easy_info_selectors: 83
+  easy_info_selectors: 84
+  easy_info_selectors: 85
+  easy_info_selectors: 86
+  easy_info_selectors: 87
+  easy_info_selectors: 88
+  easy_info_selectors: 89
+  easy_info_selectors: 90
+  easy_info_selectors: 91
+  easy_info_selectors: 92
+  easy_info_selectors: 93
+  easy_info_selectors: 94
+  easy_info_selectors: 95
+}

@@ -88,6 +88,11 @@ class MockServer : public MockServerBase {
   /// curl has even requested the corresponding socket or chunk.
   void SetScripts(const curl::fuzzer::proto::Scenario& scenario);
 
+  /// Preload the bounded HTTP response, half-close the peer, and invoke
+  /// curl_easy_perform. This avoids a helper thread while guaranteeing that
+  /// curl never waits for the outer chunk-delivery loop.
+  void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+
   /// Deliver one queued response chunk.
   /// @return true when a chunk was consumed from the script.
   bool DeliverNextChunk();
@@ -119,10 +124,28 @@ class MockServer : public MockServerBase {
   /// @return total bytes drained during this call.
   std::size_t DrainIncomingConnections();
 
+  /// Service one deterministic application event-loop turn by draining all
+  /// request bytes currently available and releasing at most one response
+  /// chunk. Both multi APIs use this ordering so selecting socket_action
+  /// changes only how readiness reaches curl, not the mock protocol script.
+  /// @return true when any request or response byte advanced.
+  bool ServiceConnections();
+
+  /// Drive the HTTP exchange through curl_multi_socket_action using the
+  /// callback state owned by MockServerBase::DriveScenario.
+  /// @param multi Multi handle containing `easy`.
+  /// @return after curl finishes or a deterministic idle/operation cap wins.
+  void RunSocketActionLoop(CURLM* multi);
+
   std::array<ConnectionScript, scenario_limits::kMaxConnections> scripts_;
   std::size_t script_count_;
   std::size_t next_script_;
   ConnectionScript* active_script_;
+
+  /// True only while HandleOpenSocket is preparing a synchronous easy drive.
+  /// Every response chunk must be queued before the callback returns because
+  /// curl_easy_perform does not yield control to the mock.
+  bool preload_all_chunks_;
 
   /// Old server halves must outlive their active role: libcurl owns the client
   /// fds and may close or briefly revisit them after opening the next socket.

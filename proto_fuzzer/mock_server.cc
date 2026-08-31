@@ -23,6 +23,7 @@
 #include <string>
 #include <vector>
 
+#include "proto_fuzzer/multi_socket_driver.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/ws_frame.h"
 
@@ -229,7 +230,7 @@ void MockConnection::ShutdownWrite() {
 
 /// Construct an idle MockServer with no scripted responses or open peers.
 /// DriveScenario() configures it from a Scenario before curl can open a socket.
-MockServer::MockServer() : script_count_(0), next_script_(0), active_script_(nullptr) {}
+MockServer::MockServer() : script_count_(0), next_script_(0), active_script_(nullptr), preload_all_chunks_(false) {}
 
 /// Default destructor; current and previous MockConnections clean up their
 /// server-side descriptors only after curl has been removed from the multi.
@@ -316,10 +317,34 @@ curl_socket_t MockServer::HandleOpenSocket() {
       return CURL_SOCKET_BAD;
     }
   }
+  if (preload_all_chunks_) {
+    while (has_more_chunks()) {
+      (void)DeliverNextChunk();
+    }
+  }
   if (active_script_->chunk_count() == 0) {
     connection_->ShutdownWrite();
   }
   return connection_->take_client_fd();
+}
+
+/// Preload all bounded response bytes from inside OPENSOCKETFUNCTION, where
+/// the mock still owns both socketpair ends. The total serialized fuzz input
+/// is capped by libFuzzer's max_len. If a non-blocking preload fills the local
+/// socket, curl observes only the successfully queued prefix and the short
+/// timeout below bounds the incomplete response. Reassert that timeout after
+/// scenario setopts so a mutated blocking option cannot turn this synchronous
+/// coverage path into a hung worker.
+/// @param easy Configured easy handle whose open-socket callback targets this
+///        mock.
+/// @param scenario Bounded response script to preload before performing.
+void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  SetScripts(scenario);
+  preload_all_chunks_ = true;
+  (void)curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, 50L);
+  (void)curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 50L);
+  (void)curl_easy_perform(easy);
+  preload_all_chunks_ = false;
 }
 
 /// Push the next queued chunk. Called by the drive loop when curl is ready
@@ -369,6 +394,46 @@ std::size_t MockServer::DrainIncomingConnections() {
   return drained;
 }
 
+/// Keep peer servicing identical across the perform and socket-action APIs.
+/// Draining first creates request-side space before a response can provoke
+/// another write, and releasing only one chunk preserves the scenario's
+/// mutation-controlled parser boundaries.
+bool MockServer::ServiceConnections() {
+  bool made_progress = DrainIncomingConnections() != 0;
+  if (has_more_chunks()) {
+    made_progress = DeliverNextChunk() || made_progress;
+  }
+  return made_progress;
+}
+
+/// Run a zero-wait application event loop around curl_multi_socket_action.
+/// Positive timers are deliberately not slept: the API lane clears timing
+/// controls and exists to cover event-driven dispatch, while the dedicated
+/// timing lane remains responsible for clock-dependent behavior.
+void MockServer::RunSocketActionLoop(CURLM* multi) {
+  MultiSocketDriver* driver = multi_socket_driver();
+  if (driver == nullptr) {
+    return;
+  }
+
+  int still_running = 1;
+  CURLMcode rc = driver->Start(&still_running);
+  int idle_iterations = 0;
+  int drive_iterations = 0;
+  while (rc == CURLM_OK && still_running && idle_iterations < kMaxIdleIterations &&
+         drive_iterations++ < kMaxDriveIterations) {
+    bool made_progress = ServiceConnections();
+    const MultiSocketDriver::DriveResult drive_result = driver->DriveReady(&still_running);
+    rc = drive_result.code;
+    made_progress = drive_result.made_progress || made_progress;
+    if (made_progress) {
+      idle_iterations = 0;
+    } else {
+      ++idle_iterations;
+    }
+  }
+}
+
 /// Seed the mock from the scenario, then drive the perform loop until curl is
 /// done or a deterministic operation/idle budget is hit. Ordinary scenarios
 /// never wait; explicit backpressure scenarios may use short select() waits.
@@ -378,6 +443,11 @@ std::size_t MockServer::DrainIncomingConnections() {
 void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   (void)easy;
   SetScripts(scenario);
+
+  if (multi_socket_driver() != nullptr) {
+    RunSocketActionLoop(multi);
+    return;
+  }
 
   int still_running = 1;
   int idle_iterations = 0;
@@ -417,10 +487,7 @@ void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Sc
     // recv buffer would otherwise stay full — curl short-writes, the mock
     // never consumes, and the transfer wedges until the drive budget. With
     // drain_limit set this still honours the per-tick byte budget.
-    made_progress = DrainIncomingConnections() != 0 || made_progress;
-    if (has_more_chunks()) {
-      made_progress = DeliverNextChunk() || made_progress;
-    }
+    made_progress = ServiceConnections() || made_progress;
 
     if (made_progress) {
       idle_iterations = 0;
