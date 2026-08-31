@@ -290,9 +290,15 @@ void MockServer::ObserveActiveTransfer(CURL* /*easy*/) {}
 /// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
 /// MockConnection, writes initial_response into it, and returns the
 /// client-side fd to hand to libcurl.
+/// @param purpose Socket role requested by curl; ordinary stream mocks do not
+///                need to distinguish outbound HTTP roles.
+/// @param address Intended destination retained by curl; the socketpair is
+///                already connected and therefore leaves it untouched.
 /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD on
 ///         failure.
-curl_socket_t MockServer::HandleOpenSocket() {
+curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
+  (void)purpose;
+  (void)address;
   if (next_script_ >= script_count_) {
     // Refusing a fifth socket keeps redirect loops bounded even if curl's own
     // redirect limit is mutated upward or an authentication scheme retries.

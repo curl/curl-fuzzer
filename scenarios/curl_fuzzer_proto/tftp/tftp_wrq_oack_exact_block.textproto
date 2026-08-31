@@ -1,0 +1,12 @@
+# An exact negotiated block forces curl to send an empty terminal DATA2 packet.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/exact"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 8 }
+options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+upload { data: "12345678" terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "\000\006blksize\0008\000tsize\0008\000"
+  on_readable: "\000\004\000\001"
+  on_readable: "\000\004\000\002"
+}

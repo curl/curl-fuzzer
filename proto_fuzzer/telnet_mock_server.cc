@@ -97,8 +97,14 @@ void TelnetMockServer::DrainBeforeUploadRead(void* userdata) {
 /// non-blocking server fd; if a compatibility input exceeds the socket buffer,
 /// the retained prefix is still useful and the half-close still guarantees
 /// termination.
+/// @param purpose Socket role requested by curl; TELNET uses one outbound
+///                stream and does not need role-specific setup.
+/// @param address Intended destination retained by curl; the already-connected
+///                socketpair does not need to rewrite it.
 /// @return The preloaded client socket, or CURL_SOCKET_BAD on setup failure.
-curl_socket_t TelnetMockServer::HandleOpenSocket() {
+curl_socket_t TelnetMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
+  (void)purpose;
+  (void)address;
   if (scenario_ == nullptr || socket_opened_) {
     return CURL_SOCKET_BAD;
   }

@@ -257,9 +257,15 @@ void WebSocketMockServer::ConsumeChunk() {
 /// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
 /// MockConnection but does NOT write anything — the handshake is driven later
 /// by TryAdvanceHandshake().
+/// @param purpose Socket role requested by curl; this peer accepts one outbound
+///                WebSocket transport only.
+/// @param address Intended destination retained by curl; the already-connected
+///                socketpair leaves it unchanged.
 /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD on
 ///         failure.
-curl_socket_t WebSocketMockServer::HandleOpenSocket() {
+curl_socket_t WebSocketMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
+  (void)purpose;
+  (void)address;
   if (connection_) {
     return CURL_SOCKET_BAD;
   }

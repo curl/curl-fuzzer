@@ -48,6 +48,8 @@ namespace {
 
 constexpr char kEventDrivenProtocolsAllowed[] = "http,https,ws,wss";
 constexpr char kTelnetProtocolAllowed[] = "telnet";
+constexpr char kFtpProtocolAllowed[] = "ftp";
+constexpr char kTftpProtocolAllowed[] = "tftp";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
 constexpr char kVerboseEnvVar[] = "FUZZ_VERBOSE";
@@ -204,12 +206,29 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
     curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
   }
 
-  // A TELNET transfer must use TelnetMockServer's preload/drain invariants.
-  // Keep it out of the redirect allowlist so an HTTP mock can never redirect
-  // into curl's synchronous TELNET driver with event-driven peer semantics.
+  // Each non-HTTP protocol must use its dedicated peer invariants. Keep them
+  // out of the redirect allowlist so an HTTP response cannot switch a stream
+  // mock into synchronous TELNET, two-channel FTP, or datagram TFTP semantics.
   // CURLOPT_PROTOCOLS_STR arrived in 7.85.0.
-  const char* direct_protocols =
-      scheme == curl::fuzzer::proto::SCHEME_TELNET ? kTelnetProtocolAllowed : kEventDrivenProtocolsAllowed;
+  const char* direct_protocols = kEventDrivenProtocolsAllowed;
+  switch (scheme) {
+    case curl::fuzzer::proto::SCHEME_TELNET:
+      direct_protocols = kTelnetProtocolAllowed;
+      break;
+    case curl::fuzzer::proto::SCHEME_FTP:
+      direct_protocols = kFtpProtocolAllowed;
+      break;
+    case curl::fuzzer::proto::SCHEME_TFTP:
+      direct_protocols = kTftpProtocolAllowed;
+      break;
+    case curl::fuzzer::proto::SCHEME_HTTP:
+    case curl::fuzzer::proto::SCHEME_HTTPS:
+    case curl::fuzzer::proto::SCHEME_WS:
+    case curl::fuzzer::proto::SCHEME_WSS:
+    case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
+    default:
+      break;
+  }
   curl_easy_setopt(easy, CURLOPT_PROTOCOLS_STR, direct_protocols);
   curl_easy_setopt(easy, CURLOPT_REDIR_PROTOCOLS_STR, kEventDrivenProtocolsAllowed);
 

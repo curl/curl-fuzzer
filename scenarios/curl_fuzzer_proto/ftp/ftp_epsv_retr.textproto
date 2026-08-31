@@ -1,0 +1,18 @@
+# Complete passive download: login, PWD, EPSV, TYPE, SIZE, RETR, data EOF,
+# then the final control-channel completion reply.
+scheme: SCHEME_FTP
+host_path: "ftp.test/file.bin"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "220 ftp fuzz peer ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||12345|)\r\n"
+  on_readable: "200 type set\r\n"
+  on_readable: "213 11\r\n"
+  on_readable: "150 opening data connection\r\n"
+  on_readable: "226 transfer complete\r\n"
+}
+subsequent_connections { initial_response: "hello world" }

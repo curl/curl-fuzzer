@@ -283,6 +283,15 @@ def test_telnet_lane_is_a_default_fixed_proto_target() -> None:
     assert "curl_fuzzer_proto_telnet" in module.HISTORICAL_PROTO_CORPUS_TARGETS
 
 
+def test_ftp_and_tftp_lanes_keep_legacy_speed_baselines() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_ftp" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_ftp" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_tftp" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_tftp" in module.DEFAULT_TARGETS
+
+
 def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
     tmp_path: Path,
 ) -> None:

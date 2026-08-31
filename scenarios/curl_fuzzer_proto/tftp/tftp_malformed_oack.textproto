@@ -1,0 +1,5 @@
+# Missing OACK value/terminator reaches negotiation rejection without waiting.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/bad-options"
+options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+connection { initial_response: "\000\006blksize\000" }

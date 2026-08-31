@@ -1,0 +1,6 @@
+# URL mode parsing and text transfer select TFTP's netascii request spelling.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/text;mode=netascii"
+options { option_id: CURLOPT_TRANSFERTEXT bool_value: true }
+options { option_id: CURLOPT_TFTP_NO_OPTIONS bool_value: true }
+connection { initial_response: "\000\003\000\001line\r\n" }

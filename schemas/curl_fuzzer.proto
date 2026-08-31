@@ -207,6 +207,10 @@ enum Scheme {
   SCHEME_WS = 3;
   SCHEME_WSS = 4;
   SCHEME_TELNET = 5;
+  // Keep new protocols append-only: the compatibility target replays binary
+  // Scenarios accumulated before these dedicated lanes existed.
+  SCHEME_FTP = 6;
+  SCHEME_TFTP = 7;
 }
 
 message SetOption {

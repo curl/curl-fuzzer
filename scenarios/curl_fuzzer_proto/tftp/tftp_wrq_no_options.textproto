@@ -1,0 +1,11 @@
+# ACK0 starts a no-options upload and ACK1 completes its short DATA1 block.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/upload"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 6 }
+options { option_id: CURLOPT_TFTP_NO_OPTIONS bool_value: true }
+upload { data: "upload" read_sizes: 2 terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "\000\004\000\000"
+  on_readable: "\000\004\000\001"
+}

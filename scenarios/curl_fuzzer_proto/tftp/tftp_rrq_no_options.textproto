@@ -1,0 +1,5 @@
+# A short DATA block completes a no-options RRQ in one round trip.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/file"
+options { option_id: CURLOPT_TFTP_NO_OPTIONS bool_value: true }
+connection { initial_response: "\000\003\000\001hello" }

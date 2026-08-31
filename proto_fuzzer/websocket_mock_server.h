@@ -68,7 +68,8 @@ class WebSocketMockServer : public MockServerBase {
   bool PushRawBytes(const unsigned char* data, std::size_t size);
 
  protected:
-  curl_socket_t HandleOpenSocket() override;
+  curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
+                                 struct curl_sockaddr* address = nullptr) override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  public:

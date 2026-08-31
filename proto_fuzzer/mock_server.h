@@ -119,7 +119,8 @@ class MockServer : public MockServerBase {
   /// multi handle has been dismantled.
   virtual void ObserveActiveTransfer(CURL* easy);
 
-  curl_socket_t HandleOpenSocket() override;
+  curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
+                                 struct curl_sockaddr* address = nullptr) override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:

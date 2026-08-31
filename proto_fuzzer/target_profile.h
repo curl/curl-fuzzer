@@ -30,6 +30,10 @@ enum class TargetProfile {
   kFastSecureWebSocket,
   /// Exercise bounded TELNET negotiation and callback-backed input.
   kFastTelnet,
+  /// Exercise FTP control and passive data connections without external I/O.
+  kFastFtp,
+  /// Exercise packet-preserving TFTP exchanges over the loopback UDP peer.
+  kFastTftp,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
   /// Isolate deterministic backpressure and timed-wait behavior.
@@ -45,6 +49,10 @@ enum class ScenarioRunMode {
   kProtocolCoverage,
   /// Drive HTTPS through a real TLS peer and inspect live TLS result state.
   kTlsCoverage,
+  /// Drive FTP through its concurrent control/passive-data peer.
+  kFtpCoverage,
+  /// Drive TFTP through its datagram-preserving loopback peer.
+  kTftpCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
 };
@@ -65,6 +73,12 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastHttps:
       return ScenarioRunMode::kTlsCoverage;
+
+    case TargetProfile::kFastFtp:
+      return ScenarioRunMode::kFtpCoverage;
+
+    case TargetProfile::kFastTftp:
+      return ScenarioRunMode::kTftpCoverage;
 
     case TargetProfile::kCompatibility:
     case TargetProfile::kDeepHttp:

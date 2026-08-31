@@ -1,0 +1,17 @@
+# A directory transfer reaches LIST/NLST parsing and the passive data channel.
+scheme: SCHEME_FTP
+host_path: "ftp.test/pub/"
+options { option_id: CURLOPT_DIRLISTONLY bool_value: true }
+options { option_id: CURLOPT_TRANSFERTEXT bool_value: true }
+connection {
+  initial_response: "220-list peer\r\n220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 ok\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "250 cwd pub\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 ascii\r\n"
+  on_readable: "150 listing\r\n"
+  on_readable: "226 listed\r\n"
+}
+subsequent_connections { initial_response: "alpha\r\nbeta\r\n" }

@@ -86,9 +86,14 @@ class MockServerBase {
 
   /// Subclass hook invoked by the OPENSOCKET trampoline. The subclass owns the
   /// decision to construct `connection_`, push any initial bytes, and hand the
-  /// client fd back to libcurl.
+  /// client fd back to libcurl. Passing curl's mutable destination through is
+  /// essential for datagram protocols: TFTP must replace the nominal URL port
+  /// with its per-scenario loopback request socket before curl records the
+  /// address used by sendto(). Stream socketpair peers simply ignore it.
+  /// @param purpose The role curl intends the new socket to serve.
+  /// @param address Mutable destination and native socket description.
   /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD.
-  virtual curl_socket_t HandleOpenSocket() = 0;
+  virtual curl_socket_t HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) = 0;
 
   /// Subclass hook invoked from DriveScenario. Runs the protocol-specific
   /// perform loop against a caller-owned multi that already has 'easy' added.

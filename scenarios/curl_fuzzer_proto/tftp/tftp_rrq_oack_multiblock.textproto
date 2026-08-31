@@ -1,0 +1,9 @@
+# Negotiate an eight-byte block, then finish with a short second DATA packet.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/multiblock"
+options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+connection {
+  initial_response: "\000\006blksize\0008\000tsize\00011\000"
+  on_readable: "\000\003\000\001abcdefgh"
+  on_readable: "\000\003\000\002ijk"
+}

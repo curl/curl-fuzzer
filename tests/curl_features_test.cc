@@ -24,19 +24,32 @@ int main() {
     return 1;
   }
   bool has_telnet = false;
+  bool has_ftp = false;
+  bool has_tftp = false;
   if (info->protocols) {
     for (const char *const *protocol = info->protocols; *protocol; ++protocol) {
       if (std::strcmp(*protocol, "telnet") == 0) {
         has_telnet = true;
-        break;
+      } else if (std::strcmp(*protocol, "ftp") == 0) {
+        has_ftp = true;
+      } else if (std::strcmp(*protocol, "tftp") == 0) {
+        has_tftp = true;
       }
     }
   }
-  // curl exposes no CURL_VERSION_TELNET feature bit. Its advertised protocol
-  // list is therefore the only runtime guard against a future build-default
-  // change silently turning the dedicated proto fuzzer into a no-op error path.
+  // curl exposes no per-protocol feature bits for these handlers. Its
+  // advertised list is therefore the runtime guard against a future default
+  // change silently turning a dedicated fuzzer into a no-op error path.
   if (!has_telnet) {
     std::fputs("libcurl was built without TELNET support\n", stderr);
+    return 1;
+  }
+  if (!has_ftp) {
+    std::fputs("libcurl was built without FTP support\n", stderr);
+    return 1;
+  }
+  if (!has_tftp) {
+    std::fputs("libcurl was built without TFTP support\n", stderr);
     return 1;
   }
   return 0;

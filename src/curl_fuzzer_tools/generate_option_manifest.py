@@ -74,6 +74,14 @@ OPTION_KIND_OVERRIDES: Dict[str, str] = {
     "CURLOPT_SSL_ENABLE_ALPN": "bool",
     "CURLOPT_COOKIESESSION": "bool",
     "CURLOPT_UNRESTRICTED_AUTH": "bool",
+    "CURLOPT_DIRLISTONLY": "bool",
+    "CURLOPT_APPEND": "bool",
+    "CURLOPT_TRANSFERTEXT": "bool",
+    "CURLOPT_FTP_USE_EPSV": "bool",
+    "CURLOPT_FTP_SKIP_PASV_IP": "bool",
+    "CURLOPT_FTP_USE_PRET": "bool",
+    "CURLOPT_WILDCARDMATCH": "bool",
+    "CURLOPT_TFTP_NO_OPTIONS": "bool",
 }
 
 VALUE_KIND_SYMBOLS: Dict[str, str] = {

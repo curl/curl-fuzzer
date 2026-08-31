@@ -17,11 +17,13 @@
 #include <string>
 
 #include "proto_fuzzer/api_lifecycle.h"
+#include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/telnet_mock_server.h"
+#include "proto_fuzzer/tftp_mock_server.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
@@ -96,6 +98,10 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "wss";
     case curl::fuzzer::proto::SCHEME_TELNET:
       return "telnet";
+    case curl::fuzzer::proto::SCHEME_FTP:
+      return "ftp";
+    case curl::fuzzer::proto::SCHEME_TFTP:
+      return "tftp";
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -126,6 +132,22 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       return std::make_unique<WebSocketMockServer>();
     case curl::fuzzer::proto::SCHEME_TELNET:
       return std::make_unique<TelnetMockServer>();
+    case curl::fuzzer::proto::SCHEME_FTP:
+      // New numeric enum values may already occur in the historical mixed
+      // corpus as unknown fields. Only the fixed FTP profile may reinterpret
+      // one as a live two-channel protocol exchange.
+      if (mode == ScenarioRunMode::kFtpCoverage) {
+        return std::make_unique<FtpMockServer>();
+      }
+      return nullptr;
+    case curl::fuzzer::proto::SCHEME_TFTP:
+      // TFTP changes the callback transport from a preconnected stream to a
+      // real UDP endpoint, so compatibility inputs must not opt into it merely
+      // because this build learned a new enum value.
+      if (mode == ScenarioRunMode::kTftpCoverage) {
+        return std::make_unique<TftpMockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
