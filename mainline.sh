@@ -25,17 +25,29 @@ shift $((OPTIND-1))
 export CC=clang
 export CXX=clang++
 FUZZ_FLAG="-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
-export CFLAGS="-fsanitize=address,fuzzer-no-link"
-export CXXFLAGS="-fsanitize=address,fuzzer-no-link -stdlib=libstdc++ $FUZZ_FLAG"
+export SANITIZER="${SANITIZER:-address}"
+SANITIZER_FLAGS="-fsanitize=${SANITIZER},fuzzer-no-link"
+export CFLAGS="$SANITIZER_FLAGS"
+export CXXFLAGS="$SANITIZER_FLAGS -stdlib=libstdc++ $FUZZ_FLAG"
 export CPPFLAGS="$FUZZ_FLAG"
 export OPENSSLFLAGS="-fno-sanitize=alignment -lstdc++"
 
+# CMake and the external dependencies cache their initial compiler flags.
+# Keep local MSan artefacts away from the historical ASan build directory so
+# switching sanitizers cannot silently produce a mixed-instrumentation binary.
+if [[ -z "${BUILD_DIR:-}" && "${SANITIZER}" == "memory" ]]; then
+  export BUILD_DIR="${BUILD_ROOT}/build-memory"
+fi
+
 "${SCRIPTDIR}"/compile_target.sh "${TARGET}"
 
-# Building fuzzers alone only checks that the regression tests compile. Run
-# the allocation-free TLV mutator and proto policy tests on every normal
-# mainline build so mutation invariants cannot regress behind a green CI job.
-if [[ "${TARGET}" == "fuzz" ]]; then
+# The fuzz target does not execute regression tests. Run the allocation-free
+# TLV mutator and proto policy tests on AddressSanitizer builds so mutation
+# invariants cannot regress behind a green CI job. The
+# runner's distro libstdc++ is not MSan-instrumented, so executing these tests
+# in the memory lane would turn library-boundary false positives into failures;
+# that lane remains a genuine instrumented compile/link check.
+if [[ "${TARGET}" == "fuzz" && "${SANITIZER}" != "memory" ]]; then
   TEST_BUILD_DIR="${BUILD_DIR:-${BUILD_ROOT}/build}"
   cmake --build "${TEST_BUILD_DIR}" --target fuzzer_unit_tests
   ctest --test-dir "${TEST_BUILD_DIR}" --output-on-failure

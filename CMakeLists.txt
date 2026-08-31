@@ -633,8 +633,23 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(LPM_PB_INCLUDE ${LPM_PB_DIR}/include)
     set(LPM_PB_LIBDIR ${LPM_PB_DIR}/lib)
     set(LPM_PROTOC ${LPM_PB_DIR}/bin/protoc)
+    set(LPM_PB_SOURCE_DIR ${LPM_PB_DIR}/src/external.protobuf)
+    set(HOST_PROTOC_BUILD_DIR
+        ${CMAKE_BINARY_DIR}/${LPM_BUILD_NAME}-host-protoc-build)
+    set(HOST_PROTOC_INSTALL_DIR
+        ${CMAKE_BINARY_DIR}/${LPM_BUILD_NAME}-host-protoc-install)
+    set(HOST_PROTOC ${HOST_PROTOC_INSTALL_DIR}/bin/protoc)
 
-    if(NOT EXISTS ${LPM_STATIC_LIB} OR NOT EXISTS ${LPM_PROTOC})
+    # A cache created before the clean host tool existed contains LPM's install
+    # outputs but not its protobuf source. Rebuild LPM once in that case so the
+    # MSan-only host build below has the exact matching source available.
+    set(HOST_PROTOC_NEEDS_SOURCE FALSE)
+    if("$ENV{SANITIZER}" STREQUAL "memory" AND NOT EXISTS ${HOST_PROTOC})
+        set(HOST_PROTOC_NEEDS_SOURCE TRUE)
+    endif()
+    if(NOT EXISTS ${LPM_STATIC_LIB} OR NOT EXISTS ${LPM_PROTOC} OR
+       (HOST_PROTOC_NEEDS_SOURCE AND
+        NOT EXISTS ${LPM_PB_SOURCE_DIR}/CMakeLists.txt))
         ExternalProject_Add(libprotobuf_mutator_external
             GIT_REPOSITORY https://github.com/google/libprotobuf-mutator.git
             GIT_TAG ${LPM_VERSION}
@@ -653,6 +668,56 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     else()
         message(STATUS "LPM already installed at ${LPM_INSTALL_DIR}, skipping build")
         add_custom_target(libprotobuf_mutator_external)
+    endif()
+
+    set(GENERATOR_PROTOC ${LPM_PROTOC})
+    set(GENERATOR_PROTOC_DEP libprotobuf_mutator_external)
+    if("$ENV{SANITIZER}" STREQUAL "memory")
+        # LPM correctly instruments its bundled protobuf libraries, but that
+        # also instruments protoc. A host tool linked to the runner's ordinary
+        # libstdc++ produces false MSan reports before it can generate inputs.
+        # Build protoc again from the same source with clean flags, while
+        # retaining the instrumented libraries linked into the fuzz targets.
+        if(NOT EXISTS ${HOST_PROTOC})
+            add_custom_command(
+                OUTPUT ${HOST_PROTOC}
+                COMMAND ${CMAKE_COMMAND} -E env
+                        --unset=CFLAGS --unset=CXXFLAGS
+                        --unset=CPPFLAGS --unset=LDFLAGS
+                        ${CMAKE_COMMAND}
+                        -S ${LPM_PB_SOURCE_DIR}
+                        -B ${HOST_PROTOC_BUILD_DIR}
+                        -G "${CMAKE_GENERATOR}"
+                        -DCMAKE_INSTALL_PREFIX=${HOST_PROTOC_INSTALL_DIR}
+                        -DCMAKE_BUILD_TYPE=Release
+                        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+                        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                        -DCMAKE_C_FLAGS=
+                        -DCMAKE_CXX_FLAGS=
+                        -DCMAKE_EXE_LINKER_FLAGS=
+                        -DCMAKE_CXX_STANDARD=14
+                        -Dprotobuf_INSTALL=ON
+                        -Dprotobuf_BUILD_TESTS=OFF
+                        -Dprotobuf_BUILD_CONFORMANCE=OFF
+                        -Dprotobuf_BUILD_EXAMPLES=OFF
+                        -Dprotobuf_BUILD_LIBUPB=OFF
+                        -Dprotobuf_BUILD_SHARED_LIBS=OFF
+                        -Dprotobuf_WITH_ZLIB=OFF
+                COMMAND ${CMAKE_COMMAND} --build ${HOST_PROTOC_BUILD_DIR}
+                        --config Release --target protoc --parallel
+                COMMAND ${CMAKE_COMMAND} --install ${HOST_PROTOC_BUILD_DIR}
+                        --config Release --component protoc
+                DEPENDS libprotobuf_mutator_external
+                COMMENT "Building uninstrumented host protoc"
+                VERBATIM
+            )
+            add_custom_target(host_protoc DEPENDS ${HOST_PROTOC})
+        else()
+            add_custom_target(host_protoc)
+            add_dependencies(host_protoc libprotobuf_mutator_external)
+        endif()
+        set(GENERATOR_PROTOC ${HOST_PROTOC})
+        set(GENERATOR_PROTOC_DEP host_protoc)
     endif()
 
     # Generate the expanded .proto and the C++ option manifest from curl.h.
@@ -683,11 +748,11 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
 
     add_custom_command(
         OUTPUT ${GEN_PB_CC} ${GEN_PB_H}
-        COMMAND ${LPM_PROTOC}
+        COMMAND ${GENERATOR_PROTOC}
                 --cpp_out=${CMAKE_BINARY_DIR}
                 --proto_path=${PROTO_FUZZER_SCHEMA_DIR}
                 ${GEN_PROTO}
-        DEPENDS ${GEN_PROTO} libprotobuf_mutator_external
+        DEPENDS ${GEN_PROTO} ${GENERATOR_PROTOC} ${GENERATOR_PROTOC_DEP}
         COMMENT "protoc curl_fuzzer.proto"
         VERBATIM
     )
@@ -907,12 +972,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 OUTPUT ${out}
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${scenario_out_dir}
                 COMMAND ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
-                        ${LPM_PROTOC}
+                        ${GENERATOR_PROTOC}
                         ${PROTO_FUZZER_SCHEMA_DIR}
                         ${GEN_PROTO}
                         ${textproto}
                         ${out}
-                DEPENDS ${textproto} ${GEN_PROTO} libprotobuf_mutator_external
+                DEPENDS ${textproto} ${GEN_PROTO} ${GENERATOR_PROTOC}
+                        ${GENERATOR_PROTOC_DEP}
                         ${CMAKE_SOURCE_DIR}/scripts/encode_scenario.sh
                 COMMENT "Encoding ${name}.textproto for ${_output_name}"
                 VERBATIM
