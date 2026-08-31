@@ -26,13 +26,17 @@
 #include <unistd.h>
 #include <curl/curl.h>
 #include "curl_fuzzer.h"
+#include "legacy_fuzzer.h"
+#include "legacy_protocol_allowlist.h"
 #include "legacy_tlv_mutator.h"
 
 /**
- * Fuzzing entry point. This function is passed a buffer containing a test
- * case.  This test case should drive the CURL API into making a request.
+ * Run one legacy TLV input independently of the exported libFuzzer symbol.
+ * Keeping the implementation behind a normal C++ function lets every
+ * protocol binary expose its own same-named source entrypoint, which is how
+ * Fuzz Introspector attributes a binary's runtime coverage to its call tree.
  */
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+int LegacyFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
   int rc = 0;
   int tlv_rc;
@@ -561,16 +565,11 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
   const char *allowed_protocols = "";
 
 #ifdef FUZZ_PROTOCOLS_ALL
-  /* Do not allow telnet currently as it accepts input from stdin. */
-  allowed_protocols =
-    "dict,file,ftp,ftps,gopher,gophers,http,https,imap,imaps,"
-    "mqtt,pop3,pop3s,"
-    "ldap,ldaps,"
-    "rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts,"
-    "scp,"
-    "sftp,"
-    "rtsp,smb,smbs,smtp,smtps,tftp,"
-    "ws,wss";
+  /* CURLOPT_PROTOCOLS_STR rejects the complete value if even one requested
+     protocol was compiled out. Derive the generic target's stable safety
+     policy from this libcurl build so optional RTMP and SSH backends cannot
+     prevent every transfer from starting. */
+  allowed_protocols = legacy_protocol_allowlist::ForCurrentCurl().c_str();
 #endif
 #ifdef FUZZ_PROTOCOLS_DICT
   allowed_protocols = "dict";

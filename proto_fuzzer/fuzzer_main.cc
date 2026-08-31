@@ -5,8 +5,9 @@
  */
 
 /// @file
-/// @brief Shared libFuzzer entrypoint for the policy-split protobuf targets.
-///        Wires each binary's LPM policy to ScenarioRunner::Run.
+/// @brief Shared LPM mutation and execution for policy-split protobuf targets.
+
+#include "proto_fuzzer/fuzzer_main.h"
 
 #include <curl/curl.h>
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
@@ -19,6 +20,8 @@
 #include "proto_fuzzer/target_policy.h"
 
 namespace {
+
+constexpr bool kUseBinaryFormat = true;
 
 #if defined(PROTO_FUZZER_TARGET_COMPATIBILITY)
 // The original target deliberately has no policy. Its OSS-Fuzz corpus and
@@ -81,10 +84,47 @@ const CurlGlobalBootstrap kGlobalBootstrap;
 
 }  // namespace
 
-/// @brief libFuzzer entry point. libFuzzer will call this function with a valid Scenario protobuf message on each
-/// fuzzing iteration. The function is expected to run the scenario and return. Any crashes or undefined behavior during
-/// scenario execution will be reported by libFuzzer as fuzzing bugs.
-/// @param scenario The Scenario describing the curl operations to perform.
-DEFINE_BINARY_PROTO_FUZZER(const curl::fuzzer::proto::Scenario& scenario) {
-  proto_fuzzer::ScenarioRunner().Run(scenario, kProbeTransferResults);
+/// Mutate a binary Scenario through LPM. This symbol deliberately remains in
+/// the shared implementation: mutation policy is identical within one binary,
+/// while only the test entrypoint needs a unique source basename for static
+/// coverage attribution.
+/// @param data Mutable serialized Scenario storage.
+/// @param size Current serialized size.
+/// @param max_size Capacity of data.
+/// @param seed Mutation random seed supplied by libFuzzer.
+/// @return Serialized size after mutation.
+extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t* data, std::size_t size, std::size_t max_size,
+                                               unsigned int seed) {
+  curl::fuzzer::proto::Scenario scenario;
+  return protobuf_mutator::libfuzzer::CustomProtoMutator(kUseBinaryFormat, data, size, max_size, seed, &scenario);
 }
+
+/// Cross two binary Scenarios through LPM while preserving target policy.
+/// @param data1 First serialized parent.
+/// @param size1 Size of data1.
+/// @param data2 Second serialized parent.
+/// @param size2 Size of data2.
+/// @param out Destination storage.
+/// @param max_out_size Capacity of out.
+/// @param seed Crossover random seed supplied by libFuzzer.
+/// @return Serialized child size.
+extern "C" std::size_t LLVMFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t size1,
+                                                 const std::uint8_t* data2, std::size_t size2, std::uint8_t* out,
+                                                 std::size_t max_out_size, unsigned int seed) {
+  curl::fuzzer::proto::Scenario scenario1;
+  curl::fuzzer::proto::Scenario scenario2;
+  return protobuf_mutator::libfuzzer::CustomProtoCrossOver(kUseBinaryFormat, data1, size1, data2, size2, out,
+                                                           max_out_size, seed, &scenario1, &scenario2);
+}
+
+namespace proto_fuzzer {
+
+int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+  curl::fuzzer::proto::Scenario scenario;
+  if (protobuf_mutator::libfuzzer::LoadProtoInput(kUseBinaryFormat, data, size, &scenario)) {
+    ScenarioRunner().Run(scenario, kProbeTransferResults);
+  }
+  return 0;
+}
+
+}  // namespace proto_fuzzer

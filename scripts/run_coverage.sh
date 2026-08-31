@@ -20,15 +20,14 @@ PROFRAW_DIR="${COVERAGE_DIR}/profraw"
 LLVM_PROFDATA="${LLVM_PROFDATA:-llvm-profdata}"
 LLVM_COV="${LLVM_COV:-llvm-cov}"
 
-# Source the canonical target list, then tack on curl_fuzzer_fnmatch which is
-# built but intentionally not in fuzz_targets (unit-test fuzzer, not shipped
-# to OSS-Fuzz). Callers can override the list via the TARGETS env var, e.g.
+# Source the canonical target list. Callers can override the list via the
+# TARGETS env var, e.g.
 #   TARGETS=curl_fuzzer_proto ./scripts/run_coverage.sh
 # to iterate on a single binary without replaying everything else.
 # shellcheck disable=SC1091
 . "${SCRIPTDIR}/fuzz_targets"
 . "${SCRIPTDIR}/fuzz_corpus_helpers.sh"
-TARGETS="${TARGETS:-${FUZZ_TARGETS} curl_fuzzer_fnmatch}"
+TARGETS="${TARGETS:-${FUZZ_TARGETS}}"
 
 mkdir -p "${PROFRAW_DIR}"
 # Wipe any stale profraw from a previous run so the merge reflects *this* run.
