@@ -51,6 +51,21 @@ void TrimMetadata(std::string* value) {
   }
 }
 
+/// Give the successful-TLS lane a hostname its fixed certificate can verify
+/// while retaining the fuzz-controlled path, query, and fragment. Arbitrary
+/// authorities remain covered by the compatibility and legacy HTTPS lanes;
+/// spending this lane's mutations on URL failures would keep curl's peer-cert
+/// and encrypted application-data paths dark.
+void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("tls.test/");
+    return;
+  }
+  scenario->set_host_path("tls.test" + host_path.substr(suffix_start));
+}
+
 template <typename RepeatedBytes>
 void BoundStringValues(RepeatedBytes* values, std::size_t count_limit, std::size_t value_limit) {
   TrimRepeated(values, count_limit);
@@ -523,6 +538,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
 
     case TargetProfile::kFastHttps:
       ClearAllBackpressure(scenario);
+      CanonicalizeTlsAuthority(scenario);
       return;
 
     case TargetProfile::kFastWebSocket:

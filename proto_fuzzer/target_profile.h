@@ -22,7 +22,7 @@ enum class TargetProfile {
   kFastHttp,
   /// Retain HTTP's complete structured request and response surface.
   kDeepHttp,
-  /// Exercise HTTPS setup without wall-clock waits.
+  /// Exercise a complete HTTPS exchange against the in-process TLS peer.
   kFastHttps,
   /// Exercise plaintext WebSocket framing without wall-clock waits.
   kFastWebSocket,
@@ -43,6 +43,8 @@ enum class ScenarioRunMode {
   kFastProtocol,
   /// Drive the protocol and inspect a compact set of public result APIs.
   kProtocolCoverage,
+  /// Drive HTTPS through a real TLS peer and inspect live TLS result state.
+  kTlsCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
 };
@@ -61,9 +63,11 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
     case TargetProfile::kApi:
       return ScenarioRunMode::kApiLifecycle;
 
+    case TargetProfile::kFastHttps:
+      return ScenarioRunMode::kTlsCoverage;
+
     case TargetProfile::kCompatibility:
     case TargetProfile::kDeepHttp:
-    case TargetProfile::kFastHttps:
     case TargetProfile::kFastWebSocket:
     case TargetProfile::kFastSecureWebSocket:
     case TargetProfile::kTiming:

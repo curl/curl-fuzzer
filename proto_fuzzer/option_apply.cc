@@ -56,6 +56,21 @@ constexpr char kHstsHttpEnvVar[] = "CURL_HSTS_HTTP";
 constexpr long kConnectTimeoutMs = 200;
 constexpr long kTimeoutMs = 200;
 
+/// Test the same prefix curl uses to choose between an in-memory digest and a
+/// filename. Do not reject malformed base64 here: those values are useful TLS
+/// parser inputs and remain filesystem-safe as long as this prefix is intact.
+bool UsesInMemoryPublicKeyPin(const std::string& value) { return value.rfind("sha256//", 0) == 0; }
+
+/// Keep mutated pin values on curl's digest-comparison branch while retaining
+/// every mutation byte. Existing expressions, including correlated corpus
+/// seeds, must remain byte-for-byte stable.
+void ConstrainPinnedPublicKeyValue(std::string* value) {
+  if (value == nullptr || UsesInMemoryPublicKeyPin(*value)) {
+    return;
+  }
+  value->insert(0, "sha256//");
+}
+
 /// Baseline write callback for both CURLOPT_WRITEFUNCTION and
 /// CURLOPT_HEADERFUNCTION. Consumes every byte so transfers don't stall on
 /// backpressure and emits nothing. Protocol-specific mocks may install their
@@ -72,10 +87,9 @@ int SilentDebugCallback(CURL* /*handle*/, curl_infotype /*type*/, char* /*data*/
 }
 
 /// Let curl's debug build accept transport-security response headers over the
-/// plaintext HTTP mock. The structured secure lane currently covers TLS setup
-/// and failure handling, not a successful TLS peer, so this curl-provided test
-/// hook is what lets the high-throughput HTTP lane reach the HSTS and Alt-Svc
-/// parsers today.
+/// plaintext HTTP mock. The HTTPS lane now provides a verified peer, but making
+/// HSTS and Alt-Svc parser coverage depend on a cryptographic handshake would
+/// needlessly remove those parsers from the high-throughput HTTP lane.
 void EnableDebugHttpTransportMetadata() {
   static const bool configured = [] {
     // CMake builds the fuzzing copy of curl with ENABLE_DEBUG specifically so
@@ -148,6 +162,9 @@ void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario) {
         if (option.value_case() != curl::fuzzer::proto::SetOption::kStringValue) {
           option.set_string_value("");
         }
+        if (desc->curlopt == CURLOPT_PINNEDPUBLICKEY) {
+          ConstrainPinnedPublicKeyValue(option.mutable_string_value());
+        }
         break;
       case OptionValueKind::kUint:
         if (option.value_case() != curl::fuzzer::proto::SetOption::kUintValue) {
@@ -202,9 +219,10 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
   // makes replay independent of the machine running the fuzzer.
   curl_easy_setopt(easy, CURLOPT_PROXY, "");
 
-  // Keep ordinary secure-scheme mutations independent of host trust-store
-  // state, matching the legacy harness. An explicit scenario option is applied
-  // later and can restore verification to exercise that deliberate path.
+  // Keep raw secure-scheme inputs independent of the host trust store,
+  // matching the legacy harness. The dedicated TLS mock installs its own
+  // in-memory trust anchor after this baseline; scenario options still run
+  // last and can deliberately select verification failures.
   curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 0L);
 
   // Force every name lookup to the fuzzer's in-process mock peer. The caller
@@ -271,6 +289,17 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
         if (result != CURLE_OK) {
           return result;
         }
+      }
+
+      // Curl otherwise treats this option as a filename during the TLS
+      // handshake. Fixed-policy inputs normally arrive pre-constrained by the
+      // postprocessor; this runtime check also protects compatibility inputs,
+      // which intentionally bypass it. Curl copies this option in setopt, so
+      // the temporary remains valid for the call's full ownership contract.
+      if (desc->curlopt == CURLOPT_PINNEDPUBLICKEY && !UsesInMemoryPublicKeyPin(value)) {
+        std::string constrained = value;
+        ConstrainPinnedPublicKeyValue(&constrained);
+        return curl_easy_setopt(easy, desc->curlopt, constrained.c_str());
       }
 
       return curl_easy_setopt(easy, desc->curlopt, value.c_str());

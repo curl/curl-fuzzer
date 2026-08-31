@@ -1,0 +1,14 @@
+# Closing a redirect response forces a second TLS socket to the same host.
+# Both connections share one per-scenario server context, allowing curl's
+# client session cache to offer the first connection's session on the second.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/start"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { option_id: CURLOPT_SSL_SESSIONID_CACHE bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: https://tls.test/final\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nresumed"
+}

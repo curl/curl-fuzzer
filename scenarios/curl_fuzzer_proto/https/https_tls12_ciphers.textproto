@@ -1,0 +1,20 @@
+# 393222 combines CURL_SSLVERSION_TLSv1_2 with
+# CURL_SSLVERSION_MAX_TLSv1_2, forcing curl through its TLS 1.2-only setup.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/tls12"
+options { option_id: CURLOPT_SSLVERSION uint_value: 393222 }
+options {
+  option_id: CURLOPT_SSL_CIPHER_LIST
+  string_value: "ECDHE-ECDSA-AES128-GCM-SHA256"
+}
+options {
+  option_id: CURLOPT_SSL_EC_CURVES
+  string_value: "P-256"
+}
+options {
+  option_id: CURLOPT_SSL_SIGNATURE_ALGORITHMS
+  string_value: "ecdsa_secp256r1_sha256"
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\ntls12"
+}

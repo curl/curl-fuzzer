@@ -28,12 +28,12 @@ namespace proto_fuzzer {
 class MockConnection {
  public:
   MockConnection();
-  ~MockConnection();
+  virtual ~MockConnection();
 
   MockConnection(const MockConnection&) = delete;
   MockConnection& operator=(const MockConnection&) = delete;
 
-  bool ok() const;
+  virtual bool ok() const;
   curl_socket_t take_client_fd();
   int server_fd() const;
 
@@ -49,12 +49,15 @@ class MockConnection {
   /// @return true when the queried postcondition holds.
   bool EnsureClientSendBufferSize(std::size_t minimum);
 
-  bool WriteAll(const unsigned char* data, std::size_t size);
-  /// Drain bytes curl has written according to the configured per-call limit.
-  /// @return number of bytes consumed during this call.
-  std::size_t DrainIncoming();
+  virtual bool WriteAll(const unsigned char* data, std::size_t size);
+  /// Advance incoming transport work according to the configured per-call
+  /// limit. Plaintext connections report bytes consumed; layered transports
+  /// may also report handshake state changes so the bounded outer loop does
+  /// not mistake useful protocol progress for an idle connection.
+  /// @return amount of transport progress made during this call.
+  virtual std::size_t DrainIncoming();
   void ReadAvailable(std::string* out);
-  void ShutdownWrite();
+  virtual void ShutdownWrite();
 
   /// Apply deterministic backpressure knobs. Set SO_RCVBUF on the server
   /// side (if recv_buf_bytes > 0) to cap how much curl can write before it
@@ -99,6 +102,23 @@ class MockServer : public MockServerBase {
   bool has_more_chunks() const;
 
  protected:
+  /// Construct the transport used for one HTTP exchange. HTTPS overrides this
+  /// factory with a TLS record layer while retaining the same bounded response
+  /// scripting and redirect lifetimes as plaintext HTTP.
+  /// @return a new connection, whose ok() result is checked before use.
+  virtual std::unique_ptr<MockConnection> CreateConnection();
+
+  /// Release every current and retired connection before resetting transport-
+  /// specific state. Derived servers call this from their destructors when
+  /// connection objects borrow state owned by the derived class.
+  void ResetConnections();
+
+  /// Observe curl while its connection filters are still attached. The
+  /// default HTTP peer has no transport-specific state to inspect; layered
+  /// transports override this instead of querying stale state after the
+  /// multi handle has been dismantled.
+  virtual void ObserveActiveTransfer(CURL* easy);
+
   curl_socket_t HandleOpenSocket() override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
@@ -135,7 +155,7 @@ class MockServer : public MockServerBase {
   /// callback state owned by MockServerBase::DriveScenario.
   /// @param multi Multi handle containing `easy`.
   /// @return after curl finishes or a deterministic idle/operation cap wins.
-  void RunSocketActionLoop(CURLM* multi);
+  void RunSocketActionLoop(CURLM* multi, CURL* easy);
 
   std::array<ConnectionScript, scenario_limits::kMaxConnections> scripts_;
   std::size_t script_count_;

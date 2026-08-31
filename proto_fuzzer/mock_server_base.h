@@ -66,8 +66,10 @@ class MockServerBase {
   /// @param scenario the Scenario proto to drive.
   /// @param use_multi_socket Select the callback-driven socket-action loop.
   /// @param wake_multi Probe wakeup/timeout control APIs while multi is live.
-  void DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket = false,
-                     bool wake_multi = false);
+  /// @return the completed transfer's CURLcode, or CURLE_FAILED_INIT when the
+  /// bounded drive could not produce a completion message.
+  CURLcode DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket = false,
+                         bool wake_multi = false);
 
   /// Run through the public easy entrypoint when a protocol mock can preload
   /// all peer work before curl takes control. The base falls back to the

@@ -70,6 +70,8 @@ OPTION_KIND_OVERRIDES: Dict[str, str] = {
     "CURLOPT_FORBID_REUSE": "bool",
     "CURLOPT_UPLOAD": "bool",
     "CURLOPT_SSL_VERIFYPEER": "bool",
+    "CURLOPT_SSL_SESSIONID_CACHE": "bool",
+    "CURLOPT_SSL_ENABLE_ALPN": "bool",
     "CURLOPT_COOKIESESSION": "bool",
     "CURLOPT_UNRESTRICTED_AUTH": "bool",
 }

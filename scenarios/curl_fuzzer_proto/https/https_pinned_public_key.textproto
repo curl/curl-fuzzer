@@ -1,0 +1,11 @@
+# Pin the fixed test certificate's SubjectPublicKeyInfo so curl reaches the
+# successful digest comparison instead of only the malformed-pin exits.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/pinned"
+options {
+  option_id: CURLOPT_PINNEDPUBLICKEY
+  string_value: "sha256//ohF20oHrdt/MM3YpyIewiTdtTbgZwq3qatd40TjMtYg="
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\npinned"
+}

@@ -14,6 +14,8 @@ def test_true_flags_use_boolean_mutations() -> None:
     for name in (
         "CURLOPT_UPLOAD",
         "CURLOPT_SSL_VERIFYPEER",
+        "CURLOPT_SSL_SESSIONID_CACHE",
+        "CURLOPT_SSL_ENABLE_ALPN",
         "CURLOPT_COOKIESESSION",
         "CURLOPT_UNRESTRICTED_AUTH",
         "CURLOPT_HTTP09_ALLOWED",
@@ -34,6 +36,11 @@ def test_modes_and_bitmasks_retain_full_integer_values() -> None:
         "CURLOPT_HSTS_CTRL",
         "CURLOPT_TIMECONDITION",
         "CURLOPT_POSTREDIR",
+        # VERIFYHOST consumes the historical 0/2 API values, while the other
+        # TLS entries are version/bitmask selectors rather than booleans.
+        "CURLOPT_SSL_VERIFYHOST",
+        "CURLOPT_SSLVERSION",
+        "CURLOPT_SSL_OPTIONS",
     ):
         assert _kind(name) == "uint"
 

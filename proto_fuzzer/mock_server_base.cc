@@ -64,11 +64,11 @@ void MockServerBase::Install(CURL* easy) {
 void MockServerBase::ConfigureRequestData(ScenarioRequestData* /*request_data*/) {}
 
 /// Allocate a multi, attach 'easy', delegate to the subclass RunLoop, consume
-/// its completion message, and clean up. Failures in multi_init / add_handle
-/// silently no-op: the fuzzer cares about what curl does when driven, not
-/// about harness-level errors.
-void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket,
-                                   bool wake_multi) {
+/// its completion message, and clean up. Harness setup failures return a
+/// stable sentinel; fuzzer callers may ignore it while unit tests can assert
+/// the protocol result without adding another callback or global.
+CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket,
+                                       bool wake_multi) {
   // Cache backpressure knobs so HandleOpenSocket can apply them the moment
   // connection_ exists. Both default to 0, which matches the legacy "drain
   // greedily, kernel-default buffers" behaviour exactly.
@@ -78,8 +78,10 @@ void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenar
 
   CURLM* multi = curl_multi_init();
   if (multi == nullptr) {
-    return;
+    return CURLE_FAILED_INIT;
   }
+
+  CURLcode transfer_result = CURLE_FAILED_INIT;
 
   // Callback data must survive both remove_handle and multi_cleanup, since
   // either may emit CURL_POLL_REMOVE. Keeping it in this outer scope provides
@@ -107,13 +109,18 @@ void MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenar
     // attached, this drain has at most one completion message regardless of
     // fuzzed response size or redirect count.
     int messages_remaining = 0;
-    while (curl_multi_info_read(multi, &messages_remaining) != nullptr) {
+    CURLMsg* message = nullptr;
+    while ((message = curl_multi_info_read(multi, &messages_remaining)) != nullptr) {
+      if (message->msg == CURLMSG_DONE && message->easy_handle == easy) {
+        transfer_result = message->data.result;
+      }
     }
 
     curl_multi_remove_handle(multi, easy);
   }
   curl_multi_cleanup(multi);
   multi_socket_driver_ = nullptr;
+  return transfer_result;
 }
 
 /// Preserve a safe fallback for protocol mocks that require an outer driver
