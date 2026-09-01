@@ -9,6 +9,22 @@
 #include <cstdio>
 #include <cstring>
 
+namespace {
+
+bool HasNamedFeature(const curl_version_info_data *info, const char *expected) {
+  if (!info->feature_names) {
+    return false;
+  }
+  for (const char *const *feature = info->feature_names; *feature; ++feature) {
+    if (std::strcmp(*feature, expected) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
 int main() {
   const curl_version_info_data *const info = curl_version_info(CURLVERSION_NOW);
   if (!info) {
@@ -23,6 +39,21 @@ int main() {
     std::fputs("libcurl did not report its linked Brotli version\n", stderr);
     return 1;
   }
+#ifdef CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES
+  if (!HasNamedFeature(info, "HTTPSRR")) {
+    std::fputs("libcurl was built without HTTPS RR support\n", stderr);
+    return 1;
+  }
+  if (!HasNamedFeature(info, "ECH")) {
+    std::fputs("libcurl was built without ECH support\n", stderr);
+    return 1;
+  }
+  if (!HasNamedFeature(info, "HTTPSIG")) {
+    std::fputs("libcurl was built without HTTP Message Signatures support\n",
+               stderr);
+    return 1;
+  }
+#endif
   bool has_telnet = false;
   bool has_ftp = false;
   bool has_tftp = false;

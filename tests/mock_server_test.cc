@@ -25,6 +25,7 @@
 #include "proto_fuzzer/ws_frame.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include <openssl/ech.h>
 #include <openssl/ssl.h>
 
 #include "proto_fuzzer/h2_proxy_mock_server.h"
@@ -336,6 +337,9 @@ struct TlsTransferResult {
   std::size_t handshake_count = 0;
   std::size_t reused_session_count = 0;
   std::size_t write_retry_count = 0;
+  int ech_status = -1;
+  std::string ech_inner_name;
+  std::string ech_outer_name;
 };
 
 /// Add a typed option without spelling protobuf oneof plumbing in each TLS
@@ -361,6 +365,138 @@ void AddStringOption(Scenario *scenario,
   auto *option = scenario->add_options();
   option->set_option_id(option_id);
   option->set_string_value(value);
+}
+
+/// Retain request bytes that the production mock normally discards while
+/// making room for curl's next write. This test-only transport still uses the
+/// same socketpair and drive loop as the fuzzer.
+class RequestCapturingConnection final : public proto_fuzzer::MockConnection {
+public:
+  explicit RequestCapturingConnection(std::string *request)
+      : request_(request) {}
+
+  std::size_t DrainIncoming() override {
+    const std::size_t previous_size = request_->size();
+    ReadAvailable(request_);
+    return request_->size() - previous_size;
+  }
+
+private:
+  std::string *request_;
+};
+
+/// Substitute the request-retaining connection without changing MockServer's
+/// response scripting or multi-perform behavior.
+class RequestCapturingServer final : public proto_fuzzer::MockServer {
+public:
+  ~RequestCapturingServer() override { ResetConnections(); }
+
+  const std::string &request() const { return request_; }
+
+protected:
+  std::unique_ptr<proto_fuzzer::MockConnection> CreateConnection() override {
+    return std::make_unique<RequestCapturingConnection>(&request_);
+  }
+
+private:
+  std::string request_;
+};
+
+/// Drive one signing algorithm through the same generated SetOption manifest,
+/// request-header owner, and in-process HTTP peer used by deep fuzz inputs.
+std::string CaptureHttpsigRequest(std::uint64_t algorithm,
+                                  const std::string &key,
+                                  const std::string &key_id,
+                                  const std::string &components) {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("httpsig.test/signed?view=full");
+  scenario.mutable_connection()->add_on_readable(
+      "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
+  scenario.add_request_headers("Date: Tue, 20 Apr 2021 02:07:55 GMT");
+  scenario.add_request_headers("X-Fuzz-Meta: first");
+  scenario.add_request_headers("X-Fuzz-Meta: second");
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_HTTPSIG_ALGORITHM,
+                algorithm);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_HTTPSIG_KEY, key);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_HTTPSIG_KEYID,
+                  key_id);
+  if (!components.empty()) {
+    AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_HTTPSIG_HEADERS,
+                    components);
+  }
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "HTTP Message Signature test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://httpsig.test/signed?view=full");
+
+  RequestCapturingServer server;
+  server.Install(easy);
+  for (const auto &option : scenario.options()) {
+    Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
+           "HTTP Message Signature option was rejected by curl");
+  }
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    Expect(server.DriveScenario(easy, scenario) == CURLE_OK,
+           "HTTP Message Signature transfer did not complete");
+  }
+  const std::string request = server.request();
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+  return request;
+}
+
+void TestHttpsigAlgorithmsEmitSignatureHeaders() {
+  // curl's debug-time hook makes the structural header assertions stable
+  // without baking a wall-clock-dependent timestamp into this regression.
+  const char *const old_force_time = std::getenv("CURL_FORCETIME");
+  const bool had_force_time = old_force_time != nullptr;
+  const std::string saved_force_time = had_force_time ? old_force_time : "";
+  const char *const old_created = std::getenv("CURL_HTTPSIG_CREATED");
+  const bool had_created = old_created != nullptr;
+  const std::string saved_created = had_created ? old_created : "";
+  (void)setenv("CURL_FORCETIME", "1", 1);
+  (void)setenv("CURL_HTTPSIG_CREATED", "1618884473", 1);
+
+  const std::string ed25519_request = CaptureHttpsigRequest(
+      1,
+      "9f8362f87a484a954e6e740c5b4c0e84"
+      "229139a20aa8ab56ff66586f6a7d29c5",
+      "fuzz-ed25519", "date: method path authority query x-fuzz-meta:");
+  Expect(ed25519_request.find(
+             "Signature-Input: sig1=(\"date\" \"@method\" \"@path\" "
+             "\"@authority\" \"@query\" \"x-fuzz-meta\");created=1618884473;"
+             "keyid=\"fuzz-ed25519\";alg=\"ed25519\"\r\n") != std::string::npos,
+         "Ed25519 signing did not emit its correlated Signature-Input");
+  Expect(ed25519_request.find("Signature: sig1=:") != std::string::npos,
+         "Ed25519 signing did not emit a Signature field");
+
+  const std::string hmac_request = CaptureHttpsigRequest(
+      2, "7365637265742d66757a7a2d6b6579", "fuzz-hmac-sha256", "");
+  Expect(hmac_request.find(
+             "Signature-Input: sig1=(\"@method\" \"@authority\" \"@path\" "
+             "\"@query\");created=1618884473;keyid=\"fuzz-hmac-sha256\";"
+             "alg=\"hmac-sha256\"\r\n") != std::string::npos,
+         "HMAC signing did not emit its default Signature-Input components");
+  Expect(hmac_request.find("Signature: sig1=:") != std::string::npos,
+         "HMAC signing did not emit a Signature field");
+
+  if (had_created) {
+    (void)setenv("CURL_HTTPSIG_CREATED", saved_created.c_str(), 1);
+  } else {
+    (void)unsetenv("CURL_HTTPSIG_CREATED");
+  }
+  if (had_force_time) {
+    (void)setenv("CURL_FORCETIME", saved_force_time.c_str(), 1);
+  } else {
+    (void)unsetenv("CURL_FORCETIME");
+  }
 }
 
 /// Construct the common complete-response shape used by TLS behavior tests.
@@ -409,6 +545,9 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   result.handshake_count = server.completed_handshake_count();
   result.reused_session_count = server.reused_session_count();
   result.write_retry_count = server.write_retry_count();
+  result.ech_status = server.ech_status();
+  result.ech_inner_name = server.ech_inner_name();
+  result.ech_outer_name = server.ech_outer_name();
 
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);
@@ -523,6 +662,28 @@ void TestTlsWriteRetryKeepsItsOriginalBoundary() {
   Expect(result.code == CURLE_OK && result.response == expected,
          "appending a response chunk corrupted an outstanding TLS write retry");
 }
+
+#ifndef OPENSSL_NO_ECH
+void TestTlsEchCompletesEncryptedClientHello() {
+  Scenario scenario = MakeTlsScenario("ech-success", "ech");
+  AddStringOption(
+      &scenario, curl::fuzzer::proto::CURLOPT_ECH,
+      std::string("ecl:") +
+          proto_fuzzer::tls_test_credentials::kEchConfigListBase64);
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK && result.response == "ech",
+         "ECH transfer did not complete over the encrypted ClientHello");
+  Expect(result.handshake_count == 1,
+         "ECH transfer completed an unexpected number of handshakes");
+  Expect(result.ech_status == SSL_ECH_STATUS_SUCCESS,
+         "OpenSSL server did not report successful ECH decryption");
+  Expect(result.ech_inner_name == "tls.test",
+         "ECH server did not recover tls.test from the inner ClientHello");
+  Expect(result.ech_outer_name == "public.test",
+         "ECH ClientHello did not retain the configured public outer name");
+}
+#endif
 
 void TestH2ProxyCarriesAnHttpOriginResponse() {
   Scenario scenario;
@@ -791,11 +952,15 @@ int main() {
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  TestHttpsigAlgorithmsEmitSignatureHeaders();
   TestTlsServerCompletesVerifiedTransfer();
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
   TestTlsRedirectReusesSession();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
+#ifndef OPENSSL_NO_ECH
+  TestTlsEchCompletesEncryptedClientHello();
+#endif
   TestH2ProxyCarriesAnHttpOriginResponse();
 #endif
   TestApiLifecycleCompletesSocketActionTransfer();

@@ -1,0 +1,18 @@
+# A valid shared secret selects the HMAC-SHA256 signer. Leaving
+# CURLOPT_HTTPSIG_HEADERS unset is intentional: curl then derives its default
+# method, authority, path, and query component set, complementing the explicit
+# component parser exercised by the Ed25519 seed.
+scheme: SCHEME_HTTP
+host_path: "httpsig.test/hmac?mode=default"
+options { option_id: CURLOPT_HTTPSIG_ALGORITHM uint_value: 2 }
+options {
+  option_id: CURLOPT_HTTPSIG_KEY
+  string_value: "7365637265742d66757a7a2d6b6579"
+}
+options {
+  option_id: CURLOPT_HTTPSIG_KEYID
+  string_value: "fuzz-hmac-sha256"
+}
+connection {
+  initial_response: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+}

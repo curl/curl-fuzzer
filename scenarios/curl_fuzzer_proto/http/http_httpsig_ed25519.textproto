@@ -1,0 +1,30 @@
+# RFC 9421 request signing needs four correlated options plus the exact
+# application headers named by CURLOPT_HTTPSIG_HEADERS. A valid 32-byte seed
+# reaches Ed25519 signing; the duplicate X-Fuzz-Meta fields also exercise
+# curl's comma-joining rule for repeated covered request headers.
+scheme: SCHEME_HTTP
+host_path: "httpsig.test/signed?view=full"
+request_headers: "Date: Tue, 20 Apr 2021 02:07:55 GMT"
+request_headers: "Content-Type: application/json"
+request_headers: "X-Fuzz-Meta: first"
+request_headers: "X-Fuzz-Meta: second"
+options { option_id: CURLOPT_HTTPSIG_ALGORITHM uint_value: 1 }
+options {
+  option_id: CURLOPT_HTTPSIG_KEY
+  string_value: "9f8362f87a484a954e6e740c5b4c0e84229139a20aa8ab56ff66586f6a7d29c5"
+}
+options {
+  option_id: CURLOPT_HTTPSIG_KEYID
+  string_value: "fuzz-ed25519"
+}
+options {
+  option_id: CURLOPT_HTTPSIG_HEADERS
+  string_value: "date: method path authority query content-type: x-fuzz-meta:"
+}
+options {
+  option_id: CURLOPT_POSTFIELDS
+  string_value: "{\"hello\":\"world\"}"
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}

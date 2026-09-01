@@ -48,6 +48,26 @@ VSpO3203VEY2vHBr/ge5V631IKRcpepoOOPPoT2ixTVTm+wt/kxX8p/G
 -----END PRIVATE KEY-----
 )PEM";
 
+/// Stable RFC 9849 ECHConfigList advertised to curl by the successful ECH
+/// seed. Its public name is public.test; curl keeps tls.test in the encrypted
+/// inner ClientHello and uses the ordinary certificate above to authenticate
+/// that inner name.
+inline constexpr char kEchConfigListBase64[] =
+    "AD7+DQA67AAgACDGVurJKeQ5Lwz2+XX6+hJyRdz6OmmPMFnsTfn1fD9ISgAEAAEA"
+    "AQALcHVibGljLnRlc3QAAA==";
+
+/// Test-only X25519 private key and its matching ECHConfigList. OpenSSL's ECH
+/// store consumes this PEM pair on the server; it is unrelated to the TLS
+/// certificate key and must never be used outside the isolated socketpair.
+inline constexpr char kEchConfigPem[] = R"PEM(-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VuBCIEIJg0AUAFk+vW0YmYjKkdPxF/jMy7DSBkNRe2p5hXJXpd
+-----END PRIVATE KEY-----
+-----BEGIN ECHCONFIG-----
+AD7+DQA67AAgACDGVurJKeQ5Lwz2+XX6+hJyRdz6OmmPMFnsTfn1fD9ISgAEAAEA
+AQALcHVibGljLnRlc3QAAA==
+-----END ECHCONFIG-----
+)PEM";
+
 }  // namespace proto_fuzzer::tls_test_credentials
 
 #endif  // PROTO_FUZZER_TLS_TEST_CREDENTIALS_H_

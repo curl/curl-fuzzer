@@ -45,6 +45,10 @@ def test_extended_http_options_are_reachable_without_pointer_hazards() -> None:
         "CURLOPT_BUFFERSIZE",
         "CURLOPT_CRLF",
         "CURLOPT_CERTINFO",
+        "CURLOPT_HTTPSIG_ALGORITHM",
+        "CURLOPT_HTTPSIG_KEY",
+        "CURLOPT_HTTPSIG_KEYID",
+        "CURLOPT_HTTPSIG_HEADERS",
     } <= supported
     assert {
         "CURLOPT_CONNECT_TO",
@@ -138,6 +142,23 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
         "http2_prior_knowledge.textproto": (
             "CURLOPT_HTTP_VERSION uint_value: 5",
             "text/plain",
+        ),
+        "http_httpsig_ed25519.textproto": (
+            "CURLOPT_HTTPSIG_ALGORITHM uint_value: 1",
+            "9f8362f87a484a954e6e740c5b4c0e84229139a20aa8ab56ff66586f6a7d29c5",
+            'string_value: "fuzz-ed25519"',
+            'string_value: "date: method path authority query content-type: x-fuzz-meta:"',
+            'request_headers: "Date: Tue, 20 Apr 2021 02:07:55 GMT"',
+            'request_headers: "Content-Type: application/json"',
+            'request_headers: "X-Fuzz-Meta: first"',
+            'request_headers: "X-Fuzz-Meta: second"',
+            "CURLOPT_POSTFIELDS",
+        ),
+        "http_httpsig_hmac_sha256.textproto": (
+            "CURLOPT_HTTPSIG_ALGORITHM uint_value: 2",
+            'string_value: "7365637265742d66757a7a2d6b6579"',
+            'string_value: "fuzz-hmac-sha256"',
+            "mode=default",
         ),
     }
 
