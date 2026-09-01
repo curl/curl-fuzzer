@@ -342,6 +342,11 @@ set(CURL_CMAKE_ARGS
     -DCURL_DISABLE_TELNET=OFF
     -DCURL_DISABLE_FTP=OFF
     -DCURL_DISABLE_TFTP=OFF
+    # Keep the HTTPS resource-record parser available in every sanitizer
+    # configuration, including MSan where this project deliberately omits a
+    # TLS backend. ECH consumes these records when TLS is present, while the
+    # standalone DoH target can exercise their wire decoder independently.
+    -DUSE_HTTPSRR=ON
     ${CURL_SSL_OPTION}
     -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
     -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
@@ -360,6 +365,15 @@ set(CURL_CMAKE_ARGS
     -DLDAP_LIBRARY=${OPENLDAP_STATIC_LIB_LDAP}
     -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
+
+# These experimental features need crypto/TLS backend support. The bundled
+# OpenSSL 4.x provides both HTTP Message Signature primitives and the ECH API;
+# MSan intentionally has no OpenSSL and therefore retains curl's defaults.
+if(TARGET openssl_external)
+    list(APPEND CURL_CMAKE_ARGS
+        -DCURL_DISABLE_HTTPSIG=OFF
+        -DUSE_ECH=ON)
+endif()
 
 # Baseline CFLAGS passed to curl's own CMake. Always defines UNITTESTS so
 # the UNITTEST macro in curl_setup.h flips from `static` to empty, giving
@@ -537,6 +551,10 @@ if(BUILD_TESTING)
         m
     )
     target_link_options(curl_features_test PRIVATE ${COVERAGE_LINK_FLAGS})
+    if(TARGET openssl_external)
+        target_compile_definitions(curl_features_test PRIVATE
+            CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
+    endif()
     add_dependencies(curl_features_test curl_external ${CURL_DEPS})
     add_test(NAME curl_features_test COMMAND curl_features_test)
     add_dependencies(fuzzer_unit_tests curl_features_test)

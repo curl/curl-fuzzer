@@ -9,6 +9,7 @@
 
 #include "proto_fuzzer/tls_mock_server.h"
 
+#include <openssl/ech.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
@@ -77,10 +78,15 @@ class TlsServerContext {
         negotiated_tls_version_(0),
         completed_handshake_count_(0),
         reused_session_count_(0),
-        write_retry_count_(0) {
+        write_retry_count_(0),
+#ifndef OPENSSL_NO_ECH
+        ech_status_(SSL_ECH_STATUS_NOT_TRIED) {
+#else
+        ech_status_(-1) {
+#endif
     OpenSslErrorQueueGuard error_guard;
     context_ = SSL_CTX_new(TLS_server_method());
-    if (context_ == nullptr || !LoadCredentials()) {
+    if (context_ == nullptr || !LoadCredentials() || !LoadEchConfig()) {
       SSL_CTX_free(context_);
       context_ = nullptr;
       return;
@@ -124,6 +130,15 @@ class TlsServerContext {
     if (SSL_session_reused(ssl) == 1) {
       ++reused_session_count_;
     }
+#ifndef OPENSSL_NO_ECH
+    char* inner_name = nullptr;
+    char* outer_name = nullptr;
+    ech_status_ = SSL_ech_get1_status(ssl, &inner_name, &outer_name);
+    ech_inner_name_ = inner_name == nullptr ? std::string() : inner_name;
+    ech_outer_name_ = outer_name == nullptr ? std::string() : outer_name;
+    OPENSSL_free(inner_name);
+    OPENSSL_free(outer_name);
+#endif
   }
 
   /// Record that OpenSSL requires an identical application-write retry.
@@ -141,6 +156,12 @@ class TlsServerContext {
   const std::string& negotiated_alpn() const { return negotiated_alpn_; }
   /// @return fixed application protocol this context offers.
   TlsApplicationProtocol protocol() const { return protocol_; }
+  /// @return OpenSSL ECH result from the latest completed handshake.
+  int ech_status() const { return ech_status_; }
+  /// @return latest decrypted inner SNI, if ECH was attempted.
+  const std::string& ech_inner_name() const { return ech_inner_name_; }
+  /// @return latest public outer SNI, if ECH was attempted.
+  const std::string& ech_outer_name() const { return ech_outer_name_; }
 
  private:
   /// Parse the checked-in test-only PEM values entirely in memory.
@@ -170,6 +191,28 @@ class TlsServerContext {
     return loaded;
   }
 
+  /// Load a fixed test-only ECH private key and matching public config. This
+  /// makes a successful encrypted ClientHello deterministic without DNS or
+  /// filesystem state; builds configured without ECH retain the TLS mock.
+  bool LoadEchConfig() {
+#ifndef OPENSSL_NO_ECH
+    BIO* ech_bio = BIO_new_mem_buf(tls_test_credentials::kEchConfigPem, -1);
+    OSSL_ECHSTORE* store = OSSL_ECHSTORE_new(nullptr, nullptr);
+    if (ech_bio == nullptr || store == nullptr) {
+      BIO_free(ech_bio);
+      OSSL_ECHSTORE_free(store);
+      return false;
+    }
+    const bool loaded =
+        OSSL_ECHSTORE_read_pem(store, ech_bio, OSSL_ECH_NO_RETRY) == 1 && SSL_CTX_set1_echstore(context_, store) == 1;
+    BIO_free(ech_bio);
+    OSSL_ECHSTORE_free(store);
+    return loaded;
+#else
+    return true;
+#endif
+  }
+
   SSL_CTX* context_;
   TlsApplicationProtocol protocol_;
   std::string negotiated_alpn_;
@@ -177,6 +220,9 @@ class TlsServerContext {
   std::size_t completed_handshake_count_;
   std::size_t reused_session_count_;
   std::size_t write_retry_count_;
+  int ech_status_;
+  std::string ech_inner_name_;
+  std::string ech_outer_name_;
 };
 
 namespace {
@@ -434,6 +480,19 @@ std::size_t TlsMockServer::write_retry_count() const { return context_ == nullpt
 /// Return the latest negotiated application protocol without exposing SSL.
 std::string TlsMockServer::negotiated_alpn() const {
   return context_ == nullptr ? std::string() : context_->negotiated_alpn();
+}
+
+/// Return OpenSSL's latest ECH result without exposing its SSL object.
+int TlsMockServer::ech_status() const { return context_ == nullptr ? -1 : context_->ech_status(); }
+
+/// Return the SNI that OpenSSL recovered from the encrypted ClientHello.
+std::string TlsMockServer::ech_inner_name() const {
+  return context_ == nullptr ? std::string() : context_->ech_inner_name();
+}
+
+/// Return the public SNI that remained in the outer ClientHello.
+std::string TlsMockServer::ech_outer_name() const {
+  return context_ == nullptr ? std::string() : context_->ech_outer_name();
 }
 
 /// Create the polymorphic record-layer connection consumed by MockServer.

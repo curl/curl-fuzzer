@@ -68,6 +68,16 @@ class TlsMockServer : public MockServer {
   /// @return ALPN protocol selected by the most recent completed handshake.
   std::string negotiated_alpn() const;
 
+  /// @return OpenSSL's ECH status for the most recent completed handshake.
+  /// Builds without ECH return a negative sentinel.
+  int ech_status() const;
+
+  /// @return encrypted inner SNI recovered by the ECH-capable server.
+  std::string ech_inner_name() const;
+
+  /// @return public outer SNI visible before ECH decryption.
+  std::string ech_outer_name() const;
+
  protected:
   /// Construct a TLS transport for a protocol-specific derived peer.
   /// @param protocol Fixed application protocol the server must negotiate.
@@ -78,6 +88,7 @@ class TlsMockServer : public MockServer {
   std::unique_ptr<MockConnection> CreateConnection() override;
 
   /// Probe result APIs only until curl exposes the active backend connection.
+  /// @param easy Easy handle whose active TLS connection is inspected.
   void ObserveActiveTransfer(CURL* easy) override;
 
  private:

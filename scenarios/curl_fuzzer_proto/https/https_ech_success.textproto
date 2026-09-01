@@ -1,0 +1,14 @@
+# Exercise a real RFC 9849 encrypted ClientHello against the in-process
+# OpenSSL peer. Keep the value below synchronized with
+# tls_test_credentials::kEchConfigListBase64. Its public name is public.test;
+# tls.test is carried only in the encrypted inner ClientHello and matches the
+# test certificate.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/ech-success"
+options {
+  option_id: CURLOPT_ECH
+  string_value: "ecl:AD7+DQA67AAgACDGVurJKeQ5Lwz2+XX6+hJyRdz6OmmPMFnsTfn1fD9ISgAEAAEAAQALcHVibGljLnRlc3QAAA=="
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nech"
+}

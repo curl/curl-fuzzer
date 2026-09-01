@@ -34,6 +34,16 @@ CURLOPT_SSL_SESSIONID_CACHE
 CURLOPT_SSL_ENABLE_ALPN
 CURLOPT_SSL_OPTIONS
 CURLOPT_PINNEDPUBLICKEY
+CURLOPT_ECH
+
+# RFC 9421 HTTP Message Signatures. Key material and component lists are
+# copied strings; the algorithm is a bounded values option. The deep HTTP
+# corpus supplies correlated valid combinations while mutations reach curl's
+# parsing and rejection paths.
+CURLOPT_HTTPSIG_ALGORITHM
+CURLOPT_HTTPSIG_KEY
+CURLOPT_HTTPSIG_KEYID
+CURLOPT_HTTPSIG_HEADERS
 
 # Stateful HTTP parsers. Filename-bearing COOKIEFILE/COOKIEJAR/ALTSVC/HSTS
 # options intentionally stay out of this mutation surface; the baseline owns

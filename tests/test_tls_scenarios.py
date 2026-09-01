@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUPPORTED_OPTIONS = REPO_ROOT / "schemas" / "curl_fuzzer_supported_curlopts.txt"
 TLS_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "https"
+TLS_CREDENTIALS = REPO_ROOT / "proto_fuzzer" / "tls_test_credentials.h"
 
 
 def _supported_options() -> set[str]:
@@ -16,6 +18,16 @@ def _supported_options() -> set[str]:
         for raw_line in SUPPORTED_OPTIONS.read_text(encoding="utf-8").splitlines()
         if (line := raw_line.strip()) and not line.startswith("#")
     }
+
+
+def _ech_config_list() -> str:
+    credentials = TLS_CREDENTIALS.read_text(encoding="utf-8")
+    declaration = re.search(
+        r"kEchConfigListBase64\[\]\s*=\s*((?:\s*\"[^\"]*\")+)\s*;",
+        credentials,
+    )
+    assert declaration is not None
+    return "".join(re.findall(r'"([^"]*)"', declaration.group(1)))
 
 
 def test_tls_controls_are_reachable_as_copied_values() -> None:
@@ -34,6 +46,7 @@ def test_tls_controls_are_reachable_as_copied_values() -> None:
         "CURLOPT_SSL_ENABLE_ALPN",
         "CURLOPT_SSL_OPTIONS",
         "CURLOPT_PINNEDPUBLICKEY",
+        "CURLOPT_ECH",
     } <= supported
     assert {
         "CURLOPT_CAINFO",
@@ -65,6 +78,11 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "CURLOPT_SSL_SESSIONID_CACHE bool_value: true",
             "Connection: close",
             "subsequent_connections {",
+        ),
+        "https_ech_success.textproto": (
+            "CURLOPT_ECH",
+            f"ecl:{_ech_config_list()}",
+            "ech-success",
         ),
     }
 
