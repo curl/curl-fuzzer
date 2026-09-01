@@ -11,6 +11,17 @@
 #include <cstring>
 #include <limits>
 
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#include <sanitizer/msan_interface.h>
+#define LEGACY_TLV_MUTATOR_MEMORY_SANITIZER 1
+#endif
+#endif
+
+#ifndef LEGACY_TLV_MUTATOR_MEMORY_SANITIZER
+#define LEGACY_TLV_MUTATOR_MEMORY_SANITIZER 0
+#endif
+
 #ifdef LEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS
 #include "curl_fuzzer.h"
 
@@ -586,9 +597,20 @@ size_t LocalByteMutate(uint8_t *data, size_t size, size_t max_size,
  */
 size_t ByteMutate(uint8_t *data, size_t size, size_t max_size,
                   Random *random) {
+  if(!max_size)
+    return 0;
 #if defined(__clang__) || defined(__GNUC__)
-  if(LLVMFuzzerMutate)
-    return std::min(LLVMFuzzerMutate(data, size, max_size), max_size);
+  if(LLVMFuzzerMutate) {
+    const size_t result =
+        std::min(LLVMFuzzerMutate(data, size, max_size), max_size);
+#if LEGACY_TLV_MUTATOR_MEMORY_SANITIZER
+    /* libFuzzer clears stale MSan shadow before the target callback, but a
+     * nested LLVMFuzzerMutate() returns before that boundary. Its result is
+     * logically initialized, so unpoison it before the finalizer parses it. */
+    __msan_unpoison(data, result);
+#endif
+    return result;
+  }
 #endif
   return LocalByteMutate(data, size, max_size, random);
 }
