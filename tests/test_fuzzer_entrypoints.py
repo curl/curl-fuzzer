@@ -7,7 +7,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENTRYPOINT_PATTERN = re.compile(r'extern\s+"C"\s+int\s+LLVMFuzzerTestOneInput\s*\(')
 CUSTOM_MUTATOR_PATTERN = re.compile(

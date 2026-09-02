@@ -22,10 +22,10 @@ import dataclasses
 import pathlib
 import re
 import sys
-from typing import Dict, Iterable, List
+from collections.abc import Iterable
 
 # Base numeric offsets for CURLOPTTYPE_* families. See curl.h.
-TYPE_BASE_VALUES: Dict[str, int] = {
+TYPE_BASE_VALUES: dict[str, int] = {
     "CURLOPTTYPE_LONG": 0,
     "CURLOPTTYPE_VALUES": 0,
     "CURLOPTTYPE_OBJECTPOINT": 10000,
@@ -39,7 +39,7 @@ TYPE_BASE_VALUES: Dict[str, int] = {
 
 # Default kind derived from the curl type token. Pointer-like families need
 # explicit per-option overrides below because they cover too many shapes.
-BASE_KIND: Dict[str, str] = {
+BASE_KIND: dict[str, str] = {
     "CURLOPTTYPE_LONG": "uint",
     "CURLOPTTYPE_VALUES": "uint",
     "CURLOPTTYPE_STRINGPOINT": "string",
@@ -47,7 +47,7 @@ BASE_KIND: Dict[str, str] = {
 }
 
 # Options whose kind cannot be inferred from the type token alone.
-OPTION_KIND_OVERRIDES: Dict[str, str] = {
+OPTION_KIND_OVERRIDES: dict[str, str] = {
     "CURLOPT_POSTFIELDS": "string",
     "CURLOPT_NOBODY": "bool",
     "CURLOPT_POST": "bool",
@@ -84,7 +84,7 @@ OPTION_KIND_OVERRIDES: Dict[str, str] = {
     "CURLOPT_TFTP_NO_OPTIONS": "bool",
 }
 
-VALUE_KIND_SYMBOLS: Dict[str, str] = {
+VALUE_KIND_SYMBOLS: dict[str, str] = {
     "string": "OptionValueKind::kString",
     "uint": "OptionValueKind::kUint",
     "bool": "OptionValueKind::kBool",
@@ -108,8 +108,8 @@ class CurlOption:
         return resolved
 
 
-def load_supported_options(path: pathlib.Path) -> List[str]:
-    options: List[str] = []
+def load_supported_options(path: pathlib.Path) -> list[str]:
+    options: list[str] = []
     for raw_line in path.read_text().splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -120,7 +120,7 @@ def load_supported_options(path: pathlib.Path) -> List[str]:
     return options
 
 
-def parse_curl_header(path: pathlib.Path) -> Dict[str, CurlOption]:
+def parse_curl_header(path: pathlib.Path) -> dict[str, CurlOption]:
     text = path.read_text()
     pattern = re.compile(
         r"CURLOPT(?:DEPRECATED)?\(\s*"
@@ -128,7 +128,7 @@ def parse_curl_header(path: pathlib.Path) -> Dict[str, CurlOption]:
         r"(CURLOPTTYPE_[A-Z0-9_]+)\s*,\s*"
         r"([0-9]+)"
     )
-    options: Dict[str, CurlOption] = {}
+    options: dict[str, CurlOption] = {}
     for match in pattern.finditer(text):
         name, type_token, offset_text = match.groups()
         if type_token not in TYPE_BASE_VALUES:
@@ -192,7 +192,7 @@ def render_proto(entries: Iterable[CurlOption], template_text: str) -> str:
     return f"{head}\n{body}\n  {tail}"
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--curl-header", required=True, type=pathlib.Path)
     parser.add_argument("--supported-list", required=True, type=pathlib.Path)
@@ -209,13 +209,13 @@ def write_if_changed(path: pathlib.Path, content: str) -> None:
     path.write_text(content)
 
 
-def run(argv: List[str] | None = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
 
     supported = load_supported_options(args.supported_list)
     header_options = parse_curl_header(args.curl_header)
 
-    ordered: List[CurlOption] = []
+    ordered: list[CurlOption] = []
     for name in supported:
         if name not in header_options:
             raise KeyError(

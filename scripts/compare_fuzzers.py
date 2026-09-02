@@ -25,10 +25,10 @@ import sys
 import tempfile
 import time
 import zipfile
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Callable, Iterable, Sequence, TypeVar
-
+from typing import IO, Callable, TypeVar
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TARGETS = (

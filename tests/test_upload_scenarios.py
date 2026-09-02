@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 SCENARIOS = (
     Path(__file__).resolve().parent.parent / "scenarios" / "curl_fuzzer_proto" / "http"
 )

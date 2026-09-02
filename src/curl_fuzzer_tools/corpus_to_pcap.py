@@ -5,7 +5,6 @@
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict
 
 from scapy.all import wrpcap
 from scapy.layers.inet import IP, TCP
@@ -37,7 +36,7 @@ RESPONSES = [
 
 def corpus_to_pcap(args: argparse.Namespace) -> None:
     """Convert the given corpus file to a pcap file."""
-    response_tlvs: Dict[int, TLVContents] = {}
+    response_tlvs: dict[int, TLVContents] = {}
 
     input_file = Path(args.input)
     if not input_file.exists():

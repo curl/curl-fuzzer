@@ -185,15 +185,15 @@ def main() -> None:
 
     for ii in range(11):
         group = parser.add_mutually_exclusive_group()
-        group.add_argument("--rsp{0}".format(ii))
-        group.add_argument("--rsp{0}file".format(ii))
-        group.add_argument("--rsp{0}test".format(ii), type=int)
+        group.add_argument(f"--rsp{ii}")
+        group.add_argument(f"--rsp{ii}file")
+        group.add_argument(f"--rsp{ii}test", type=int)
 
     for ii in range(2):
         group = parser.add_mutually_exclusive_group()
-        group.add_argument("--secrsp{0}".format(ii))
-        group.add_argument("--secrsp{0}file".format(ii))
-        group.add_argument("--secrsp{0}test".format(ii), type=int)
+        group.add_argument(f"--secrsp{ii}")
+        group.add_argument(f"--secrsp{ii}file")
+        group.add_argument(f"--secrsp{ii}test", type=int)
 
     args = parser.parse_args()
 

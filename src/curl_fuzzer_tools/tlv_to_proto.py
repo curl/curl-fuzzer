@@ -24,7 +24,6 @@ import argparse
 import pathlib
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from curl_fuzzer_tools.corpus import BaseType, TLVDecoder
 
@@ -70,17 +69,17 @@ RESPONSE_CHUNK_TAGS = frozenset(range(BaseType.TYPE_RSP1, BaseType.TYPE_RSP10 + 
 class ProtoOutput:
     """Accumulated fields for a single Scenario textproto."""
 
-    scheme: Optional[str] = None
-    host_path: Optional[bytes] = None
-    options: List[str] = field(default_factory=list)
-    initial_response: Optional[bytes] = None
-    response_chunks: List[tuple[int, bytes]] = field(default_factory=list)
-    skipped: List[int] = field(default_factory=list)
+    scheme: str | None = None
+    host_path: bytes | None = None
+    options: list[str] = field(default_factory=list)
+    initial_response: bytes | None = None
+    response_chunks: list[tuple[int, bytes]] = field(default_factory=list)
+    skipped: list[int] = field(default_factory=list)
 
 
 def escape_bytes(value: bytes) -> str:
     """Produce a textproto-safe double-quoted byte string."""
-    out: List[str] = ['"']
+    out: list[str] = ['"']
     for byte in value:
         if byte == 0x5C:  # backslash
             out.append("\\\\")
@@ -186,7 +185,7 @@ def convert_stream(stream: bytes) -> ProtoOutput:
 
 def render_textproto(source_name: str, data: ProtoOutput) -> str:
     """Serialise accumulated fields into a textproto Scenario string."""
-    lines: List[str] = [f"# source: {source_name}"]
+    lines: list[str] = [f"# source: {source_name}"]
     for tag in data.skipped:
         label = BaseType.TYPEMAP.get(tag, f"0x{tag:02x}")
         lines.append(f"# skipped TLV {label}")
@@ -196,7 +195,7 @@ def render_textproto(source_name: str, data: ProtoOutput) -> str:
         lines.append(f"host_path: {escape_bytes(data.host_path)}")
     lines.extend(data.options)
 
-    connection_lines: List[str] = []
+    connection_lines: list[str] = []
     if data.initial_response is not None:
         connection_lines.append(
             f"  initial_response: {escape_bytes(data.initial_response)}"
@@ -211,8 +210,8 @@ def render_textproto(source_name: str, data: ProtoOutput) -> str:
     return "\n".join(lines) + "\n"
 
 
-def iter_corpus_files(root: pathlib.Path) -> List[pathlib.Path]:
-    result: List[pathlib.Path] = []
+def iter_corpus_files(root: pathlib.Path) -> list[pathlib.Path]:
+    result: list[pathlib.Path] = []
     for entry in sorted(root.iterdir()):
         if not entry.is_file():
             continue
@@ -224,7 +223,7 @@ def iter_corpus_files(root: pathlib.Path) -> List[pathlib.Path]:
     return result
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "corpus_dir",
@@ -239,7 +238,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run(argv: List[str] | None = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if not args.corpus_dir.is_dir():
         print(f"error: corpus directory {args.corpus_dir} not found", file=sys.stderr)

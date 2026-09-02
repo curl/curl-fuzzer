@@ -6,7 +6,6 @@ import ast
 import re
 from pathlib import Path
 
-
 _TLV_DEFINE_PATTERN = re.compile(r"#define\s+(TLV_TYPE_[A-Z0-9_]+)\s+([0-9]+)")
 
 
