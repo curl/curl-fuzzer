@@ -23,6 +23,8 @@
 #include <string>
 #include <string_view>
 
+#include "proto_fuzzer/curl_raii.h"
+
 namespace proto_fuzzer {
 
 namespace {
@@ -469,10 +471,9 @@ void ApiLifecycle::ProbeEasyDuplication() {
   if (!plan_.duplicate_easy()) {
     return;
   }
-  CURL* duplicate = curl_easy_duphandle(easy_);
+  CurlEasyPtr duplicate(curl_easy_duphandle(easy_));
   if (duplicate != nullptr) {
-    curl_easy_reset(duplicate);
-    curl_easy_cleanup(duplicate);
+    curl_easy_reset(duplicate.get());
   }
 }
 

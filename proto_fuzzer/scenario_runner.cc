@@ -17,6 +17,7 @@
 #include <string>
 
 #include "proto_fuzzer/api_lifecycle.h"
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
@@ -35,20 +36,6 @@
 namespace proto_fuzzer {
 
 namespace {
-
-/// @brief RAII wrapper for CURL* easy handles.
-struct CurlEasyDeleter {
-  void operator()(CURL* h) const noexcept {
-    if (h) curl_easy_cleanup(h);
-  }
-};
-using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
-
-/// @brief RAII wrapper for caller-owned curl_slist option data.
-struct CurlSlistDeleter {
-  void operator()(curl_slist* list) const noexcept { curl_slist_free_all(list); }
-};
-using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
 
 constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
 constexpr std::size_t kMaxResultHeaders = 16;

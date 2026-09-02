@@ -8,10 +8,10 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <memory>
 #include <string>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
@@ -19,17 +19,8 @@
 namespace {
 
 using curl::fuzzer::proto::Scenario;
-
-struct CurlEasyDeleter {
-  void operator()(CURL *easy) const { curl_easy_cleanup(easy); }
-};
-
-struct CurlSlistDeleter {
-  void operator()(curl_slist *list) const { curl_slist_free_all(list); }
-};
-
-using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
-using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
+using proto_fuzzer::CurlEasyPtr;
+using proto_fuzzer::CurlSlistPtr;
 
 void Fail(const char *message) {
   std::cerr << message << '\n';

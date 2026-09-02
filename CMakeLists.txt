@@ -1216,6 +1216,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
+            proto_fuzzer/multi_transfer_runner.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/request_data.cc
             proto_fuzzer/telnet_mock_server.cc
