@@ -230,7 +230,12 @@ void MockConnection::ShutdownWrite() {
 
 /// Construct an idle MockServer with no scripted responses or open peers.
 /// DriveScenario() configures it from a Scenario before curl can open a socket.
-MockServer::MockServer() : script_count_(0), next_script_(0), active_script_(nullptr), preload_all_chunks_(false) {}
+MockServer::MockServer()
+    : script_count_(0),
+      next_script_(0),
+      active_script_(nullptr),
+      preload_all_chunks_(false),
+      keep_connections_open_(false) {}
 
 /// Default destructor; current and previous MockConnections clean up their
 /// server-side descriptors only after curl has been removed from the multi.
@@ -264,6 +269,9 @@ void MockServer::SetScripts(const curl::fuzzer::proto::Scenario& scenario) {
     append_script(scenario.subsequent_connections(static_cast<int>(i)));
   }
 }
+
+/// Configure whether a completed response leaves its socket reusable.
+void MockServer::SetKeepConnectionsOpen(bool keep_open) { keep_connections_open_ = keep_open; }
 
 /// @return true if at least one on_readable chunk has not yet been sent.
 bool MockServer::has_more_chunks() const {
@@ -343,7 +351,7 @@ curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_soc
       (void)DeliverNextChunk();
     }
   }
-  if (active_script_->chunk_count() == 0) {
+  if (active_script_->chunk_count() == 0 && !keep_connections_open_) {
     connection_->ShutdownWrite();
   }
   return connection_->take_client_fd();
@@ -394,7 +402,7 @@ bool MockServer::DeliverNextChunk() {
       connection_->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
     }
   }
-  if (!has_more_chunks()) {
+  if (!has_more_chunks() && !keep_connections_open_) {
     connection_->ShutdownWrite();
   }
   return true;
@@ -426,6 +434,8 @@ bool MockServer::ServiceConnections() {
   }
   return made_progress;
 }
+
+std::size_t MockServer::opened_connection_count() const { return next_script_; }
 
 /// Run a zero-wait application event loop around curl_multi_socket_action.
 /// Positive timers are deliberately not slept: the API lane clears timing

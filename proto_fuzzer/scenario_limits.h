@@ -92,6 +92,15 @@ inline constexpr std::size_t kMaxApiInfoSelectors = 32;
 /// URL escaping can expand input threefold. Four KiB crosses parser buffer
 /// boundaries without letting one convenience-API probe dominate a transfer.
 inline constexpr std::size_t kMaxApiStringBytes = 4 * 1024;
+/// Two handles are the minimum that can enter shared-multi scheduling, while
+/// four align with the mock's fixed connection-script budget.
+inline constexpr std::size_t kMinMultiTransfers = 2;
+/// Maximum easy handles configured in one shared-multi fuzz iteration.
+inline constexpr std::size_t kMaxMultiTransfers = 4;
+/// Ordered lifecycle transitions remain useful in pairs (pause/resume and
+/// remove/re-add); sixteen permit several handles to interact without making
+/// action processing proportional to mutated protobuf size.
+inline constexpr std::size_t kMaxMultiActions = 16;
 
 }  // namespace proto_fuzzer::scenario_limits
 

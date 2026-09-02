@@ -1,0 +1,20 @@
+scheme: SCHEME_HTTP
+host_path: "multi.test/parallel"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\na"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 201 Created\r\nContent-Length: 1\r\nConnection: close\r\n\r\nb"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 202 Accepted\r\nContent-Length: 1\r\nConnection: close\r\n\r\nc"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+}
+multi_plan {
+  transfer_count: 4
+  max_host_connections: 4
+  max_total_connections: 4
+  connection_cache_size: 4
+}

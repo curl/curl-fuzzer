@@ -20,6 +20,7 @@
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
+#include "proto_fuzzer/multi_transfer_runner.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/telnet_mock_server.h"
@@ -184,6 +185,11 @@ ScenarioRunner::~ScenarioRunner() = default;
 /// Implement the bounded orchestration contract documented on Run's public
 /// declaration; keeping argument docs there avoids two drifting descriptions.
 int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
+  if (mode == ScenarioRunMode::kMultiTransfer) {
+    (void)MultiTransferRunner().Run(scenario);
+    return 0;
+  }
+
   const char* prefix = SchemePrefix(scenario.scheme());
   if (prefix == nullptr || scenario.host_path().empty()) {
     return 0;

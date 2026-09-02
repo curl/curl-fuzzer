@@ -1,0 +1,26 @@
+scheme: SCHEME_HTTP
+host_path: "multi.test/actions"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\na"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\nb"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\nc"
+}
+multi_plan {
+  transfer_count: 3
+  drive_mode: MULTI_DRIVE_SOCKET
+  max_host_connections: 2
+  max_total_connections: 2
+  connection_cache_size: 1
+  multiplex: true
+  wake_multi: true
+  actions { transfer_selector: 0 kind: MULTI_ACTION_PAUSE_RECV }
+  actions { transfer_selector: 0 kind: MULTI_ACTION_RESUME }
+  actions { transfer_selector: 1 kind: MULTI_ACTION_REMOVE }
+  actions { transfer_selector: 1 kind: MULTI_ACTION_READD }
+  actions { transfer_selector: 2 kind: MULTI_ACTION_PAUSE_ALL }
+  actions { transfer_selector: 2 kind: MULTI_ACTION_RESUME }
+}

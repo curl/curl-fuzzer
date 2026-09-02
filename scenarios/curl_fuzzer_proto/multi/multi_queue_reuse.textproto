@@ -1,0 +1,16 @@
+scheme: SCHEME_HTTP
+host_path: "multi.test/reuse"
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\na"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nb"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nc"
+  on_readable: "HTTP/1.1 204 No Content\r\n\r\n"
+}
+multi_plan {
+  transfer_count: 4
+  max_host_connections: 1
+  max_total_connections: 1
+  connection_cache_size: 1
+  keep_connections_open: true
+  wake_multi: true
+}

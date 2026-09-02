@@ -68,6 +68,11 @@ message Scenario {
   // iteration if they were unconditional. Fixed non-API target policies clear
   // this plan; curl_fuzzer_proto_api retains and bounds it after mutation.
   ApiPlan api_plan = 10;
+  // Concurrent easy-handle scheduling has a separate coverage lane so its
+  // extra handles and connection-cache work do not reduce parser throughput
+  // in the protocol targets. curl_fuzzer_proto_multi retains this plan and
+  // applies the same request/response shape to a small set of easy handles.
+  MultiPlan multi_plan = 11;
 }
 
 // A bounded plan for public libcurl APIs that are adjacent to, rather than
@@ -105,6 +110,55 @@ enum ApiDriveMode {
   API_DRIVE_MULTI_PERFORM = 0;
   API_DRIVE_MULTI_SOCKET = 1;
   API_DRIVE_EASY_PERFORM = 2;
+}
+
+// A bounded shared-multi lifecycle. All handles use the containing Scenario's
+// URL, options, and request body, while Connection plus subsequent_connections
+// provide up to four independent peer scripts. Limiting variation to the
+// scheduling controls keeps mutations focused on multi.c rather than cloning
+// the complete transfer grammar for every handle.
+message MultiPlan {
+  // Canonicalized to the inclusive range [2, 4] by the multi target policy.
+  uint32 transfer_count = 1;
+  MultiDriveMode drive_mode = 2;
+  // Zero preserves libcurl's default; non-zero values are capped to the
+  // transfer count so mutations efficiently explore queueing boundaries.
+  uint32 max_host_connections = 3;
+  uint32 max_total_connections = 4;
+  // CURLMOPT_MAXCONNECTS controls the size of the shared connection cache.
+  // Zero retains libcurl's default and non-zero values are runtime-bounded.
+  uint32 connection_cache_size = 5;
+  // Ask the peer not to half-close completed responses, making an HTTP/1.1
+  // connection eligible for reuse by a queued handle.
+  bool keep_connections_open = 6;
+  // Enable CURLPIPE_MULTIPLEX on the multi handle. The plaintext seeds remain
+  // HTTP/1.1, but mutations can combine this setting with HTTP version options.
+  bool multiplex = 7;
+  bool wake_multi = 8;
+  // One action is consumed per bounded event-loop turn. Ordered actions can
+  // therefore pause then resume, or remove then re-add, the same easy handle.
+  repeated MultiAction actions = 9;
+}
+
+enum MultiDriveMode {
+  MULTI_DRIVE_PERFORM = 0;
+  MULTI_DRIVE_SOCKET = 1;
+}
+
+message MultiAction {
+  // Folded into the configured handle count after mutation.
+  uint32 transfer_selector = 1;
+  MultiActionKind kind = 2;
+}
+
+enum MultiActionKind {
+  MULTI_ACTION_NONE = 0;
+  MULTI_ACTION_PAUSE_RECV = 1;
+  MULTI_ACTION_PAUSE_SEND = 2;
+  MULTI_ACTION_PAUSE_ALL = 3;
+  MULTI_ACTION_RESUME = 4;
+  MULTI_ACTION_REMOVE = 5;
+  MULTI_ACTION_READD = 6;
 }
 
 // A bounded source for CURLOPT_READFUNCTION. The payload and read-limit list

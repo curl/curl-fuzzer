@@ -110,6 +110,19 @@ void CanonicalizeFtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("ftp.test" + host_path.substr(suffix_start));
 }
 
+/// Put every handle in the multi lane on one origin so connection limits,
+/// queueing, and reuse affect real transfers instead of independent hosts.
+/// Path/query/fragment bytes remain mutation-controlled.
+void CanonicalizeMultiAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("multi.test/");
+    return;
+  }
+  scenario->set_host_path("multi.test" + host_path.substr(suffix_start));
+}
+
 template <typename RepeatedBytes>
 void BoundStringValues(RepeatedBytes* values, std::size_t count_limit, std::size_t value_limit) {
   TrimRepeated(values, count_limit);
@@ -236,6 +249,46 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
     default:
       plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
       break;
+  }
+}
+
+/// Keep concurrent-handle work within the mock's fixed socket and operation
+/// budgets. Values are canonicalized here rather than only at runtime so LPM
+/// mutates state that the target can actually distinguish.
+void BoundMultiPlanShape(curl::fuzzer::proto::MultiPlan* plan) {
+  const std::uint32_t minimum = static_cast<std::uint32_t>(scenario_limits::kMinMultiTransfers);
+  const std::uint32_t maximum = static_cast<std::uint32_t>(scenario_limits::kMaxMultiTransfers);
+  const std::uint32_t transfer_count = std::max(minimum, std::min(plan->transfer_count(), maximum));
+  plan->set_transfer_count(transfer_count);
+  plan->set_max_host_connections(std::min(plan->max_host_connections(), transfer_count));
+  plan->set_max_total_connections(std::min(plan->max_total_connections(), transfer_count));
+  plan->set_connection_cache_size(std::min(plan->connection_cache_size(), maximum * 2U));
+  TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxMultiActions);
+
+  switch (plan->drive_mode()) {
+    case curl::fuzzer::proto::MULTI_DRIVE_PERFORM:
+    case curl::fuzzer::proto::MULTI_DRIVE_SOCKET:
+      break;
+    default:
+      plan->set_drive_mode(curl::fuzzer::proto::MULTI_DRIVE_PERFORM);
+      break;
+  }
+
+  for (auto& action : *plan->mutable_actions()) {
+    action.set_transfer_selector(action.transfer_selector() % transfer_count);
+    switch (action.kind()) {
+      case curl::fuzzer::proto::MULTI_ACTION_NONE:
+      case curl::fuzzer::proto::MULTI_ACTION_PAUSE_RECV:
+      case curl::fuzzer::proto::MULTI_ACTION_PAUSE_SEND:
+      case curl::fuzzer::proto::MULTI_ACTION_PAUSE_ALL:
+      case curl::fuzzer::proto::MULTI_ACTION_RESUME:
+      case curl::fuzzer::proto::MULTI_ACTION_REMOVE:
+      case curl::fuzzer::proto::MULTI_ACTION_READD:
+        break;
+      default:
+        action.set_kind(curl::fuzzer::proto::MULTI_ACTION_NONE);
+        break;
+    }
   }
 }
 
@@ -655,6 +708,10 @@ void RemoveTelnetOnlyShape(curl::fuzzer::proto::Scenario* scenario) {
 /// existing reproducers keep their historical serialized meaning.
 void RemoveApiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->clear_api_plan(); }
 
+/// Keep concurrent multi-handle work out of every other fixed lane. The
+/// compatibility binary deliberately preserves newly-added unknown fields.
+void RemoveMultiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->clear_multi_plan(); }
+
 /// Remove stream-driver controls that neither file-transfer peer interprets.
 /// FTP consumes raw byte chunks as control/data replies, while TFTP preserves
 /// them as individual datagrams; structured WebSocket frames, manual probes,
@@ -674,6 +731,7 @@ void RemoveIgnoredFtpShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_mime_post();
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
 
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
   TrimRepeated(scenario->mutable_subsequent_connections(), scenario_limits::kMaxConnections - 1);
@@ -691,6 +749,7 @@ void RemoveIgnoredTftpShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_mime_post();
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
@@ -777,6 +836,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     // PAUSE budgets are selected rather than event-driven compatibility ones.
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
     RemoveApiOnlyShape(scenario);
+    RemoveMultiOnlyShape(scenario);
     RemoveNonTelnetShape(scenario);
     RetainCheapTelnetOptions(scenario);
     BoundScenarioShape(scenario);
@@ -787,6 +847,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   if (profile == TargetProfile::kFastHttp) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
     RemoveApiOnlyShape(scenario);
+    RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
     RetainCheapHttpOptions(scenario);
@@ -797,6 +858,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   if (profile == TargetProfile::kH2Proxy) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
     RemoveApiOnlyShape(scenario);
+    RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveIgnoredH2ProxyShape(scenario);
     RetainH2ProxyOriginOptions(scenario);
@@ -838,6 +900,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kApi:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
       break;
+    case TargetProfile::kMulti:
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+      break;
     case TargetProfile::kFastHttps:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       break;
@@ -870,6 +935,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   if (profile != TargetProfile::kApi) {
     RemoveApiOnlyShape(scenario);
   }
+  if (profile != TargetProfile::kMulti) {
+    RemoveMultiOnlyShape(scenario);
+  }
   RemoveFileTransferOnlyOptions(scenario);
   BoundScenarioShape(scenario);
 
@@ -894,6 +962,15 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
         BoundApiPlanShape(scenario->mutable_api_plan());
       }
       return;
+
+    case TargetProfile::kMulti: {
+      ClearAllBackpressure(scenario);
+      CanonicalizeMultiAuthority(scenario);
+      auto* plan = scenario->mutable_multi_plan();
+      BoundMultiPlanShape(plan);
+      TrimRepeated(scenario->mutable_subsequent_connections(), plan->transfer_count() - 1U);
+      return;
+    }
 
     case TargetProfile::kFastHttps:
       ClearAllBackpressure(scenario);

@@ -851,6 +851,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/mock_server.cc
         proto_fuzzer/mock_server_base.cc
         proto_fuzzer/multi_socket_driver.cc
+        proto_fuzzer/multi_transfer_runner.cc
         proto_fuzzer/target_policy.cc
         proto_fuzzer/telnet_mock_server.cc
         proto_fuzzer/telnet_scenario.cc
@@ -947,6 +948,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_ftp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_tftp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
 
     # Compile textproto seed scenarios into binary corpus entries. These are
@@ -971,6 +973,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/tftp/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/api/*.textproto)
+    file(GLOB MULTI_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/multi/*.textproto)
     file(GLOB_RECURSE TIMING_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/*backpressure*.textproto)
 
@@ -1119,6 +1123,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_tftp ${TFTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
         curl_fuzzer_proto_api ${API_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_multi_corpus
+        curl_fuzzer_proto_multi ${MULTI_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_timing_corpus
         curl_fuzzer_proto_timing ${TIMING_SCENARIO_TEXTPROTOS})
     add_dependencies(curl_fuzzer_proto curl_fuzzer_proto_corpus)
@@ -1135,6 +1141,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_ftp curl_fuzzer_proto_ftp_corpus)
     add_dependencies(curl_fuzzer_proto_tftp curl_fuzzer_proto_tftp_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
+    add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
 
     # Policy tests need only the generated message and protobuf runtime. Keep
@@ -1251,6 +1258,46 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_test(NAME mock_server_test COMMAND mock_server_test)
         set_tests_properties(mock_server_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests mock_server_test)
+
+        # Keep concurrent scheduling checks independent of the TLS and
+        # protocol integrations in mock_server_test. This focused executable
+        # validates shared-multi ownership and completion accounting using
+        # only the plaintext socketpair peer.
+        add_executable(multi_transfer_runner_test
+            tests/multi_transfer_runner_test.cc
+            proto_fuzzer/mock_server.cc
+            proto_fuzzer/mock_server_base.cc
+            proto_fuzzer/multi_socket_driver.cc
+            proto_fuzzer/multi_transfer_runner.cc
+            proto_fuzzer/option_apply.cc
+            proto_fuzzer/request_data.cc
+            proto_fuzzer/ws_frame.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(multi_transfer_runner_test PRIVATE cxx_std_17)
+        target_compile_options(multi_transfer_runner_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(multi_transfer_runner_test PRIVATE
+            ${CURL_INCLUDE_DIRS}
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE}
+        )
+        target_link_libraries(multi_transfer_runner_test PRIVATE
+            ${CURL_LIB_DIR}/libcurl.a
+            ${CURL_STATIC_DEPENDENCY_LIBS}
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(multi_transfer_runner_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(multi_transfer_runner_test
+            ${FUZZ_DEPS}
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME multi_transfer_runner_test COMMAND multi_transfer_runner_test)
+        set_tests_properties(multi_transfer_runner_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests multi_transfer_runner_test)
 
         # Protocol peers that need multi-socket coordination have focused
         # executable tests. Keeping them outside mock_server_test makes their
