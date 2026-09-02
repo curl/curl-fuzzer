@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/multi_socket_driver.h"
 #include "proto_fuzzer/option_apply.h"
@@ -26,29 +27,6 @@
 namespace proto_fuzzer {
 
 namespace {
-
-struct CurlEasyDeleter {
-  void operator()(CURL* easy) const noexcept {
-    if (easy != nullptr) {
-      curl_easy_cleanup(easy);
-    }
-  }
-};
-using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
-
-struct CurlMultiDeleter {
-  void operator()(CURLM* multi) const noexcept {
-    if (multi != nullptr) {
-      curl_multi_cleanup(multi);
-    }
-  }
-};
-using CurlMultiPtr = std::unique_ptr<CURLM, CurlMultiDeleter>;
-
-struct CurlSlistDeleter {
-  void operator()(curl_slist* list) const noexcept { curl_slist_free_all(list); }
-};
-using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
 
 /// One easy handle and every caller-owned pointer installed on it. Declaration
 /// order makes reverse destruction detach request data, clean the easy, then

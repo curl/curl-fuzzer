@@ -14,6 +14,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/multi_socket_driver.h"
 
@@ -91,7 +92,7 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
   pending_recv_buf_bytes_ = static_cast<int>(bp.recv_buf_bytes());
   pending_drain_limit_ = static_cast<std::size_t>(bp.drain_limit());
 
-  CURLM* multi = curl_multi_init();
+  CurlMultiPtr multi(curl_multi_init());
   if (multi == nullptr) {
     return CURLE_FAILED_INIT;
   }
@@ -102,20 +103,20 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
   // either may emit CURL_POLL_REMOVE. Keeping it in this outer scope provides
   // that lifetime without allocating per-watch state.
   MultiSocketDriver socket_driver;
-  if (use_multi_socket && socket_driver.Install(multi)) {
+  if (use_multi_socket && socket_driver.Install(multi.get())) {
     multi_socket_driver_ = &socket_driver;
   }
-  if (curl_multi_add_handle(multi, easy) == CURLM_OK) {
+  if (curl_multi_add_handle(multi.get(), easy) == CURLM_OK) {
     if (wake_multi) {
       if (multi_socket_driver_ != nullptr) {
         multi_socket_driver_->ProbeControlApis();
       } else {
         long timeout_ms = -1;
-        (void)curl_multi_timeout(multi, &timeout_ms);
-        (void)curl_multi_wakeup(multi);
+        (void)curl_multi_timeout(multi.get(), &timeout_ms);
+        (void)curl_multi_wakeup(multi.get());
       }
     }
-    RunLoop(multi, easy, scenario);
+    RunLoop(multi.get(), easy, scenario);
 
     // Completion messages are the multi API's only durable record of the
     // transfer result. Consume them while the easy handle is still attached:
@@ -125,15 +126,15 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
     // fuzzed response size or redirect count.
     int messages_remaining = 0;
     CURLMsg* message = nullptr;
-    while ((message = curl_multi_info_read(multi, &messages_remaining)) != nullptr) {
+    while ((message = curl_multi_info_read(multi.get(), &messages_remaining)) != nullptr) {
       if (message->msg == CURLMSG_DONE && message->easy_handle == easy) {
         transfer_result = message->data.result;
       }
     }
 
-    curl_multi_remove_handle(multi, easy);
+    curl_multi_remove_handle(multi.get(), easy);
   }
-  curl_multi_cleanup(multi);
+  multi.reset();
   multi_socket_driver_ = nullptr;
   return transfer_result;
 }
