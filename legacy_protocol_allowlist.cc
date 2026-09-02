@@ -24,8 +24,7 @@ const char *const kIntendedProtocols[] = {
     "http",   "https",  "imap",   "imaps",  "mqtt",   "pop3",
     "pop3s",  "ldap",   "ldaps",  "rtmp",   "rtmpe",  "rtmps",
     "rtmpt",  "rtmpte", "rtmpts", "scp",    "sftp",   "rtsp",
-    "smb",    "smbs",   "smtp",   "smtps",  "tftp",   "ws",
-    "wss",    nullptr};
+    "smtp",   "smtps",  "tftp",   "ws",     "wss",    nullptr};
 
 /**
  * Tests support against libcurl's authoritative runtime protocol list so a

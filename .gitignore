@@ -25,7 +25,6 @@ libstandaloneengine.a
 /curl_fuzzer_rtsp
 /curl_fuzzer_scp
 /curl_fuzzer_sftp
-/curl_fuzzer_smb
 /curl_fuzzer_smtp
 /curl_fuzzer_tftp
 /curl_fuzzer_proto

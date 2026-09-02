@@ -39,6 +39,10 @@ int main() {
     std::fputs("libcurl did not report its linked Brotli version\n", stderr);
     return 1;
   }
+  if (HasNamedFeature(info, "NTLM")) {
+    std::fputs("libcurl was built with deprecated NTLM support\n", stderr);
+    return 1;
+  }
 #ifdef CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES
   if (!HasNamedFeature(info, "HTTPSRR")) {
     std::fputs("libcurl was built without HTTPS RR support\n", stderr);
@@ -57,6 +61,7 @@ int main() {
   bool has_telnet = false;
   bool has_ftp = false;
   bool has_tftp = false;
+  bool has_smb = false;
   if (info->protocols) {
     for (const char *const *protocol = info->protocols; *protocol; ++protocol) {
       if (std::strcmp(*protocol, "telnet") == 0) {
@@ -65,6 +70,9 @@ int main() {
         has_ftp = true;
       } else if (std::strcmp(*protocol, "tftp") == 0) {
         has_tftp = true;
+      } else if (std::strcmp(*protocol, "smb") == 0 ||
+                 std::strcmp(*protocol, "smbs") == 0) {
+        has_smb = true;
       }
     }
   }
@@ -81,6 +89,10 @@ int main() {
   }
   if (!has_tftp) {
     std::fputs("libcurl was built without TFTP support\n", stderr);
+    return 1;
+  }
+  if (has_smb) {
+    std::fputs("libcurl was built with deprecated SMB support\n", stderr);
     return 1;
   }
   return 0;

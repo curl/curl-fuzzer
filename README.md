@@ -67,7 +67,6 @@ The public corpus links for each target are also accessible directly:
 - [curl_fuzzer_rtsp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_rtsp/public.zip)
 - [curl_fuzzer_scp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_scp/public.zip)
 - [curl_fuzzer_sftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_sftp/public.zip)
-- [curl_fuzzer_smb](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_smb/public.zip)
 - [curl_fuzzer_smtp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_smtp/public.zip)
 - [curl_fuzzer_tftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_tftp/public.zip)
 - [curl_fuzzer_ws](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ws/public.zip)
