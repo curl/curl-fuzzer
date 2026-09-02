@@ -38,6 +38,8 @@ enum class TargetProfile {
   kFastTftp,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
+  /// Exercise several easy handles through one shared multi handle.
+  kMulti,
   /// Isolate deterministic backpressure and timed-wait behavior.
   kTiming,
 };
@@ -59,6 +61,8 @@ enum class ScenarioRunMode {
   kTftpCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
+  /// Honour MultiPlan and drive several HTTP transfers through one multi.
+  kMultiTransfer,
 };
 
 /// Derive runtime behaviour from the compiled target identity. Mutation policy
@@ -74,6 +78,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kApi:
       return ScenarioRunMode::kApiLifecycle;
+
+    case TargetProfile::kMulti:
+      return ScenarioRunMode::kMultiTransfer;
 
     case TargetProfile::kFastHttps:
       return ScenarioRunMode::kTlsCoverage;

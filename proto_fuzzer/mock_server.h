@@ -91,6 +91,12 @@ class MockServer : public MockServerBase {
   /// curl has even requested the corresponding socket or chunk.
   void SetScripts(const curl::fuzzer::proto::Scenario& scenario);
 
+  /// Keep completed response sockets writable instead of half-closing them.
+  /// The multi-transfer lane uses this to let a queued easy handle reuse an
+  /// HTTP/1.1 connection; ordinary protocol drives retain close-on-completion.
+  /// @param keep_open Whether the peer should suppress its response-side FIN.
+  void SetKeepConnectionsOpen(bool keep_open);
+
   /// Preload the bounded HTTP response, half-close the peer, and invoke
   /// curl_easy_perform. This avoids a helper thread while guaranteeing that
   /// curl never waits for the outer chunk-delivery loop.
@@ -100,6 +106,16 @@ class MockServer : public MockServerBase {
   /// @return true when a chunk was consumed from the script.
   bool DeliverNextChunk();
   bool has_more_chunks() const;
+
+  /// Service one deterministic application event-loop turn by draining all
+  /// request bytes currently available and releasing at most one response
+  /// chunk. Exposed for the shared-multi driver, which owns the outer loop.
+  /// @return true when any request or response byte advanced.
+  bool ServiceConnections();
+
+  /// Report how many peer sockets curl opened during the current script run.
+  /// @return Number of response scripts assigned to live or retired sockets.
+  std::size_t opened_connection_count() const;
 
  protected:
   /// Construct the transport used for one HTTP exchange. HTTPS overrides this
@@ -145,13 +161,6 @@ class MockServer : public MockServerBase {
   /// @return total bytes drained during this call.
   std::size_t DrainIncomingConnections();
 
-  /// Service one deterministic application event-loop turn by draining all
-  /// request bytes currently available and releasing at most one response
-  /// chunk. Both multi APIs use this ordering so selecting socket_action
-  /// changes only how readiness reaches curl, not the mock protocol script.
-  /// @return true when any request or response byte advanced.
-  bool ServiceConnections();
-
   /// Drive the HTTP exchange through curl_multi_socket_action using the
   /// callback state owned by MockServerBase::DriveScenario.
   /// @param multi Multi handle containing `easy`.
@@ -167,6 +176,10 @@ class MockServer : public MockServerBase {
   /// Every response chunk must be queued before the callback returns because
   /// curl_easy_perform does not yield control to the mock.
   bool preload_all_chunks_;
+
+  /// Suppress response-side half-close after the final scripted chunk. This
+  /// is false for every historical target and enabled only by MultiPlan.
+  bool keep_connections_open_;
 
   /// Old server halves must outlive their active role: libcurl owns the client
   /// fds and may close or briefly revisit them after opening the next socket.

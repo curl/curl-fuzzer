@@ -793,7 +793,8 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kTiming,
+      TargetProfile::kFastTftp,      TargetProfile::kMulti,
+      TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kProtocolPolicies) {
@@ -806,6 +807,83 @@ void TestProtocolPoliciesDiscardApiPlans() {
 
     Expect(!scenario.has_api_plan(),
            "a protocol-focused policy retained API-only lifecycle work");
+  }
+}
+
+void TestMultiPolicyRetainsAndBoundsItsPlan() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("mutated.invalid/a/path?query#fragment");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxConnections + 2; ++index) {
+    scenario.add_subsequent_connections()->set_initial_response("response");
+  }
+
+  auto *plan = scenario.mutable_multi_plan();
+  plan->set_transfer_count(99);
+  plan->set_drive_mode(curl::fuzzer::proto::MULTI_DRIVE_SOCKET);
+  plan->set_max_host_connections(99);
+  plan->set_max_total_connections(99);
+  plan->set_connection_cache_size(99);
+  plan->set_keep_connections_open(true);
+  plan->set_multiplex(true);
+  plan->set_wake_multi(true);
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxMultiActions + 3; ++index) {
+    auto *action = plan->add_actions();
+    action->set_transfer_selector(99);
+    action->set_kind(curl::fuzzer::proto::MULTI_ACTION_REMOVE);
+  }
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kMulti);
+
+  Expect(scenario.scheme() == SCHEME_HTTP,
+         "multi policy did not force plaintext HTTP");
+  Expect(scenario.host_path() == "multi.test/a/path?query#fragment",
+         "multi policy did not put all handles on one origin");
+  Expect(!scenario.connection().has_backpressure(),
+         "multi policy retained timed backpressure");
+  Expect(!scenario.has_api_plan(),
+         "multi policy retained API-only lifecycle work");
+  Expect(scenario.has_multi_plan(),
+         "multi policy discarded its shared-multi plan");
+  Expect(scenario.multi_plan().transfer_count() ==
+             proto_fuzzer::scenario_limits::kMaxMultiTransfers,
+         "multi policy did not cap the easy-handle count");
+  Expect(scenario.multi_plan().max_host_connections() ==
+                 proto_fuzzer::scenario_limits::kMaxMultiTransfers &&
+             scenario.multi_plan().max_total_connections() ==
+                 proto_fuzzer::scenario_limits::kMaxMultiTransfers &&
+             scenario.multi_plan().connection_cache_size() ==
+                 proto_fuzzer::scenario_limits::kMaxMultiTransfers * 2,
+         "multi policy did not cap connection limits");
+  Expect(static_cast<std::size_t>(scenario.multi_plan().actions_size()) ==
+             proto_fuzzer::scenario_limits::kMaxMultiActions,
+         "multi policy retained actions beyond its operation budget");
+  Expect(scenario.multi_plan().actions(0).transfer_selector() <
+             scenario.multi_plan().transfer_count(),
+         "multi policy retained an out-of-range handle selector");
+  Expect(static_cast<std::size_t>(scenario.subsequent_connections_size()) ==
+             proto_fuzzer::scenario_limits::kMaxMultiTransfers - 1,
+         "multi policy retained response scripts beyond its handle count");
+}
+
+void TestOtherPoliciesDiscardMultiPlans() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kTiming,
+  };
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("example.test/");
+    scenario.mutable_multi_plan()->set_transfer_count(4);
+    ApplyTargetPolicy(&scenario, profile);
+    Expect(!scenario.has_multi_plan(),
+           "a non-multi policy retained concurrent-handle work");
   }
 }
 
@@ -835,6 +913,8 @@ void TestProfileRunModes() {
          "fast TELNET profile gained coverage-probe overhead");
   Expect(RunModeFor(TargetProfile::kApi) == ScenarioRunMode::kApiLifecycle,
          "API profile does not authorize its lifecycle plan");
+  Expect(RunModeFor(TargetProfile::kMulti) == ScenarioRunMode::kMultiTransfer,
+         "multi profile does not authorize concurrent transfers");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
   Expect(RunModeFor(TargetProfile::kH2Proxy) ==
@@ -861,6 +941,7 @@ void TestCompatibilityProfileIsNoOp() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("compatibility.example/");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.add_request_headers("X-Compatibility: retained");
   const std::string before = scenario.SerializeAsString();
 
@@ -895,6 +976,8 @@ int main() {
   TestFastHttpFiltersBeforeApplyingOptionBound();
   TestApiPolicyRetainsAndBoundsItsPlan();
   TestProtocolPoliciesDiscardApiPlans();
+  TestMultiPolicyRetainsAndBoundsItsPlan();
+  TestOtherPoliciesDiscardMultiPlans();
   TestApiEasyDriveDropsMultiOnlyWakeup();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
