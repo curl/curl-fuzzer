@@ -1,16 +1,17 @@
 """Common corpus functions."""
+from __future__ import annotations
 
 import logging
 import struct
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, ClassVar
 
 from curl_fuzzer_tools.curl_test_data import TestData
 
 log = logging.getLogger(__name__)
 
 
-class BaseType(object):
+class BaseType:
     """Known TLV types."""
 
     TYPE_URL = 1
@@ -247,7 +248,7 @@ class BaseType(object):
     TYPE_MAX_RECV_SPEED_LARGE = 324
     TYPE_TIMEVALUE_LARGE = 325
 
-    TYPEMAP = {
+    TYPEMAP: ClassVar[dict[int, str]] = {
         # Connection and response TLVs
         TYPE_URL: "CURLOPT_URL",
         TYPE_RSP0: "Server banner (sent on connection)",
@@ -505,18 +506,18 @@ class TLVEncoder(BaseType):
         """Write a bytes TLV to the output."""
         self.write_tlv(tlv_type, len(bytedata), bytedata)
 
-    def maybe_write_string(self, tlv_type: int, wstring: Optional[str]) -> None:
+    def maybe_write_string(self, tlv_type: int, wstring: str | None) -> None:
         """Write a string TLV to the output if specified."""
         if wstring is not None:
             self.write_string(tlv_type, wstring)
 
-    def maybe_write_u32(self, tlv_type: int, num: Optional[int]) -> None:
+    def maybe_write_u32(self, tlv_type: int, num: int | None) -> None:
         """Write an unsigned 32-bit integer TLV to the output if specified."""
         if num is not None:
             self.write_u32(tlv_type, num)
 
     def maybe_write_response(
-        self, rsp_type: int, rsp: Optional[str], rsp_file: Optional[Path], rsp_test: int
+        self, rsp_type: int, rsp: str | None, rsp_file: Path | None, rsp_test: int
     ) -> None:
         """Write a response TLV to the output if specified."""
         if rsp:
@@ -548,7 +549,7 @@ class TLVEncoder(BaseType):
         self.write_tlv(self.TYPE_MIME_PART, len(part_tlv), part_tlv)
 
     def encode_tlv(
-        self, tlv_type: int, tlv_length: int, tlv_data: Optional[bytes] = None
+        self, tlv_type: int, tlv_length: int, tlv_data: bytes | None = None
     ) -> bytes:
         """Encode the Type, Length, and Value into a bytes array."""
         log.debug(
@@ -566,7 +567,7 @@ class TLVEncoder(BaseType):
         return data
 
     def write_tlv(
-        self, tlv_type: int, tlv_length: int, tlv_data: Optional[bytes] = None
+        self, tlv_type: int, tlv_length: int, tlv_data: bytes | None = None
     ) -> None:
         """Write an encoded TLV to the output as bytes."""
         log.debug(
@@ -620,15 +621,15 @@ class TLVDecoder(BaseType):
         """Create a TLVDecoder object."""
         self.inputdata = inputdata
         self.pos = 0
-        self.tlv: Optional["TLVContents"] = None
+        self.tlv: TLVContents | None = None
 
-    def __iter__(self) -> "TLVDecoder":
+    def __iter__(self) -> TLVDecoder:
         """Return an iterator for the TLVs."""
         self.pos = 0
         self.tlv = None
         return self
 
-    def __next__(self) -> "TLVContents":
+    def __next__(self) -> TLVContents:
         """Return the next TLV in the input data."""
         if self.tlv:
             self.pos += self.tlv.total_length()

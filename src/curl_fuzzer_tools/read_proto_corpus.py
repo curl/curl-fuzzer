@@ -21,12 +21,11 @@ import os
 import pathlib
 import subprocess
 import sys
-from typing import List, Optional
 
 SCENARIO_MESSAGE = "curl.fuzzer.proto.Scenario"
 
 
-def find_proto_file(explicit: Optional[pathlib.Path]) -> Optional[pathlib.Path]:
+def find_proto_file(explicit: pathlib.Path | None) -> pathlib.Path | None:
     """Resolve the expanded curl_fuzzer.proto, or None if not found."""
     if explicit is not None:
         if not explicit.is_file():
@@ -46,7 +45,7 @@ def find_proto_file(explicit: Optional[pathlib.Path]) -> Optional[pathlib.Path]:
     return None
 
 
-def decode(corpus_file: pathlib.Path, proto_file: Optional[pathlib.Path]) -> str:
+def decode(corpus_file: pathlib.Path, proto_file: pathlib.Path | None) -> str:
     """Return the textproto decoding of ``corpus_file``."""
     data = corpus_file.read_bytes()
     if proto_file is not None:
@@ -65,7 +64,7 @@ def decode(corpus_file: pathlib.Path, proto_file: Optional[pathlib.Path]) -> str
     return result.stdout.decode("utf-8", errors="replace")
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "input",
@@ -90,7 +89,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run(argv: List[str] | None = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if not args.input.is_file():
         print(f"error: {args.input} does not exist", file=sys.stderr)

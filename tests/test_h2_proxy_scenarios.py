@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_ROOT = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "h2_proxy"
 

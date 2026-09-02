@@ -8,7 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "compare_fuzzers.py"
 
@@ -204,8 +203,7 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
             str(output),
         ],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
 
@@ -371,8 +369,7 @@ def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
             str(output),
         ],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
 
@@ -433,8 +430,7 @@ def test_cli_preserves_log_and_fails_on_fuzzer_error(tmp_path: Path) -> None:
             str(output),
         ],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
 
@@ -460,8 +456,7 @@ def test_cli_rejects_partial_source_coverage_configuration(tmp_path: Path) -> No
             str(tmp_path / "coverage-baseline"),
         ],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
 

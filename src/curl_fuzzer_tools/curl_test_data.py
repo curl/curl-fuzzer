@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 #  Project                     ___| | | |  _ \| |
 #                             / __| | | | |_) | |
@@ -21,7 +20,6 @@
 #
 """Module for extracting test data from the test data folder."""
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 import re
@@ -33,7 +31,7 @@ log = logging.getLogger(__name__)
 REPLY_DATA = re.compile(r"<reply>\s*<data>(.*?)</data>", re.MULTILINE | re.DOTALL)
 
 
-class TestData(object):
+class TestData:
     """Class for extracting test data from the curl test data folder."""
 
     def __init__(self, data_folder: Path) -> None:

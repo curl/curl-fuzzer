@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUPPORTED_OPTIONS = REPO_ROOT / "schemas" / "curl_fuzzer_supported_curlopts.txt"
 TLS_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "https"
