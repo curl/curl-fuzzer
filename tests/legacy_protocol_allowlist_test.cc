@@ -46,7 +46,8 @@ bool ContainsToken(const std::string &list, const std::string &token) {
  */
 void TestBuildIntersectsSupportedProtocols() {
   const char *const supported[] = {"telnet", "http", "made-up", "sftp",
-                                   "rtmps", "wss", nullptr};
+                                   "rtmps",  "smb",  "smbs",    "wss",
+                                   nullptr};
   const std::string allowed = legacy_protocol_allowlist::Build(supported);
 
   Expect(allowed == "http,rtmps,sftp,wss",
@@ -55,6 +56,10 @@ void TestBuildIntersectsSupportedProtocols() {
          "generic legacy allow-list enabled TELNET");
   Expect(!ContainsToken(allowed, "made-up"),
          "generic legacy allow-list enabled an unreviewed protocol");
+  Expect(!ContainsToken(allowed, "smb"),
+         "generic legacy allow-list enabled SMB");
+  Expect(!ContainsToken(allowed, "smbs"),
+         "generic legacy allow-list enabled SMBS");
 }
 
 /**

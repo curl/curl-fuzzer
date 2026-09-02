@@ -342,6 +342,11 @@ set(CURL_CMAKE_ARGS
     -DCURL_DISABLE_TELNET=OFF
     -DCURL_DISABLE_FTP=OFF
     -DCURL_DISABLE_TFTP=OFF
+    # SMB and NTLM are deprecated upstream and no longer fuzzed here. Keep
+    # them disabled explicitly so curl default changes cannot restore either
+    # surface to the aggregate legacy fuzzer.
+    -DCURL_ENABLE_SMB=OFF
+    -DCURL_ENABLE_NTLM=OFF
     # Keep the HTTPS resource-record parser available in every sanitizer
     # configuration, including MSan where this project deliberately omits a
     # TLS backend. ECH consumes these records when TLS is present, while the
@@ -596,7 +601,6 @@ curl_add_fuzzer(curl_fuzzer_ldap      LDAP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
 curl_add_fuzzer(curl_fuzzer_pop3      POP3)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
-curl_add_fuzzer(curl_fuzzer_smb       SMB)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
 curl_add_fuzzer(curl_fuzzer_ws        WS)
@@ -643,7 +647,6 @@ add_custom_target(fuzz
         curl_fuzzer_mqtt
         curl_fuzzer_pop3
         curl_fuzzer_rtsp
-        curl_fuzzer_smb
         curl_fuzzer_smtp
         curl_fuzzer_tftp
         curl_fuzzer_ws

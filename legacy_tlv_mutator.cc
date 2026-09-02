@@ -488,8 +488,6 @@ const char *DefaultUrl() {
   return "scp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_SFTP)
   return "sftp://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_SMB)
-  return "smb://127.0.0.1/share";
 #elif defined(FUZZ_PROTOCOLS_SMTP)
   return "smtp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_TFTP)

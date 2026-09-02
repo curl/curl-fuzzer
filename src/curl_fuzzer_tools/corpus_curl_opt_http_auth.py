@@ -16,12 +16,8 @@ class CurlOptHttpAuth(Enum):
     CURLAUTH_DIGEST = 2
     # define CURLAUTH_NEGOTIATE    (((unsigned long)1)<<2)
     CURLAUTH_NEGOTIATE = 4
-    # define CURLAUTH_NTLM         (((unsigned long)1)<<3)
-    CURLAUTH_NTLM = 8
     # define CURLAUTH_DIGEST_IE    (((unsigned long)1)<<4)
     CURLAUTH_DIGEST_IE = 16
-    # define CURLAUTH_NTLM_WB      (((unsigned long)1)<<5)
-    CURLAUTH_NTLM_WB = 32
     # define CURLAUTH_BEARER       (((unsigned long)1)<<6)
     CURLAUTH_BEARER = 64
     # define CURLAUTH_AWS_SIGV4    (((unsigned long)1)<<7)

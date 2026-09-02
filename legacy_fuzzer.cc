@@ -613,9 +613,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_SFTP
   allowed_protocols = "sftp";
 #endif
-#ifdef FUZZ_PROTOCOLS_SMB
-  allowed_protocols = "smb,smbs";
-#endif
 #ifdef FUZZ_PROTOCOLS_SMTP
   allowed_protocols = "smtp,smtps";
 #endif
