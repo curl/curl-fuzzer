@@ -21,7 +21,7 @@ fi
 
 # Download dependencies for oss-fuzz
 $SUDO apt-get -o Dpkg::Use-Pty=0 update
-$SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
+$SUDO apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends \
   make \
   autoconf \
   automake \
@@ -32,5 +32,4 @@ $SUDO apt-get -o Dpkg::Use-Pty=0 install -y \
   pkg-config \
   wget \
   cmake \
-  ninja-build \
-  groff-base \
+  ninja-build

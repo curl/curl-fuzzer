@@ -7,7 +7,7 @@ project(curl_fuzzer_deps)
 # memory used by links. Job pools are a Ninja feature, so other generators
 # retain their existing scheduling.
 if(CMAKE_GENERATOR MATCHES "Ninja")
-    set_property(GLOBAL PROPERTY JOB_POOLS curl_fuzzer_link_pool=8)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS curl_fuzzer_link_pool=8)
     set(CMAKE_JOB_POOL_LINK curl_fuzzer_link_pool)
 endif()
 
@@ -18,6 +18,12 @@ else()
 endif()
 
 include(ExternalProject)
+
+# Dependency prefixes are cached between CI runs. This marker both records the
+# library/header-only install policy and provides a single version to bump when
+# that policy changes, forcing restored prefixes through a clean restage.
+set(MINIMAL_INSTALL_RECIPE minimal-install-v1)
+set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 
 # LLVM source-based coverage, driven by codecoverage.sh. When ON, libcurl and
 # the fuzzer binaries are compiled with -fprofile-instr-generate
@@ -44,14 +50,26 @@ set(ZLIB_URL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/z
 set(ZLIB_BUILD_NAME zlib-${ZLIB_VERSION})
 set(ZLIB_INSTALL_DIR ${CMAKE_BINARY_DIR}/${ZLIB_BUILD_NAME}-install)
 set(ZLIB_STATIC_LIB ${ZLIB_INSTALL_DIR}/lib/libz.a)
+set(ZLIB_INSTALL_STAMP ${ZLIB_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
-if(NOT EXISTS ${ZLIB_STATIC_LIB})
+if(NOT EXISTS ${ZLIB_INSTALL_STAMP} OR NOT EXISTS ${ZLIB_STATIC_LIB})
     ExternalProject_Add(zlib_external
         URL ${ZLIB_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/${ZLIB_BUILD_NAME}
+        PREFIX ${CMAKE_BINARY_DIR}/${ZLIB_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
         CONFIGURE_COMMAND ./configure --static --prefix=${ZLIB_INSTALL_DIR}
+        BUILD_COMMAND ${MAKE} libz.a
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${ZLIB_INSTALL_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ZLIB_INSTALL_DIR}/include
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ZLIB_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/zlib.h <SOURCE_DIR>/zconf.h
+            ${ZLIB_INSTALL_DIR}/include
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/libz.a ${ZLIB_STATIC_LIB}
+        COMMAND ${CMAKE_COMMAND} -E touch ${ZLIB_INSTALL_STAMP}
         BUILD_IN_SOURCE 1
-        BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB}
+        BUILD_BYPRODUCTS ${ZLIB_STATIC_LIB} ${ZLIB_INSTALL_STAMP}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
@@ -68,16 +86,38 @@ set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}
 set(ZSTD_BUILD_NAME zstd-${ZSTD_VERSION})
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/${ZSTD_BUILD_NAME}-install)
 set(ZSTD_STATIC_LIB ${ZSTD_INSTALL_DIR}/lib/libzstd.a)
+set(ZSTD_INSTALL_STAMP ${ZSTD_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
-if(NOT EXISTS ${ZSTD_STATIC_LIB})
+if(NOT EXISTS ${ZSTD_INSTALL_STAMP} OR NOT EXISTS ${ZSTD_STATIC_LIB})
     ExternalProject_Add(zstd_external
         URL ${ZSTD_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/${ZSTD_BUILD_NAME}
+        PREFIX ${CMAKE_BINARY_DIR}/${ZSTD_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
         SOURCE_SUBDIR build/cmake
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ZSTD_INSTALL_DIR}
             -DCMAKE_INSTALL_LIBDIR=lib
-            -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_CONTRIB=OFF -DZSTD_BUILD_TESTS=OFF
-        BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB}
+            -DZSTD_BUILD_SHARED=OFF
+            -DZSTD_BUILD_STATIC=ON
+            -DZSTD_BUILD_COMPRESSION=OFF
+            -DZSTD_BUILD_DECOMPRESSION=ON
+            -DZSTD_BUILD_DICTBUILDER=OFF
+            -DZSTD_LEGACY_SUPPORT=OFF
+            -DZSTD_MULTITHREAD_SUPPORT=OFF
+            -DZSTD_BUILD_PROGRAMS=OFF
+            -DZSTD_BUILD_CONTRIB=OFF
+            -DZSTD_BUILD_TESTS=OFF
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+            --target libzstd_static
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${ZSTD_INSTALL_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ZSTD_INSTALL_DIR}/include
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ZSTD_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/lib/zstd.h <SOURCE_DIR>/lib/zstd_errors.h
+            ${ZSTD_INSTALL_DIR}/include
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/lib/libzstd.a ${ZSTD_STATIC_LIB}
+        COMMAND ${CMAKE_COMMAND} -E touch ${ZSTD_INSTALL_STAMP}
+        BUILD_BYPRODUCTS ${ZSTD_STATIC_LIB} ${ZSTD_INSTALL_STAMP}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
@@ -96,17 +136,38 @@ set(BROTLI_INSTALL_DIR ${CMAKE_BINARY_DIR}/${BROTLI_BUILD_NAME}-install)
 set(BROTLI_DEC_STATIC_LIB ${BROTLI_INSTALL_DIR}/lib/libbrotlidec.a)
 set(BROTLI_COMMON_STATIC_LIB ${BROTLI_INSTALL_DIR}/lib/libbrotlicommon.a)
 set(BROTLI_STATIC_LIBS ${BROTLI_DEC_STATIC_LIB} ${BROTLI_COMMON_STATIC_LIB})
+set(BROTLI_INSTALL_STAMP ${BROTLI_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
-if(NOT EXISTS ${BROTLI_DEC_STATIC_LIB} OR NOT EXISTS ${BROTLI_COMMON_STATIC_LIB})
+if(NOT EXISTS ${BROTLI_INSTALL_STAMP} OR
+   NOT EXISTS ${BROTLI_DEC_STATIC_LIB} OR
+   NOT EXISTS ${BROTLI_COMMON_STATIC_LIB})
     ExternalProject_Add(brotli_external
         URL ${BROTLI_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/${BROTLI_BUILD_NAME}
+        PREFIX ${CMAKE_BINARY_DIR}/${BROTLI_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${BROTLI_INSTALL_DIR}
             -DCMAKE_INSTALL_LIBDIR=lib
             -DBUILD_SHARED_LIBS=OFF
             -DBROTLI_BUILD_TOOLS=OFF
             -DBROTLI_DISABLE_TESTS=ON
-        BUILD_BYPRODUCTS ${BROTLI_STATIC_LIBS}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+            --target brotlidec
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${BROTLI_INSTALL_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${BROTLI_INSTALL_DIR}/include/brotli
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${BROTLI_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/c/include/brotli/decode.h
+            <SOURCE_DIR>/c/include/brotli/port.h
+            <SOURCE_DIR>/c/include/brotli/shared_dictionary.h
+            <SOURCE_DIR>/c/include/brotli/types.h
+            ${BROTLI_INSTALL_DIR}/include/brotli
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/libbrotlicommon.a
+            <BINARY_DIR>/libbrotlidec.a
+            ${BROTLI_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E touch ${BROTLI_INSTALL_STAMP}
+        BUILD_BYPRODUCTS ${BROTLI_STATIC_LIBS} ${BROTLI_INSTALL_STAMP}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
@@ -127,8 +188,8 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
         https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz)
     set(OPENSSL_BUILD_NAME openssl-${OPENSSL_VERSION})
     set(OPENSSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}-install)
-    set(OPENSSL_SRC_DIR ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}/src/openssl_external)
     set(OPENSSL_STATIC_LIB ${OPENSSL_INSTALL_DIR}/lib/libssl.a ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
+    set(OPENSSL_INSTALL_STAMP ${OPENSSL_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
     # Architecture and sanitizer logic
     set(OPENSSL_ARCH_TARGET "")
@@ -172,14 +233,24 @@ if(NOT "$ENV{SANITIZER}" STREQUAL "memory")
         $ENV{OPENSSLFLAGS}
     )
 
-    if(NOT EXISTS ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
+    if(NOT EXISTS ${OPENSSL_INSTALL_STAMP} OR
+       NOT EXISTS ${OPENSSL_INSTALL_DIR}/lib/libssl.a OR
+       NOT EXISTS ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
         ExternalProject_Add(openssl_external
             URL ${OPENSSL_URL}
-            PREFIX ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}
+            PREFIX ${CMAKE_BINARY_DIR}/${OPENSSL_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
             CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_COMMAND}
-            INSTALL_COMMAND ${MAKE} install_sw
+            BUILD_COMMAND ${MAKE} build_libs
+            INSTALL_COMMAND
+                ${CMAKE_COMMAND} -E remove_directory ${OPENSSL_INSTALL_DIR}
+            COMMAND ${MAKE} install_dev
+            COMMAND ${CMAKE_COMMAND} -E remove_directory
+                ${OPENSSL_INSTALL_DIR}/lib/cmake
+            COMMAND ${CMAKE_COMMAND} -E remove_directory
+                ${OPENSSL_INSTALL_DIR}/lib/pkgconfig
+            COMMAND ${CMAKE_COMMAND} -E touch ${OPENSSL_INSTALL_STAMP}
             BUILD_IN_SOURCE 1
-            BUILD_BYPRODUCTS ${OPENSSL_STATIC_LIB}
+            BUILD_BYPRODUCTS ${OPENSSL_STATIC_LIB} ${OPENSSL_INSTALL_STAMP}
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE
             DOWNLOAD_NO_PROGRESS 1
         )
@@ -209,15 +280,30 @@ set(NGHTTP2_URL https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_
 set(NGHTTP2_BUILD_NAME nghttp2-${NGHTTP2_VERSION})
 set(NGHTTP2_INSTALL_DIR ${CMAKE_BINARY_DIR}/${NGHTTP2_BUILD_NAME}-install)
 set(NGHTTP2_STATIC_LIB ${NGHTTP2_INSTALL_DIR}/lib/libnghttp2.a)
+set(NGHTTP2_INSTALL_STAMP ${NGHTTP2_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
-if(NOT EXISTS ${NGHTTP2_STATIC_LIB})
+if(NOT EXISTS ${NGHTTP2_INSTALL_STAMP} OR NOT EXISTS ${NGHTTP2_STATIC_LIB})
     ExternalProject_Add(nghttp2_external
         URL ${NGHTTP2_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/${NGHTTP2_BUILD_NAME}
+        PREFIX ${CMAKE_BINARY_DIR}/${NGHTTP2_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${NGHTTP2_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
             -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF
             -DENABLE_LIB_ONLY=ON -DENABLE_THREADS=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF ${NGHTTP2_OPENSSL_OPTION}
-        BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+            --target nghttp2_static
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${NGHTTP2_INSTALL_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${NGHTTP2_INSTALL_DIR}/include/nghttp2
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${NGHTTP2_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/lib/includes/nghttp2/nghttp2.h
+            <BINARY_DIR>/lib/includes/nghttp2/nghttp2ver.h
+            ${NGHTTP2_INSTALL_DIR}/include/nghttp2
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/lib/libnghttp2.a ${NGHTTP2_STATIC_LIB}
+        COMMAND ${CMAKE_COMMAND} -E touch ${NGHTTP2_INSTALL_STAMP}
+        BUILD_BYPRODUCTS ${NGHTTP2_STATIC_LIB} ${NGHTTP2_INSTALL_STAMP}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
@@ -236,15 +322,28 @@ set(LIBIDN2_URL https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.
 set(LIBIDN2_BUILD_NAME libidn2-${LIBIDN2_VERSION})
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/${LIBIDN2_BUILD_NAME}-install)
 set(LIBIDN2_STATIC_LIB ${LIBIDN2_INSTALL_DIR}/lib/libidn2.a)
+set(LIBIDN2_INSTALL_STAMP ${LIBIDN2_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
-if(NOT EXISTS ${LIBIDN2_STATIC_LIB})
+if(NOT EXISTS ${LIBIDN2_INSTALL_STAMP} OR NOT EXISTS ${LIBIDN2_STATIC_LIB})
     ExternalProject_Add(libidn2_external
         URL ${LIBIDN2_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/${LIBIDN2_BUILD_NAME}
+        PREFIX ${CMAKE_BINARY_DIR}/${LIBIDN2_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
         CONFIGURE_COMMAND ./configure --disable-dependency-tracking --prefix=${LIBIDN2_INSTALL_DIR} --disable-shared --enable-static
-            --disable-doc
+            --disable-doc --disable-nls
+        BUILD_COMMAND ${MAKE} -C <SOURCE_DIR>/gl all
+        COMMAND ${MAKE} -C <SOURCE_DIR>/unistring all
+        COMMAND ${MAKE} -C <SOURCE_DIR>/lib all
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${LIBIDN2_INSTALL_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBIDN2_INSTALL_DIR}/include
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBIDN2_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/lib/idn2.h ${LIBIDN2_INSTALL_DIR}/include
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/lib/.libs/libidn2.a ${LIBIDN2_STATIC_LIB}
+        COMMAND ${CMAKE_COMMAND} -E touch ${LIBIDN2_INSTALL_STAMP}
         BUILD_IN_SOURCE 1
-        BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB}
+        BUILD_BYPRODUCTS ${LIBIDN2_STATIC_LIB} ${LIBIDN2_INSTALL_STAMP}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
@@ -287,22 +386,37 @@ set(OPENLDAP_BUILD_NAME openldap-${OPENLDAP_VERSION})
 set(OPENLDAP_INSTALL_DIR ${CMAKE_BINARY_DIR}/${OPENLDAP_BUILD_NAME}-install)
 set(OPENLDAP_STATIC_LIB_LDAP ${OPENLDAP_INSTALL_DIR}/lib/libldap.a)
 set(OPENLDAP_STATIC_LIB_LBER ${OPENLDAP_INSTALL_DIR}/lib/liblber.a)
+set(OPENLDAP_INSTALL_STAMP ${OPENLDAP_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
-if(NOT EXISTS ${OPENLDAP_STATIC_LIB_LDAP})
+if(NOT EXISTS ${OPENLDAP_INSTALL_STAMP} OR
+   NOT EXISTS ${OPENLDAP_STATIC_LIB_LDAP} OR
+   NOT EXISTS ${OPENLDAP_STATIC_LIB_LBER})
     ExternalProject_Add(openldap_external
         URL ${OPENLDAP_URL}
-        PREFIX ${CMAKE_BINARY_DIR}/${OPENLDAP_BUILD_NAME}
+        PREFIX ${CMAKE_BINARY_DIR}/${OPENLDAP_BUILD_NAME}-${MINIMAL_INSTALL_RECIPE}
         CONFIGURE_COMMAND ./configure --prefix=${OPENLDAP_INSTALL_DIR} --disable-shared --enable-static --without-tls --disable-slapd
+        BUILD_COMMAND ${MAKE} -C <SOURCE_DIR>/include all
+        COMMAND ${MAKE} -C <SOURCE_DIR>/libraries/liblber liblber.la
+        COMMAND ${MAKE} -C <SOURCE_DIR>/libraries/libldap libldap.la
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${OPENLDAP_INSTALL_DIR}
+        COMMAND ${MAKE} -C <SOURCE_DIR>/include install
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${OPENLDAP_INSTALL_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/libraries/liblber/.libs/liblber.a
+            ${OPENLDAP_STATIC_LIB_LBER}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/libraries/libldap/.libs/libldap.a
+            ${OPENLDAP_STATIC_LIB_LDAP}
+        COMMAND ${CMAKE_COMMAND} -E touch ${OPENLDAP_INSTALL_STAMP}
         BUILD_IN_SOURCE 1
-        BUILD_BYPRODUCTS ${OPENLDAP_STATIC_LIB_LDAP} ${OPENLDAP_STATIC_LIB_LBER}
+        BUILD_BYPRODUCTS
+            ${OPENLDAP_STATIC_LIB_LDAP}
+            ${OPENLDAP_STATIC_LIB_LBER}
+            ${OPENLDAP_INSTALL_STAMP}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS 1
     )
-    if(TARGET openssl_external)
-        add_dependencies(openldap_external openssl_external)
-    else()
-        message(STATUS "Not building OpenLDAP with OpenSSL")
-    endif()
 else()
     message(STATUS "OpenLDAP already installed at ${OPENLDAP_INSTALL_DIR}, skipping build")
     add_custom_target(openldap_external)
@@ -335,6 +449,7 @@ endif()
 set(CURL_CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
     -DCMAKE_INSTALL_LIBDIR=lib
+    -DCURL_DISABLE_INSTALL=ON
     -DBUILD_SHARED_LIBS=OFF
     # curl's tests and examples are not part of any packaged fuzz target. In
     # addition to saving build time, disabling them keeps the build inputs in
@@ -413,10 +528,23 @@ list(APPEND CURL_CMAKE_ARGS
     "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
 )
 
-set(CURL_POST_INSTALL_COMMAND
+set(CURL_INSTALL_COMMAND
+    INSTALL_COMMAND
+        ${CMAKE_COMMAND} -E remove_directory ${CURL_INSTALL_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/lib
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CURL_INSTALL_DIR}/include/curl
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
-    COMMAND ${CMAKE_COMMAND} -E touch ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        <SOURCE_DIR>/include/curl ${CURL_INSTALL_DIR}/include/curl
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+        ${CURL_INSTALL_DIR}/include/curl/Makefile.am
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        <BINARY_DIR>/lib/libcurl.a ${CURL_INSTALL_DIR}/lib/libcurl.a
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
+    COMMAND ${CMAKE_COMMAND} -E touch
+        ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
 )
 
 # Conditionally check to see if there's a source directory or not.
@@ -427,7 +555,7 @@ if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
     ExternalProject_Add(curl_external
         SOURCE_DIR $ENV{CURL_SOURCE_DIR}
         PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
-        ${CURL_POST_INSTALL_COMMAND}
+        ${CURL_INSTALL_COMMAND}
         CMAKE_ARGS ${CURL_CMAKE_ARGS}
         BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
@@ -439,7 +567,7 @@ else()
         GIT_SHALLOW 1
         PREFIX ${CMAKE_BINARY_DIR}/curl
         PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
-        ${CURL_POST_INSTALL_COMMAND}
+        ${CURL_INSTALL_COMMAND}
         CMAKE_ARGS ${CURL_CMAKE_ARGS}
         BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
     )
@@ -1430,3 +1558,36 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_custom_target(lint DEPENDS ${LINT_DEPS})
     endif()
 endif()
+
+# Record the exact install prefixes belonging to this configuration. The CI
+# cache uses a broad restore key, so trim_cache.sh needs this list to discard
+# prefixes left behind by dependency version bumps.
+set(CACHE_INSTALL_DIRS
+    ${ZLIB_INSTALL_DIR}
+    ${ZSTD_INSTALL_DIR}
+    ${BROTLI_INSTALL_DIR}
+    ${NGHTTP2_INSTALL_DIR}
+    ${LIBIDN2_INSTALL_DIR}
+    ${OPENLDAP_INSTALL_DIR}
+    ${CURL_INSTALL_DIR}
+)
+if(DEFINED OPENSSL_INSTALL_DIR)
+    list(APPEND CACHE_INSTALL_DIRS ${OPENSSL_INSTALL_DIR})
+endif()
+if(BUILD_GDB)
+    list(APPEND CACHE_INSTALL_DIRS ${GDB_INSTALL_DIR})
+endif()
+if(DEFINED LPM_INSTALL_DIR)
+    list(APPEND CACHE_INSTALL_DIRS ${LPM_INSTALL_DIR})
+endif()
+if(DEFINED HOST_PROTOC_INSTALL_DIR AND
+   "$ENV{SANITIZER}" STREQUAL "memory")
+    list(APPEND CACHE_INSTALL_DIRS ${HOST_PROTOC_INSTALL_DIR})
+endif()
+
+set(CACHE_INSTALL_MANIFEST ${CMAKE_BINARY_DIR}/curl-fuzzer-cache-installs.txt)
+file(WRITE ${CACHE_INSTALL_MANIFEST} "")
+foreach(install_dir IN LISTS CACHE_INSTALL_DIRS)
+    get_filename_component(install_name ${install_dir} NAME)
+    file(APPEND ${CACHE_INSTALL_MANIFEST} "${install_name}\n")
+endforeach()
