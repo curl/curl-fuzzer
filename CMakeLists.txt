@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
 project(curl_fuzzer_deps)
 
+# OSS-Fuzz builders expose enough CPUs for Ninja to start dozens of linker
+# processes concurrently, but coverage instrumentation makes each link much
+# more memory-hungry. Keep compilation fully parallel while bounding the peak
+# memory used by links. Job pools are a Ninja feature, so other generators
+# retain their existing scheduling.
+if(CMAKE_GENERATOR MATCHES "Ninja")
+    set_property(GLOBAL PROPERTY JOB_POOLS curl_fuzzer_link_pool=8)
+    set(CMAKE_JOB_POOL_LINK curl_fuzzer_link_pool)
+endif()
+
 if(NOT "$ENV{MAKE}" STREQUAL "")
     set(MAKE "$ENV{MAKE}")
 else()
