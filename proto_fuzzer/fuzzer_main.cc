@@ -14,6 +14,7 @@
 
 #include <cassert>
 #include <csignal>
+#include <cstdlib>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/option_apply.h"
@@ -58,6 +59,11 @@ void EnsureTargetPostProcessor(proto_fuzzer::TargetProfile profile) {
 // static ctors run once.
 struct CurlGlobalBootstrap {
   CurlGlobalBootstrap() {
+    // Open curl's TLS keylog at backend init. Curl_tls_keylog_open() runs once
+    // inside curl_global_init, so setting this after bootstrap would be too
+    // late. Keep the output in /dev/null and let a reproducer override it.
+    (void)setenv("SSLKEYLOGFILE", "/dev/null", 0);
+
     // Keep parity with the legacy harness. libcurl normally suppresses
     // SIGPIPE for its own writes, but fuzzed connection lifecycles also race
     // mock-peer teardown; those failures should be reported as socket errors,
