@@ -159,6 +159,8 @@ void TestDeepHttpPolicy() {
 void TestFastHttpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
 
   ApplyTargetPolicy(&scenario, TargetProfile::kFastHttps);
 
@@ -168,6 +170,50 @@ void TestFastHttpsPolicy() {
          "fast HTTPS policy retained backpressure");
   Expect(scenario.host_path() == "tls.test/a/path?query#fragment",
          "fast HTTPS policy did not retain URL suffix under the trusted host");
+  Expect(scenario.tls_certificate_chain() ==
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
+         "fast HTTPS policy discarded its certificate-chain selector");
+}
+
+void TestFastHttpsPolicyRejectsUnknownCertificateChain() {
+  Scenario scenario;
+  scenario.set_tls_certificate_chain(
+      static_cast<curl::fuzzer::proto::TlsCertificateChainProfile>(99));
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttps);
+
+  Expect(scenario.tls_certificate_chain() ==
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+         "fast HTTPS policy retained an unknown certificate-chain selector");
+}
+
+void TestNonHttpsPoliciesDiscardTlsCertificateChains() {
+  constexpr TargetProfile kNonHttpsPolicies[] = {
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kApi,
+      TargetProfile::kMulti,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kNonHttpsPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("example.test/");
+    scenario.set_tls_certificate_chain(
+        curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+
+    ApplyTargetPolicy(&scenario, profile);
+
+    Expect(scenario.tls_certificate_chain() ==
+               curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+           "a non-HTTPS policy retained TLS certificate-chain work");
+  }
 }
 
 void TestH2ProxyPolicy() {
@@ -942,6 +988,8 @@ void TestCompatibilityProfileIsNoOp() {
   scenario.set_host_path("compatibility.example/");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
   scenario.add_request_headers("X-Compatibility: retained");
   const std::string before = scenario.SerializeAsString();
 
@@ -957,6 +1005,8 @@ int main() {
   TestFastHttpPolicy();
   TestDeepHttpPolicy();
   TestFastHttpsPolicy();
+  TestFastHttpsPolicyRejectsUnknownCertificateChain();
+  TestNonHttpsPoliciesDiscardTlsCertificateChains();
   TestH2ProxyPolicy();
   TestFastWebSocketPolicy();
   TestFastSecureWebSocketPolicy();

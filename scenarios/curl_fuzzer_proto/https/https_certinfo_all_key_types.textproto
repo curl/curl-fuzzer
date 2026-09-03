@@ -1,0 +1,12 @@
+# The alternate TLS peer keeps its verified EC identity but sends auxiliary
+# RSA, DSA, and finite-field DH certificates. CERTINFO makes curl walk every
+# peer-supplied entry and format each public-key family in ossl_certchain.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/certinfo-all-key-types"
+tls_certificate_chain: TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES
+options { option_id: CURLOPT_SSL_VERIFYPEER bool_value: true }
+options { option_id: CURLOPT_SSL_VERIFYHOST uint_value: 2 }
+options { option_id: CURLOPT_CERTINFO bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nall-keys"
+}

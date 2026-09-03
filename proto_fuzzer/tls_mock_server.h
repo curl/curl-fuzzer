@@ -38,6 +38,10 @@ class TlsServerContext;
 class TlsMockServer : public MockServer {
  public:
   TlsMockServer();
+
+  /// Construct an HTTP/1.1 TLS peer with a bounded certificate-chain profile.
+  /// @param certificate_chain Peer certificate chain presented to curl.
+  explicit TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain);
   ~TlsMockServer() override;
 
   TlsMockServer(const TlsMockServer&) = delete;
@@ -81,7 +85,10 @@ class TlsMockServer : public MockServer {
  protected:
   /// Construct a TLS transport for a protocol-specific derived peer.
   /// @param protocol Fixed application protocol the server must negotiate.
-  explicit TlsMockServer(TlsApplicationProtocol protocol);
+  /// @param certificate_chain Peer certificate chain presented to curl.
+  explicit TlsMockServer(TlsApplicationProtocol protocol,
+                         curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
+                             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
 
   /// Wrap one socketpair server endpoint in an OpenSSL acceptor.
   /// @return a failed connection when context setup was unavailable.

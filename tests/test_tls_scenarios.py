@@ -58,6 +58,11 @@ def test_tls_controls_are_reachable_as_copied_values() -> None:
 def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
     """Protect values that blind protobuf mutation is unlikely to recreate."""
     expected_tokens = {
+        "https_certinfo_all_key_types.textproto": (
+            "TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES",
+            "CURLOPT_CERTINFO bool_value: true",
+            "all-keys",
+        ),
         "https_tls13_certinfo.textproto": (
             "CURLOPT_CERTINFO bool_value: true",
             "CURLOPT_SSL_VERIFYHOST uint_value: 2",

@@ -72,7 +72,7 @@ int SelectAlpn(SSL* /*ssl*/, const unsigned char** selected, unsigned char* sele
 /// one fuzz input from affecting the next.
 class TlsServerContext {
  public:
-  explicit TlsServerContext(TlsApplicationProtocol protocol)
+  TlsServerContext(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
       : context_(nullptr),
         protocol_(protocol),
         negotiated_tls_version_(0),
@@ -86,7 +86,7 @@ class TlsServerContext {
 #endif
     OpenSslErrorQueueGuard error_guard;
     context_ = SSL_CTX_new(TLS_server_method());
-    if (context_ == nullptr || !LoadCredentials() || !LoadEchConfig()) {
+    if (context_ == nullptr || !LoadCredentials(certificate_chain) || !LoadEchConfig()) {
       SSL_CTX_free(context_);
       context_ = nullptr;
       return;
@@ -164,8 +164,28 @@ class TlsServerContext {
   const std::string& ech_outer_name() const { return ech_outer_name_; }
 
  private:
+  /// Append one profile-selected peer certificate without requiring it to
+  /// authenticate the TLS handshake. OpenSSL transfers ownership on success;
+  /// failure leaves cleanup with the caller.
+  bool AddExtraChainCertificate(const char* certificate_pem) {
+    BIO* certificate_bio = BIO_new_mem_buf(certificate_pem, -1);
+    if (certificate_bio == nullptr) {
+      return false;
+    }
+    X509* certificate = PEM_read_bio_X509(certificate_bio, nullptr, nullptr, nullptr);
+    BIO_free(certificate_bio);
+    if (certificate == nullptr) {
+      return false;
+    }
+    if (SSL_CTX_add_extra_chain_cert(context_, certificate) != 1) {
+      X509_free(certificate);
+      return false;
+    }
+    return true;
+  }
+
   /// Parse the checked-in test-only PEM values entirely in memory.
-  bool LoadCredentials() {
+  bool LoadCredentials(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain) {
     BIO* certificate_bio = BIO_new_mem_buf(tls_test_credentials::kCertificatePem, -1);
     BIO* key_bio = BIO_new_mem_buf(tls_test_credentials::kPrivateKeyPem, -1);
     if (certificate_bio == nullptr || key_bio == nullptr) {
@@ -188,7 +208,19 @@ class TlsServerContext {
                         SSL_CTX_use_PrivateKey(context_, key) == 1 && SSL_CTX_check_private_key(context_) == 1;
     X509_free(certificate);
     EVP_PKEY_free(key);
-    return loaded;
+    if (!loaded) {
+      return false;
+    }
+
+    switch (certificate_chain) {
+      case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES:
+        return AddExtraChainCertificate(tls_test_credentials::kRsaCertificatePem) &&
+               AddExtraChainCertificate(tls_test_credentials::kDsaCertificatePem) &&
+               AddExtraChainCertificate(tls_test_credentials::kDhCertificatePem);
+      case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC:
+      default:
+        return true;
+    }
   }
 
   /// Load a fixed test-only ECH private key and matching public config. This
@@ -433,11 +465,16 @@ class TlsMockConnection final : public MockConnection {
 }  // namespace
 
 /// Build one reusable in-process server context per fuzz iteration.
-TlsMockServer::TlsMockServer() : TlsMockServer(TlsApplicationProtocol::kHttp11) {}
+TlsMockServer::TlsMockServer() : TlsMockServer(curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC) {}
+
+/// Select one bounded certificate chain while retaining HTTP/1.1 ALPN.
+TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+    : TlsMockServer(TlsApplicationProtocol::kHttp11, certificate_chain) {}
 
 /// Construct the shared TLS transport with one fixed ALPN outcome.
-TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol)
-    : context_(std::make_unique<TlsServerContext>(protocol)), saw_live_tls_session_(false) {}
+TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
+                             curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+    : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)), saw_live_tls_session_(false) {}
 
 /// Release SSL objects before their owning server context. OpenSSL reference
 /// counting makes the reverse order legal, but making the ownership order

@@ -73,6 +73,19 @@ message Scenario {
   // in the protocol targets. curl_fuzzer_proto_multi retains this plan and
   // applies the same request/response shape to a small set of easy handles.
   MultiPlan multi_plan = 11;
+  // Select the fixed certificate chain served by the dedicated HTTPS peer.
+  // Keeping this a closed profile rather than fuzzing PEM bytes makes every
+  // choice a parseable TLS handshake while still varying the X509 public-key
+  // types consumed by curl. Other fixed protocol lanes discard this field.
+  TlsCertificateChainProfile tls_certificate_chain = 12;
+}
+
+// Test-only certificate bundles available to the in-process TLS server. Zero
+// is the historical single-certificate setup so existing binary corpus inputs
+// preserve both their wire representation and negotiated server identity.
+enum TlsCertificateChainProfile {
+  TLS_CERTIFICATE_CHAIN_DEFAULT_EC = 0;
+  TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES = 1;
 }
 
 // A bounded plan for public libcurl APIs that are adjacent to, rather than
