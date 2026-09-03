@@ -360,10 +360,10 @@ curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_soc
 /// Preload all bounded response bytes from inside OPENSOCKETFUNCTION, where
 /// the mock still owns both socketpair ends. The total serialized fuzz input
 /// is capped by libFuzzer's max_len. If a non-blocking preload fills the local
-/// socket, curl observes only the successfully queued prefix and the short
-/// timeout below bounds the incomplete response. Reassert that timeout after
-/// scenario setopts so a mutated blocking option cannot turn this synchronous
-/// coverage path into a hung worker.
+/// socket, curl observes only the successfully queued prefix and the timeouts
+/// below bound the incomplete response. Unlike every other drive loop, this one
+/// has no iteration budget of its own, so it reasserts those timeouts after
+/// scenario setopts and clears the one option that can disable them.
 /// @param easy Configured easy handle whose open-socket callback targets this
 ///        mock.
 /// @param scenario Bounded response script to preload before performing.
@@ -372,6 +372,14 @@ void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenar
   preload_all_chunks_ = true;
   (void)curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, 50L);
   (void)curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 50L);
+  // CONNECT_ONLY makes curl's timeleft check report "no limit" for the whole
+  // post-connect phase, so the timeouts above stop being enforced; value 2
+  // additionally skips the connect-only shortcut and runs a complete transfer.
+  // Clearing it is not a coverage loss: the multi-driven WebSocket lanes still
+  // exercise CONNECT_ONLY under their own iteration budget. Zero rather than
+  // one because CONNECT_ONLY=1 also disables the timeout and stays bounded only
+  // through a curl-internal shortcut this harness should not depend on.
+  (void)curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 0L);
   (void)curl_easy_perform(easy);
   preload_all_chunks_ = false;
 }

@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -820,6 +821,67 @@ void TestEasyPerformPreloadsIncrementalResponse() {
   curl_slist_free_all(connect_to);
 }
 
+/// CURLOPT_CONNECT_ONLY disables curl's own transfer timeout, and value 2 keeps
+/// a full request running. Combined with an upload that provokes
+/// Expect: 100-continue, that left curl_easy_perform waiting out the entire
+/// expect timeout with nothing to bound it. Assert wall-clock as well as
+/// content: pre-fix curl does deliver the response, just 65 seconds later.
+void TestEasyPerformBoundsConnectOnlyUpload() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/easy");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("ok");
+  scenario.mutable_upload()->set_data("body");
+
+  auto *upload = scenario.add_options();
+  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload->set_bool_value(true);
+  auto *expect_timeout = scenario.add_options();
+  expect_timeout->set_option_id(
+      curl::fuzzer::proto::CURLOPT_EXPECT_100_TIMEOUT_MS);
+  expect_timeout->set_uint_value(65535);
+  auto *connect_only = scenario.add_options();
+  connect_only->set_option_id(curl::fuzzer::proto::CURLOPT_CONNECT_ONLY);
+  connect_only->set_uint_value(2);
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "connect-only upload test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/easy");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  TestMockServer server;
+  server.Install(easy);
+  // Route through the production option path so the CONNECT_ONLY decode is
+  // covered too, not just the resulting setopt.
+  (void)proto_fuzzer::ApplyScenarioOptions(easy, scenario);
+
+  const auto start = std::chrono::steady_clock::now();
+  {
+    // Without this owner, NeedsUploadCallbacks is unsatisfied and curl reads
+    // the request body from stdin.
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.DriveEasyScenario(easy, scenario);
+  }
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - start);
+
+  Expect(response == "ok",
+         "connect-only upload did not complete the preloaded response");
+  Expect(elapsed < std::chrono::milliseconds(2000),
+         "CONNECT_ONLY disabled the easy-perform drive's transfer timeout");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 void TestTelnetPreloadsChunksAndNeverReadsStdin() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_TELNET);
@@ -965,6 +1027,7 @@ int main() {
 #endif
   TestApiLifecycleCompletesSocketActionTransfer();
   TestEasyPerformPreloadsIncrementalResponse();
+  TestEasyPerformBoundsConnectOnlyUpload();
   TestTelnetPreloadsChunksAndNeverReadsStdin();
   TestTelnetMaximumAmplificationCannotBlock();
   return 0;
