@@ -56,6 +56,21 @@ def test_seed_families_keep_their_high_value_wire_tokens() -> None:
     assert "algorithm=SHA-256-SESS" in digest
     assert 'qop=\\"auth-int\\"' in digest
 
+    digest_sha512 = (
+        HTTP_SCENARIOS / "http_digest_auth_sha512_256.textproto"
+    ).read_text(encoding="utf-8")
+    assert "WWW-Authenticate: Digest" in digest_sha512
+    assert "algorithm=SHA-512-256" in digest_sha512
+    assert "subsequent_connections {" in digest_sha512
+
+    digest_sha512_sess = (
+        HTTP_SCENARIOS / "http_digest_auth_sha512_256_sess.textproto"
+    ).read_text(encoding="utf-8")
+    assert "WWW-Authenticate: Digest" in digest_sha512_sess
+    assert "algorithm=SHA-512-256-SESS" in digest_sha512_sess
+    assert 'qop=\\"auth\\"' in digest_sha512_sess
+    assert "subsequent_connections {" in digest_sha512_sess
+
     transport = (HTTP_SCENARIOS / "http_altsvc_hsts.textproto").read_text()
     assert "Alt-Svc: clear" in transport
     assert "Strict-Transport-Security: max-age=0" in transport

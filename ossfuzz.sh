@@ -54,12 +54,13 @@ export BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 
 # Curl is cloned fresh (--depth 1) on every CIFuzz container start. Replay
 # builds likewise update that checkout before invoking this script. Invalidate
-# both client variants so a restored ExternalProject stamp cannot retain an
+# all client variants so a restored ExternalProject stamp cannot retain an
 # archive from the previous curl revision.
 if [[ "${CIFUZZ:-}" == "True" || -n "${REPLAY_ENABLED:-}" ]]; then
   rm -f "${BUILD_DIR}/curl-install/lib/libcurl.a"
   rm -f "${BUILD_DIR}/curl-gnutls-install/lib/libcurl.a"
-  for CURL_VARIANT in curl_external curl_gnutls_external; do
+  rm -f "${BUILD_DIR}/curl-mbedtls-install/lib/libcurl.a"
+  for CURL_VARIANT in curl_external curl_gnutls_external curl_mbedtls_external; do
     rm -f "${BUILD_DIR}/${CURL_VARIANT}-prefix/src/${CURL_VARIANT}-stamp/${CURL_VARIANT}-"{configure,build,install,done}
   done
 fi

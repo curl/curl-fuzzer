@@ -41,6 +41,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_http_deep",
     "curl_fuzzer_proto_https",
     "curl_fuzzer_proto_https_gnutls",
+    "curl_fuzzer_proto_https_mbedtls",
     "curl_fuzzer_proto_h2_proxy",
     "curl_fuzzer_proto_ws",
     "curl_fuzzer_proto_wss",
@@ -53,6 +54,7 @@ DEFAULT_TARGETS = (
 )
 COMPATIBLE_CORPUS_TARGETS = {
     "curl_fuzzer_proto_https_gnutls": ("curl_fuzzer_proto_https",),
+    "curl_fuzzer_proto_https_mbedtls": ("curl_fuzzer_proto_https",),
 }
 HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
     {
@@ -60,6 +62,7 @@ HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
         "curl_fuzzer_proto_http_deep",
         "curl_fuzzer_proto_https",
         "curl_fuzzer_proto_https_gnutls",
+        "curl_fuzzer_proto_https_mbedtls",
         "curl_fuzzer_proto_ws",
         "curl_fuzzer_proto_wss",
         "curl_fuzzer_proto_telnet",

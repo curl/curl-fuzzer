@@ -372,6 +372,7 @@ void AddStringOption(Scenario *scenario,
 /// Retain request bytes that the production mock normally discards while
 /// making room for curl's next write. This test-only transport still uses the
 /// same socketpair and drive loop as the fuzzer.
+#ifdef CURL_FUZZER_HAS_HTTPSIG
 class RequestCapturingConnection final : public proto_fuzzer::MockConnection {
 public:
   explicit RequestCapturingConnection(std::string *request)
@@ -500,6 +501,7 @@ void TestHttpsigAlgorithmsEmitSignatureHeaders() {
     (void)unsetenv("CURL_FORCETIME");
   }
 }
+#endif
 
 /// Construct the common complete-response shape used by TLS behavior tests.
 Scenario MakeTlsScenario(const std::string &path, const std::string &body) {
@@ -597,6 +599,7 @@ void TestTlsServerCompletesVerifiedTransfer() {
          "single TLS transfer completed an unexpected number of handshakes");
 }
 
+#ifdef CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES
 void TestTlsAllKeyTypesReachCertificateInfo() {
   Scenario scenario = MakeTlsScenario("certinfo-all-key-types", "keys");
   scenario.set_tls_certificate_chain(
@@ -630,6 +633,7 @@ void TestTlsAllKeyTypesReachCertificateInfo() {
   Expect(HasCertificateInfoPrefix(result, "Serial Number:-"),
          "negative certificate serial did not reach certificate info");
 }
+#endif
 
 void TestTls12OptionsForceNegotiatedVersion() {
   Scenario scenario = MakeTlsScenario("tls12", "tls12");
@@ -640,6 +644,11 @@ void TestTls12OptionsForceNegotiatedVersion() {
   // curves and signature algorithms are selected through the same expression.
   AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
                   "NORMAL:-VERS-ALL:+VERS-TLS1.2");
+#elif defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  // mbedTLS consumes the shared curl cipher-suite names, but does not expose
+  // separate curve or signature-algorithm controls through this backend.
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
+                  "ECDHE-ECDSA-AES128-GCM-SHA256");
 #else
   AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
                   "ECDHE-ECDSA-AES128-GCM-SHA256");
@@ -697,6 +706,11 @@ void TestTlsRedirectReusesSession() {
                 CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
   AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
                   "NORMAL:-VERS-ALL:+VERS-TLS1.2");
+#elif defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  // Curl disables mbedTLS session tickets, so use TLS 1.2 session IDs for a
+  // deterministic resumption before the bounded peer closes the connection.
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSLVERSION,
+                CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
 #endif
   scenario.mutable_connection()->set_initial_response(
       "HTTP/1.1 302 Found\r\nLocation: https://tls.test/final\r\nConnection: "
@@ -736,7 +750,7 @@ void TestTlsWriteRetryKeepsItsOriginalBoundary() {
          "appending a response chunk corrupted an outstanding TLS write retry");
 }
 
-#if !defined(OPENSSL_NO_ECH) && !defined(CURL_FUZZER_EXPECT_GNUTLS)
+#if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
 void TestTlsEchCompletesEncryptedClientHello() {
   Scenario scenario = MakeTlsScenario("ech-success", "ech");
   AddStringOption(
@@ -1086,14 +1100,18 @@ int main() {
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();
+#endif
   TestTlsServerCompletesVerifiedTransfer();
+#ifdef CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES
   TestTlsAllKeyTypesReachCertificateInfo();
+#endif
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
   TestTlsRedirectReusesSession();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
-#if !defined(OPENSSL_NO_ECH) && !defined(CURL_FUZZER_EXPECT_GNUTLS)
+#if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
   TestTlsEchCompletesEncryptedClientHello();
 #endif
   TestH2ProxyCarriesAnHttpOriginResponse();

@@ -5,7 +5,7 @@
 # lane's generated seeds while OSS-Fuzz still sees a distinct binary basename.
 fuzz_local_corpus_name() {
     case "$1" in
-        curl_fuzzer_proto_https_gnutls)
+        curl_fuzzer_proto_https_gnutls|curl_fuzzer_proto_https_mbedtls)
             echo "curl_fuzzer_proto_https"
             ;;
         *)
@@ -40,10 +40,10 @@ fuzz_local_corpus_dir() {
 fuzz_public_corpus_names() {
     echo "$1"
     case "$1" in
-        curl_fuzzer_proto_https_gnutls)
+        curl_fuzzer_proto_https_gnutls|curl_fuzzer_proto_https_mbedtls)
             # Bootstrap the backend variant from the compatible HTTPS corpus as
             # well as the original mixed Scenario corpus. Once OSS-Fuzz has a
-            # native GnuTLS corpus, the first name above picks it up too.
+            # native backend corpus, the first name above picks it up too.
             echo "curl_fuzzer_proto_https"
             echo "curl_fuzzer_proto"
             ;;

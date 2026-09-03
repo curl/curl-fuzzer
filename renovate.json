@@ -69,6 +69,15 @@
       "extractVersion": "^openssl-(?<version>.*)$"
     },
     {
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "Mbed-TLS/mbedtls"
+      ],
+      "extractVersion": "^mbedtls-(?<version>.*)$"
+    },
+    {
       "matchDatasources": [
         "custom.gnu"
       ],
