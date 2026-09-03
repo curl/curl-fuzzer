@@ -333,6 +333,7 @@ struct TlsTransferResult {
   std::string response;
   long verify_result = -1;
   int certificate_count = 0;
+  std::vector<std::string> certificate_info;
   bool saw_live_tls_session = false;
   int negotiated_version = 0;
   std::size_t handshake_count = 0;
@@ -523,7 +524,7 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   const std::string url = "https://" + scenario.host_path();
   curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
 
-  proto_fuzzer::TlsMockServer server;
+  proto_fuzzer::TlsMockServer server(scenario.tls_certificate_chain());
   server.Install(easy);
   for (const auto &option : scenario.options()) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
@@ -540,6 +541,17 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
           CURLE_OK &&
       certificate_info != nullptr) {
     result.certificate_count = certificate_info->num_of_certs;
+    for (int certificate_index = 0;
+         certificate_index < certificate_info->num_of_certs;
+         ++certificate_index) {
+      for (const curl_slist *entry =
+               certificate_info->certinfo[certificate_index];
+           entry != nullptr; entry = entry->next) {
+        if (entry->data != nullptr) {
+          result.certificate_info.emplace_back(entry->data);
+        }
+      }
+    }
   }
   result.saw_live_tls_session = server.saw_live_tls_session();
   result.negotiated_version = server.negotiated_tls_version();
@@ -553,6 +565,16 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);
   return result;
+}
+
+bool HasCertificateInfoPrefix(const TlsTransferResult &result,
+                              const std::string &prefix) {
+  for (const std::string &entry : result.certificate_info) {
+    if (entry.compare(0, prefix.size(), prefix) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void TestTlsServerCompletesVerifiedTransfer() {
@@ -573,6 +595,31 @@ void TestTlsServerCompletesVerifiedTransfer() {
          "default TLS seed no longer negotiates TLS 1.3");
   Expect(result.handshake_count == 1,
          "single TLS transfer completed an unexpected number of handshakes");
+}
+
+void TestTlsAllKeyTypesReachCertificateInfo() {
+  Scenario scenario = MakeTlsScenario("certinfo-all-key-types", "keys");
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_CERTINFO, true);
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK && result.response == "keys",
+         "all-key-types TLS chain did not complete a verified transfer");
+  Expect(result.verify_result == 0,
+         "auxiliary certificate types changed leaf verification");
+  Expect(result.certificate_count == 4,
+         "all-key-types TLS peer did not send every selected certificate");
+  Expect(HasCertificateInfoPrefix(result, "RSA Public Key:"),
+         "RSA certificate did not reach ossl_certchain's key formatter");
+#ifndef OPENSSL_NO_DSA
+  Expect(HasCertificateInfoPrefix(result, "dsa(p):"),
+         "DSA certificate did not reach ossl_certchain's key formatter");
+#endif
+  Expect(HasCertificateInfoPrefix(result, "dh(p):"),
+         "DH certificate did not reach ossl_certchain's key formatter");
+  Expect(HasCertificateInfoPrefix(result, "Serial Number:-"),
+         "negative certificate serial did not reach ossl_certchain");
 }
 
 void TestTls12OptionsForceNegotiatedVersion() {
@@ -1016,6 +1063,7 @@ int main() {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
   TestHttpsigAlgorithmsEmitSignatureHeaders();
   TestTlsServerCompletesVerifiedTransfer();
+  TestTlsAllKeyTypesReachCertificateInfo();
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
   TestTlsRedirectReusesSession();

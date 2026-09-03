@@ -831,6 +831,13 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
+  // Only the dedicated HTTPS peer consumes a certificate-chain selector.
+  // Remove it before protocol-specific early returns so other fixed targets
+  // do not spend mutations on inert TLS server state.
+  if (profile != TargetProfile::kFastHttps) {
+    scenario->clear_tls_certificate_chain();
+  }
+
   if (profile == TargetProfile::kFastTelnet) {
     // Set the scheme before general bounds so the TELNET-specific upload and
     // PAUSE budgets are selected rather than event-driven compatibility ones.
@@ -975,6 +982,14 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastHttps:
       ClearAllBackpressure(scenario);
       CanonicalizeTlsAuthority(scenario);
+      switch (scenario->tls_certificate_chain()) {
+        case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC:
+        case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES:
+          break;
+        default:
+          scenario->clear_tls_certificate_chain();
+          break;
+      }
       return;
 
     case TargetProfile::kH2Proxy:
