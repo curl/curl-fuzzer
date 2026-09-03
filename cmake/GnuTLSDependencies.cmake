@@ -90,7 +90,7 @@ else()
 endif()
 
 # renovate: datasource=custom.gnu depName=nettle
-set(GNUTLS_NETTLE_VERSION 3.10.2)
+set(GNUTLS_NETTLE_VERSION 4.0)
 set(GNUTLS_NETTLE_INSTALL_DIR
     ${CMAKE_BINARY_DIR}/nettle-${GNUTLS_NETTLE_VERSION}-install)
 set(GNUTLS_NETTLE_INCLUDE_DIR ${GNUTLS_NETTLE_INSTALL_DIR}/include)
