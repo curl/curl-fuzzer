@@ -1,0 +1,13 @@
+# GnuTLS interprets CURLOPT_SSL_CIPHER_LIST as a priority expression. Preserve
+# one valid correlated value so mutation does not have to rediscover its
+# punctuation before reaching the backend's TLS 1.2 handshake paths.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/gnutls-tls12"
+options { option_id: CURLOPT_SSLVERSION uint_value: 393222 }
+options {
+  option_id: CURLOPT_SSL_CIPHER_LIST
+  string_value: "NORMAL:-VERS-ALL:+VERS-TLS1.2"
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\ntls12"
+}

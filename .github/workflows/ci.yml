@@ -72,7 +72,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
           restore-keys: |
             ossfuzz-build-v2-${{ runner.os }}-address-x86_64-
 
@@ -93,7 +93,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
 
       # Archive the fuzzer output (which maintains permissions)
       - name: Create fuzz tar

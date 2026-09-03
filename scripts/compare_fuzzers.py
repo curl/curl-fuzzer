@@ -40,6 +40,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_http",
     "curl_fuzzer_proto_http_deep",
     "curl_fuzzer_proto_https",
+    "curl_fuzzer_proto_https_gnutls",
     "curl_fuzzer_proto_h2_proxy",
     "curl_fuzzer_proto_ws",
     "curl_fuzzer_proto_wss",
@@ -50,11 +51,15 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_multi",
     "curl_fuzzer_proto_timing",
 )
+COMPATIBLE_CORPUS_TARGETS = {
+    "curl_fuzzer_proto_https_gnutls": ("curl_fuzzer_proto_https",),
+}
 HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
     {
         "curl_fuzzer_proto_http",
         "curl_fuzzer_proto_http_deep",
         "curl_fuzzer_proto_https",
+        "curl_fuzzer_proto_https_gnutls",
         "curl_fuzzer_proto_ws",
         "curl_fuzzer_proto_wss",
         "curl_fuzzer_proto_telnet",
@@ -520,16 +525,20 @@ def _corpus_sources(
         return overrides[target]
 
     sources: list[Path] = []
-    checked_in = corpus_root / target
-    if checked_in.is_dir() and any(path.is_file() for path in checked_in.rglob("*")):
-        sources.append(checked_in)
+    compatible_targets = (target, *COMPATIBLE_CORPUS_TARGETS.get(target, ()))
+    for compatible_target in compatible_targets:
+        checked_in = corpus_root / compatible_target
+        if checked_in.is_dir() and any(
+            path.is_file() for path in checked_in.rglob("*")
+        ):
+            sources.append(checked_in)
 
-    seed_archive = baseline_dir / f"{target}_seed_corpus.zip"
-    if seed_archive.is_file():
-        sources.append(seed_archive)
+        seed_archive = baseline_dir / f"{compatible_target}_seed_corpus.zip"
+        if seed_archive.is_file():
+            sources.append(seed_archive)
 
     if public_corpus_root is not None:
-        public_targets = [target]
+        public_targets = list(compatible_targets)
         if target in HISTORICAL_PROTO_CORPUS_TARGETS:
             public_targets.append("curl_fuzzer_proto")
         for public_target in public_targets:

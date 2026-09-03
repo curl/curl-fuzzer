@@ -49,16 +49,20 @@ if [[ "${CIFUZZ:-}" == "True" && -n "${OUT:-}" ]]; then
   export BUILD_DIR=${CACHE_ROOT}/build
   mkdir -p "${BUILD_DIR}"
   echo "CIFuzz detected: redirecting BUILD_DIR to ${BUILD_DIR}"
-
-  # Curl is cloned fresh (--depth 1) on every container start, but its CMake
-  # ExternalProject stamp would skip rebuilding if we kept it. Drop the stamps
-  # and the built library so curl (and the fuzzer binaries that link it) get
-  # rebuilt against the current tip. Mirrors the REPLAY_ENABLED handling in
-  # oss-fuzz/projects/curl/build.sh.
-  rm -f "${BUILD_DIR}/curl-install/lib/libcurl.a"
-  rm -f "${BUILD_DIR}"/curl_external-prefix/src/curl_external-stamp/curl_external-{configure,build,install,done}
 fi
 export BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
+
+# Curl is cloned fresh (--depth 1) on every CIFuzz container start. Replay
+# builds likewise update that checkout before invoking this script. Invalidate
+# both client variants so a restored ExternalProject stamp cannot retain an
+# archive from the previous curl revision.
+if [[ "${CIFUZZ:-}" == "True" || -n "${REPLAY_ENABLED:-}" ]]; then
+  rm -f "${BUILD_DIR}/curl-install/lib/libcurl.a"
+  rm -f "${BUILD_DIR}/curl-gnutls-install/lib/libcurl.a"
+  for CURL_VARIANT in curl_external curl_gnutls_external; do
+    rm -f "${BUILD_DIR}/${CURL_VARIANT}-prefix/src/${CURL_VARIANT}-stamp/${CURL_VARIANT}-"{configure,build,install,done}
+  done
+fi
 
 # Compile the fuzzers.
 "${SCRIPTDIR}"/compile_target.sh fuzz

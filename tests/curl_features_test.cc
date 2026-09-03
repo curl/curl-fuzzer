@@ -9,6 +9,12 @@
 #include <cstdio>
 #include <cstring>
 
+#if (defined(CURL_FUZZER_EXPECT_OPENSSL) || \
+     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)) && \
+    defined(CURL_FUZZER_EXPECT_GNUTLS)
+#error "A curl feature test must select exactly one expected TLS backend"
+#endif
+
 namespace {
 
 bool HasNamedFeature(const curl_version_info_data *info, const char *expected) {
@@ -22,6 +28,14 @@ bool HasNamedFeature(const curl_version_info_data *info, const char *expected) {
   }
   return false;
 }
+
+#if defined(CURL_FUZZER_EXPECT_OPENSSL) || \
+    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) || \
+    defined(CURL_FUZZER_EXPECT_GNUTLS)
+bool HasPrefix(const char *value, const char *expected) {
+  return value && std::strncmp(value, expected, std::strlen(expected)) == 0;
+}
+#endif
 
 }  // namespace
 
@@ -43,15 +57,35 @@ int main() {
     std::fputs("libcurl was built with deprecated NTLM support\n", stderr);
     return 1;
   }
-#ifdef CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES
+#if defined(CURL_FUZZER_EXPECT_OPENSSL) || \
+    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
+  if (!HasPrefix(info->ssl_version, "OpenSSL/")) {
+    std::fputs("libcurl does not report OpenSSL as its TLS backend\n", stderr);
+    return 1;
+  }
+#endif
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+  if (!HasPrefix(info->ssl_version, "GnuTLS/")) {
+    std::fputs("libcurl does not report GnuTLS as its TLS backend\n", stderr);
+    return 1;
+  }
+#endif
+#if defined(CURL_FUZZER_EXPECT_HTTPSRR) || \
+    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "HTTPSRR")) {
     std::fputs("libcurl was built without HTTPS RR support\n", stderr);
     return 1;
   }
+#endif
+#if defined(CURL_FUZZER_EXPECT_ECH) || \
+    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "ECH")) {
     std::fputs("libcurl was built without ECH support\n", stderr);
     return 1;
   }
+#endif
+#if defined(CURL_FUZZER_EXPECT_HTTPSIG) || \
+    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "HTTPSIG")) {
     std::fputs("libcurl was built without HTTP Message Signatures support\n",
                stderr);
