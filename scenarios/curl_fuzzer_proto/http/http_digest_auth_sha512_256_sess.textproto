@@ -1,0 +1,13 @@
+# The session form performs an additional SHA-512/256 calculation over HA1,
+# the nonce, and curl's cnonce. qop=auth is required for session algorithms and
+# keeps the exchange independent of request-body mutations.
+scheme: SCHEME_HTTP
+host_path: "auth.test/sha512-256-sess/resource?view=full"
+options { option_id: CURLOPT_USERPWD string_value: "session-user:session-pass" }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"sha512-session-realm\", nonce=\"fedcba9876543210\", algorithm=SHA-512-256-SESS, qop=\"auth\", opaque=\"sha512-session-opaque\"\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

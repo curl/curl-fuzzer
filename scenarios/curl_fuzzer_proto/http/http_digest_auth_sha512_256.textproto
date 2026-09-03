@@ -1,0 +1,13 @@
+# RFC 7616's SHA-512/256 algorithm reaches curl's dedicated digest helper.
+# Omitting qop also retains coverage of the legacy response calculation while
+# a closed 401 connection makes the authenticated retry deterministic.
+scheme: SCHEME_HTTP
+host_path: "auth.test/sha512-256/resource"
+options { option_id: CURLOPT_USERPWD string_value: "sha512-user:sha512-pass" }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 2 }
+connection {
+  initial_response: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"sha512-realm\", nonce=\"0123456789abcdef\", algorithm=SHA-512-256, opaque=\"sha512-opaque\"\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

@@ -14,6 +14,12 @@
     defined(CURL_FUZZER_EXPECT_GNUTLS)
 #error "A curl feature test must select exactly one expected TLS backend"
 #endif
+#if defined(CURL_FUZZER_EXPECT_MBEDTLS) && \
+    (defined(CURL_FUZZER_EXPECT_OPENSSL) || \
+     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) || \
+     defined(CURL_FUZZER_EXPECT_GNUTLS))
+#error "A curl feature test must select exactly one expected TLS backend"
+#endif
 
 namespace {
 
@@ -31,7 +37,8 @@ bool HasNamedFeature(const curl_version_info_data *info, const char *expected) {
 
 #if defined(CURL_FUZZER_EXPECT_OPENSSL) || \
     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) || \
-    defined(CURL_FUZZER_EXPECT_GNUTLS)
+    defined(CURL_FUZZER_EXPECT_GNUTLS) || \
+    defined(CURL_FUZZER_EXPECT_MBEDTLS)
 bool HasPrefix(const char *value, const char *expected) {
   return value && std::strncmp(value, expected, std::strlen(expected)) == 0;
 }
@@ -67,6 +74,12 @@ int main() {
 #ifdef CURL_FUZZER_EXPECT_GNUTLS
   if (!HasPrefix(info->ssl_version, "GnuTLS/")) {
     std::fputs("libcurl does not report GnuTLS as its TLS backend\n", stderr);
+    return 1;
+  }
+#endif
+#ifdef CURL_FUZZER_EXPECT_MBEDTLS
+  if (!HasPrefix(info->ssl_version, "mbedTLS/")) {
+    std::fputs("libcurl does not report mbedTLS as its TLS backend\n", stderr);
     return 1;
   }
 #endif

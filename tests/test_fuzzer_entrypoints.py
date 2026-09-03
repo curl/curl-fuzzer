@@ -28,6 +28,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_http_deep": "kDeepHttp",
     "curl_fuzzer_proto_https": "kFastHttps",
     "curl_fuzzer_proto_https_gnutls": "kFastHttps",
+    "curl_fuzzer_proto_https_mbedtls": "kFastHttps",
     "curl_fuzzer_proto_h2_proxy": "kH2Proxy",
     "curl_fuzzer_proto_ws": "kFastWebSocket",
     "curl_fuzzer_proto_wss": "kFastSecureWebSocket",
@@ -62,13 +63,16 @@ def _packaged_targets(
     return set(result.stdout.splitlines())
 
 
-def test_gnutls_target_is_limited_to_supported_builds() -> None:
+def test_alternative_tls_targets_are_limited_to_supported_builds() -> None:
     """Keep packaging aligned with the CMake sanitizer/architecture gates."""
-    target = "curl_fuzzer_proto_https_gnutls"
+    targets = {
+        "curl_fuzzer_proto_https_gnutls",
+        "curl_fuzzer_proto_https_mbedtls",
+    }
 
-    assert target in _packaged_targets()
-    assert target not in _packaged_targets(sanitizer="memory")
-    assert target not in _packaged_targets(architecture="i386")
+    assert targets <= _packaged_targets()
+    assert targets.isdisjoint(_packaged_targets(sanitizer="memory"))
+    assert targets.isdisjoint(_packaged_targets(architecture="i386"))
 
 
 def _checked_in_cpp_sources() -> list[Path]:

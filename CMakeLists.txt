@@ -422,16 +422,22 @@ else()
     add_custom_target(openldap_external)
 endif()
 
-# A second TLS backend is useful only for the 64-bit structured suite. Keep it
-# out of MSan until the complete crypto dependency stack can be built against
-# an instrumented C library; this mirrors the existing OpenSSL exclusion.
+# Additional TLS backends are useful only for the 64-bit structured suite.
+# Keep them out of MSan until their complete crypto dependency stacks can be
+# built against an instrumented C library; this mirrors the existing OpenSSL
+# exclusion.
 set(BUILD_GNUTLS_VARIANT FALSE)
 set(GNUTLS_EXTERNAL_DEP "")
 set(GNUTLS_CACHE_INSTALL_DIRS "")
+set(BUILD_MBEDTLS_VARIANT FALSE)
+set(MBEDTLS_EXTERNAL_DEP "")
+set(MBEDTLS_CACHE_INSTALL_DIRS "")
 if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" AND
    NOT "$ENV{SANITIZER}" STREQUAL "memory")
     set(BUILD_GNUTLS_VARIANT TRUE)
     include(${CMAKE_SOURCE_DIR}/cmake/GnuTLSDependencies.cmake)
+    set(BUILD_MBEDTLS_VARIANT TRUE)
+    include(${CMAKE_SOURCE_DIR}/cmake/MbedTLSDependencies.cmake)
 endif()
 
 # Group non-curl dependencies into a single target
@@ -445,16 +451,18 @@ add_custom_target(deps
         libidn2_external
         openldap_external
         ${GNUTLS_EXTERNAL_DEP}
+        ${MBEDTLS_EXTERNAL_DEP}
 )
 
 # Now for the main dependencies!
 #
 # Compile and install curl. The existing target remains the default/OpenSSL
 # build so cached artefacts and every established fuzzer retain their names.
-# The GnuTLS variant consumes the same source checkout from a separate build
-# and install tree.
+# The backend variants consume the same source checkout from separate build
+# and install trees.
 set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
 set(CURL_GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-gnutls-install)
+set(CURL_MBEDTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-mbedtls-install)
 
 set(CURL_COMMON_CMAKE_ARGS
     -DCMAKE_INSTALL_LIBDIR=lib
@@ -538,13 +546,30 @@ if(TARGET openssl_external)
         -DCURL_ENABLE_SSL=ON
         -DCURL_USE_OPENSSL=ON
         -DCURL_USE_GNUTLS=OFF
+        -DCURL_USE_MBEDTLS=OFF
         -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR}
         -DCURL_DISABLE_HTTPSIG=OFF
         -DUSE_ECH=ON)
 else()
     list(APPEND CURL_DEFAULT_CMAKE_ARGS
         -DCURL_USE_OPENSSL=OFF
-        -DCURL_USE_GNUTLS=OFF)
+        -DCURL_USE_GNUTLS=OFF
+        -DCURL_USE_MBEDTLS=OFF)
+endif()
+
+if(BUILD_MBEDTLS_VARIANT)
+    set(CURL_MBEDTLS_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${CURL_MBEDTLS_INSTALL_DIR}
+        ${CURL_COMMON_CMAKE_ARGS}
+        "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
+        "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
+        ${MBEDTLS_CURL_CMAKE_ARGS}
+        # curl has no mbedTLS implementation for HTTP Message Signatures or
+        # ECH. Disable them explicitly so a curl default cannot silently add
+        # a second TLS backend or make this lane's feature set ambiguous.
+        -DCURL_DISABLE_HTTPSIG=ON
+        -DUSE_ECH=OFF
+    )
 endif()
 
 if(BUILD_GNUTLS_VARIANT)
@@ -595,9 +620,9 @@ function(curl_add_external_variant _target _install_dir)
 endfunction()
 
 # Conditionally use the source directory supplied by OSS-Fuzz. The standalone
-# fallback lets the primary project perform the single clone; the GnuTLS build
-# then waits for and reuses that checkout rather than creating a second source
-# path in LLVM coverage data.
+# fallback lets the primary project perform the single clone; additional
+# backend builds then wait for and reuse that checkout rather than creating
+# extra source paths in LLVM coverage data.
 if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
     message(STATUS "Building curl variants from source directory: $ENV{CURL_SOURCE_DIR}")
     set(CURL_DEFAULT_SOURCE_ARGS
@@ -625,40 +650,58 @@ curl_add_external_variant(curl_external ${CURL_INSTALL_DIR}
     SOURCE_ARGS ${CURL_DEFAULT_SOURCE_ARGS}
     DEPENDS ${CURL_DEPS})
 
-if(BUILD_GNUTLS_VARIANT)
+if(BUILD_GNUTLS_VARIANT OR BUILD_MBEDTLS_VARIANT)
     if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
-        set(CURL_GNUTLS_SOURCE_ARGS
+        set(CURL_TLS_VARIANT_SOURCE_ARGS
             SOURCE_DIR $ENV{CURL_SOURCE_DIR}
             DOWNLOAD_COMMAND ""
             UPDATE_COMMAND "")
-        set(CURL_GNUTLS_SOURCE_DEP "")
+        set(CURL_TLS_VARIANT_SOURCE_DEP "")
     else()
         ExternalProject_Get_Property(curl_external SOURCE_DIR)
         set(CURL_SHARED_SOURCE_DIR ${SOURCE_DIR})
         unset(SOURCE_DIR)
-        set(CURL_GNUTLS_SOURCE_ARGS
+        set(CURL_TLS_VARIANT_SOURCE_ARGS
             SOURCE_DIR ${CURL_SHARED_SOURCE_DIR}
             DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E echo
                 "Reusing curl source from curl_external"
             UPDATE_COMMAND "")
         # The download step is part of curl_external in standalone builds.
         # Waiting for that project avoids racing a configure against its clone.
-        set(CURL_GNUTLS_SOURCE_DEP curl_external)
+        set(CURL_TLS_VARIANT_SOURCE_DEP curl_external)
     endif()
+endif()
+
+if(BUILD_GNUTLS_VARIANT)
     set(CURL_GNUTLS_DEPS
         ${CURL_COMMON_DEPS}
         ${GNUTLS_EXTERNAL_DEP}
-        ${CURL_GNUTLS_SOURCE_DEP})
+        ${CURL_TLS_VARIANT_SOURCE_DEP})
     curl_add_external_variant(curl_gnutls_external
         ${CURL_GNUTLS_INSTALL_DIR}
         CMAKE_ARGS ${CURL_GNUTLS_CMAKE_ARGS}
-        SOURCE_ARGS ${CURL_GNUTLS_SOURCE_ARGS}
+        SOURCE_ARGS ${CURL_TLS_VARIANT_SOURCE_ARGS}
         DEPENDS ${CURL_GNUTLS_DEPS})
+endif()
+
+if(BUILD_MBEDTLS_VARIANT)
+    set(CURL_MBEDTLS_DEPS
+        ${CURL_COMMON_DEPS}
+        libidn2_external
+        ${MBEDTLS_EXTERNAL_DEP}
+        ${CURL_TLS_VARIANT_SOURCE_DEP})
+    curl_add_external_variant(curl_mbedtls_external
+        ${CURL_MBEDTLS_INSTALL_DIR}
+        CMAKE_ARGS ${CURL_MBEDTLS_CMAKE_ARGS}
+        SOURCE_ARGS ${CURL_TLS_VARIANT_SOURCE_ARGS}
+        DEPENDS ${CURL_MBEDTLS_DEPS})
 endif()
 
 set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
 set(CURL_GNUTLS_STATIC_LIB
     ${CURL_GNUTLS_INSTALL_DIR}/lib/libcurl.a)
+set(CURL_MBEDTLS_STATIC_LIB
+    ${CURL_MBEDTLS_INSTALL_DIR}/lib/libcurl.a)
 
 # Now it's time for the main targets!
 
@@ -671,6 +714,10 @@ set(CURL_LIB_DIR ${CURL_INSTALL_DIR}/lib)
 set(CURL_GNUTLS_INCLUDE_DIRS
     ${CURL_GNUTLS_INSTALL_DIR}/include
     ${CURL_GNUTLS_INSTALL_DIR}/utfuzzer
+)
+set(CURL_MBEDTLS_INCLUDE_DIRS
+    ${CURL_MBEDTLS_INSTALL_DIR}/include
+    ${CURL_MBEDTLS_INSTALL_DIR}/utfuzzer
 )
 
 # Fuzzing engine
@@ -715,7 +762,7 @@ set(CURL_STATIC_DEPENDENCY_LIBS
 )
 
 # Keep the libcurl client backend separate from the OpenSSL-based mock peer.
-# A final executable links one client bundle; the GnuTLS proto bundle adds
+# A final executable links one client bundle; non-OpenSSL proto bundles add
 # OpenSSL only to satisfy the server-side TLS implementation.
 add_library(curl_client_default INTERFACE)
 target_include_directories(curl_client_default INTERFACE ${CURL_INCLUDE_DIRS})
@@ -733,6 +780,33 @@ if(TARGET openssl_external)
     target_link_libraries(curl_tls_mock_openssl INTERFACE
         ${OPENSSL_STATIC_LIB})
     add_dependencies(curl_tls_mock_openssl openssl_external)
+endif()
+
+if(BUILD_MBEDTLS_VARIANT)
+    add_library(curl_client_mbedtls INTERFACE)
+    target_include_directories(curl_client_mbedtls INTERFACE
+        ${CURL_MBEDTLS_INCLUDE_DIRS})
+    target_link_libraries(curl_client_mbedtls INTERFACE
+        ${CURL_MBEDTLS_STATIC_LIB}
+        ${NGHTTP2_STATIC_LIB}
+        curl_fuzzer::mbedtls_dependencies
+        ${ZLIB_STATIC_LIB}
+        ${ZSTD_STATIC_LIB}
+        ${BROTLI_STATIC_LIBS}
+        ${LIBIDN2_STATIC_LIB}
+        ${OPENLDAP_STATIC_LIB_LDAP}
+        ${OPENLDAP_STATIC_LIB_LBER}
+        pthread
+        m)
+    add_dependencies(curl_client_mbedtls
+        curl_mbedtls_external ${CURL_MBEDTLS_DEPS})
+
+    add_library(curl_proto_client_mbedtls INTERFACE)
+    target_link_libraries(curl_proto_client_mbedtls INTERFACE
+        curl_tls_mock_openssl
+        curl_client_mbedtls)
+    add_dependencies(curl_proto_client_mbedtls
+        curl_mbedtls_external openssl_external)
 endif()
 
 if(BUILD_GNUTLS_VARIANT)
@@ -835,6 +909,25 @@ if(BUILD_TESTING)
         add_test(NAME curl_gnutls_features_test
             COMMAND curl_gnutls_features_test)
         add_dependencies(fuzzer_unit_tests curl_gnutls_features_test)
+    endif()
+
+    if(BUILD_MBEDTLS_VARIANT)
+        add_executable(curl_mbedtls_features_test tests/curl_features_test.cc)
+        target_compile_features(curl_mbedtls_features_test PRIVATE cxx_std_11)
+        target_compile_options(curl_mbedtls_features_test PRIVATE
+            ${COMMON_FLAGS})
+        target_compile_definitions(curl_mbedtls_features_test PRIVATE
+            CURL_FUZZER_EXPECT_MBEDTLS
+            CURL_FUZZER_EXPECT_HTTPSRR)
+        target_link_libraries(curl_mbedtls_features_test PRIVATE
+            curl_client_mbedtls)
+        target_link_options(curl_mbedtls_features_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(curl_mbedtls_features_test
+            curl_mbedtls_external ${CURL_MBEDTLS_DEPS})
+        add_test(NAME curl_mbedtls_features_test
+            COMMAND curl_mbedtls_features_test)
+        add_dependencies(fuzzer_unit_tests curl_mbedtls_features_test)
     endif()
 
     add_executable(legacy_protocol_allowlist_test
@@ -1158,21 +1251,24 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
     # wiring independent of mutation and execution behaviour.
     function(curl_add_proto_fuzzer _name)
+        cmake_parse_arguments(PROTO "" "CLIENT" "INCLUDE_DIRS;DEPENDS" ${ARGN})
+        if(PROTO_UNPARSED_ARGUMENTS)
+            message(FATAL_ERROR
+                "Unsupported arguments for ${_name}: ${PROTO_UNPARSED_ARGUMENTS}")
+        endif()
         set(_curl_client curl_client_default)
         set(_curl_target_deps ${FUZZ_DEPS})
         set(_curl_include_dirs ${CURL_INCLUDE_DIRS})
-        if(ARGC GREATER 1)
-            if(NOT "${ARGV1}" STREQUAL "gnutls" OR
-               NOT BUILD_GNUTLS_VARIANT)
-                message(FATAL_ERROR
-                    "Unsupported curl client variant for ${_name}: ${ARGV1}")
-            endif()
-            set(_curl_client curl_proto_client_gnutls)
+        if(PROTO_CLIENT)
+            set(_curl_client ${PROTO_CLIENT})
+        endif()
+        if(PROTO_DEPENDS)
             set(_curl_target_deps
-                curl_gnutls_external
-                ${CURL_GNUTLS_DEPS}
+                ${PROTO_DEPENDS}
                 ${LIB_FUZZING_ENGINE_DEP})
-            set(_curl_include_dirs ${CURL_GNUTLS_INCLUDE_DIRS})
+        endif()
+        if(PROTO_INCLUDE_DIRS)
+            set(_curl_include_dirs ${PROTO_INCLUDE_DIRS})
         endif()
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
@@ -1222,7 +1318,16 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
     curl_add_proto_fuzzer(curl_fuzzer_proto_https)
     if(BUILD_GNUTLS_VARIANT)
-        curl_add_proto_fuzzer(curl_fuzzer_proto_https_gnutls gnutls)
+        curl_add_proto_fuzzer(curl_fuzzer_proto_https_gnutls
+            CLIENT curl_proto_client_gnutls
+            INCLUDE_DIRS ${CURL_GNUTLS_INCLUDE_DIRS}
+            DEPENDS curl_gnutls_external ${CURL_GNUTLS_DEPS})
+    endif()
+    if(BUILD_MBEDTLS_VARIANT)
+        curl_add_proto_fuzzer(curl_fuzzer_proto_https_mbedtls
+            CLIENT curl_proto_client_mbedtls
+            INCLUDE_DIRS ${CURL_MBEDTLS_INCLUDE_DIRS}
+            DEPENDS curl_mbedtls_external ${CURL_MBEDTLS_DEPS})
     endif()
     curl_add_proto_fuzzer(curl_fuzzer_proto_h2_proxy)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ws)
@@ -1419,6 +1524,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_dependencies(curl_fuzzer_proto_https_gnutls
             curl_fuzzer_proto_https_corpus)
     endif()
+    if(BUILD_MBEDTLS_VARIANT)
+        add_dependencies(curl_fuzzer_proto_https_mbedtls
+            curl_fuzzer_proto_https_corpus)
+    endif()
     add_dependencies(curl_fuzzer_proto_h2_proxy
         curl_fuzzer_proto_h2_proxy_corpus)
     add_dependencies(curl_fuzzer_proto_ws curl_fuzzer_proto_ws_corpus)
@@ -1518,6 +1627,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         )
 
         function(curl_add_mock_server_test _name _curl_client)
+            cmake_parse_arguments(MOCK "" "" "DEFINITIONS" ${ARGN})
             add_executable(${_name} ${MOCK_SERVER_TEST_SOURCES})
             target_compile_features(${_name} PRIVATE cxx_std_17)
             target_compile_options(${_name} PRIVATE ${COMMON_FLAGS})
@@ -1531,8 +1641,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 target_include_directories(${_name} PRIVATE
                     ${OPENSSL_INSTALL_DIR}/include)
             endif()
-            if(ARGC GREATER 2)
-                target_compile_definitions(${_name} PRIVATE ${ARGV2})
+            if(MOCK_DEFINITIONS)
+                target_compile_definitions(${_name} PRIVATE
+                    ${MOCK_DEFINITIONS})
             endif()
             target_link_libraries(${_name} PRIVATE
                 ${_curl_client}
@@ -1547,10 +1658,23 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             add_dependencies(fuzzer_unit_tests ${_name})
         endfunction()
 
-        curl_add_mock_server_test(mock_server_test curl_client_default)
+        curl_add_mock_server_test(mock_server_test curl_client_default
+            DEFINITIONS
+                CURL_FUZZER_HAS_HTTPSIG
+                CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES
+                CURL_FUZZER_HAS_ECH)
         if(BUILD_GNUTLS_VARIANT)
             curl_add_mock_server_test(mock_server_gnutls_test
-                curl_proto_client_gnutls CURL_FUZZER_EXPECT_GNUTLS)
+                curl_proto_client_gnutls
+                DEFINITIONS
+                    CURL_FUZZER_EXPECT_GNUTLS
+                    CURL_FUZZER_HAS_HTTPSIG
+                    CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES)
+        endif()
+        if(BUILD_MBEDTLS_VARIANT)
+            curl_add_mock_server_test(mock_server_mbedtls_test
+                curl_proto_client_mbedtls
+                DEFINITIONS CURL_FUZZER_EXPECT_MBEDTLS)
         endif()
 
         # Keep concurrent scheduling checks independent of the TLS and
@@ -1733,6 +1857,11 @@ if(BUILD_GNUTLS_VARIANT)
     list(APPEND CACHE_INSTALL_DIRS
         ${GNUTLS_CACHE_INSTALL_DIRS}
         ${CURL_GNUTLS_INSTALL_DIR})
+endif()
+if(BUILD_MBEDTLS_VARIANT)
+    list(APPEND CACHE_INSTALL_DIRS
+        ${MBEDTLS_CACHE_INSTALL_DIRS}
+        ${CURL_MBEDTLS_INSTALL_DIR})
 endif()
 if(BUILD_GDB)
     list(APPEND CACHE_INSTALL_DIRS ${GDB_INSTALL_DIR})
