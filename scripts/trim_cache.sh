@@ -103,7 +103,7 @@ for install_dir in "${BD}"/*-install; do
     continue
   fi
   case "${install_name}" in
-    curl-install|lpm-*-install|gdb-*-install)
+    curl-install|curl-gnutls-install|lpm-*-install|gdb-*-install)
       continue
       ;;
   esac

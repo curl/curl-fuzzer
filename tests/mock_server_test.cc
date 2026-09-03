@@ -611,21 +611,36 @@ void TestTlsAllKeyTypesReachCertificateInfo() {
   Expect(result.certificate_count == 4,
          "all-key-types TLS peer did not send every selected certificate");
   Expect(HasCertificateInfoPrefix(result, "RSA Public Key:"),
-         "RSA certificate did not reach ossl_certchain's key formatter");
+         "RSA certificate did not reach curl's certificate-info formatter");
 #ifndef OPENSSL_NO_DSA
   Expect(HasCertificateInfoPrefix(result, "dsa(p):"),
-         "DSA certificate did not reach ossl_certchain's key formatter");
+         "DSA certificate did not reach curl's certificate-info formatter");
 #endif
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+  // The shared ASN.1 parser recognizes X9.42 dhpublicnumber keys, whereas
+  // this PKCS#3 fixture deliberately uses dhKeyAgreement to exercise
+  // OpenSSL's EVP_PKEY_DH formatter in the default build.
+  Expect(HasCertificateInfoPrefix(result,
+                                  "Public Key Algorithm:1.2.840.113549.1.3.1"),
+         "PKCS#3 DH certificate did not reach curl's ASN.1 formatter");
+#else
   Expect(HasCertificateInfoPrefix(result, "dh(p):"),
          "DH certificate did not reach ossl_certchain's key formatter");
+#endif
   Expect(HasCertificateInfoPrefix(result, "Serial Number:-"),
-         "negative certificate serial did not reach ossl_certchain");
+         "negative certificate serial did not reach certificate info");
 }
 
 void TestTls12OptionsForceNegotiatedVersion() {
   Scenario scenario = MakeTlsScenario("tls12", "tls12");
   AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSLVERSION,
                 CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+  // GnuTLS treats CURLOPT_SSL_CIPHER_LIST as its complete priority language;
+  // curves and signature algorithms are selected through the same expression.
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
+                  "NORMAL:-VERS-ALL:+VERS-TLS1.2");
+#else
   AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
                   "ECDHE-ECDSA-AES128-GCM-SHA256");
   AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_EC_CURVES,
@@ -633,6 +648,7 @@ void TestTls12OptionsForceNegotiatedVersion() {
   AddStringOption(&scenario,
                   curl::fuzzer::proto::CURLOPT_SSL_SIGNATURE_ALGORITHMS,
                   "ecdsa_secp256r1_sha256");
+#endif
 
   const TlsTransferResult result = DriveTlsScenario(scenario);
   Expect(result.code == CURLE_OK && result.response == "tls12",
@@ -673,6 +689,15 @@ void TestTlsRedirectReusesSession() {
   AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_MAXREDIRS, 2);
   AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_SESSIONID_CACHE,
                 true);
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+  // GnuTLS receives TLS 1.3 tickets after the handshake, while this bounded
+  // peer closes as soon as the scripted response is complete. Use TLS 1.2 so
+  // the second connection deterministically exercises its session cache.
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSLVERSION,
+                CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_CIPHER_LIST,
+                  "NORMAL:-VERS-ALL:+VERS-TLS1.2");
+#endif
   scenario.mutable_connection()->set_initial_response(
       "HTTP/1.1 302 Found\r\nLocation: https://tls.test/final\r\nConnection: "
       "close\r\nContent-Length: 0\r\n\r\n");
@@ -711,7 +736,7 @@ void TestTlsWriteRetryKeepsItsOriginalBoundary() {
          "appending a response chunk corrupted an outstanding TLS write retry");
 }
 
-#ifndef OPENSSL_NO_ECH
+#if !defined(OPENSSL_NO_ECH) && !defined(CURL_FUZZER_EXPECT_GNUTLS)
 void TestTlsEchCompletesEncryptedClientHello() {
   Scenario scenario = MakeTlsScenario("ech-success", "ech");
   AddStringOption(
@@ -1068,7 +1093,7 @@ int main() {
   TestTlsPublicKeyPins();
   TestTlsRedirectReusesSession();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
-#ifndef OPENSSL_NO_ECH
+#if !defined(OPENSSL_NO_ECH) && !defined(CURL_FUZZER_EXPECT_GNUTLS)
   TestTlsEchCompletesEncryptedClientHello();
 #endif
   TestH2ProxyCarriesAnHttpOriginResponse();

@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 
 # Return the generated corpus directory associated with a binary. Proto lane
-# names currently match their directories; keeping this helper centralizes any
-# future rename without duplicating mappings across packaging and coverage.
+# names normally match their directories. Backend variants reuse the protocol
+# lane's generated seeds while OSS-Fuzz still sees a distinct binary basename.
 fuzz_local_corpus_name() {
-    echo "$1"
+    case "$1" in
+        curl_fuzzer_proto_https_gnutls)
+            echo "curl_fuzzer_proto_https"
+            ;;
+        *)
+            echo "$1"
+            ;;
+    esac
 }
 
 # Resolve the corpus directory produced for a target. A build-tree manifest is
@@ -33,6 +40,13 @@ fuzz_local_corpus_dir() {
 fuzz_public_corpus_names() {
     echo "$1"
     case "$1" in
+        curl_fuzzer_proto_https_gnutls)
+            # Bootstrap the backend variant from the compatible HTTPS corpus as
+            # well as the original mixed Scenario corpus. Once OSS-Fuzz has a
+            # native GnuTLS corpus, the first name above picks it up too.
+            echo "curl_fuzzer_proto_https"
+            echo "curl_fuzzer_proto"
+            ;;
         curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_ftp|curl_fuzzer_proto_tftp|curl_fuzzer_proto_api|curl_fuzzer_proto_multi|curl_fuzzer_proto_timing)
             echo "curl_fuzzer_proto"
             ;;

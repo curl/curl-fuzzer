@@ -422,6 +422,18 @@ else()
     add_custom_target(openldap_external)
 endif()
 
+# A second TLS backend is useful only for the 64-bit structured suite. Keep it
+# out of MSan until the complete crypto dependency stack can be built against
+# an instrumented C library; this mirrors the existing OpenSSL exclusion.
+set(BUILD_GNUTLS_VARIANT FALSE)
+set(GNUTLS_EXTERNAL_DEP "")
+set(GNUTLS_CACHE_INSTALL_DIRS "")
+if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" AND
+   NOT "$ENV{SANITIZER}" STREQUAL "memory")
+    set(BUILD_GNUTLS_VARIANT TRUE)
+    include(${CMAKE_SOURCE_DIR}/cmake/GnuTLSDependencies.cmake)
+endif()
+
 # Group non-curl dependencies into a single target
 add_custom_target(deps
     DEPENDS
@@ -432,22 +444,19 @@ add_custom_target(deps
         brotli_external
         libidn2_external
         openldap_external
+        ${GNUTLS_EXTERNAL_DEP}
 )
 
 # Now for the main dependencies!
 #
-# Compile and install curl.
+# Compile and install curl. The existing target remains the default/OpenSSL
+# build so cached artefacts and every established fuzzer retain their names.
+# The GnuTLS variant consumes the same source checkout from a separate build
+# and install tree.
 set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
+set(CURL_GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-gnutls-install)
 
-# Determine SSL and nghttp2 options
-if(TARGET openssl_external)
-    set(CURL_SSL_OPTION -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR})
-else()
-    set(CURL_SSL_OPTION -DCURL_USE_OPENSSL=OFF)
-endif()
-
-set(CURL_CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
+set(CURL_COMMON_CMAKE_ARGS
     -DCMAKE_INSTALL_LIBDIR=lib
     -DCURL_DISABLE_INSTALL=ON
     -DBUILD_SHARED_LIBS=OFF
@@ -459,6 +468,11 @@ set(CURL_CMAKE_ARGS
     -DENABLE_DEBUG=ON
     -DCURL_HIDDEN_SYMBOLS=OFF
     -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
+    # TLS scenarios install their test CA from an in-memory blob. Avoid
+    # auto-detecting and reparsing the container's host trust store on every
+    # fuzz iteration, which is particularly expensive in the GnuTLS backend.
+    -DCURL_CA_BUNDLE=none
+    -DCURL_CA_PATH=none
     -DCURL_USE_LIBPSL=OFF
     # These protocol parsers have no feature bits. Make their coverage
     # dependencies explicit and verify curl's advertised protocol list too,
@@ -477,7 +491,6 @@ set(CURL_CMAKE_ARGS
     # TLS backend. ECH consumes these records when TLS is present, while the
     # standalone DoH target can exercise their wire decoder independently.
     -DUSE_HTTPSRR=ON
-    ${CURL_SSL_OPTION}
     -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
     -DZLIB_LIBRARY=${ZLIB_STATIC_LIB}
     -DNGHTTP2_INCLUDE_DIR=${NGHTTP2_INSTALL_DIR}/include
@@ -495,15 +508,6 @@ set(CURL_CMAKE_ARGS
     -DLDAP_LIBRARY=${OPENLDAP_STATIC_LIB_LDAP}
     -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
-
-# These experimental features need crypto/TLS backend support. The bundled
-# OpenSSL 4.x provides both HTTP Message Signature primitives and the ECH API;
-# MSan intentionally has no OpenSSL and therefore retains curl's defaults.
-if(TARGET openssl_external)
-    list(APPEND CURL_CMAKE_ARGS
-        -DCURL_DISABLE_HTTPSIG=OFF
-        -DUSE_ECH=ON)
-endif()
 
 # Baseline CFLAGS passed to curl's own CMake. Always defines UNITTESTS so
 # the UNITTEST macro in curl_setup.h flips from `static` to empty, giving
@@ -523,69 +527,138 @@ if(ENABLE_COVERAGE)
     set(_CURL_BASE_CXX_FLAGS "${_CURL_BASE_CXX_FLAGS} ${_COV_COMPILE_FLAGS_STR}")
 endif()
 
-list(APPEND CURL_CMAKE_ARGS
+set(CURL_DEFAULT_CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CURL_INSTALL_DIR}
+    ${CURL_COMMON_CMAKE_ARGS}
     "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
     "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
 )
-
-set(CURL_INSTALL_COMMAND
-    INSTALL_COMMAND
-        ${CMAKE_COMMAND} -E remove_directory ${CURL_INSTALL_DIR}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/lib
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        ${CURL_INSTALL_DIR}/include/curl
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CURL_INSTALL_DIR}/utfuzzer
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        <SOURCE_DIR>/include/curl ${CURL_INSTALL_DIR}/include/curl
-    COMMAND ${CMAKE_COMMAND} -E rm -f
-        ${CURL_INSTALL_DIR}/include/curl/Makefile.am
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        <BINARY_DIR>/lib/libcurl.a ${CURL_INSTALL_DIR}/lib/libcurl.a
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        <SOURCE_DIR>/lib/bufq.h ${CURL_INSTALL_DIR}/utfuzzer/
-    COMMAND ${CMAKE_COMMAND} -E touch
-        ${CURL_INSTALL_DIR}/utfuzzer/curl_setup.h
-)
-
-# Conditionally check to see if there's a source directory or not.
-# If there is, use it. Otherwise, download the latest version.
-#
-if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
-    message(STATUS "Building curl from source directory: $ENV{CURL_SOURCE_DIR}")
-    ExternalProject_Add(curl_external
-        SOURCE_DIR $ENV{CURL_SOURCE_DIR}
-        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
-        ${CURL_INSTALL_COMMAND}
-        CMAKE_ARGS ${CURL_CMAKE_ARGS}
-        BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
-    )
+if(TARGET openssl_external)
+    list(APPEND CURL_DEFAULT_CMAKE_ARGS
+        -DCURL_ENABLE_SSL=ON
+        -DCURL_USE_OPENSSL=ON
+        -DCURL_USE_GNUTLS=OFF
+        -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR}
+        -DCURL_DISABLE_HTTPSIG=OFF
+        -DUSE_ECH=ON)
 else()
-    message(STATUS "Building curl from git master")
-    set(CURL_URL "https://github.com/curl/curl")
-    ExternalProject_Add(curl_external
-        GIT_REPOSITORY ${CURL_URL}
-        GIT_SHALLOW 1
-        PREFIX ${CMAKE_BINARY_DIR}/curl
-        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
-        ${CURL_INSTALL_COMMAND}
-        CMAKE_ARGS ${CURL_CMAKE_ARGS}
-        BUILD_BYPRODUCTS ${CURL_INSTALL_DIR}/lib/libcurl.a
+    list(APPEND CURL_DEFAULT_CMAKE_ARGS
+        -DCURL_USE_OPENSSL=OFF
+        -DCURL_USE_GNUTLS=OFF)
+endif()
+
+if(BUILD_GNUTLS_VARIANT)
+    set(CURL_GNUTLS_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${CURL_GNUTLS_INSTALL_DIR}
+        ${CURL_COMMON_CMAKE_ARGS}
+        # Nettle's public bignum.h includes gmp.h. Keep curl's Ed25519 build
+        # on the vendored GMP headers rather than whichever version happens
+        # to be installed on the host.
+        "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS} -I${GNUTLS_GMP_INCLUDE_DIR}"
+        "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS} -I${GNUTLS_GMP_INCLUDE_DIR}"
+        ${GNUTLS_CURL_CMAKE_ARGS}
+        # GnuTLS carries a private libunistring in this hermetic build. Linking
+        # curl's bundled libidn2 (and its own libunistring copy) into the same
+        # executable would make symbol resolution depend on archive order.
+        # The default curl build retains IDN coverage.
+        -DUSE_LIBIDN2=OFF
+        -DCURL_DISABLE_HTTPSIG=OFF
+        -DUSE_ECH=OFF
     )
 endif()
 
-set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
-set(CURL_DEPS
+function(curl_add_external_variant _target _install_dir)
+    cmake_parse_arguments(VARIANT "" "" "CMAKE_ARGS;SOURCE_ARGS;DEPENDS" ${ARGN})
+    ExternalProject_Add(${_target}
+        ${VARIANT_SOURCE_ARGS}
+        PATCH_COMMAND ${CMAKE_COMMAND} -E echo "pre-build commands"
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${_install_dir}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${_install_dir}/lib
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${_install_dir}/include/curl
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${_install_dir}/utfuzzer
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            <SOURCE_DIR>/include/curl ${_install_dir}/include/curl
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            ${_install_dir}/include/curl/Makefile.am
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/lib/libcurl.a ${_install_dir}/lib/libcurl.a
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <SOURCE_DIR>/lib/bufq.h ${_install_dir}/utfuzzer/
+        COMMAND ${CMAKE_COMMAND} -E touch
+            ${_install_dir}/utfuzzer/curl_setup.h
+        CMAKE_ARGS ${VARIANT_CMAKE_ARGS}
+        BUILD_BYPRODUCTS ${_install_dir}/lib/libcurl.a
+    )
+    add_dependencies(${_target} ${VARIANT_DEPENDS})
+endfunction()
+
+# Conditionally use the source directory supplied by OSS-Fuzz. The standalone
+# fallback lets the primary project perform the single clone; the GnuTLS build
+# then waits for and reuses that checkout rather than creating a second source
+# path in LLVM coverage data.
+if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
+    message(STATUS "Building curl variants from source directory: $ENV{CURL_SOURCE_DIR}")
+    set(CURL_DEFAULT_SOURCE_ARGS
+        SOURCE_DIR $ENV{CURL_SOURCE_DIR}
+        DOWNLOAD_COMMAND ""
+        UPDATE_COMMAND "")
+else()
+    message(STATUS "Building curl variants from git master")
+    set(CURL_DEFAULT_SOURCE_ARGS
+        GIT_REPOSITORY https://github.com/curl/curl
+        GIT_SHALLOW 1
+        PREFIX ${CMAKE_BINARY_DIR}/curl)
+endif()
+
+set(CURL_COMMON_DEPS
     nghttp2_external
-    ${OPENSSL_DEP}
     zlib_external
     zstd_external
     brotli_external
-    libidn2_external
     openldap_external
 )
+set(CURL_DEPS ${CURL_COMMON_DEPS} libidn2_external ${OPENSSL_DEP})
+curl_add_external_variant(curl_external ${CURL_INSTALL_DIR}
+    CMAKE_ARGS ${CURL_DEFAULT_CMAKE_ARGS}
+    SOURCE_ARGS ${CURL_DEFAULT_SOURCE_ARGS}
+    DEPENDS ${CURL_DEPS})
 
-# Add dependencies for curl
-add_dependencies(curl_external ${CURL_DEPS})
+if(BUILD_GNUTLS_VARIANT)
+    if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
+        set(CURL_GNUTLS_SOURCE_ARGS
+            SOURCE_DIR $ENV{CURL_SOURCE_DIR}
+            DOWNLOAD_COMMAND ""
+            UPDATE_COMMAND "")
+        set(CURL_GNUTLS_SOURCE_DEP "")
+    else()
+        ExternalProject_Get_Property(curl_external SOURCE_DIR)
+        set(CURL_SHARED_SOURCE_DIR ${SOURCE_DIR})
+        unset(SOURCE_DIR)
+        set(CURL_GNUTLS_SOURCE_ARGS
+            SOURCE_DIR ${CURL_SHARED_SOURCE_DIR}
+            DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E echo
+                "Reusing curl source from curl_external"
+            UPDATE_COMMAND "")
+        # The download step is part of curl_external in standalone builds.
+        # Waiting for that project avoids racing a configure against its clone.
+        set(CURL_GNUTLS_SOURCE_DEP curl_external)
+    endif()
+    set(CURL_GNUTLS_DEPS
+        ${CURL_COMMON_DEPS}
+        ${GNUTLS_EXTERNAL_DEP}
+        ${CURL_GNUTLS_SOURCE_DEP})
+    curl_add_external_variant(curl_gnutls_external
+        ${CURL_GNUTLS_INSTALL_DIR}
+        CMAKE_ARGS ${CURL_GNUTLS_CMAKE_ARGS}
+        SOURCE_ARGS ${CURL_GNUTLS_SOURCE_ARGS}
+        DEPENDS ${CURL_GNUTLS_DEPS})
+endif()
+
+set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
+set(CURL_GNUTLS_STATIC_LIB
+    ${CURL_GNUTLS_INSTALL_DIR}/lib/libcurl.a)
 
 # Now it's time for the main targets!
 
@@ -595,6 +668,10 @@ set(CURL_INCLUDE_DIRS
     ${CURL_INSTALL_DIR}/utfuzzer
 )
 set(CURL_LIB_DIR ${CURL_INSTALL_DIR}/lib)
+set(CURL_GNUTLS_INCLUDE_DIRS
+    ${CURL_GNUTLS_INSTALL_DIR}/include
+    ${CURL_GNUTLS_INSTALL_DIR}/utfuzzer
+)
 
 # Fuzzing engine
 if(NOT "$ENV{LIB_FUZZING_ENGINE}" STREQUAL "")
@@ -636,12 +713,57 @@ set(CURL_STATIC_DEPENDENCY_LIBS
     ${OPENLDAP_STATIC_LIB_LDAP}
     ${OPENLDAP_STATIC_LIB_LBER}
 )
-set(COMMON_LINK_LIBS
-    ${CURL_LIB_DIR}/libcurl.a
+
+# Keep the libcurl client backend separate from the OpenSSL-based mock peer.
+# A final executable links one client bundle; the GnuTLS proto bundle adds
+# OpenSSL only to satisfy the server-side TLS implementation.
+add_library(curl_client_default INTERFACE)
+target_include_directories(curl_client_default INTERFACE ${CURL_INCLUDE_DIRS})
+target_link_libraries(curl_client_default INTERFACE
+    ${CURL_STATIC_LIB}
     ${CURL_STATIC_DEPENDENCY_LIBS}
-    ${LIB_FUZZING_ENGINE}
     pthread
-    m
+    m)
+add_dependencies(curl_client_default curl_external ${CURL_DEPS})
+
+if(TARGET openssl_external)
+    add_library(curl_tls_mock_openssl INTERFACE)
+    target_include_directories(curl_tls_mock_openssl INTERFACE
+        ${OPENSSL_INSTALL_DIR}/include)
+    target_link_libraries(curl_tls_mock_openssl INTERFACE
+        ${OPENSSL_STATIC_LIB})
+    add_dependencies(curl_tls_mock_openssl openssl_external)
+endif()
+
+if(BUILD_GNUTLS_VARIANT)
+    add_library(curl_client_gnutls INTERFACE)
+    target_include_directories(curl_client_gnutls INTERFACE
+        ${CURL_GNUTLS_INCLUDE_DIRS})
+    target_link_libraries(curl_client_gnutls INTERFACE
+        ${CURL_GNUTLS_STATIC_LIB}
+        ${NGHTTP2_STATIC_LIB}
+        curl_fuzzer::gnutls_dependencies
+        ${ZLIB_STATIC_LIB}
+        ${ZSTD_STATIC_LIB}
+        ${BROTLI_STATIC_LIBS}
+        ${OPENLDAP_STATIC_LIB_LDAP}
+        ${OPENLDAP_STATIC_LIB_LBER}
+        pthread
+        m)
+    add_dependencies(curl_client_gnutls
+        curl_gnutls_external ${CURL_GNUTLS_DEPS})
+
+    add_library(curl_proto_client_gnutls INTERFACE)
+    target_link_libraries(curl_proto_client_gnutls INTERFACE
+        curl_tls_mock_openssl
+        curl_client_gnutls)
+    add_dependencies(curl_proto_client_gnutls
+        curl_gnutls_external openssl_external)
+endif()
+
+set(COMMON_LINK_LIBS
+    curl_client_default
+    ${LIB_FUZZING_ENGINE}
 )
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG} ${COVERAGE_LINK_FLAGS})
 
@@ -686,13 +808,7 @@ if(BUILD_TESTING)
     add_executable(curl_features_test tests/curl_features_test.cc)
     target_compile_features(curl_features_test PRIVATE cxx_std_11)
     target_compile_options(curl_features_test PRIVATE ${COMMON_FLAGS})
-    target_include_directories(curl_features_test PRIVATE ${CURL_INCLUDE_DIRS})
-    target_link_libraries(curl_features_test PRIVATE
-        ${CURL_LIB_DIR}/libcurl.a
-        ${CURL_STATIC_DEPENDENCY_LIBS}
-        pthread
-        m
-    )
+    target_link_libraries(curl_features_test PRIVATE curl_client_default)
     target_link_options(curl_features_test PRIVATE ${COVERAGE_LINK_FLAGS})
     if(TARGET openssl_external)
         target_compile_definitions(curl_features_test PRIVATE
@@ -702,6 +818,25 @@ if(BUILD_TESTING)
     add_test(NAME curl_features_test COMMAND curl_features_test)
     add_dependencies(fuzzer_unit_tests curl_features_test)
 
+    if(BUILD_GNUTLS_VARIANT)
+        add_executable(curl_gnutls_features_test tests/curl_features_test.cc)
+        target_compile_features(curl_gnutls_features_test PRIVATE cxx_std_11)
+        target_compile_options(curl_gnutls_features_test PRIVATE ${COMMON_FLAGS})
+        target_compile_definitions(curl_gnutls_features_test PRIVATE
+            CURL_FUZZER_EXPECT_GNUTLS
+            CURL_FUZZER_EXPECT_HTTPSRR
+            CURL_FUZZER_EXPECT_HTTPSIG)
+        target_link_libraries(curl_gnutls_features_test PRIVATE
+            curl_client_gnutls)
+        target_link_options(curl_gnutls_features_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(curl_gnutls_features_test
+            curl_gnutls_external ${CURL_GNUTLS_DEPS})
+        add_test(NAME curl_gnutls_features_test
+            COMMAND curl_gnutls_features_test)
+        add_dependencies(fuzzer_unit_tests curl_gnutls_features_test)
+    endif()
+
     add_executable(legacy_protocol_allowlist_test
         legacy_protocol_allowlist.cc
         tests/legacy_protocol_allowlist_test.cc
@@ -709,15 +844,9 @@ if(BUILD_TESTING)
     target_compile_features(legacy_protocol_allowlist_test PRIVATE cxx_std_11)
     target_compile_options(legacy_protocol_allowlist_test PRIVATE ${COMMON_FLAGS})
     target_include_directories(legacy_protocol_allowlist_test PRIVATE
-        ${CMAKE_SOURCE_DIR}
-        ${CURL_INCLUDE_DIRS}
-    )
+        ${CMAKE_SOURCE_DIR})
     target_link_libraries(legacy_protocol_allowlist_test PRIVATE
-        ${CURL_LIB_DIR}/libcurl.a
-        ${CURL_STATIC_DEPENDENCY_LIBS}
-        pthread
-        m
-    )
+        curl_client_default)
     target_link_options(legacy_protocol_allowlist_test PRIVATE
         ${COVERAGE_LINK_FLAGS})
     add_dependencies(legacy_protocol_allowlist_test curl_external ${CURL_DEPS})
@@ -1029,6 +1158,22 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
     # wiring independent of mutation and execution behaviour.
     function(curl_add_proto_fuzzer _name)
+        set(_curl_client curl_client_default)
+        set(_curl_target_deps ${FUZZ_DEPS})
+        set(_curl_include_dirs ${CURL_INCLUDE_DIRS})
+        if(ARGC GREATER 1)
+            if(NOT "${ARGV1}" STREQUAL "gnutls" OR
+               NOT BUILD_GNUTLS_VARIANT)
+                message(FATAL_ERROR
+                    "Unsupported curl client variant for ${_name}: ${ARGV1}")
+            endif()
+            set(_curl_client curl_proto_client_gnutls)
+            set(_curl_target_deps
+                curl_gnutls_external
+                ${CURL_GNUTLS_DEPS}
+                ${LIB_FUZZING_ENGINE_DEP})
+            set(_curl_include_dirs ${CURL_GNUTLS_INCLUDE_DIRS})
+        endif()
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
@@ -1037,7 +1182,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         target_compile_options(${_name} PRIVATE
             ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
         target_include_directories(${_name} PRIVATE
-            ${CURL_INCLUDE_DIRS}
+            ${_curl_include_dirs}
             ${CMAKE_BINARY_DIR}
             ${CMAKE_SOURCE_DIR}
             ${LPM_INSTALL_DIR}/include
@@ -1045,8 +1190,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             ${LPM_PB_INCLUDE}
         )
         target_link_libraries(${_name} PRIVATE
-            ${CURL_LIB_DIR}/libcurl.a
-            ${CURL_STATIC_DEPENDENCY_LIBS}
+            ${_curl_client}
             ${LIB_FUZZING_ENGINE}
             # -Wl,@file: ld reads the response file and substitutes its
             # contents — the absolute paths to every .a from LPM's install +
@@ -1059,12 +1203,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             # The -Wl, prefix is what keeps CMake from mangling "@file" into
             # "-l@file" (treating it as a library name).
             "-Wl,@${LPM_LINK_RSP}"
-            pthread
-            m
         )
         target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
         add_dependencies(${_name}
-            ${FUZZ_DEPS}
+            ${_curl_target_deps}
             curl_fuzzer_proto_runtime
             libprotobuf_mutator_external
             lpm_link_rsp
@@ -1079,6 +1221,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_http)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
     curl_add_proto_fuzzer(curl_fuzzer_proto_https)
+    if(BUILD_GNUTLS_VARIANT)
+        curl_add_proto_fuzzer(curl_fuzzer_proto_https_gnutls gnutls)
+    endif()
     curl_add_proto_fuzzer(curl_fuzzer_proto_h2_proxy)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ws)
     curl_add_proto_fuzzer(curl_fuzzer_proto_wss)
@@ -1270,6 +1415,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_http_deep
         curl_fuzzer_proto_http_deep_corpus)
     add_dependencies(curl_fuzzer_proto_https curl_fuzzer_proto_https_corpus)
+    if(BUILD_GNUTLS_VARIANT)
+        add_dependencies(curl_fuzzer_proto_https_gnutls
+            curl_fuzzer_proto_https_corpus)
+    endif()
     add_dependencies(curl_fuzzer_proto_h2_proxy
         curl_fuzzer_proto_h2_proxy_corpus)
     add_dependencies(curl_fuzzer_proto_ws curl_fuzzer_proto_ws_corpus)
@@ -1351,7 +1500,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # wall-clock waits. This catches script-order, connection-budget, and
         # old-peer lifetime regressions at the callback boundary where they
         # would otherwise look like ordinary curl transfer failures.
-        add_executable(mock_server_test
+        set(MOCK_SERVER_TEST_SOURCES
             tests/mock_server_test.cc
             proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/mock_server.cc
@@ -1367,36 +1516,42 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/ws_frame.cc
             ${GEN_PB_CC}
         )
-        target_compile_features(mock_server_test PRIVATE cxx_std_17)
-        target_compile_options(mock_server_test PRIVATE ${COMMON_FLAGS})
-        target_include_directories(mock_server_test PRIVATE
-            ${CURL_INCLUDE_DIRS}
-            ${CMAKE_BINARY_DIR}
-            ${CMAKE_SOURCE_DIR}
-            ${LPM_PB_INCLUDE}
-        )
-        if(TARGET openssl_external)
-            target_compile_definitions(mock_server_test PRIVATE
-                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-            target_include_directories(mock_server_test PRIVATE
-                ${OPENSSL_INSTALL_DIR}/include)
+
+        function(curl_add_mock_server_test _name _curl_client)
+            add_executable(${_name} ${MOCK_SERVER_TEST_SOURCES})
+            target_compile_features(${_name} PRIVATE cxx_std_17)
+            target_compile_options(${_name} PRIVATE ${COMMON_FLAGS})
+            target_include_directories(${_name} PRIVATE
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE})
+            if(TARGET openssl_external)
+                target_compile_definitions(${_name} PRIVATE
+                    PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+                target_include_directories(${_name} PRIVATE
+                    ${OPENSSL_INSTALL_DIR}/include)
+            endif()
+            if(ARGC GREATER 2)
+                target_compile_definitions(${_name} PRIVATE ${ARGV2})
+            endif()
+            target_link_libraries(${_name} PRIVATE
+                ${_curl_client}
+                "-Wl,@${LPM_LINK_RSP}")
+            target_link_options(${_name} PRIVATE ${COVERAGE_LINK_FLAGS})
+            add_dependencies(${_name}
+                ${_curl_client}
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME ${_name} COMMAND ${_name})
+            set_tests_properties(${_name} PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests ${_name})
+        endfunction()
+
+        curl_add_mock_server_test(mock_server_test curl_client_default)
+        if(BUILD_GNUTLS_VARIANT)
+            curl_add_mock_server_test(mock_server_gnutls_test
+                curl_proto_client_gnutls CURL_FUZZER_EXPECT_GNUTLS)
         endif()
-        target_link_libraries(mock_server_test PRIVATE
-            ${CURL_LIB_DIR}/libcurl.a
-            ${CURL_STATIC_DEPENDENCY_LIBS}
-            "-Wl,@${LPM_LINK_RSP}"
-            pthread
-            m
-        )
-        target_link_options(mock_server_test PRIVATE ${COVERAGE_LINK_FLAGS})
-        add_dependencies(mock_server_test
-            ${FUZZ_DEPS}
-            libprotobuf_mutator_external
-            lpm_link_rsp
-        )
-        add_test(NAME mock_server_test COMMAND mock_server_test)
-        set_tests_properties(mock_server_test PROPERTIES TIMEOUT 5)
-        add_dependencies(fuzzer_unit_tests mock_server_test)
 
         # Keep concurrent scheduling checks independent of the TLS and
         # protocol integrations in mock_server_test. This focused executable
@@ -1573,6 +1728,11 @@ set(CACHE_INSTALL_DIRS
 )
 if(DEFINED OPENSSL_INSTALL_DIR)
     list(APPEND CACHE_INSTALL_DIRS ${OPENSSL_INSTALL_DIR})
+endif()
+if(BUILD_GNUTLS_VARIANT)
+    list(APPEND CACHE_INSTALL_DIRS
+        ${GNUTLS_CACHE_INSTALL_DIRS}
+        ${CURL_GNUTLS_INSTALL_DIR})
 endif()
 if(BUILD_GDB)
     list(APPEND CACHE_INSTALL_DIRS ${GDB_INSTALL_DIR})

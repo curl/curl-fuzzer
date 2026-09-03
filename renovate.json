@@ -10,10 +10,11 @@
       "customType": "regex",
       "extractVersionTemplate": "^v?(?<version>.*)$",
       "managerFilePatterns": [
-        "CMakeLists.txt"
+        "/(^|/)CMakeLists\\.txt$/",
+        "/^cmake/.*\\.cmake$/"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\r?\\n\\s*set\\([A-Z0-9_]+_VERSION (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\r?\\n\\s*set\\([A-Z0-9_]+_VERSION (?<currentValue>\\d+(?:\\.\\d+)+)\\)"
       ]
     },
     {
@@ -30,6 +31,12 @@
       "versioningTemplate": "semver"
     }
   ],
+  "customDatasources": {
+    "gnu": {
+      "defaultRegistryUrlTemplate": "https://ftp.gnu.org/gnu/{{packageName}}/",
+      "format": "html"
+    }
+  },
   "packageRules": [
     {
       "matchManagers": [
@@ -60,6 +67,33 @@
         "openssl/openssl"
       ],
       "extractVersion": "^openssl-(?<version>.*)$"
+    },
+    {
+      "matchDatasources": [
+        "custom.gnu"
+      ],
+      "matchPackageNames": [
+        "gmp"
+      ],
+      "extractVersion": "^gmp-(?<version>\\d+\\.\\d+\\.\\d+)\\.tar\\.xz$"
+    },
+    {
+      "matchDatasources": [
+        "custom.gnu"
+      ],
+      "matchPackageNames": [
+        "nettle"
+      ],
+      "extractVersion": "^nettle-(?<version>\\d+(?:\\.\\d+){1,2})\\.tar\\.gz$"
+    },
+    {
+      "matchDatasources": [
+        "gitlab-tags"
+      ],
+      "matchPackageNames": [
+        "gnutls/gnutls"
+      ],
+      "extractVersion": "^(?<version>\\d+\\.\\d+\\.\\d+)$"
     }
   ]
 }

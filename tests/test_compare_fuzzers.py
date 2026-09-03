@@ -288,6 +288,44 @@ def test_h2_proxy_lane_uses_only_its_frame_aware_corpus() -> None:
     assert "curl_fuzzer_proto_h2_proxy" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
 
 
+def test_gnutls_https_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
+    module = _load_module()
+    corpus_root = tmp_path / "corpora"
+    https_corpus = corpus_root / "curl_fuzzer_proto_https"
+    https_corpus.mkdir(parents=True)
+    (https_corpus / "seed").write_bytes(b"https")
+
+    baseline_dir = tmp_path / "bin"
+    baseline_dir.mkdir()
+    https_seed_archive = baseline_dir / "curl_fuzzer_proto_https_seed_corpus.zip"
+    https_seed_archive.write_bytes(b"seed archive")
+
+    public_root = tmp_path / "public"
+    gnutls_public = public_root / "curl_fuzzer_proto_https_gnutls"
+    https_public = public_root / "curl_fuzzer_proto_https"
+    historical_public = public_root / "curl_fuzzer_proto"
+    for directory in (gnutls_public, https_public, historical_public):
+        directory.mkdir(parents=True)
+        (directory / "input").write_bytes(directory.name.encode())
+
+    sources = module._corpus_sources(
+        "curl_fuzzer_proto_https_gnutls",
+        baseline_dir,
+        corpus_root,
+        public_root,
+        {},
+    )
+
+    assert "curl_fuzzer_proto_https_gnutls" in module.DEFAULT_TARGETS
+    assert sources == [
+        https_corpus,
+        https_seed_archive,
+        gnutls_public,
+        https_public,
+        historical_public,
+    ]
+
+
 def test_ftp_and_tftp_lanes_keep_legacy_speed_baselines() -> None:
     module = _load_module()
 

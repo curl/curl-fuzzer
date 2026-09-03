@@ -27,6 +27,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_http": "kFastHttp",
     "curl_fuzzer_proto_http_deep": "kDeepHttp",
     "curl_fuzzer_proto_https": "kFastHttps",
+    "curl_fuzzer_proto_https_gnutls": "kFastHttps",
     "curl_fuzzer_proto_h2_proxy": "kH2Proxy",
     "curl_fuzzer_proto_ws": "kFastWebSocket",
     "curl_fuzzer_proto_wss": "kFastSecureWebSocket",
@@ -39,9 +40,12 @@ PROTO_TARGET_PROFILES = {
 }
 
 
-def _packaged_targets() -> set[str]:
+def _packaged_targets(
+    *, architecture: str = "x86_64", sanitizer: str = "address"
+) -> set[str]:
     environment = os.environ.copy()
-    environment["ARCHITECTURE"] = "x86_64"
+    environment["ARCHITECTURE"] = architecture
+    environment["SANITIZER"] = sanitizer
     result = subprocess.run(
         [
             "bash",
@@ -56,6 +60,15 @@ def _packaged_targets() -> set[str]:
         env=environment,
     )
     return set(result.stdout.splitlines())
+
+
+def test_gnutls_target_is_limited_to_supported_builds() -> None:
+    """Keep packaging aligned with the CMake sanitizer/architecture gates."""
+    target = "curl_fuzzer_proto_https_gnutls"
+
+    assert target in _packaged_targets()
+    assert target not in _packaged_targets(sanitizer="memory")
+    assert target not in _packaged_targets(architecture="i386")
 
 
 def _checked_in_cpp_sources() -> list[Path]:

@@ -73,6 +73,11 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "ECDHE-ECDSA-AES128-GCM-SHA256",
             "ecdsa_secp256r1_sha256",
         ),
+        "https_gnutls_tls12_priority.textproto": (
+            "CURLOPT_SSLVERSION uint_value: 393222",
+            "NORMAL:-VERS-ALL:+VERS-TLS1.2",
+            "gnutls-tls12",
+        ),
         "https_pinned_public_key.textproto": (
             "CURLOPT_PINNEDPUBLICKEY",
             "sha256//ohF20oHrdt/MM3YpyIewiTdtTbgZwq3qatd40TjMtYg=",
@@ -80,6 +85,7 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
         ),
         "https_session_redirect.textproto": (
             "CURLOPT_SSL_SESSIONID_CACHE bool_value: true",
+            "CURLOPT_SSLVERSION uint_value: 393222",
             "Connection: close",
             "subsequent_connections {",
         ),
