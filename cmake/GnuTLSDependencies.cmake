@@ -43,8 +43,9 @@ endif()
 
 # renovate: datasource=custom.gnu depName=gmp
 set(GNUTLS_GMP_VERSION 6.3.0)
+set(GNUTLS_GMP_CACHE_ID gmp-${GNUTLS_GMP_VERSION})
 set(GNUTLS_GMP_INSTALL_DIR
-    ${CMAKE_BINARY_DIR}/gmp-${GNUTLS_GMP_VERSION}-install)
+    ${CMAKE_BINARY_DIR}/${GNUTLS_GMP_CACHE_ID}-install)
 set(GNUTLS_GMP_INCLUDE_DIR ${GNUTLS_GMP_INSTALL_DIR}/include)
 set(GNUTLS_GMP_STATIC_LIB ${GNUTLS_GMP_INSTALL_DIR}/lib/libgmp.a)
 set(GNUTLS_GMP_INSTALL_STAMP
@@ -57,7 +58,7 @@ if(NOT EXISTS ${GNUTLS_GMP_INSTALL_STAMP} OR
             https://ftp.gnu.org/gnu/gmp/gmp-${GNUTLS_GMP_VERSION}.tar.xz
             https://ftpmirror.gnu.org/gmp/gmp-${GNUTLS_GMP_VERSION}.tar.xz
         PREFIX
-            ${CMAKE_BINARY_DIR}/gmp-${GNUTLS_GMP_VERSION}-${MINIMAL_INSTALL_RECIPE}
+            ${CMAKE_BINARY_DIR}/${GNUTLS_GMP_CACHE_ID}-${MINIMAL_INSTALL_RECIPE}
         CONFIGURE_COMMAND
             ${CMAKE_COMMAND} -E env
                 "CC=${_GNUTLS_DEPS_CC}"
@@ -91,8 +92,12 @@ endif()
 
 # renovate: datasource=custom.gnu depName=nettle
 set(GNUTLS_NETTLE_VERSION 4.0)
+# Cache identities include the complete static dependency closure. A Nettle
+# archive built against one GMP release must not be reused with another.
+set(GNUTLS_NETTLE_CACHE_ID
+    nettle-${GNUTLS_NETTLE_VERSION}-${GNUTLS_GMP_CACHE_ID})
 set(GNUTLS_NETTLE_INSTALL_DIR
-    ${CMAKE_BINARY_DIR}/nettle-${GNUTLS_NETTLE_VERSION}-install)
+    ${CMAKE_BINARY_DIR}/${GNUTLS_NETTLE_CACHE_ID}-install)
 set(GNUTLS_NETTLE_INCLUDE_DIR ${GNUTLS_NETTLE_INSTALL_DIR}/include)
 set(GNUTLS_NETTLE_STATIC_LIB
     ${GNUTLS_NETTLE_INSTALL_DIR}/lib/libnettle.a)
@@ -121,7 +126,7 @@ if(NOT EXISTS ${GNUTLS_NETTLE_INSTALL_STAMP} OR
             https://ftp.gnu.org/gnu/nettle/nettle-${GNUTLS_NETTLE_VERSION}.tar.gz
             https://ftpmirror.gnu.org/nettle/nettle-${GNUTLS_NETTLE_VERSION}.tar.gz
         PREFIX
-            ${CMAKE_BINARY_DIR}/nettle-${GNUTLS_NETTLE_VERSION}-${MINIMAL_INSTALL_RECIPE}
+            ${CMAKE_BINARY_DIR}/${GNUTLS_NETTLE_CACHE_ID}-${MINIMAL_INSTALL_RECIPE}
         CONFIGURE_COMMAND
             ${CMAKE_COMMAND} -E env
                 "CC=${_GNUTLS_DEPS_CC}"
@@ -167,7 +172,11 @@ endif()
 # renovate: datasource=gitlab-tags depName=gnutls/gnutls
 set(GNUTLS_VERSION 3.8.13)
 string(REGEX MATCH "^[0-9]+\\.[0-9]+" GNUTLS_SERIES "${GNUTLS_VERSION}")
-set(GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/gnutls-${GNUTLS_VERSION}-install)
+# GnuTLS compiles against Nettle's headers, so a Nettle or GMP upgrade must
+# invalidate the cached GnuTLS archive even when GNUTLS_VERSION is unchanged.
+set(GNUTLS_CACHE_ID
+    gnutls-${GNUTLS_VERSION}-${GNUTLS_NETTLE_CACHE_ID})
+set(GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/${GNUTLS_CACHE_ID}-install)
 set(GNUTLS_INCLUDE_DIR ${GNUTLS_INSTALL_DIR}/include)
 set(GNUTLS_STATIC_LIB ${GNUTLS_INSTALL_DIR}/lib/libgnutls.a)
 set(GNUTLS_INSTALL_STAMP
@@ -191,7 +200,7 @@ if(NOT EXISTS ${GNUTLS_INSTALL_STAMP} OR
         URL
             https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_SERIES}/gnutls-${GNUTLS_VERSION}.tar.xz
         PREFIX
-            ${CMAKE_BINARY_DIR}/gnutls-${GNUTLS_VERSION}-${MINIMAL_INSTALL_RECIPE}
+            ${CMAKE_BINARY_DIR}/${GNUTLS_CACHE_ID}-${MINIMAL_INSTALL_RECIPE}
         CONFIGURE_COMMAND
             ${CMAKE_COMMAND} -E env
                 "CC=${_GNUTLS_DEPS_CC}"
