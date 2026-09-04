@@ -47,6 +47,13 @@ fuzz_public_corpus_names() {
             echo "curl_fuzzer_proto_https"
             echo "curl_fuzzer_proto"
             ;;
+        curl_fuzzer_proto_http3)
+            # HTTP/3 has its own wire-response seeds, but ordinary HTTPS
+            # scenarios still provide useful URL, request, and option state;
+            # the fixed profile supplies a valid default H3 response plan.
+            echo "curl_fuzzer_proto_https"
+            echo "curl_fuzzer_proto"
+            ;;
         curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_ftp|curl_fuzzer_proto_tftp|curl_fuzzer_proto_api|curl_fuzzer_proto_multi|curl_fuzzer_proto_timing)
             echo "curl_fuzzer_proto"
             ;;

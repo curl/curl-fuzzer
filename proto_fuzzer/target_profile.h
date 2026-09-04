@@ -24,6 +24,8 @@ enum class TargetProfile {
   kDeepHttp,
   /// Exercise a complete HTTPS exchange against the in-process TLS peer.
   kFastHttps,
+  /// Exercise HTTP/3 over a valid in-process QUIC/TLS connection.
+  kFastHttp3,
   /// Exercise an HTTP/1.1 origin through an HTTPS/HTTP2 CONNECT proxy.
   kH2Proxy,
   /// Exercise plaintext WebSocket framing without wall-clock waits.
@@ -53,6 +55,8 @@ enum class ScenarioRunMode {
   kProtocolCoverage,
   /// Drive HTTPS through a real TLS peer and inspect live TLS result state.
   kTlsCoverage,
+  /// Drive ordered plaintext HTTP/3 actions through the QUIC peer.
+  kHttp3Coverage,
   /// Drive raw HTTP/2 proxy frames around one CONNECT tunnel.
   kH2ProxyCoverage,
   /// Drive FTP through its concurrent control/passive-data peer.
@@ -84,6 +88,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastHttps:
       return ScenarioRunMode::kTlsCoverage;
+
+    case TargetProfile::kFastHttp3:
+      return ScenarioRunMode::kHttp3Coverage;
 
     case TargetProfile::kH2Proxy:
       return ScenarioRunMode::kH2ProxyCoverage;

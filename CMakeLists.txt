@@ -422,22 +422,27 @@ else()
     add_custom_target(openldap_external)
 endif()
 
-# Additional TLS backends are useful only for the 64-bit structured suite.
-# Keep them out of MSan until their complete crypto dependency stacks can be
-# built against an instrumented C library; this mirrors the existing OpenSSL
-# exclusion.
+# Additional TLS and HTTP/3 variants are useful only for the 64-bit structured
+# suite. Keep them out of MSan until their complete crypto dependency stacks
+# can be built against an instrumented C library; this mirrors the existing
+# OpenSSL exclusion.
 set(BUILD_GNUTLS_VARIANT FALSE)
 set(GNUTLS_EXTERNAL_DEP "")
 set(GNUTLS_CACHE_INSTALL_DIRS "")
 set(BUILD_MBEDTLS_VARIANT FALSE)
 set(MBEDTLS_EXTERNAL_DEP "")
 set(MBEDTLS_CACHE_INSTALL_DIRS "")
+set(BUILD_HTTP3_VARIANT FALSE)
+set(HTTP3_EXTERNAL_DEP "")
+set(HTTP3_CACHE_INSTALL_DIRS "")
 if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" AND
    NOT "$ENV{SANITIZER}" STREQUAL "memory")
     set(BUILD_GNUTLS_VARIANT TRUE)
     include(${CMAKE_SOURCE_DIR}/cmake/GnuTLSDependencies.cmake)
     set(BUILD_MBEDTLS_VARIANT TRUE)
     include(${CMAKE_SOURCE_DIR}/cmake/MbedTLSDependencies.cmake)
+    set(BUILD_HTTP3_VARIANT TRUE)
+    include(${CMAKE_SOURCE_DIR}/cmake/Http3Dependencies.cmake)
 endif()
 
 # Group non-curl dependencies into a single target
@@ -452,6 +457,7 @@ add_custom_target(deps
         openldap_external
         ${GNUTLS_EXTERNAL_DEP}
         ${MBEDTLS_EXTERNAL_DEP}
+        ${HTTP3_EXTERNAL_DEP}
 )
 
 # Now for the main dependencies!
@@ -463,6 +469,7 @@ add_custom_target(deps
 set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
 set(CURL_GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-gnutls-install)
 set(CURL_MBEDTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-mbedtls-install)
+set(CURL_HTTP3_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-http3-install)
 
 set(CURL_COMMON_CMAKE_ARGS
     -DCMAKE_INSTALL_LIBDIR=lib
@@ -592,6 +599,23 @@ if(BUILD_GNUTLS_VARIANT)
     )
 endif()
 
+if(BUILD_HTTP3_VARIANT)
+    set(CURL_HTTP3_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${CURL_HTTP3_INSTALL_DIR}
+        ${CURL_COMMON_CMAKE_ARGS}
+        "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
+        "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
+        -DCURL_ENABLE_SSL=ON
+        -DCURL_USE_OPENSSL=ON
+        -DCURL_USE_GNUTLS=OFF
+        -DCURL_USE_MBEDTLS=OFF
+        -DOPENSSL_ROOT_DIR=${HTTP3_OPENSSL_INSTALL_DIR}
+        ${HTTP3_CURL_CMAKE_ARGS}
+        -DCURL_DISABLE_HTTPSIG=OFF
+        -DUSE_ECH=ON
+    )
+endif()
+
 function(curl_add_external_variant _target _install_dir)
     cmake_parse_arguments(VARIANT "" "" "CMAKE_ARGS;SOURCE_ARGS;DEPENDS" ${ARGN})
     ExternalProject_Add(${_target}
@@ -650,7 +674,7 @@ curl_add_external_variant(curl_external ${CURL_INSTALL_DIR}
     SOURCE_ARGS ${CURL_DEFAULT_SOURCE_ARGS}
     DEPENDS ${CURL_DEPS})
 
-if(BUILD_GNUTLS_VARIANT OR BUILD_MBEDTLS_VARIANT)
+if(BUILD_GNUTLS_VARIANT OR BUILD_MBEDTLS_VARIANT OR BUILD_HTTP3_VARIANT)
     if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
         set(CURL_TLS_VARIANT_SOURCE_ARGS
             SOURCE_DIR $ENV{CURL_SOURCE_DIR}
@@ -670,6 +694,19 @@ if(BUILD_GNUTLS_VARIANT OR BUILD_MBEDTLS_VARIANT)
         # Waiting for that project avoids racing a configure against its clone.
         set(CURL_TLS_VARIANT_SOURCE_DEP curl_external)
     endif()
+endif()
+
+if(BUILD_HTTP3_VARIANT)
+    set(CURL_HTTP3_DEPS
+        ${CURL_COMMON_DEPS}
+        libidn2_external
+        ${HTTP3_EXTERNAL_DEP}
+        ${CURL_TLS_VARIANT_SOURCE_DEP})
+    curl_add_external_variant(curl_http3_external
+        ${CURL_HTTP3_INSTALL_DIR}
+        CMAKE_ARGS ${CURL_HTTP3_CMAKE_ARGS}
+        SOURCE_ARGS ${CURL_TLS_VARIANT_SOURCE_ARGS}
+        DEPENDS ${CURL_HTTP3_DEPS})
 endif()
 
 if(BUILD_GNUTLS_VARIANT)
@@ -702,6 +739,8 @@ set(CURL_GNUTLS_STATIC_LIB
     ${CURL_GNUTLS_INSTALL_DIR}/lib/libcurl.a)
 set(CURL_MBEDTLS_STATIC_LIB
     ${CURL_MBEDTLS_INSTALL_DIR}/lib/libcurl.a)
+set(CURL_HTTP3_STATIC_LIB
+    ${CURL_HTTP3_INSTALL_DIR}/lib/libcurl.a)
 
 # Now it's time for the main targets!
 
@@ -718,6 +757,10 @@ set(CURL_GNUTLS_INCLUDE_DIRS
 set(CURL_MBEDTLS_INCLUDE_DIRS
     ${CURL_MBEDTLS_INSTALL_DIR}/include
     ${CURL_MBEDTLS_INSTALL_DIR}/utfuzzer
+)
+set(CURL_HTTP3_INCLUDE_DIRS
+    ${CURL_HTTP3_INSTALL_DIR}/include
+    ${CURL_HTTP3_INSTALL_DIR}/utfuzzer
 )
 
 # Fuzzing engine
@@ -780,6 +823,26 @@ if(TARGET openssl_external)
     target_link_libraries(curl_tls_mock_openssl INTERFACE
         ${OPENSSL_STATIC_LIB})
     add_dependencies(curl_tls_mock_openssl openssl_external)
+endif()
+
+if(BUILD_HTTP3_VARIANT)
+    add_library(curl_client_http3 INTERFACE)
+    target_include_directories(curl_client_http3 INTERFACE
+        ${CURL_HTTP3_INCLUDE_DIRS})
+    target_link_libraries(curl_client_http3 INTERFACE
+        ${CURL_HTTP3_STATIC_LIB}
+        curl_fuzzer::http3_dependencies
+        ${NGHTTP2_STATIC_LIB}
+        ${ZLIB_STATIC_LIB}
+        ${ZSTD_STATIC_LIB}
+        ${BROTLI_STATIC_LIBS}
+        ${LIBIDN2_STATIC_LIB}
+        ${OPENLDAP_STATIC_LIB_LDAP}
+        ${OPENLDAP_STATIC_LIB_LBER}
+        pthread
+        m)
+    add_dependencies(curl_client_http3
+        curl_http3_external ${CURL_HTTP3_DEPS})
 endif()
 
 if(BUILD_MBEDTLS_VARIANT)
@@ -928,6 +991,24 @@ if(BUILD_TESTING)
         add_test(NAME curl_mbedtls_features_test
             COMMAND curl_mbedtls_features_test)
         add_dependencies(fuzzer_unit_tests curl_mbedtls_features_test)
+    endif()
+
+    if(BUILD_HTTP3_VARIANT)
+        add_executable(curl_http3_features_test tests/curl_features_test.cc)
+        target_compile_features(curl_http3_features_test PRIVATE cxx_std_11)
+        target_compile_options(curl_http3_features_test PRIVATE ${COMMON_FLAGS})
+        target_compile_definitions(curl_http3_features_test PRIVATE
+            CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES
+            CURL_FUZZER_EXPECT_HTTP3)
+        target_link_libraries(curl_http3_features_test PRIVATE
+            curl_client_http3)
+        target_link_options(curl_http3_features_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(curl_http3_features_test
+            curl_http3_external ${CURL_HTTP3_DEPS})
+        add_test(NAME curl_http3_features_test
+            COMMAND curl_http3_features_test)
+        add_dependencies(fuzzer_unit_tests curl_http3_features_test)
     endif()
 
     add_executable(legacy_protocol_allowlist_test
@@ -1166,6 +1247,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         COMMENT "protoc curl_fuzzer.proto"
         VERBATIM
     )
+    add_custom_target(curl_fuzzer_proto_generated
+        DEPENDS ${GEN_PB_CC} ${GEN_PB_H})
 
     # Write out a linker response file listing every .a the LPM install
     # produced — LPM's own libs (libprotobuf-mutator, libprotobuf-mutator-
@@ -1205,7 +1288,6 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/api_lifecycle.cc
         proto_fuzzer/fuzzer_main.cc
         proto_fuzzer/ftp_mock_server.cc
-        proto_fuzzer/scenario_runner.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/mock_server.cc
@@ -1244,23 +1326,79 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_runtime
         ${FUZZ_DEPS}
         libprotobuf_mutator_external
+        curl_fuzzer_proto_generated
         lpm_link_rsp
     )
+
+    # ScenarioRunner is compiled separately from the protocol implementation
+    # objects. The HTTP/3 lane can then select a runner that knows about its
+    # QUIC peer without pulling nghttp3/OpenSSL server references into every
+    # structured fuzzer executable.
+    add_library(curl_fuzzer_proto_runner OBJECT
+        proto_fuzzer/scenario_runner.cc)
+    target_compile_features(curl_fuzzer_proto_runner PRIVATE cxx_std_17)
+    target_compile_options(curl_fuzzer_proto_runner PRIVATE
+        ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+    target_include_directories(curl_fuzzer_proto_runner PRIVATE
+        ${CURL_INCLUDE_DIRS}
+        ${CMAKE_BINARY_DIR}
+        ${CMAKE_SOURCE_DIR}
+        ${LPM_PB_INCLUDE})
+    if(TARGET openssl_external)
+        target_compile_definitions(curl_fuzzer_proto_runner PRIVATE
+            PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+        target_include_directories(curl_fuzzer_proto_runner PRIVATE
+            ${OPENSSL_INSTALL_DIR}/include)
+    endif()
+    add_dependencies(curl_fuzzer_proto_runner
+        ${FUZZ_DEPS}
+        curl_fuzzer_proto_generated
+        libprotobuf_mutator_external)
+
+    if(BUILD_HTTP3_VARIANT)
+        add_library(curl_fuzzer_proto_http3_runner OBJECT
+            proto_fuzzer/scenario_runner.cc
+            proto_fuzzer/http3_mock_server.cc)
+        target_compile_features(curl_fuzzer_proto_http3_runner PRIVATE
+            cxx_std_17)
+        target_compile_options(curl_fuzzer_proto_http3_runner PRIVATE
+            ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+        target_compile_definitions(curl_fuzzer_proto_http3_runner PRIVATE
+            PROTO_FUZZER_HAS_TLS_MOCK_SERVER
+            PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
+        target_include_directories(curl_fuzzer_proto_http3_runner PRIVATE
+            ${CURL_HTTP3_INCLUDE_DIRS}
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE})
+        target_link_libraries(curl_fuzzer_proto_http3_runner PRIVATE
+            curl_fuzzer::http3_dependencies)
+        add_dependencies(curl_fuzzer_proto_http3_runner
+            curl_http3_external
+            ${CURL_HTTP3_DEPS}
+            curl_fuzzer_proto_generated
+            libprotobuf_mutator_external)
+    endif()
 
     # Build one compatibility binary plus fixed protocol/cost lanes. Each
     # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
     # wiring independent of mutation and execution behaviour.
     function(curl_add_proto_fuzzer _name)
-        cmake_parse_arguments(PROTO "" "CLIENT" "INCLUDE_DIRS;DEPENDS" ${ARGN})
+        cmake_parse_arguments(PROTO "" "CLIENT;RUNNER"
+            "INCLUDE_DIRS;DEPENDS" ${ARGN})
         if(PROTO_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR
                 "Unsupported arguments for ${_name}: ${PROTO_UNPARSED_ARGUMENTS}")
         endif()
         set(_curl_client curl_client_default)
+        set(_curl_runner curl_fuzzer_proto_runner)
         set(_curl_target_deps ${FUZZ_DEPS})
         set(_curl_include_dirs ${CURL_INCLUDE_DIRS})
         if(PROTO_CLIENT)
             set(_curl_client ${PROTO_CLIENT})
+        endif()
+        if(PROTO_RUNNER)
+            set(_curl_runner ${PROTO_RUNNER})
         endif()
         if(PROTO_DEPENDS)
             set(_curl_target_deps
@@ -1273,6 +1411,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
+            $<TARGET_OBJECTS:${_curl_runner}>
         )
         target_compile_features(${_name} PRIVATE cxx_std_17)
         target_compile_options(${_name} PRIVATE
@@ -1304,6 +1443,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_dependencies(${_name}
             ${_curl_target_deps}
             curl_fuzzer_proto_runtime
+            ${_curl_runner}
             libprotobuf_mutator_external
             lpm_link_rsp
         )
@@ -1329,6 +1469,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             INCLUDE_DIRS ${CURL_MBEDTLS_INCLUDE_DIRS}
             DEPENDS curl_mbedtls_external ${CURL_MBEDTLS_DEPS})
     endif()
+    if(BUILD_HTTP3_VARIANT)
+        curl_add_proto_fuzzer(curl_fuzzer_proto_http3
+            CLIENT curl_client_http3
+            RUNNER curl_fuzzer_proto_http3_runner
+            INCLUDE_DIRS ${CURL_HTTP3_INCLUDE_DIRS}
+            DEPENDS curl_http3_external ${CURL_HTTP3_DEPS})
+    endif()
     curl_add_proto_fuzzer(curl_fuzzer_proto_h2_proxy)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ws)
     curl_add_proto_fuzzer(curl_fuzzer_proto_wss)
@@ -1347,6 +1494,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/http/*.textproto)
     file(GLOB HTTPS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/https/*.textproto)
+    file(GLOB HTTP3_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/http3/*.textproto)
     file(GLOB H2_PROXY_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/h2_proxy/*.textproto)
     file(GLOB WS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -1496,6 +1645,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
         curl_fuzzer_proto_https
         ${DEEP_HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_http3_corpus
+        curl_fuzzer_proto_http3 ${HTTP3_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_h2_proxy_corpus
         curl_fuzzer_proto_h2_proxy ${H2_PROXY_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_ws_corpus
@@ -1527,6 +1678,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     if(BUILD_MBEDTLS_VARIANT)
         add_dependencies(curl_fuzzer_proto_https_mbedtls
             curl_fuzzer_proto_https_corpus)
+    endif()
+    if(BUILD_HTTP3_VARIANT)
+        add_dependencies(curl_fuzzer_proto_http3
+            curl_fuzzer_proto_http3_corpus)
     endif()
     add_dependencies(curl_fuzzer_proto_h2_proxy
         curl_fuzzer_proto_h2_proxy_corpus)
@@ -1765,6 +1920,41 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(ftp_mock_server_test
             tests/ftp_mock_server_test.cc
             proto_fuzzer/ftp_mock_server.cc)
+
+        if(BUILD_HTTP3_VARIANT)
+            add_executable(http3_mock_server_test
+                tests/http3_mock_server_test.cc
+                proto_fuzzer/http3_mock_server.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC})
+            target_compile_features(http3_mock_server_test PRIVATE cxx_std_17)
+            target_compile_options(http3_mock_server_test PRIVATE
+                ${COMMON_FLAGS})
+            target_include_directories(http3_mock_server_test PRIVATE
+                ${CURL_HTTP3_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE})
+            target_link_libraries(http3_mock_server_test PRIVATE
+                curl_client_http3
+                "-Wl,@${LPM_LINK_RSP}")
+            target_link_options(http3_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(http3_mock_server_test
+                curl_http3_external
+                ${CURL_HTTP3_DEPS}
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME http3_mock_server_test
+                COMMAND http3_mock_server_test)
+            set_tests_properties(http3_mock_server_test PROPERTIES TIMEOUT 10)
+            add_dependencies(fuzzer_unit_tests http3_mock_server_test)
+        endif()
     endif()
 
     # Documentation lint. `cmake --build build --target doxygen-check` runs
@@ -1862,6 +2052,11 @@ if(BUILD_MBEDTLS_VARIANT)
     list(APPEND CACHE_INSTALL_DIRS
         ${MBEDTLS_CACHE_INSTALL_DIRS}
         ${CURL_MBEDTLS_INSTALL_DIR})
+endif()
+if(BUILD_HTTP3_VARIANT)
+    list(APPEND CACHE_INSTALL_DIRS
+        ${HTTP3_CACHE_INSTALL_DIRS}
+        ${CURL_HTTP3_INSTALL_DIR})
 endif()
 if(BUILD_GDB)
     list(APPEND CACHE_INSTALL_DIRS ${GDB_INSTALL_DIR})

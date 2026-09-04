@@ -1,0 +1,23 @@
+# Structured headers establish a valid response before a raw plaintext frame
+# prefix probes nghttp3/curl error handling on the same request stream.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/raw"
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      response_headers {
+        name: "content-type"
+        value: "application/octet-stream"
+      }
+    }
+  }
+  actions {
+    stream_write {
+      role: HTTP3_STREAM_RESPONSE
+      # Unknown frame type 0x21, two-byte payload, followed by FIN.
+      data: "\x21\x02\xde\xad"
+      finish_stream: true
+    }
+  }
+}

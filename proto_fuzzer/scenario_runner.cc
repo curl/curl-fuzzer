@@ -32,6 +32,9 @@
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #endif
+#if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
+#include "proto_fuzzer/http3_mock_server.h"
+#endif
 
 namespace proto_fuzzer {
 
@@ -104,6 +107,14 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
 /// protobuf field from silently changing old OSS-Fuzz reproducers.
 std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::proto::Scenario& scenario,
                                                           ScenarioRunMode mode) {
+  if (mode == ScenarioRunMode::kHttp3Coverage) {
+#if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
+    return std::make_unique<Http3MockServer>(scenario.tls_certificate_chain());
+#else
+    return nullptr;
+#endif
+  }
+
   if (mode == ScenarioRunMode::kH2ProxyCoverage) {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
     return std::make_unique<H2ProxyMockServer>();
@@ -240,8 +251,10 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioR
     if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM) {
       mock->DriveEasyScenario(easy.get(), scenario);
     } else {
-      mock->DriveScenario(easy.get(), scenario, drive_mode == curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
-                          api_plan != nullptr && api_plan->wake_multi());
+      mock->DriveScenario(
+          easy.get(), scenario,
+          mode == ScenarioRunMode::kHttp3Coverage || drive_mode == curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
+          api_plan != nullptr && api_plan->wake_multi());
     }
     if (api_lifecycle != nullptr) {
       api_lifecycle->ProbeTransferResults(drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);

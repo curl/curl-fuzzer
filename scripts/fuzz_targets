@@ -9,7 +9,7 @@ if [ "${ARCHITECTURE:-}" != "i386" ]; then
     # MemorySanitizer until all of their static dependencies can be built with
     # MSan instrumentation.
     if [ "${SANITIZER:-}" != "memory" ]; then
-        FUZZ_TARGETS_LIST="${FUZZ_TARGETS_LIST} curl_fuzzer_proto_https_gnutls curl_fuzzer_proto_https_mbedtls"
+        FUZZ_TARGETS_LIST="${FUZZ_TARGETS_LIST} curl_fuzzer_proto_https_gnutls curl_fuzzer_proto_https_mbedtls curl_fuzzer_proto_http3"
     fi
 fi
 

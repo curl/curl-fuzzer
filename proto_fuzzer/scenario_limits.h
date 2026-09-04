@@ -11,6 +11,7 @@
 #define PROTO_FUZZER_SCENARIO_LIMITS_H_
 
 #include <cstddef>
+#include <cstdint>
 
 namespace proto_fuzzer::scenario_limits {
 
@@ -101,6 +102,33 @@ inline constexpr std::size_t kMaxMultiTransfers = 4;
 /// remove/re-add); sixteen permit several handles to interact without making
 /// action processing proportional to mutated protobuf size.
 inline constexpr std::size_t kMaxMultiActions = 16;
+/// Ordered H3 work needs enough slots to interleave response fragments with
+/// stream and connection state changes without becoming mutation-sized.
+inline constexpr std::size_t kMaxHttp3Actions = 16;
+/// Keep each structured header block small enough for cheap QPACK encoding.
+inline constexpr std::size_t kMaxHttp3Headers = 16;
+/// Trailer lists need fewer entries while retaining duplicate-name behavior.
+inline constexpr std::size_t kMaxHttp3Trailers = 8;
+/// Header names are tokens rather than general metadata. This comfortably
+/// exceeds practical field names while limiting canonicalization work.
+inline constexpr std::size_t kMaxHttp3HeaderNameBytes = 256;
+/// Values use the shared metadata ceiling used by other header-bearing APIs.
+inline constexpr std::size_t kMaxHttp3HeaderValueBytes = kMaxMetadataBytes;
+/// Share one metadata budget across every structured header and trailer block
+/// so many actions cannot multiply the per-field ceiling into a large case.
+inline constexpr std::size_t kMaxHttp3HeaderBytes = 16 * 1024;
+/// Bound the number of DATA-frame boundaries independently of total bytes.
+inline constexpr std::size_t kMaxHttp3BodyChunks = 16;
+/// A response body can still cross curl's normal 16 KiB callback boundary.
+inline constexpr std::size_t kMaxHttp3BodyBytes = 16 * 1024;
+/// Raw plaintext is primarily for malformed frame/QPACK prefixes; a compact
+/// per-action cap preserves that purpose without duplicating body storage.
+inline constexpr std::size_t kMaxHttp3RawWriteBytes = 4 * 1024;
+/// Share one ceiling across all raw actions so sixteen maximum-sized writes
+/// cannot make one fuzzer iteration disproportionately expensive.
+inline constexpr std::size_t kMaxHttp3RawBytes = 16 * 1024;
+/// QUIC variable-length integers reserve their two high bits for encoding.
+inline constexpr std::uint64_t kMaxQuicVarint = (std::uint64_t{1} << 62U) - 1U;
 
 }  // namespace proto_fuzzer::scenario_limits
 

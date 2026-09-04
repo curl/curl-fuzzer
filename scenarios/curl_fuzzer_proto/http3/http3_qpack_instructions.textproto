@@ -1,0 +1,24 @@
+# Exercise both QPACK instruction parsers after their critical streams have
+# valid type prefixes. Exact suffix bytes remain freely mutable.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/qpack"
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      body_chunks: "qpack"
+    }
+  }
+  actions {
+    stream_write {
+      role: HTTP3_STREAM_QPACK_ENCODER
+      data: "\xff\x00"
+    }
+  }
+  actions {
+    stream_write {
+      role: HTTP3_STREAM_QPACK_DECODER
+      data: "\xff\x00"
+    }
+  }
+}

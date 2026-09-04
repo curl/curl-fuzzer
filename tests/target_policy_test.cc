@@ -175,16 +175,216 @@ void TestFastHttpsPolicy() {
          "fast HTTPS policy discarded its certificate-chain selector");
 }
 
-void TestFastHttpsPolicyRejectsUnknownCertificateChain() {
-  Scenario scenario;
+void TestTlsPoliciesRejectUnknownCertificateChain() {
+  constexpr TargetProfile kTlsPolicies[] = {
+      TargetProfile::kFastHttps,
+      TargetProfile::kFastHttp3,
+  };
+  for (const TargetProfile profile : kTlsPolicies) {
+    Scenario scenario;
+    scenario.set_tls_certificate_chain(
+        static_cast<curl::fuzzer::proto::TlsCertificateChainProfile>(99));
+
+    ApplyTargetPolicy(&scenario, profile);
+
+    Expect(scenario.tls_certificate_chain() ==
+               curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+           "a TLS policy retained an unknown certificate-chain selector");
+  }
+}
+
+void TestFastHttp3PolicyMaterializesUsefulPlan() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
+  scenario.add_request_headers("X-H3: retained");
+  scenario.add_subsequent_connections()->set_initial_response(
+      "ignored stream response");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
+  scenario.mutable_upload()->set_data("upload sentinel");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_tls_certificate_chain(
-      static_cast<curl::fuzzer::proto::TlsCertificateChainProfile>(99));
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.mutable_http3_plan();
 
-  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttps);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_CONNECT_ONLY);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
 
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp3);
+
+  Expect(scenario.scheme() == SCHEME_HTTPS,
+         "fast HTTP/3 policy did not force HTTPS");
+  Expect(scenario.host_path() == "tls.test/a/path?query#fragment",
+         "fast HTTP/3 policy did not retain the URL suffix");
+  Expect(!scenario.has_connection() &&
+             scenario.subsequent_connections_size() == 0,
+         "fast HTTP/3 policy retained stream-socket response scripts");
+  Expect(scenario.request_headers_size() == 1 && scenario.has_mime_post() &&
+             scenario.has_upload(),
+         "fast HTTP/3 policy removed request-side HTTP state");
+  Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+             !scenario.has_multi_plan(),
+         "fast HTTP/3 policy retained another target's work");
   Expect(scenario.tls_certificate_chain() ==
-             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-         "fast HTTPS policy retained an unknown certificate-chain selector");
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
+         "fast HTTP/3 policy discarded its certificate-chain selector");
+  Expect(scenario.options_size() == 1 && scenario.options(0).option_id() ==
+                                             curl::fuzzer::proto::CURLOPT_POST,
+         "fast HTTP/3 policy retained transport-breaking options");
+  Expect(scenario.has_http3_plan() && scenario.http3_plan().actions_size() == 1,
+         "fast HTTP/3 policy did not materialize a default peer action");
+  const auto &response = scenario.http3_plan().actions(0).structured_response();
+  Expect(response.status_code() == 200 && response.finish_stream(),
+         "fast HTTP/3 default action is not a finished 200 response");
+}
+
+void TestFastHttp3PolicyBoundsOrderedActions() {
+  Scenario scenario;
+  auto *plan = scenario.mutable_http3_plan();
+
+  auto *response = plan->add_actions()->mutable_structured_response();
+  response->set_status_code(700);
+  auto *first_header = response->add_response_headers();
+  first_header->set_name(":Bad NAME");
+  first_header->set_value(std::string("ok\r\n\0bad\x7f", 9));
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxHttp3Headers + 4; ++index) {
+    auto *header = response->add_response_headers();
+    header->set_name(std::string(
+        proto_fuzzer::scenario_limits::kMaxHttp3HeaderNameBytes + 8, 'N'));
+    header->set_value(std::string(
+        proto_fuzzer::scenario_limits::kMaxHttp3HeaderValueBytes + 8, 'v'));
+  }
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxHttp3Trailers + 4; ++index) {
+    auto *trailer = response->add_response_trailers();
+    trailer->set_name("X-Trailer");
+    trailer->set_value("value");
+  }
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxHttp3BodyChunks + 4;
+       ++index) {
+    response->add_body_chunks(std::string(
+        proto_fuzzer::scenario_limits::kMaxHttp3BodyBytes + 8, 'b'));
+  }
+
+  auto *write = plan->add_actions()->mutable_stream_write();
+  write->set_role(static_cast<curl::fuzzer::proto::Http3StreamRole>(99));
+  write->set_data(std::string(
+      proto_fuzzer::scenario_limits::kMaxHttp3RawWriteBytes + 8, 'r'));
+  write->set_finish_stream(true);
+
+  auto *opened_stream =
+      plan->add_actions()->mutable_open_unidirectional_stream();
+  opened_stream->set_data(std::string(
+      proto_fuzzer::scenario_limits::kMaxHttp3RawWriteBytes + 8, 'u'));
+  opened_stream->set_finish_stream(true);
+
+  auto *reset = plan->add_actions()->mutable_stream_reset();
+  reset->set_role(static_cast<curl::fuzzer::proto::Http3StreamRole>(99));
+  reset->set_application_error_code(std::numeric_limits<std::uint64_t>::max());
+  plan->add_actions()->mutable_goaway()->set_id(
+      std::numeric_limits<std::uint64_t>::max());
+  plan->add_actions();
+  while (static_cast<std::size_t>(plan->actions_size()) <
+         proto_fuzzer::scenario_limits::kMaxHttp3Actions - 1) {
+    plan->add_actions()->mutable_stream_write()->set_data("suffix");
+  }
+  plan->add_actions()->mutable_connection_close()->set_application_error_code(
+      std::numeric_limits<std::uint64_t>::max());
+  for (int index = 0; index < 4; ++index) {
+    plan->add_actions()->mutable_stream_write()->set_data("ignored suffix");
+  }
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp3);
+
+  Expect(static_cast<std::size_t>(scenario.http3_plan().actions_size()) ==
+             proto_fuzzer::scenario_limits::kMaxHttp3Actions,
+         "fast HTTP/3 policy retained actions beyond its operation budget");
+  const auto &bounded_response =
+      scenario.http3_plan().actions(0).structured_response();
+  Expect(bounded_response.status_code() == 300,
+         "fast HTTP/3 policy did not fold status into 100..599");
+  Expect(bounded_response.response_headers(0).name() == "-bad-name",
+         "fast HTTP/3 policy did not canonicalize a field name");
+  Expect(bounded_response.response_headers(0).value() ==
+             std::string("ok   bad ", 9),
+         "fast HTTP/3 policy retained controls in a field value");
+  Expect(
+      static_cast<std::size_t>(bounded_response.response_headers_size()) <=
+              proto_fuzzer::scenario_limits::kMaxHttp3Headers &&
+          static_cast<std::size_t>(bounded_response.response_trailers_size()) <=
+              proto_fuzzer::scenario_limits::kMaxHttp3Trailers,
+      "fast HTTP/3 policy retained too many fields");
+
+  std::size_t body_bytes = 0;
+  for (const std::string &chunk : bounded_response.body_chunks()) {
+    body_bytes += chunk.size();
+  }
+  Expect(static_cast<std::size_t>(bounded_response.body_chunks_size()) ==
+                 proto_fuzzer::scenario_limits::kMaxHttp3BodyChunks &&
+             body_bytes == proto_fuzzer::scenario_limits::kMaxHttp3BodyBytes,
+         "fast HTTP/3 policy did not apply its body budgets");
+
+  const auto &bounded_write = scenario.http3_plan().actions(1).stream_write();
+  Expect(bounded_write.role() == curl::fuzzer::proto::HTTP3_STREAM_RESPONSE &&
+             bounded_write.data().size() ==
+                 proto_fuzzer::scenario_limits::kMaxHttp3RawWriteBytes &&
+             bounded_write.finish_stream(),
+         "fast HTTP/3 policy did not bound a raw write in place");
+  const auto &bounded_open =
+      scenario.http3_plan().actions(2).open_unidirectional_stream();
+  Expect(bounded_open.data().size() ==
+                 proto_fuzzer::scenario_limits::kMaxHttp3RawWriteBytes &&
+             bounded_open.finish_stream(),
+         "fast HTTP/3 policy did not bound a fresh raw stream in place");
+       const std::uint64_t max_quic_varint =
+                     proto_fuzzer::scenario_limits::kMaxQuicVarint;
+  const auto &bounded_reset = scenario.http3_plan().actions(3).stream_reset();
+  Expect(bounded_reset.role() == curl::fuzzer::proto::HTTP3_STREAM_RESPONSE &&
+             bounded_reset.application_error_code() == max_quic_varint,
+         "fast HTTP/3 policy did not canonicalize a stream reset");
+  Expect(scenario.http3_plan().actions(4).goaway().id() ==
+             (max_quic_varint & ~std::uint64_t{3}),
+         "fast HTTP/3 policy did not canonicalize a GOAWAY stream ID");
+  Expect(scenario.http3_plan()
+                 .actions(static_cast<int>(
+                     proto_fuzzer::scenario_limits::kMaxHttp3Actions - 1))
+                 .connection_close()
+                 .application_error_code() == max_quic_varint,
+         "fast HTTP/3 policy did not bound a connection-close error");
+  const auto &defaulted =
+      scenario.http3_plan().actions(5).structured_response();
+  Expect(defaulted.status_code() == 200 && defaulted.finish_stream(),
+         "fast HTTP/3 policy left an empty ordered action inert");
+}
+
+void TestNonHttp3PoliciesDiscardPlans() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kMulti,         TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.mutable_http3_plan()
+        ->add_actions()
+        ->mutable_structured_response()
+        ->set_status_code(204);
+
+    ApplyTargetPolicy(&scenario, profile);
+
+    Expect(!scenario.has_http3_plan(),
+           "a non-HTTP/3 policy retained QUIC-peer work");
+  }
 }
 
 void TestNonHttpsPoliciesDiscardTlsCertificateChains() {
@@ -835,11 +1035,17 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
 
 void TestProtocolPoliciesDiscardApiPlans() {
   constexpr TargetProfile kProtocolPolicies[] = {
-      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kMulti,
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
 
@@ -916,11 +1122,17 @@ void TestMultiPolicyRetainsAndBoundsItsPlan() {
 
 void TestOtherPoliciesDiscardMultiPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kApi,
       TargetProfile::kTiming,
   };
   for (const TargetProfile profile : kOtherPolicies) {
@@ -963,6 +1175,9 @@ void TestProfileRunModes() {
          "multi profile does not authorize concurrent transfers");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
+  Expect(RunModeFor(TargetProfile::kFastHttp3) ==
+             ScenarioRunMode::kHttp3Coverage,
+         "fast HTTP/3 profile does not authorize the QUIC peer");
   Expect(RunModeFor(TargetProfile::kH2Proxy) ==
              ScenarioRunMode::kH2ProxyCoverage,
          "HTTP/2 proxy profile does not authorize its CONNECT peer");
@@ -990,6 +1205,10 @@ void TestCompatibilityProfileIsNoOp() {
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.mutable_http3_plan()
+      ->add_actions()
+      ->mutable_stream_write()
+      ->set_data("compatibility H3 bytes");
   scenario.add_request_headers("X-Compatibility: retained");
   const std::string before = scenario.SerializeAsString();
 
@@ -1005,7 +1224,10 @@ int main() {
   TestFastHttpPolicy();
   TestDeepHttpPolicy();
   TestFastHttpsPolicy();
-  TestFastHttpsPolicyRejectsUnknownCertificateChain();
+  TestTlsPoliciesRejectUnknownCertificateChain();
+  TestFastHttp3PolicyMaterializesUsefulPlan();
+  TestFastHttp3PolicyBoundsOrderedActions();
+  TestNonHttp3PoliciesDiscardPlans();
   TestNonHttpsPoliciesDiscardTlsCertificateChains();
   TestH2ProxyPolicy();
   TestFastWebSocketPolicy();

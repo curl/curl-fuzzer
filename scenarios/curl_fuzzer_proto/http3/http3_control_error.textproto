@@ -1,0 +1,19 @@
+# Start from a valid request/response, then append a second SETTINGS frame to
+# the peer control stream. HTTP/3 forbids duplicate SETTINGS, giving mutation
+# a compact route into curl/nghttp3 control-stream error handling.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/control-error"
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      body_chunks: "control"
+    }
+  }
+  actions {
+    stream_write {
+      role: HTTP3_STREAM_CONTROL
+      data: "\x04\x00"
+    }
+  }
+}

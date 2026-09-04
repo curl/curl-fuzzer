@@ -1,0 +1,14 @@
+# Open a second server control stream from byte zero. HTTP/3 permits exactly
+# one control stream in each direction, so this seed reaches curl/nghttp3's
+# duplicate-critical-stream handling without corrupting the valid bootstrap.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/duplicate-control-stream"
+http3_plan {
+  actions {
+    open_unidirectional_stream {
+      # stream type=control, followed by an empty SETTINGS frame.
+      data: "\x00\x04\x00"
+      finish_stream: true
+    }
+  }
+}

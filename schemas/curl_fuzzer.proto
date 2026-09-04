@@ -78,6 +78,12 @@ message Scenario {
   // choice a parseable TLS handshake while still varying the X509 public-key
   // types consumed by curl. Other fixed protocol lanes discard this field.
   TlsCertificateChainProfile tls_certificate_chain = 12;
+  // Ordered HTTP/3 peer work for the dedicated QUIC lane. Keeping this in a
+  // separate message lets the ordinary Connection retain its historical
+  // stream-socket meaning while the H3 peer encrypts these plaintext actions
+  // onto the appropriate QUIC streams. Non-H3 fixed targets discard the plan;
+  // the compatibility target deliberately leaves field 13 untouched.
+  Http3Plan http3_plan = 13;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -86,6 +92,89 @@ message Scenario {
 enum TlsCertificateChainProfile {
   TLS_CERTIFICATE_CHAIN_DEFAULT_EC = 0;
   TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES = 1;
+}
+
+// A bounded, ordered HTTP/3 server script. Structured responses keep common
+// mutations protocol-valid; raw writes retain access to malformed HTTP/3 and
+// QPACK input after the peer has completed a valid QUIC/TLS handshake.
+message Http3Plan {
+  repeated Http3Action actions = 1;
+}
+
+// One operation performed by the in-process HTTP/3 peer. The oneof prevents a
+// mutation from describing contradictory response and termination work while
+// still permitting deliberate ordering such as response, GOAWAY, then FIN.
+message Http3Action {
+  oneof action {
+    Http3Response structured_response = 1;
+    Http3StreamWrite stream_write = 2;
+    Http3StreamReset stream_reset = 3;
+    Http3Goaway goaway = 4;
+    Http3ConnectionClose connection_close = 5;
+    Http3OpenUnidirectionalStream open_unidirectional_stream = 6;
+  }
+}
+
+// A response encoded by the peer through nghttp3. Status is canonicalized to
+// 100..599, header metadata and chunk counts are bounded, and finish_stream
+// controls whether this response also concludes the request stream.
+message Http3Response {
+  uint32 status_code = 1;
+  repeated Http3Header response_headers = 2;
+  repeated bytes body_chunks = 3;
+  repeated Http3Header response_trailers = 4;
+  bool finish_stream = 5;
+}
+
+// One ordinary response or trailer field. Pseudo-headers are peer-owned; the
+// policy turns names into lowercase HTTP token bytes so this structured path
+// remains encodable. Malformed fields remain reachable through raw writes.
+message Http3Header {
+  bytes name = 1;
+  bytes value = 2;
+}
+
+// Streams writable by an HTTP/3 server. Zero intentionally names the response
+// stream so a default-initialized action remains useful.
+enum Http3StreamRole {
+  HTTP3_STREAM_RESPONSE = 0;
+  HTTP3_STREAM_CONTROL = 1;
+  HTTP3_STREAM_QPACK_ENCODER = 2;
+  HTTP3_STREAM_QPACK_DECODER = 3;
+}
+
+// Plaintext bytes written after QUIC/TLS has made the selected stream live.
+// Setting finish_stream makes the write and stream conclusion one ordered
+// operation; an empty write can therefore express a standalone FIN.
+message Http3StreamWrite {
+  Http3StreamRole role = 1;
+  bytes data = 2;
+  bool finish_stream = 3;
+}
+
+// Create a fresh server-initiated unidirectional QUIC stream and write these
+// exact plaintext bytes from stream offset zero. Unlike a role-based write,
+// the peer does not prepend a stream type or bind the stream to nghttp3, so
+// mutations can select unknown and duplicate HTTP/3 stream types directly.
+message Http3OpenUnidirectionalStream {
+  bytes data = 1;
+  bool finish_stream = 2;
+}
+
+message Http3StreamReset {
+  Http3StreamRole role = 1;
+  uint64 application_error_code = 2;
+}
+
+message Http3Goaway {
+  // Client-initiated bidirectional stream ID advertised as the first request
+  // the server will reject. The target policy folds this onto 0,4,8,... and
+  // into QUIC's 62-bit varint range.
+  uint64 id = 1;
+}
+
+message Http3ConnectionClose {
+  uint64 application_error_code = 1;
 }
 
 // A bounded plan for public libcurl APIs that are adjacent to, rather than
