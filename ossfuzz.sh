@@ -60,7 +60,8 @@ if [[ "${CIFUZZ:-}" == "True" || -n "${REPLAY_ENABLED:-}" ]]; then
   rm -f "${BUILD_DIR}/curl-install/lib/libcurl.a"
   rm -f "${BUILD_DIR}/curl-gnutls-install/lib/libcurl.a"
   rm -f "${BUILD_DIR}/curl-mbedtls-install/lib/libcurl.a"
-  for CURL_VARIANT in curl_external curl_gnutls_external curl_mbedtls_external; do
+  rm -f "${BUILD_DIR}/curl-http3-install/lib/libcurl.a"
+  for CURL_VARIANT in curl_external curl_gnutls_external curl_mbedtls_external curl_http3_external; do
     rm -f "${BUILD_DIR}/${CURL_VARIANT}-prefix/src/${CURL_VARIANT}-stamp/${CURL_VARIANT}-"{configure,build,install,done}
   done
 fi

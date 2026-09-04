@@ -1,0 +1,33 @@
+# Exercise informational/final response ordering and each peer-owned shutdown
+# operation without asking mutations to synthesize a QUIC or TLS handshake.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/shutdown"
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 103
+      response_headers {
+        name: "link"
+        value: "</asset>; rel=preload"
+      }
+    }
+  }
+  actions {
+    structured_response {
+      status_code: 200
+      body_chunks: "partial body"
+    }
+  }
+  actions {
+    stream_reset {
+      role: HTTP3_STREAM_RESPONSE
+      application_error_code: 268
+    }
+  }
+  actions {
+    goaway { id: 0 }
+  }
+  actions {
+    connection_close { application_error_code: 256 }
+  }
+}

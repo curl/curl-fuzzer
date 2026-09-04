@@ -66,6 +66,19 @@ void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("tls.test" + host_path.substr(suffix_start));
 }
 
+/// Both fixed TLS peers support the same closed set of checked-in certificate
+/// bundles. Unknown proto3 enum values fall back to the historical EC chain.
+void CanonicalizeTlsCertificateChain(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->tls_certificate_chain()) {
+    case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC:
+    case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES:
+      return;
+    default:
+      scenario->clear_tls_certificate_chain();
+      return;
+  }
+}
+
 /// Keep the tunneled origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
@@ -292,6 +305,181 @@ void BoundMultiPlanShape(curl::fuzzer::proto::MultiPlan* plan) {
   }
 }
 
+/// HTTP field names are lowercase RFC token bytes in the structured lane.
+/// Replacing (rather than deleting) invalid bytes retains mutation-significant
+/// positions while preventing accidental pseudo-headers and encoder failures.
+void CanonicalizeHttp3HeaderName(std::string* name) {
+  if (name->size() > scenario_limits::kMaxHttp3HeaderNameBytes) {
+    name->resize(scenario_limits::kMaxHttp3HeaderNameBytes);
+  }
+  if (name->empty()) {
+    *name = "x-fuzz";
+    return;
+  }
+
+  for (char& byte : *name) {
+    const unsigned char value = static_cast<unsigned char>(byte);
+    const bool alpha = (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z');
+    const bool digit = value >= '0' && value <= '9';
+    const bool punctuation = value == '!' || value == '#' || value == '$' || value == '%' || value == '&' ||
+                             value == '\'' || value == '*' || value == '+' || value == '-' || value == '.' ||
+                             value == '^' || value == '_' || value == '`' || value == '|' || value == '~';
+    if (value >= 'A' && value <= 'Z') {
+      byte = static_cast<char>(value - 'A' + 'a');
+    } else if (!alpha && !digit && !punctuation) {
+      byte = '-';
+    }
+  }
+}
+
+/// Structured field values must not inject another HTTP field or carry NUL
+/// into the encoder. Observable malformed bytes remain available in raw stream
+/// actions, while this path stays suitable for valid QPACK generation.
+void CanonicalizeHttp3HeaderValue(std::string* value) {
+  if (value->size() > scenario_limits::kMaxHttp3HeaderValueBytes) {
+    value->resize(scenario_limits::kMaxHttp3HeaderValueBytes);
+  }
+  for (char& byte : *value) {
+    const unsigned char character = static_cast<unsigned char>(byte);
+    if ((character < 0x20U && character != '\t') || character == 0x7fU) {
+      byte = ' ';
+    }
+  }
+}
+
+/// Retain only a prefix of encodable fields within both a count and a shared
+/// byte budget. A missing name is materialized as x-fuzz while budget remains,
+/// making default-initialized structured headers useful to the peer.
+template <typename RepeatedHeaders>
+void BoundHttp3Headers(RepeatedHeaders* headers, std::size_t count_limit, std::size_t* remaining_bytes) {
+  TrimRepeated(headers, count_limit);
+  std::size_t retained = 0;
+  while (retained < static_cast<std::size_t>(headers->size()) && *remaining_bytes != 0) {
+    auto* header = headers->Mutable(static_cast<int>(retained));
+    CanonicalizeHttp3HeaderName(header->mutable_name());
+    CanonicalizeHttp3HeaderValue(header->mutable_value());
+
+    if (header->name().size() > *remaining_bytes) {
+      header->mutable_name()->resize(*remaining_bytes);
+      header->clear_value();
+    } else if (header->value().size() > *remaining_bytes - header->name().size()) {
+      header->mutable_value()->resize(*remaining_bytes - header->name().size());
+    }
+    *remaining_bytes -= header->name().size() + header->value().size();
+    ++retained;
+  }
+  TrimRepeated(headers, retained);
+}
+
+void CanonicalizeHttp3StreamRole(curl::fuzzer::proto::Http3StreamRole* role) {
+  switch (*role) {
+    case curl::fuzzer::proto::HTTP3_STREAM_RESPONSE:
+    case curl::fuzzer::proto::HTTP3_STREAM_CONTROL:
+    case curl::fuzzer::proto::HTTP3_STREAM_QPACK_ENCODER:
+    case curl::fuzzer::proto::HTTP3_STREAM_QPACK_DECODER:
+      return;
+    default:
+      *role = curl::fuzzer::proto::HTTP3_STREAM_RESPONSE;
+      return;
+  }
+}
+
+void BoundHttp3RawData(std::string* data, std::size_t* remaining_raw_bytes) {
+  const std::size_t limit = std::min(scenario_limits::kMaxHttp3RawWriteBytes, *remaining_raw_bytes);
+  if (data->size() > limit) {
+    data->resize(limit);
+  }
+  *remaining_raw_bytes -= data->size();
+}
+
+/// Canonicalize one ordered H3 script to the exact bounded prefix that the
+/// QUIC peer can execute. Transport setup remains peer-owned; only plaintext
+/// HTTP/3 operations are mutation-controlled here.
+void BoundHttp3PlanShape(curl::fuzzer::proto::Http3Plan* plan) {
+  TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxHttp3Actions);
+  if (plan->actions().empty()) {
+    auto* response = plan->add_actions()->mutable_structured_response();
+    response->set_status_code(200);
+    response->set_finish_stream(true);
+  }
+
+  std::size_t remaining_header_bytes = scenario_limits::kMaxHttp3HeaderBytes;
+  std::size_t remaining_body_bytes = scenario_limits::kMaxHttp3BodyBytes;
+  std::size_t remaining_raw_bytes = scenario_limits::kMaxHttp3RawBytes;
+  std::size_t retained_actions = 0;
+  bool connection_closed = false;
+  for (auto& action : *plan->mutable_actions()) {
+    if (connection_closed) {
+      break;
+    }
+    ++retained_actions;
+    switch (action.action_case()) {
+      case curl::fuzzer::proto::Http3Action::kStructuredResponse: {
+        auto* response = action.mutable_structured_response();
+        if (response->status_code() == 0U) {
+          response->set_status_code(200U);
+        } else if (response->status_code() < 100U || response->status_code() > 599U) {
+          response->set_status_code(100U + response->status_code() % 500U);
+        }
+        BoundHttp3Headers(response->mutable_response_headers(), scenario_limits::kMaxHttp3Headers,
+                          &remaining_header_bytes);
+        BoundHttp3Headers(response->mutable_response_trailers(), scenario_limits::kMaxHttp3Trailers,
+                          &remaining_header_bytes);
+        TrimRepeated(response->mutable_body_chunks(), scenario_limits::kMaxHttp3BodyChunks);
+        for (std::string& chunk : *response->mutable_body_chunks()) {
+          if (chunk.size() > remaining_body_bytes) {
+            chunk.resize(remaining_body_bytes);
+          }
+          remaining_body_bytes -= chunk.size();
+        }
+        break;
+      }
+
+      case curl::fuzzer::proto::Http3Action::kStreamWrite: {
+        auto* write = action.mutable_stream_write();
+        auto role = write->role();
+        CanonicalizeHttp3StreamRole(&role);
+        write->set_role(role);
+        BoundHttp3RawData(write->mutable_data(), &remaining_raw_bytes);
+        break;
+      }
+
+      case curl::fuzzer::proto::Http3Action::kOpenUnidirectionalStream: {
+        auto* stream = action.mutable_open_unidirectional_stream();
+        BoundHttp3RawData(stream->mutable_data(), &remaining_raw_bytes);
+        break;
+      }
+
+      case curl::fuzzer::proto::Http3Action::kStreamReset: {
+        auto* reset = action.mutable_stream_reset();
+        auto role = reset->role();
+        CanonicalizeHttp3StreamRole(&role);
+        reset->set_role(role);
+        reset->set_application_error_code(reset->application_error_code() & scenario_limits::kMaxQuicVarint);
+        break;
+      }
+
+      case curl::fuzzer::proto::Http3Action::kGoaway:
+        action.mutable_goaway()->set_id(action.goaway().id() & scenario_limits::kMaxQuicVarint & ~std::uint64_t{3});
+        break;
+
+      case curl::fuzzer::proto::Http3Action::kConnectionClose:
+        action.mutable_connection_close()->set_application_error_code(
+            action.connection_close().application_error_code() & scenario_limits::kMaxQuicVarint);
+        connection_closed = true;
+        break;
+
+      case curl::fuzzer::proto::Http3Action::ACTION_NOT_SET: {
+        auto* response = action.mutable_structured_response();
+        response->set_status_code(200);
+        response->set_finish_stream(true);
+        break;
+      }
+    }
+  }
+  TrimRepeated(plan->mutable_actions(), retained_actions);
+}
+
 /// Canonicalize all shape limits enforced by the runtime. This runs only in
 /// fixed policy targets; the compatibility binary deliberately retains its
 /// historical no-postprocessor semantics for existing OSS-Fuzz reproducers.
@@ -457,6 +645,14 @@ void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
 /// Compact the option list before its shared cap so irrelevant TLS, WebSocket,
 /// and file-transfer entries cannot crowd out origin traffic mutations.
 void RetainH2ProxyOriginOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario, &IsH2ProxyOriginOption);
+}
+
+/// HTTP/3 owns QUIC selection, ALPN, routing, and certificate verification in
+/// its peer. The tunneled-origin allowlist is deliberately the same set of
+/// request-level HTTP controls, and notably excludes CURLOPT_HTTP_VERSION and
+/// CURLOPT_CONNECT_ONLY, which could bypass the dedicated transport.
+void RetainHttp3RequestOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(scenario, &IsH2ProxyOriginOption);
 }
 
@@ -712,6 +908,17 @@ void RemoveApiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->cle
 /// compatibility binary deliberately preserves newly-added unknown fields.
 void RemoveMultiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->clear_multi_plan(); }
 
+/// The QUIC peer consumes Http3Plan rather than the stream-socket response
+/// script. Request headers, MIME, upload state, and HTTP options remain useful
+/// because curl serializes those onto its client-initiated request stream.
+void RemoveIgnoredHttp3Shape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_connection();
+  scenario->clear_subsequent_connections();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+}
+
 /// Remove stream-driver controls that neither file-transfer peer interprets.
 /// FTP consumes raw byte chunks as control/data replies, while TFTP preserves
 /// them as individual datagrams; structured WebSocket frames, manual probes,
@@ -831,11 +1038,31 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
-  // Only the dedicated HTTPS peer consumes a certificate-chain selector.
-  // Remove it before protocol-specific early returns so other fixed targets
-  // do not spend mutations on inert TLS server state.
-  if (profile != TargetProfile::kFastHttps) {
+  // Only the dedicated TLS and QUIC peers consume a certificate-chain
+  // selector. Remove it before protocol-specific early returns so other fixed
+  // targets do not spend mutations on inert TLS server state.
+  if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kFastHttp3) {
     scenario->clear_tls_certificate_chain();
+  }
+
+  // Field 13 is append-only so the compatibility target can round-trip it,
+  // but every other fixed lane must discard work its peer cannot consume.
+  if (profile != TargetProfile::kFastHttp3) {
+    scenario->clear_http3_plan();
+  }
+
+  if (profile == TargetProfile::kFastHttp3) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+    RemoveIgnoredHttp3Shape(scenario);
+    RetainHttp3RequestOptions(scenario);
+    BoundScenarioShape(scenario);
+    // BoundScenarioShape materializes an empty primary Connection while
+    // sharing request-side limits. Do not retain that protocol-inert message.
+    scenario->clear_connection();
+    BoundHttp3PlanShape(scenario->mutable_http3_plan());
+    CanonicalizeTlsAuthority(scenario);
+    CanonicalizeTlsCertificateChain(scenario);
+    return;
   }
 
   if (profile == TargetProfile::kFastTelnet) {
@@ -913,6 +1140,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastHttps:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       break;
+    case TargetProfile::kFastHttp3:
+      // The protocol-specific early path owns the QUIC response plan.
+      return;
     case TargetProfile::kH2Proxy:
       // The early path removes proxy-incompatible fields before general
       // bounds, keeping raw frame mutation dense.
@@ -982,14 +1212,12 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastHttps:
       ClearAllBackpressure(scenario);
       CanonicalizeTlsAuthority(scenario);
-      switch (scenario->tls_certificate_chain()) {
-        case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC:
-        case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES:
-          break;
-        default:
-          scenario->clear_tls_certificate_chain();
-          break;
-      }
+      CanonicalizeTlsCertificateChain(scenario);
+      return;
+
+    case TargetProfile::kFastHttp3:
+      // Handled before generic connection bounding because Http3Plan replaces
+      // the stream-socket response script.
       return;
 
     case TargetProfile::kH2Proxy:

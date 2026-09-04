@@ -366,6 +366,48 @@ def test_mbedtls_https_lane_reuses_compatible_https_corpora(
     ]
 
 
+def test_http3_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
+    module = _load_module()
+    corpus_root = tmp_path / "corpora"
+    http3_corpus = corpus_root / "curl_fuzzer_proto_http3"
+    https_corpus = corpus_root / "curl_fuzzer_proto_https"
+    http3_corpus.mkdir(parents=True)
+    https_corpus.mkdir()
+    (http3_corpus / "h3-seed").write_bytes(b"http3")
+    (https_corpus / "https-seed").write_bytes(b"https")
+
+    baseline_dir = tmp_path / "bin"
+    baseline_dir.mkdir()
+    https_seed_archive = baseline_dir / "curl_fuzzer_proto_https_seed_corpus.zip"
+    https_seed_archive.write_bytes(b"seed archive")
+
+    public_root = tmp_path / "public"
+    http3_public = public_root / "curl_fuzzer_proto_http3"
+    https_public = public_root / "curl_fuzzer_proto_https"
+    historical_public = public_root / "curl_fuzzer_proto"
+    for directory in (http3_public, https_public, historical_public):
+        directory.mkdir(parents=True)
+        (directory / "input").write_bytes(directory.name.encode())
+
+    sources = module._corpus_sources(
+        "curl_fuzzer_proto_http3",
+        baseline_dir,
+        corpus_root,
+        public_root,
+        {},
+    )
+
+    assert "curl_fuzzer_proto_http3" in module.DEFAULT_TARGETS
+    assert sources == [
+        http3_corpus,
+        https_corpus,
+        https_seed_archive,
+        http3_public,
+        https_public,
+        historical_public,
+    ]
+
+
 def test_ftp_and_tftp_lanes_keep_legacy_speed_baselines() -> None:
     module = _load_module()
 

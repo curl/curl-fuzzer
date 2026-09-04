@@ -1,0 +1,14 @@
+# Drive the complete response stream as exact mutator-controlled plaintext.
+# HEADERS carries a zero-state QPACK block with static :status=200; DATA then
+# supplies the body before FIN. Mutations can replace every H3 response byte.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/raw-complete"
+http3_plan {
+  actions {
+    stream_write {
+      role: HTTP3_STREAM_RESPONSE
+      data: "\x01\x03\x00\x00\xd9\x00\x09raw-first"
+      finish_stream: true
+    }
+  }
+}

@@ -83,6 +83,18 @@ int main() {
     return 1;
   }
 #endif
+#ifdef CURL_FUZZER_EXPECT_HTTP3
+  if (!(info->features & CURL_VERSION_HTTP3)) {
+    std::fputs("libcurl was built without HTTP/3 support\n", stderr);
+    return 1;
+  }
+  if (!info->quic_version ||
+      std::strstr(info->quic_version, "ngtcp2/") == nullptr ||
+      std::strstr(info->quic_version, "nghttp3/") == nullptr) {
+    std::fputs("libcurl does not report the ngtcp2/nghttp3 stack\n", stderr);
+    return 1;
+  }
+#endif
 #if defined(CURL_FUZZER_EXPECT_HTTPSRR) || \
     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "HTTPSRR")) {

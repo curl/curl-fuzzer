@@ -1,0 +1,23 @@
+# Keep the first H3 corpus entry entirely structured so every run starts from
+# a valid QUIC/TLS connection, QPACK block, DATA frame, trailers, and FIN.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/basic"
+request_headers: "Accept: */*"
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      response_headers {
+        name: "content-type"
+        value: "text/plain"
+      }
+      body_chunks: "hello "
+      body_chunks: "over h3"
+      response_trailers {
+        name: "x-fuzz-trailer"
+        value: "complete"
+      }
+      finish_stream: true
+    }
+  }
+}
