@@ -1275,9 +1275,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
 
     # The protocol runners, LPM adapter, and generated message are identical
     # for every structured target. Compile them once; each same-named thin
-    # entrypoint passes its profile explicitly, giving Introspector an
-    # unambiguous static-profile-to-coverage mapping without target-specific
-    # compiler definitions.
+    # entrypoint calls the shared runtime directly with its explicit profile.
+    # Keeping the call direct lets Introspector retain the full call tree after
+    # LTO while avoiding target-specific compiler definitions.
     set(PROTO_FUZZER_TLS_SOURCES)
     if(TARGET openssl_external)
         list(APPEND PROTO_FUZZER_TLS_SOURCES
