@@ -115,19 +115,27 @@ def test_cmake_builds_every_packaged_entrypoint() -> None:
 
 
 def test_proto_entrypoints_bind_profiles_in_source() -> None:
-    """Keep target behaviour visible in C++, including mutation callbacks."""
+    """Keep target behaviour and Introspector-visible calls in each wrapper."""
     for target, profile in PROTO_TARGET_PROFILES.items():
         source = REPO_ROOT / "fuzzer_entrypoints" / f"{target}.cc"
         contents = source.read_text(encoding="utf-8")
 
         assert contents.count(f"TargetProfile::{profile}") == 1
+        assert contents.count("ProtoFuzzerTestOneInput(kProfile") == 1
+        assert contents.count("ProtoFuzzerCustomMutator(kProfile") == 1
+        assert contents.count("ProtoFuzzerCustomCrossOver(") == 1
+        assert "ProtoFuzzerEntrypoint" not in contents
         assert len(ENTRYPOINT_PATTERN.findall(contents)) == 1
         assert len(CUSTOM_MUTATOR_PATTERN.findall(contents)) == 1
         assert len(CUSTOM_CROSSOVER_PATTERN.findall(contents)) == 1
 
+    shared_header = (REPO_ROOT / "proto_fuzzer" / "fuzzer_main.h").read_text(
+        encoding="utf-8"
+    )
     shared_main = (REPO_ROOT / "proto_fuzzer" / "fuzzer_main.cc").read_text(
         encoding="utf-8"
     )
     cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "ProtoFuzzerEntrypoint" not in shared_header
     assert "PROTO_FUZZER_TARGET_" not in shared_main
     assert "PROTO_FUZZER_TARGET_" not in cmake
