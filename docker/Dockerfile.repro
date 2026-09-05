@@ -1,5 +1,14 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends protobuf-compiler \
+	&& rm -rf /var/lib/apt/lists/*
+
 COPY out/ /out/
+COPY schema/ /out/schema/
+COPY decode-scenario /usr/local/bin/decode-scenario
+RUN chmod +x /usr/local/bin/decode-scenario
+ENV CURL_FUZZER_PROTO=/out/schema/curl_fuzzer.proto
 ENV PATH="/out/gdb-install/bin:${PATH}"
 WORKDIR /out

@@ -1,3 +1,23 @@
+# Reproducing Fuzzer Findings
+
+## Decode Structured Scenarios
+
+ACR repro images include the build-specific scenario schema and a `decode-scenario`
+command. To decode a ClusterFuzz testcase on the host, mount it into the container:
+
+```shell
+docker run --rm -i \
+  -v "$PWD/clusterfuzz-testcase-minimized-curl_fuzzer_proto_multi-5329718237528064:/testcase:ro" \
+  curlfuzzer.azurecr.io/address-libfuzzer \
+  decode-scenario /testcase
+```
+
+The command also accepts scenario data on standard input:
+
+```shell
+docker run --rm -i curlfuzzer.azurecr.io/address-libfuzzer decode-scenario \
+  < clusterfuzz-testcase-minimized-curl_fuzzer_proto_multi-5329718237528064
+```
 # Reproducing OSS-Fuzz issues
 ## Reproducible vs non-reproducible
 OSS-Fuzz generates two kinds of issues; reproducible and non-reproducible. It _generally_ only raises issues for reproducible problems; that is, a testcase that can be passed to the relevant fuzzer which causes a crash. They are marked as such in the OSS-Fuzz dashboard.

@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+schema="${CURL_FUZZER_PROTO:-/out/schema/curl_fuzzer.proto}"
+
+if [ "$#" -gt 1 ]; then
+    echo "Usage: decode-scenario [testcase]" >&2
+    exit 64
+fi
+
+if [ "$#" -eq 1 ]; then
+    exec protoc \
+        --decode=curl.fuzzer.proto.Scenario \
+        --proto_path="$(dirname "$schema")" \
+        "$schema" < "$1"
+fi
+
+exec protoc \
+    --decode=curl.fuzzer.proto.Scenario \
+    --proto_path="$(dirname "$schema")" \
+    "$schema"

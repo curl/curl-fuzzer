@@ -105,6 +105,9 @@ jobs:
         run: |
           docker run --rm "${IMAGE}" gdb --version
           docker run --rm "${IMAGE}" ls /out/curl_fuzzer
+          docker run --rm "${IMAGE}" protoc --version
+          docker run --rm "${IMAGE}" test -s /out/schema/curl_fuzzer.proto
+          docker run --rm -i "${IMAGE}" decode-scenario < /dev/null
 
       - name: Push image
         env:

@@ -6,7 +6,7 @@ Orchestrates the oss-fuzz build pipeline:
 1. Clone oss-fuzz (if needed)
 2. Build the curl builder image
 3. Build fuzzers with GDB support
-4. Package into a repro image with the built GDB
+4. Package the fuzzers, GDB, and expanded scenario schema into a repro image
 """
 
 import argparse
@@ -75,6 +75,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    source_root = (args.source_path or REPO_ROOT).resolve()
     oss_fuzz_dir = args.oss_fuzz_dir
     if not oss_fuzz_dir:
         oss_fuzz_dir = REPO_ROOT / ".oss-fuzz"
@@ -115,14 +116,16 @@ def main() -> None:
         "GDBINSTALL=1",
         "curl",
     ]
-    if args.source_path:
-        build_cmd.append(str(args.source_path.resolve()))
+    build_cmd.append(str(source_root))
     run(build_cmd)
 
-    # Step 3: Build the repro Docker image.
+    # Step 3: Stage the build outputs and generated decoder schema.
     out_dir = oss_fuzz_dir / "build" / "out" / "curl"
     if not out_dir.exists():
         sys.exit(f"Build output not found at {out_dir}")
+    scenario_schema = source_root / "build" / "schemas" / "curl_fuzzer.proto"
+    if not scenario_schema.is_file():
+        sys.exit(f"Generated scenario schema not found at {scenario_schema}")
 
     date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
     tag = args.tag or f"curl-fuzzer:{args.sanitizer}-{args.engine}-{date_tag}"
@@ -131,6 +134,10 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         context = Path(tmpdir)
         shutil.copytree(out_dir, context / "out")
+        schema_dir = context / "schema"
+        schema_dir.mkdir()
+        shutil.copy2(scenario_schema, schema_dir / scenario_schema.name)
+        shutil.copy2(REPO_ROOT / "docker" / "decode-scenario", context / "decode-scenario")
         run(
             [
                 "docker",
@@ -146,6 +153,11 @@ def main() -> None:
         )
 
     log.info("Repro image built: %s", tag)
+    log.info(
+        "Decode scenarios with: docker run --rm -i -v /path/to/testcase:/testcase %s "
+        "decode-scenario /testcase",
+        tag,
+    )
 
     if args.push:
         run(["docker", "push", tag])
