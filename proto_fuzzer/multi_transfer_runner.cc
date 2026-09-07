@@ -46,6 +46,18 @@ std::size_t RuntimeTransferCount(const curl::fuzzer::proto::MultiPlan& plan) {
                   std::min(static_cast<std::size_t>(plan.transfer_count()), scenario_limits::kMaxMultiTransfers));
 }
 
+void RecordNotification(CURLM *, unsigned int notification, CURL *, void *userdata) {
+  auto *stats = static_cast<MultiTransferRunStats *>(userdata);
+  if (stats == nullptr) {
+    return;
+  }
+  if (notification == CURLMNOTIFY_INFO_READ) {
+    ++stats->info_read_notifications;
+  } else if (notification == CURLMNOTIFY_EASY_DONE) {
+    ++stats->easy_done_notifications;
+  }
+}
+
 /// Consume every currently queued completion before handle removal can discard
 /// it. Re-added handles may complete more than once, so count messages rather
 /// than only distinct easy pointers.
@@ -167,6 +179,11 @@ MultiTransferRunStats MultiTransferRunner::Run(const curl::fuzzer::proto::Scenar
   (void)curl_multi_setopt(multi.get(), CURLMOPT_MAXCONNECTS, cache_size);
   (void)curl_multi_setopt(multi.get(), CURLMOPT_PIPELINING,
                           plan.multiplex() ? static_cast<long>(CURLPIPE_MULTIPLEX) : 0L);
+  (void)curl_multi_setopt(multi.get(), CURLMOPT_NOTIFYFUNCTION,
+                          &RecordNotification);
+  (void)curl_multi_setopt(multi.get(), CURLMOPT_NOTIFYDATA, &stats);
+  (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_INFO_READ);
+  (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_EASY_DONE);
 
   const bool socket_mode = plan.drive_mode() == curl::fuzzer::proto::MULTI_DRIVE_SOCKET;
   const bool socket_driver_installed = socket_mode && socket_driver.Install(multi.get());
