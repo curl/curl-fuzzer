@@ -104,6 +104,11 @@ void EnableDebugHttpTransportMetadata() {
   (void)configured;
 }
 
+void EnableTraceIds() {
+  static const bool enabled = curl_global_trace("+LIB-IDS") == CURLE_OK;
+  (void)enabled;
+}
+
 /// Decode protobuf's two integral oneof members according to the semantic
 /// kind in the generated option descriptor. The schema cannot couple an
 /// option id to one particular oneof member, so both retained corpus entries
@@ -189,14 +194,21 @@ void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario) {
 /// @param scheme Protocol whose dedicated in-process mock will service it.
 /// @return the curl_slist owned by the caller (for CURLOPT_CONNECT_TO), which
 ///         must be freed with curl_slist_free_all after curl_easy_cleanup.
-struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme) {
+struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme,
+                                         bool trace_ids) {
   EnableDebugHttpTransportMetadata();
 
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &SilentWriteCallback);
   curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &SilentWriteCallback);
 
   const bool user_requested_verbose = std::getenv(kVerboseEnvVar) != nullptr;
-  if (scheme == curl::fuzzer::proto::SCHEME_TELNET && !user_requested_verbose) {
+  if (trace_ids) {
+    EnableTraceIds();
+    // Keep trace-ID coverage enabled during fuzzing without flooding the
+    // process log. The callback still executes curl_trc.c's formatting path.
+    curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &SilentDebugCallback);
+    curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+  } else if (scheme == curl::fuzzer::proto::SCHEME_TELNET && !user_requested_verbose) {
     // printoption() and printsub() contain a substantial part of curl's TELNET
     // parser diagnostics but run only in verbose mode. Keep those paths in the
     // ordinary TELNET coverage lane while suppressing their high-volume text.

@@ -211,7 +211,7 @@ int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioR
 
   std::string url = std::string(prefix) + "://" + scenario.host_path();
   const auto configure_easy = [&] {
-    connect_to.reset(ApplyBaselineOptions(easy.get(), scenario.scheme()));
+    connect_to.reset(ApplyBaselineOptions(easy.get(), scenario.scheme(), scenario.trace_ids()));
     curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str());
     mock->Install(easy.get());
 

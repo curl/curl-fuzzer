@@ -195,7 +195,8 @@ MultiTransferRunStats MultiTransferRunner::Run(const curl::fuzzer::proto::Scenar
     if (!transfer.easy) {
       continue;
     }
-    transfer.connect_to.reset(ApplyBaselineOptions(transfer.easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+    transfer.connect_to.reset(ApplyBaselineOptions(transfer.easy.get(), curl::fuzzer::proto::SCHEME_HTTP,
+                                                   scenario.trace_ids()));
     (void)curl_easy_setopt(transfer.easy.get(), CURLOPT_URL, url.c_str());
     mock.Install(transfer.easy.get());
     (void)ApplyScenarioOptions(transfer.easy.get(), scenario);
