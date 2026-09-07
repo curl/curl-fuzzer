@@ -38,6 +38,8 @@ enum class TargetProfile {
   kFastFtp,
   /// Exercise packet-preserving TFTP exchanges over the loopback UDP peer.
   kFastTftp,
+  /// Exercise Gopher selectors through the bounded stream peer.
+  kFastGopher,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
   /// Exercise several easy handles through one shared multi handle.
@@ -63,6 +65,8 @@ enum class ScenarioRunMode {
   kFtpCoverage,
   /// Drive TFTP through its datagram-preserving loopback peer.
   kTftpCoverage,
+  /// Drive Gopher through the bounded stream peer.
+  kGopherCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
   /// Honour MultiPlan and drive several HTTP transfers through one multi.
@@ -100,6 +104,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastTftp:
       return ScenarioRunMode::kTftpCoverage;
+
+    case TargetProfile::kFastGopher:
+      return ScenarioRunMode::kGopherCoverage;
 
     case TargetProfile::kCompatibility:
     case TargetProfile::kDeepHttp:

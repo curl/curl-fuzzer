@@ -94,6 +94,10 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "ftp";
     case curl::fuzzer::proto::SCHEME_TFTP:
       return "tftp";
+    case curl::fuzzer::proto::SCHEME_GOPHER:
+      return "gopher";
+    case curl::fuzzer::proto::SCHEME_GOPHERS:
+      return "gophers";
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -138,6 +142,17 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       (void)mode;
 #endif
       return std::make_unique<MockServer>();
+    case curl::fuzzer::proto::SCHEME_GOPHER:
+      return mode == ScenarioRunMode::kGopherCoverage ? std::make_unique<MockServer>() : nullptr;
+    case curl::fuzzer::proto::SCHEME_GOPHERS:
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kGopherCoverage) {
+        return std::make_unique<TlsMockServer>(scenario.tls_certificate_chain());
+      }
+      return nullptr;
+#else
+      return nullptr;
+#endif
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
       return std::make_unique<WebSocketMockServer>();

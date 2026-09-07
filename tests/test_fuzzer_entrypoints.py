@@ -36,6 +36,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_telnet": "kFastTelnet",
     "curl_fuzzer_proto_ftp": "kFastFtp",
     "curl_fuzzer_proto_tftp": "kFastTftp",
+    "curl_fuzzer_proto_gopher": "kFastGopher",
     "curl_fuzzer_proto_api": "kApi",
     "curl_fuzzer_proto_multi": "kMulti",
     "curl_fuzzer_proto_timing": "kTiming",

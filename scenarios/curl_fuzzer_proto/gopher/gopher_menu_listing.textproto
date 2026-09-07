@@ -1,0 +1,5 @@
+scheme: SCHEME_GOPHER
+host_path: "tls.test/1/menu"
+connection {
+  initial_response: "0Example\t/menu\ttls.test\t70\r\n.\r\n"
+}

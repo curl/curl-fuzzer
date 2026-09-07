@@ -194,8 +194,7 @@ void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario) {
 /// @param scheme Protocol whose dedicated in-process mock will service it.
 /// @return the curl_slist owned by the caller (for CURLOPT_CONNECT_TO), which
 ///         must be freed with curl_slist_free_all after curl_easy_cleanup.
-struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme,
-                                         bool trace_ids) {
+struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids) {
   EnableDebugHttpTransportMetadata();
 
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &SilentWriteCallback);
@@ -232,6 +231,12 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       break;
     case curl::fuzzer::proto::SCHEME_TFTP:
       direct_protocols = kTftpProtocolAllowed;
+      break;
+    case curl::fuzzer::proto::SCHEME_GOPHER:
+      direct_protocols = "gopher";
+      break;
+    case curl::fuzzer::proto::SCHEME_GOPHERS:
+      direct_protocols = "gophers";
       break;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:

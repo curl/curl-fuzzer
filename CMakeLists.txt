@@ -496,6 +496,7 @@ set(CURL_COMMON_CMAKE_ARGS
     -DCURL_DISABLE_TELNET=OFF
     -DCURL_DISABLE_FTP=OFF
     -DCURL_DISABLE_TFTP=OFF
+    -DCURL_DISABLE_GOPHER=OFF
     # SMB and NTLM are deprecated upstream and no longer fuzzed here. Keep
     # them disabled explicitly so curl default changes cannot restore either
     # surface to the aggregate legacy fuzzer.
@@ -1482,6 +1483,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_telnet)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ftp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_tftp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
@@ -1508,6 +1510,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/ftp/*.textproto)
     file(GLOB TFTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/tftp/*.textproto)
+    file(GLOB GOPHER_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/gopher/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/api/*.textproto)
     file(GLOB MULTI_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -1660,6 +1664,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_ftp ${FTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_tftp_corpus
         curl_fuzzer_proto_tftp ${TFTP_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_gopher_corpus
+        curl_fuzzer_proto_gopher ${GOPHER_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
         curl_fuzzer_proto_api ${API_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_multi_corpus
@@ -1691,6 +1697,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_telnet_corpus)
     add_dependencies(curl_fuzzer_proto_ftp curl_fuzzer_proto_ftp_corpus)
     add_dependencies(curl_fuzzer_proto_tftp curl_fuzzer_proto_tftp_corpus)
+    add_dependencies(curl_fuzzer_proto_gopher curl_fuzzer_proto_gopher_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)

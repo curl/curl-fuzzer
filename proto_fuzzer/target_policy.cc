@@ -960,6 +960,17 @@ void RemoveIgnoredTftpShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+void RemoveIgnoredGopherShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  scenario->clear_upload();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -1121,6 +1132,17 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
+  if (profile == TargetProfile::kFastGopher) {
+    scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
+                             ? curl::fuzzer::proto::SCHEME_GOPHERS
+                             : curl::fuzzer::proto::SCHEME_GOPHER);
+    RemoveIgnoredGopherShape(scenario);
+    RemoveFileTransferOnlyOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeTlsAuthority(scenario);
+    return;
+  }
+
   // Select the lane's scheme before applying scheme-sensitive upload bounds.
   // The scheme field is itself mutable, so bounding first could accidentally
   // give an HTTP/WS case TELNET's smaller payload budget merely because that
@@ -1241,6 +1263,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
 
     case TargetProfile::kFastFtp:
     case TargetProfile::kFastTftp:
+    case TargetProfile::kFastGopher:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.
       return;
