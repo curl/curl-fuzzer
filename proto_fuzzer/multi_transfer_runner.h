@@ -25,6 +25,10 @@ struct MultiTransferRunStats {
   std::size_t added_handles = 0;
   /// CURLMSG_DONE records consumed across all configured handles.
   std::size_t completion_messages = 0;
+  /// CURLMNOTIFY_INFO_READ notifications dispatched to the multi handle.
+  std::size_t info_read_notifications = 0;
+  /// CURLMNOTIFY_EASY_DONE notifications dispatched to the multi handle.
+  std::size_t easy_done_notifications = 0;
   /// Ordered plan actions consumed, including intentional no-ops.
   std::size_t actions_consumed = 0;
   /// Peer sockets opened while serving the concurrent transfers.

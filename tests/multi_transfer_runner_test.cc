@@ -6,6 +6,8 @@
 
 #include "proto_fuzzer/multi_transfer_runner.h"
 
+#include <curl/curl.h>
+
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
@@ -53,6 +55,28 @@ void TestCompletesConcurrentHandles() {
          "multi runner did not attach every configured easy handle");
   Expect(stats.completion_messages == 3,
          "multi runner did not consume every concurrent completion");
+  Expect(stats.info_read_notifications > 0,
+         "multi runner did not dispatch INFO_READ notifications");
+  Expect(stats.easy_done_notifications > 0,
+         "multi runner did not dispatch EASY_DONE notifications");
+}
+
+void TestNotificationTypeValidation() {
+  CURLM *multi = curl_multi_init();
+  Expect(multi != nullptr, "could not create multi handle");
+
+  Expect(curl_multi_notify_enable(multi, CURLMNOTIFY_INFO_READ) == CURLM_OK,
+         "valid notification enable failed");
+  Expect(curl_multi_notify_disable(multi, CURLMNOTIFY_INFO_READ) == CURLM_OK,
+         "valid notification disable failed");
+  Expect(curl_multi_notify_enable(multi, CURLMNOTIFY_LAST) ==
+             CURLM_UNKNOWN_OPTION,
+         "invalid notification enable was accepted");
+  Expect(curl_multi_notify_disable(multi, CURLMNOTIFY_LAST) ==
+             CURLM_UNKNOWN_OPTION,
+         "invalid notification disable was accepted");
+
+  curl_multi_cleanup(multi);
 }
 
 void TestQueuesAndReusesOneConnection() {
@@ -109,6 +133,7 @@ void TestConsumesBoundedActions() {
 
 int main() {
   TestCompletesConcurrentHandles();
+  TestNotificationTypeValidation();
   TestQueuesAndReusesOneConnection();
   TestConsumesBoundedActions();
   return 0;
