@@ -369,6 +369,8 @@ enum Scheme {
   // Scenarios accumulated before these dedicated lanes existed.
   SCHEME_FTP = 6;
   SCHEME_TFTP = 7;
+  SCHEME_GOPHER = 8;
+  SCHEME_GOPHERS = 9;
 }
 
 message SetOption {

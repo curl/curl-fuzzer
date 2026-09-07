@@ -1,0 +1,5 @@
+scheme: SCHEME_GOPHERS
+host_path: "tls.test/1/secure"
+connection {
+  initial_response: "0Secure\t/\ttls.test\t70\r\n.\r\n"
+}

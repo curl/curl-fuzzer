@@ -46,8 +46,8 @@ std::size_t RuntimeTransferCount(const curl::fuzzer::proto::MultiPlan& plan) {
                   std::min(static_cast<std::size_t>(plan.transfer_count()), scenario_limits::kMaxMultiTransfers));
 }
 
-void RecordNotification(CURLM *, unsigned int notification, CURL *, void *userdata) {
-  auto *stats = static_cast<MultiTransferRunStats *>(userdata);
+void RecordNotification(CURLM*, unsigned int notification, CURL*, void* userdata) {
+  auto* stats = static_cast<MultiTransferRunStats*>(userdata);
   if (stats == nullptr) {
     return;
   }
@@ -179,8 +179,7 @@ MultiTransferRunStats MultiTransferRunner::Run(const curl::fuzzer::proto::Scenar
   (void)curl_multi_setopt(multi.get(), CURLMOPT_MAXCONNECTS, cache_size);
   (void)curl_multi_setopt(multi.get(), CURLMOPT_PIPELINING,
                           plan.multiplex() ? static_cast<long>(CURLPIPE_MULTIPLEX) : 0L);
-  (void)curl_multi_setopt(multi.get(), CURLMOPT_NOTIFYFUNCTION,
-                          &RecordNotification);
+  (void)curl_multi_setopt(multi.get(), CURLMOPT_NOTIFYFUNCTION, &RecordNotification);
   (void)curl_multi_setopt(multi.get(), CURLMOPT_NOTIFYDATA, &stats);
   (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_INFO_READ);
   (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_EASY_DONE);
@@ -195,8 +194,8 @@ MultiTransferRunStats MultiTransferRunner::Run(const curl::fuzzer::proto::Scenar
     if (!transfer.easy) {
       continue;
     }
-    transfer.connect_to.reset(ApplyBaselineOptions(transfer.easy.get(), curl::fuzzer::proto::SCHEME_HTTP,
-                                                   scenario.trace_ids()));
+    transfer.connect_to.reset(
+        ApplyBaselineOptions(transfer.easy.get(), curl::fuzzer::proto::SCHEME_HTTP, scenario.trace_ids()));
     (void)curl_easy_setopt(transfer.easy.get(), CURLOPT_URL, url.c_str());
     mock.Install(transfer.easy.get());
     (void)ApplyScenarioOptions(transfer.easy.get(), scenario);
