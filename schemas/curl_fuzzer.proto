@@ -84,6 +84,8 @@ message Scenario {
   // onto the appropriate QUIC streams. Non-H3 fixed targets discard the plan;
   // the compatibility target deliberately leaves field 13 untouched.
   Http3Plan http3_plan = 13;
+  // Enable verbose curl tracing with LIB-IDS prefixes for this scenario.
+  bool trace_ids = 14;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

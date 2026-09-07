@@ -42,7 +42,8 @@ void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario);
 /// Returns a caller-owned CONNECT_TO list that must outlive the easy handle.
 /// `scheme` identifies the dedicated in-process mock that will service the
 /// transfer and therefore selects the safe direct-protocol allowlist.
-struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme);
+struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme,
+                                        bool trace_ids = false);
 
 /// Translate and apply one generated scalar/string option. String pointers
 /// borrow the SetOption's protobuf-owned storage, so the containing Scenario

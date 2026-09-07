@@ -1,0 +1,12 @@
+scheme: SCHEME_HTTP
+host_path: "multi.test/trace-ids"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+}
+trace_ids: true
+multi_plan {
+  transfer_count: 2
+  max_host_connections: 2
+  max_total_connections: 2
+  connection_cache_size: 2
+}
