@@ -245,7 +245,7 @@ MockServer::~MockServer() = default;
 /// Connection always occupies slot zero for backwards compatibility; only
 /// three subsequent pointers are retained so protobuf mutations cannot
 /// allocate socketpairs or prolong redirects in proportion to repeated-field
-/// size. The Scenario passed by ScenarioRunner outlives this synchronous drive,
+/// size. The Scenario passed by RunScenario outlives this synchronous drive,
 /// which makes borrowing safe while avoiding response-byte copies.
 /// @param scenario Source of the primary and bounded follow-on scripts.
 void MockServer::SetScripts(const curl::fuzzer::proto::Scenario& scenario) {

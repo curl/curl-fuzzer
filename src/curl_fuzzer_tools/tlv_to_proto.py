@@ -149,7 +149,7 @@ def convert_stream(stream: bytes) -> ProtoOutput:
                 out.skipped.append(tlv.type)
                 continue
             url_seen = True
-            # ScenarioRunner owns CURLOPT_URL: it composes it from these two
+            # RunScenario owns CURLOPT_URL: it composes it from these two
             # fields and deliberately does not expose CURLOPT_URL through the
             # generic option manifest. Preserve all bytes after the separator
             # verbatim so malformed authorities and paths remain fuzzable.
@@ -166,7 +166,7 @@ def convert_stream(stream: bytes) -> ProtoOutput:
             else:
                 # Unsupported schemes cannot be represented by the current
                 # proto schema. Make that loss visible instead of emitting an
-                # option that protoc or ScenarioRunner will ignore.
+                # option that protoc or RunScenario will ignore.
                 out.skipped.append(tlv.type)
         elif tlv.type == BaseType.TYPE_RSP0:
             out.initial_response = tlv.data

@@ -1,0 +1,84 @@
+name: Fuzz Introspector
+
+'on':
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/introspector.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'fuzz_introspector_exclusion.config'
+      - 'fuzzer_entrypoints/**'
+      - 'ossfuzz.sh'
+      - 'proto_fuzzer/**'
+      - 'scripts/check_introspector_report.py'
+      - 'scripts/compile_target.sh'
+      - 'scripts/fuzz_targets'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/introspector.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'fuzz_introspector_exclusion.config'
+      - 'fuzzer_entrypoints/**'
+      - 'ossfuzz.sh'
+      - 'proto_fuzzer/**'
+      - 'scripts/check_introspector_report.py'
+      - 'scripts/compile_target.sh'
+      - 'scripts/fuzz_targets'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  DO_NOT_TRACK: '1'
+
+jobs:
+  CallGraph:
+    name: 'Proto call graph'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out curl-fuzzer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: curl-fuzzer
+          persist-credentials: false
+
+      - name: Check out OSS-Fuzz
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: google/oss-fuzz
+          path: oss-fuzz
+          persist-credentials: false
+
+      # A sanitizer build runs the same light source analysis and binary
+      # correlation used by the published report. No corpus replay is needed
+      # to catch a severed static call-graph edge.
+      - name: Build Fuzz Introspector metadata
+        run: >-
+          python3 oss-fuzz/infra/helper.py build_fuzzers
+          --sanitizer=introspector --clean curl
+          "${GITHUB_WORKSPACE}/curl-fuzzer"
+
+      - name: Check proto runner ancestry
+        run: >-
+          python3 curl-fuzzer/scripts/check_introspector_report.py
+          oss-fuzz/build/out/curl/inspector
+
+      - name: Upload diagnostic metadata
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-introspector-callgraph
+          path: |
+            oss-fuzz/build/out/curl/inspector/summary.json
+            oss-fuzz/build/out/curl/inspector/fuzzerLogFile-curl_fuzzer_proto*.data
+          if-no-files-found: warn

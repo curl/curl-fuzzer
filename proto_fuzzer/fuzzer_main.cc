@@ -99,7 +99,7 @@ int ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t* data, std
   EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario;
   if (protobuf_mutator::libfuzzer::LoadProtoInput(kUseBinaryFormat, data, size, &scenario)) {
-    ScenarioRunner().Run(scenario, RunModeFor(profile));
+    proto_fuzzer::RunScenario(scenario, RunModeFor(profile));
   }
   return 0;
 }
