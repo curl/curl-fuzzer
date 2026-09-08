@@ -145,13 +145,7 @@ void ProbeMultiWaitApis(CURLM* multi) {
 
 }  // namespace
 
-/// Construct a stateless runner; all ownership is scoped to Run().
-MultiTransferRunner::MultiTransferRunner() = default;
-
-/// Default destructor; Run() dismantles each shared-multi lifecycle in place.
-MultiTransferRunner::~MultiTransferRunner() = default;
-
-MultiTransferRunStats MultiTransferRunner::Run(const curl::fuzzer::proto::Scenario& scenario) {
+MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenario& scenario) {
   MultiTransferRunStats stats;
   const auto& plan = scenario.multi_plan();
   const std::size_t transfer_count = RuntimeTransferCount(plan);

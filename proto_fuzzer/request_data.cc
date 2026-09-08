@@ -216,7 +216,7 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
 }  // namespace
 
 /// Borrow and cap the immutable upload shape once, before libcurl receives a
-/// userdata pointer. ScenarioRunner keeps the protobuf alive for the complete
+/// userdata pointer. RunScenario keeps the protobuf alive for the complete
 /// drive, so a view removes a per-input body copy without weakening callback
 /// lifetime. For non-TELNET schemes, the absent-message fallback avoids a
 /// 16 KiB allocation by synthesizing the same `U` bytes as the old callback.

@@ -5,7 +5,7 @@
  */
 
 /// @file
-/// @brief Implementation of ScenarioRunner::Run.
+/// @brief Implementation of RunScenario.
 
 #include "proto_fuzzer/scenario_runner.h"
 
@@ -182,24 +182,11 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
 }  // namespace
 
-/// @class proto_fuzzer::ScenarioRunner
-/// @brief Executes one Scenario end-to-end: applies options, picks a mock
-///        server for the scheme, and hands off to the mock's DriveScenario.
-///        Instances are cheap; create one per fuzz case so per-scenario state
-///        is torn down cleanly.
-
-/// Default-construct an empty runner. All state is set up inside Run().
-ScenarioRunner::ScenarioRunner() = default;
-
-/// Default destructor; per-run state is local to Run() so nothing to tear
-/// down at instance scope.
-ScenarioRunner::~ScenarioRunner() = default;
-
-/// Implement the bounded orchestration contract documented on Run's public
+/// Implement the bounded orchestration contract documented on the public
 /// declaration; keeping argument docs there avoids two drifting descriptions.
-int ScenarioRunner::Run(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
+int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
   if (mode == ScenarioRunMode::kMultiTransfer) {
-    (void)MultiTransferRunner().Run(scenario);
+    (void)proto_fuzzer::RunMultiTransferScenario(scenario);
     return 0;
   }
 

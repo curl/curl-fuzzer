@@ -86,7 +86,7 @@ class MockServer : public MockServerBase {
 
   /// Borrow the primary and bounded follow-on HTTP scripts from `scenario`.
   /// The caller must keep the scenario alive and unmodified until the current
-  /// synchronous drive has finished. ScenarioRunner already provides exactly
+  /// synchronous drive has finished. RunScenario already provides exactly
   /// that lifetime, so retaining pointers avoids copying response bytes before
   /// curl has even requested the corresponding socket or chunk.
   void SetScripts(const curl::fuzzer::proto::Scenario& scenario);

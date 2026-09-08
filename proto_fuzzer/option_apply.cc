@@ -369,7 +369,7 @@ std::size_t RuntimeOptionCount(const curl::fuzzer::proto::Scenario& scenario) {
 
 /// Apply only the prefix curl can observe in every target lane. Bounding here,
 /// rather than relying solely on LPM's postprocessor, is important because
-/// standalone compatibility seeds reach ScenarioRunner without normalization.
+/// standalone compatibility seeds reach RunScenario without normalization.
 std::size_t ApplyScenarioOptions(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   const std::size_t option_count = RuntimeOptionCount(scenario);
   for (std::size_t index = 0; index < option_count; ++index) {

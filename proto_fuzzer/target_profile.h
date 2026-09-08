@@ -48,7 +48,7 @@ enum class TargetProfile {
   kTiming,
 };
 
-/// Selects one of the complete, valid ScenarioRunner behaviours. Keeping this
+/// Selects one of the complete, valid RunScenario behaviours. Keeping this
 /// closed set avoids boolean combinations that have no useful interpretation.
 enum class ScenarioRunMode {
   /// Drive the protocol without charging its hot loop for generic API probes.
@@ -77,7 +77,7 @@ enum class ScenarioRunMode {
 /// remains profile-specific, while targets that need the same execution cost
 /// deliberately share a run mode.
 /// @param profile Compiled target whose runner behaviour is required.
-/// @return The only ScenarioRunner mode valid for that target.
+/// @return The only RunScenario mode valid for that target.
 constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
   switch (profile) {
     case TargetProfile::kFastHttp:

@@ -270,7 +270,7 @@ void ProbeEasyOptionMetadataOnce() {
 
 }  // namespace
 
-/// Preserve the caller's plan by reference because ScenarioRunner keeps the
+/// Preserve the caller's plan by reference because RunScenario keeps the
 /// source Scenario alive and unmodified for this object's complete lifetime.
 ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan, std::string_view url)
     : easy_(easy), plan_(plan), share_(nullptr) {
@@ -282,7 +282,7 @@ ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan,
   }
 }
 
-/// ScenarioRunner keeps this owner alive through easy cleanup, which releases
+/// RunScenario keeps this owner alive through easy cleanup, which releases
 /// even an incomplete connection's share reference before CleanupShare runs.
 ApiLifecycle::~ApiLifecycle() { CleanupShare(); }
 

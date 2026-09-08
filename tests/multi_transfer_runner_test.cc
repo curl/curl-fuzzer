@@ -50,7 +50,7 @@ void TestCompletesConcurrentHandles() {
   plan->set_max_total_connections(3);
 
   const proto_fuzzer::MultiTransferRunStats stats =
-      proto_fuzzer::MultiTransferRunner().Run(scenario);
+      proto_fuzzer::RunMultiTransferScenario(scenario);
   Expect(stats.configured_handles == 3 && stats.added_handles == 3,
          "multi runner did not attach every configured easy handle");
   Expect(stats.completion_messages == 3,
@@ -95,7 +95,7 @@ void TestQueuesAndReusesOneConnection() {
   plan->set_keep_connections_open(true);
 
   const proto_fuzzer::MultiTransferRunStats stats =
-      proto_fuzzer::MultiTransferRunner().Run(scenario);
+      proto_fuzzer::RunMultiTransferScenario(scenario);
   Expect(stats.completion_messages == 3,
          "queued transfers did not all complete on the reusable connection");
   Expect(stats.opened_connections == 1,
@@ -120,7 +120,7 @@ void TestConsumesBoundedActions() {
   }
 
   const proto_fuzzer::MultiTransferRunStats stats =
-      proto_fuzzer::MultiTransferRunner().Run(scenario);
+      proto_fuzzer::RunMultiTransferScenario(scenario);
   Expect(stats.configured_handles ==
              proto_fuzzer::scenario_limits::kMaxMultiTransfers,
          "multi runner did not enforce its runtime handle cap");

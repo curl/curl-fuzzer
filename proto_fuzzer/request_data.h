@@ -24,7 +24,7 @@
 namespace proto_fuzzer {
 
 /// Cursor and policy behind the request read/seek callbacks. Keeping it per
-/// ScenarioRunner invocation avoids the file-static state that made nested or
+/// RunScenario invocation avoids the file-static state that made nested or
 /// concurrent reproductions share an upload cursor, and gives retry paths a
 /// real rewindable source rather than stdin.
 class UploadScriptState {

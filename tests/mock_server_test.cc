@@ -514,7 +514,7 @@ Scenario MakeTlsScenario(const std::string &path, const std::string &body) {
   return scenario;
 }
 
-/// Apply options in ScenarioRunner's production order and retain the exact
+/// Apply options in RunScenario's production order and retain the exact
 /// completion result. This keeps the tests on the same socketpair/multi path
 /// as fuzz inputs while making failure-path assertions deterministic.
 TlsTransferResult DriveTlsScenario(const Scenario &scenario) {

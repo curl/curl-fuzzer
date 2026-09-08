@@ -1331,10 +1331,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         lpm_link_rsp
     )
 
-    # ScenarioRunner is compiled separately from the protocol implementation
-    # objects. The HTTP/3 lane can then select a runner that knows about its
-    # QUIC peer without pulling nghttp3/OpenSSL server references into every
-    # structured fuzzer executable.
+    # Scenario orchestration is compiled separately from the protocol
+    # implementation objects. The HTTP/3 lane can then select code that knows
+    # about its QUIC peer without pulling nghttp3/OpenSSL server references into
+    # every structured fuzzer executable.
     add_library(curl_fuzzer_proto_runner OBJECT
         proto_fuzzer/scenario_runner.cc)
     target_compile_features(curl_fuzzer_proto_runner PRIVATE cxx_std_17)

@@ -35,24 +35,13 @@ struct MultiTransferRunStats {
   std::size_t opened_connections = 0;
 };
 
-/// @class proto_fuzzer::MultiTransferRunner
-/// @brief Drives two to four easy handles through one CURLM and one bounded
-///        in-process HTTP peer.
-class MultiTransferRunner {
- public:
-  MultiTransferRunner();
-  ~MultiTransferRunner();
-
-  MultiTransferRunner(const MultiTransferRunner&) = delete;
-  MultiTransferRunner& operator=(const MultiTransferRunner&) = delete;
-
-  /// Configure and run the containing Scenario according to its MultiPlan.
-  /// Runtime bounds repeat the mutation policy's limits so direct unit-test
-  /// and standalone calls cannot make work proportional to unchecked input.
-  /// @param scenario HTTP transfer shape and concurrent lifecycle plan.
-  /// @return Bounded setup, action, and completion counts.
-  MultiTransferRunStats Run(const curl::fuzzer::proto::Scenario& scenario);
-};
+/// Drive two to four easy handles through one CURLM and one bounded in-process
+/// HTTP peer. Runtime bounds repeat the mutation policy's limits so direct
+/// unit-test and standalone calls cannot make work proportional to unchecked
+/// input.
+/// @param scenario HTTP transfer shape and concurrent lifecycle plan.
+/// @return Bounded setup, action, and completion counts.
+MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenario& scenario);
 
 }  // namespace proto_fuzzer
 
