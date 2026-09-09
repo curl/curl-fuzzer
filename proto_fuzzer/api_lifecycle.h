@@ -12,6 +12,7 @@
 
 #include <curl/curl.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
@@ -53,6 +54,12 @@ class ApiLifecycle {
   /// valued option copied from the source still has a live owner.
   void ProbeEasyDuplication();
 
+  /// @return whether the API-plan response callback returned PAUSE once.
+  bool response_pause_returned() const;
+
+  /// @return response bytes accepted after the paused chunk was replayed.
+  std::size_t response_bytes_received() const;
+
  private:
   /// Counters provide real callback userdata without synchronization: this
   /// fuzzer drives one easy handle on one thread.
@@ -60,6 +67,16 @@ class ApiLifecycle {
     std::uint64_t locks = 0;
     std::uint64_t unlocks = 0;
   };
+
+  /// State borrowed by CURLOPT_WRITEDATA for the complete easy lifetime.
+  struct ResponseCallbackState {
+    bool pause_once = false;
+    bool pause_returned = false;
+    std::size_t bytes_received = 0;
+  };
+
+  /// Pause the first non-empty body delivery, then accept its replay.
+  static std::size_t ResponseWrite(char* contents, std::size_t size, std::size_t nmemb, void* user_data);
 
   /// Install and attach a share according to bounded typed selectors.
   void ConfigureShare();
@@ -81,6 +98,7 @@ class ApiLifecycle {
 
   CURL* easy_;
   const curl::fuzzer::proto::ApiPlan& plan_;
+  ResponseCallbackState response_callback_state_;
   CURLSH* share_;
   ShareCallbackState share_callback_state_;
 };

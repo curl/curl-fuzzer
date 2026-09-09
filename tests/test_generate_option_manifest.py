@@ -45,6 +45,12 @@ def test_modes_and_bitmasks_retain_full_integer_values() -> None:
         assert _kind(name) == "uint"
 
 
+def test_postfield_pointer_options_use_bounded_strings() -> None:
+    """Both borrowed and copied POST bodies share the binary string path."""
+    for name in ("CURLOPT_POSTFIELDS", "CURLOPT_COPYPOSTFIELDS"):
+        assert _kind(name, "CURLOPTTYPE_OBJECTPOINT") == "string"
+
+
 def test_manifest_generates_direct_switch_lookup() -> None:
     """Both runtime users should dispatch without scanning every option."""
     entries = [

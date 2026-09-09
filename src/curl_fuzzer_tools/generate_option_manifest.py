@@ -49,6 +49,7 @@ BASE_KIND: dict[str, str] = {
 # Options whose kind cannot be inferred from the type token alone.
 OPTION_KIND_OVERRIDES: dict[str, str] = {
     "CURLOPT_POSTFIELDS": "string",
+    "CURLOPT_COPYPOSTFIELDS": "string",
     "CURLOPT_NOBODY": "bool",
     "CURLOPT_POST": "bool",
     "CURLOPT_HTTPGET": "bool",

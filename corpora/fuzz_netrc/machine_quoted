@@ -1,0 +1,1 @@
+0machine fuzz.test login "fuzz\tuser" password "secret\nvalue" account ignored

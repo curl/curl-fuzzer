@@ -1,0 +1,10 @@
+# SOCKS4A leaves the canonical hostname for the proxy. Splitting the 8-byte
+# reply exercises curl's incremental response state before tunneled HTTP.
+scheme: SCHEME_HTTP
+socks_proxy_mode: SOCKS_PROXY_SOCKS4A
+host_path: "socks.test/socks4a"
+connection {
+  on_readable: "\000\132\000"
+  on_readable: "\120\177\000\000\001"
+  on_readable: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+}

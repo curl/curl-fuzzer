@@ -25,13 +25,16 @@
 namespace proto_fuzzer {
 
 /// @class proto_fuzzer::FtpMockServer
-/// @brief Keeps FTP's control and passive-data connections alive together.
+/// @brief Keeps FTP's control and passive/active data connections alive.
 ///
 /// FTP cannot use the generic one-script-per-socket HTTP peer: curl opens a
 /// passive data socket while it still needs the control socket for TYPE,
 /// SIZE, RETR/STOR, and the final transfer reply. This peer therefore treats
 /// Scenario.connection as a command-aligned control script and the bounded
-/// subsequent_connections prefix as passive data streams. All work remains
+/// subsequent_connections prefix as data streams. Passive transfers use
+/// socketpairs; active transfers let curl create a loopback listener and have
+/// the mock connect to it after observing the generated PORT/EPRT command.
+/// All work remains
 /// in-process and non-waiting so malformed scripts terminate by operation
 /// budget or EOF rather than by curl's FTP response timeout.
 class FtpMockServer final : public MockServerBase {
@@ -55,17 +58,20 @@ class FtpMockServer final : public MockServerBase {
   const std::string& uploaded_data() const;
 
   /// Let tests distinguish control-only failures from paths that reached
-  /// curl's passive connection setup.
-  /// @return Number of bounded passive socketpairs handed to curl.
+  /// curl's passive or active data setup.
+  /// @return Number of bounded data scripts assigned to a transfer socket.
   std::size_t opened_data_connection_count() const;
 
  protected:
-  /// Assign the first socket to the control script and later sockets to at
-  /// most three passive data scripts. The callback arguments are deliberately
-  /// ignored: FTPPORT is excluded by target policy, while socketpairs are
-  /// already connected for both EPSV and PASV paths.
+  /// Assign the first socket to the control script. Passive connection
+  /// requests receive socketpairs; an active request receives an unbound
+  /// loopback TCP socket that curl can bind/listen on normally.
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
+
+  /// Distinguish socketpair-backed control/passive transports from curl's
+  /// real active-mode listener without querying either descriptor.
+  SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override;
 
   /// Drive curl and the command-aware peer in alternating, bounded turns.
   /// @param multi Multi handle containing `easy`.
@@ -74,7 +80,7 @@ class FtpMockServer final : public MockServerBase {
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:
-  /// Direction determines whether a passive peer should be preloaded and
+  /// Direction determines whether a data peer should be preloaded and
   /// half-closed for a download or kept readable while curl uploads to it.
   enum class TransferDirection {
     kNone,
@@ -82,7 +88,7 @@ class FtpMockServer final : public MockServerBase {
     kUpload,
   };
 
-  /// One passive socket and its borrowed script must outlive the control
+  /// One passive or active socket and its borrowed script must outlive the control
   /// command that starts it. A fixed array keeps protobuf repetition from
   /// turning into an unbounded collection of live descriptors.
   struct DataChannel {
@@ -90,6 +96,9 @@ class FtpMockServer final : public MockServerBase {
     const curl::fuzzer::proto::Connection* script = nullptr;
     /// The server half stays owned after curl receives the client fd.
     std::unique_ptr<MockConnection> connection;
+    /// Connecting side of an active-mode TCP data channel. This remains -1
+    /// for passive socketpairs and until the PORT/EPRT command is accepted.
+    int active_fd = -1;
     /// EPSV/PASV may open the socket well before RETR/STOR makes data valid.
     bool transfer_started = false;
     /// Upload peers are drained on every outer-loop turn.
@@ -119,15 +128,36 @@ class FtpMockServer final : public MockServerBase {
   /// @param command One newline-terminated command from curl.
   void HandleControlCommand(std::string_view command);
 
-  /// Select the next unopened passive peer and prepare it for the transfer.
+  /// Select the next unopened data peer and prepare it for the transfer.
   /// @param direction Whether curl will read or write the data connection.
   void StartNextTransfer(TransferDirection direction);
 
   /// Preload all bounded download fragments once RETR/LIST has been accepted.
   /// Delaying until the command prevents an early EOF from perturbing curl's
   /// passive setup states.
-  /// @param channel Passive peer whose script supplies the download bytes.
+  /// @param channel Data peer whose script supplies the download bytes.
   void PreloadDownload(DataChannel* channel);
+
+  /// Return true when the retained FTPPORT option selected active mode.
+  bool UsesActiveMode() const;
+
+  /// Allocate or replace curl's active-mode listener socket. A duplicated
+  /// descriptor lets the mock recover the kernel-selected port after curl
+  /// binds it, without parsing its generated PORT/EPRT command.
+  curl_socket_t OpenActiveListener(struct curl_sockaddr* address);
+
+  /// Connect the pending server-side active data channel to curl's listener
+  /// after a successful PORT/EPRT response has been queued.
+  void ConnectActiveDataChannel();
+
+  /// Close all raw active-mode descriptors before state is reused/destroyed.
+  void CloseActiveDescriptors();
+
+  /// Write a bounded scripted download to an active TCP socket.
+  static bool WriteActiveBytes(int fd, const unsigned char* data, std::size_t size);
+
+  /// Drain currently available bytes from an active upload connection.
+  static bool ReadActiveBytes(int fd, std::string* output);
 
   /// Queue the transfer-final response before curl observes data EOF. curl's
   /// FTP completion path performs a blocking control read inside
@@ -200,7 +230,7 @@ class FtpMockServer final : public MockServerBase {
   /// @param completed Whether curl reported that the transfer stopped.
   void FinishConnections(bool completed);
 
-  /// Three passive sockets cover listing plus two file transfers while
+  /// Three data sockets cover listing plus two file transfers while
   /// matching the repository-wide four-connection scenario budget.
   static constexpr std::size_t kMaxDataChannels = scenario_limits::kMaxConnections - 1;
 
@@ -220,6 +250,14 @@ class FtpMockServer final : public MockServerBase {
   std::array<DataChannel, kMaxDataChannels> data_channels_;
   /// Number of subsequent scripts already assigned to curl-opened sockets.
   std::size_t next_data_script_;
+  /// Duplicate of curl's pending active listener. The duplicate observes the
+  /// same bind/listen state but is never handed to libcurl.
+  int active_listener_fd_;
+  /// Non-owning identity of the matching descriptor handed to curl. It marks
+  /// the one IPCXN socket that still needs curl's ordinary bind/listen setup.
+  curl_socket_t active_listener_client_fd_;
+  /// Channel awaiting the server-side connect, or kMaxDataChannels when none.
+  std::size_t pending_active_channel_;
   /// Runtime-visible prefix of primary on_readable response fragments.
   std::size_t control_reply_count_;
   /// Cursor advanced once per command, plus once per accepted transfer final.

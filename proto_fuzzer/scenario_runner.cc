@@ -24,11 +24,13 @@
 #include "proto_fuzzer/multi_transfer_runner.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
+#include "proto_fuzzer/socks4_mock_server.h"
 #include "proto_fuzzer/telnet_mock_server.h"
 #include "proto_fuzzer/tftp_mock_server.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #endif
@@ -130,6 +132,20 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 #endif
   }
 
+  if (mode == ScenarioRunMode::kTlsHttp2Coverage) {
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+    return std::make_unique<H2OriginMockServer>(scenario.tls_certificate_chain());
+#else
+    // This target remains buildable under MemorySanitizer, whose curl build
+    // omits the OpenSSL server dependency required for TLS/ALPN h2.
+    return nullptr;
+#endif
+  }
+
+  if (mode == ScenarioRunMode::kSocks4Coverage) {
+    return std::make_unique<Socks4MockServer>(scenario.socks_proxy_mode());
+  }
+
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
       return std::make_unique<MockServer>();
@@ -225,6 +241,13 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   };
   configure_easy();
 
+  if (mode == ScenarioRunMode::kResolverCoverage) {
+    // The normal CONNECT_TO baseline deliberately bypasses DNS. This lane
+    // removes only that override; OPENSOCKET still returns the in-process
+    // socketpair, so no resolved address can receive network traffic.
+    (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
+  }
+
   const curl::fuzzer::proto::ApiPlan* api_plan =
       mode == ScenarioRunMode::kApiLifecycle && scenario.has_api_plan() ? &scenario.api_plan() : nullptr;
   if (api_plan != nullptr && api_plan->reset_easy()) {
@@ -247,19 +270,29 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     // the entire multi-handle drive, then let it detach them while `easy` is
     // still valid. This inner scope is deliberate: easy.reset() below must
     // never run before the owner's destructor clears those options.
-    ScenarioRequestData request_data(easy.get(), scenario);
+    ScenarioRequestData request_data(easy.get(), scenario, mode == ScenarioRunMode::kResolverCoverage);
+    if (mode == ScenarioRunMode::kResolverCoverage && !request_data.resolve_entries_ready()) {
+      return 0;
+    }
     mock->ConfigureRequestData(&request_data);
     const auto drive_mode = api_plan == nullptr ? curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM : api_plan->drive_mode();
     if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM) {
       mock->DriveEasyScenario(easy.get(), scenario);
+    } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS) {
+      mock->DriveEasyScenario(easy.get(), scenario, true);
+    } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY) {
+      (void)mock->DriveConnectOnlyScenario(easy.get(), scenario);
     } else {
       mock->DriveScenario(
           easy.get(), scenario,
           mode == ScenarioRunMode::kHttp3Coverage || drive_mode == curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
-          api_plan != nullptr && api_plan->wake_multi());
+          api_plan != nullptr && api_plan->wake_multi(), api_plan != nullptr && api_plan->pause_response_once());
     }
     if (api_lifecycle != nullptr) {
-      api_lifecycle->ProbeTransferResults(drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
+      const bool retains_internal_multi = drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM ||
+                                          drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS ||
+                                          drive_mode == curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY;
+      api_lifecycle->ProbeTransferResults(retains_internal_multi);
       api_lifecycle->ProbeEasyDuplication();
     } else if (mode != ScenarioRunMode::kFastProtocol) {
       ProbeTransferResults(easy.get());

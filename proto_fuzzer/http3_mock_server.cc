@@ -1576,6 +1576,11 @@ curl_socket_t Http3MockServer::HandleOpenSocket(curlsocktype purpose, struct cur
   return impl_ == nullptr ? CURL_SOCKET_BAD : impl_->OpenSocket(purpose, address);
 }
 
+SocketSetupDisposition Http3MockServer::GetSocketSetupDisposition(curl_socket_t /*curlfd*/,
+                                                                  curlsocktype /*purpose*/) const {
+  return SocketSetupDisposition::kNeedsSetup;
+}
+
 void Http3MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   (void)easy;
   if (impl_ == nullptr) {

@@ -1,0 +1,9 @@
+# SOCKS4 resolves localhost on the curl side, sends a user id, then carries a
+# complete HTTP response through the accepted tunnel.
+scheme: SCHEME_HTTP
+socks_proxy_mode: SOCKS_PROXY_SOCKS4
+host_path: "localhost/socks4"
+connection {
+  on_readable: "\000\132\000\120\177\000\000\001"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nsocks4"
+}

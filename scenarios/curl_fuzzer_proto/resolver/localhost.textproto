@@ -1,0 +1,6 @@
+# Exercise curl's localhost resolver path without a matching host-cache entry.
+scheme: SCHEME_HTTP
+host_path: "localhost/localhost"
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nlocalhost"
+}

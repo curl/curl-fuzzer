@@ -9,7 +9,9 @@
 
 #include "proto_fuzzer/multi_transfer_runner.h"
 
+#define CURL_ALLOW_OLD_MULTI_SOCKET
 #include <curl/curl.h>
+#include <curl/multi.h>
 
 #include <algorithm>
 #include <array>
@@ -131,6 +133,11 @@ void ProbeMultiWaitApis(CURLM* multi) {
   (void)curl_multi_poll(multi, nullptr, 0, 0, &numfds);
   (void)curl_multi_wait(multi, nullptr, 0, 0, &numfds);
 
+  unsigned int waitfd_count = 0;
+  (void)curl_multi_waitfds(multi, nullptr, 0, &waitfd_count);
+  std::array<curl_waitfd, scenario_limits::kMaxMultiTransfers * 2> waitfds{};
+  (void)curl_multi_waitfds(multi, waitfds.data(), static_cast<unsigned int>(waitfds.size()), &waitfd_count);
+
   fd_set readfds;
   fd_set writefds;
   fd_set exceptfds;
@@ -141,6 +148,35 @@ void ProbeMultiWaitApis(CURLM* multi) {
   (void)curl_multi_fdset(multi, &readfds, &writefds, &exceptfds, &maxfd);
   long timeout_ms = -1;
   (void)curl_multi_timeout(multi, &timeout_ms);
+
+  CURL** handles = curl_multi_get_handles(multi);
+  curl_free(handles);
+
+  constexpr CURLMinfo_offt kOffsetInfo[] = {
+      CURLMINFO_XFERS_CURRENT, CURLMINFO_XFERS_RUNNING, CURLMINFO_XFERS_PENDING,
+      CURLMINFO_XFERS_DONE,    CURLMINFO_XFERS_ADDED,
+  };
+  for (const CURLMinfo_offt info : kOffsetInfo) {
+    curl_off_t value = 0;
+    (void)curl_multi_get_offt(multi, info, &value);
+  }
+}
+
+/// Exercise the two deprecated public entrypoints as real symbols rather than
+/// curl_multi_socket's compatibility macro. Their output is deliberately not
+/// used to select the primary runner: either call may advance a transfer, and
+/// the normal bounded loop consumes whatever state remains.
+void ProbeLegacyMultiSocketApis(CURLM* multi) {
+  int running_handles = 0;
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  (void)curl_multi_socket(multi, CURL_SOCKET_TIMEOUT, &running_handles);
+  (void)curl_multi_socket_all(multi, &running_handles);
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 }
 
 }  // namespace
@@ -177,6 +213,10 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
   (void)curl_multi_setopt(multi.get(), CURLMOPT_NOTIFYDATA, &stats);
   (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_INFO_READ);
   (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_EASY_DONE);
+  (void)curl_multi_notify_disable(multi.get(), CURLMNOTIFY_INFO_READ);
+  (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_INFO_READ);
+  (void)curl_multi_notify_disable(multi.get(), CURLMNOTIFY_EASY_DONE);
+  (void)curl_multi_notify_enable(multi.get(), CURLMNOTIFY_EASY_DONE);
 
   const bool socket_mode = plan.drive_mode() == curl::fuzzer::proto::MULTI_DRIVE_SOCKET;
   const bool socket_driver_installed = socket_mode && socket_driver.Install(multi.get());
@@ -205,6 +245,8 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
     multi.reset();
     return stats;
   }
+
+  ProbeLegacyMultiSocketApis(multi.get());
 
   const std::size_t action_count = std::min<std::size_t>(plan.actions_size(), scenario_limits::kMaxMultiActions);
   std::size_t next_action = 0;

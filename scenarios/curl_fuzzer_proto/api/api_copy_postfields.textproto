@@ -1,0 +1,10 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/copy-postfields"
+options {
+  option_id: CURLOPT_COPYPOSTFIELDS
+  string_value: "copy\000body"
+}
+connection {
+  initial_response: "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+}
+api_plan {}

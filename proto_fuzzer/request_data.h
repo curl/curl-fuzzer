@@ -108,6 +108,9 @@ class UploadScriptState {
 struct RequestBuildStats {
   /// Number of top-level CURLOPT_HTTPHEADER entries retained.
   std::size_t request_headers = 0;
+  /// Number of fuzzed CURLOPT_RESOLVE entries retained before the fixed
+  /// loopback mapping was appended.
+  std::size_t resolve_entries = 0;
   /// Number of CURLOPT_TELNETOPTIONS entries retained.
   std::size_t telnet_options = 0;
   /// Number of top-level and nested curl_mimepart objects constructed.
@@ -129,7 +132,7 @@ class ScenarioRequestData {
   /// @param easy Easy handle that will perform this scenario.
   /// @param scenario Source headers/TELNET options, optional MIME body, and
   ///                 upload script.
-  ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
+  ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool apply_resolve_entries = false);
 
   /// A temporary Scenario cannot outlive the upload view retained for curl.
   ScenarioRequestData(CURL* easy, curl::fuzzer::proto::Scenario&& scenario) = delete;
@@ -155,6 +158,10 @@ class ScenarioRequestData {
   /// @return True when read and seek callbacks were attached to the handle.
   bool upload_callbacks_installed() const;
 
+  /// Return whether resolver-only slist construction installed its mandatory
+  /// final loopback mapping. Ordinary lanes always report true.
+  bool resolve_entries_ready() const;
+
   /// Arrange protocol-specific work immediately before every upload read.
   /// This is intentionally a narrow callback seam rather than exposing curl's
   /// retained READFUNCTION userdata or the mutable upload cursor.
@@ -165,10 +172,12 @@ class ScenarioRequestData {
  private:
   CURL* easy_;
   curl_slist* request_headers_;
+  curl_slist* resolve_entries_;
   curl_slist* telnet_options_;
   curl_mime* mime_post_;
   UploadScriptState upload_state_;
   bool upload_callbacks_installed_;
+  bool resolve_entries_ready_;
   RequestBuildStats stats_;
 };
 

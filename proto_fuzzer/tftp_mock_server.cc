@@ -52,6 +52,11 @@ std::uint16_t TftpMockServer::request_port() const { return request_port_; }
 /// Return the kernel-selected transfer port in host byte order.
 std::uint16_t TftpMockServer::transfer_port() const { return transfer_port_; }
 
+SocketSetupDisposition TftpMockServer::GetSocketSetupDisposition(curl_socket_t /*curlfd*/,
+                                                                 curlsocktype /*purpose*/) const {
+  return SocketSetupDisposition::kNeedsSetup;
+}
+
 /// Borrow only the response prefix the runtime can emit. The nonempty check on
 /// initial_response preserves proto3's absent/empty equivalence; repeated bytes
 /// retain presence, so an empty on_readable entry remains a real zero-length

@@ -17,12 +17,42 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include "proto_fuzzer/tls_test_credentials.h"
 
 namespace proto_fuzzer {
 
 namespace {
+
+constexpr std::size_t kMaxSessionExportAttempts = 8;
+constexpr std::size_t kMaxSessionHashSize = 128;
+constexpr std::size_t kMaxSessionDataSize = 16 * 1024;
+
+/// Own the only export retained by one probe. curl owns every pointer passed
+/// to the callback, so both binary fields must be copied before it returns.
+struct ExportedSession {
+  std::vector<unsigned char> salted_hash;
+  std::vector<unsigned char> session_data;
+};
+
+/// Retain at most one bounded ticket while allowing curl to finish its cache
+/// walk. Importing here would recurse into the already-locked session cache.
+CURLcode CaptureExportedSession(CURL* /*easy*/, void* user_data, const char* /*session_key*/,
+                                const unsigned char* salted_hash, std::size_t salted_hash_size,
+                                const unsigned char* session_data, std::size_t session_data_size,
+                                curl_off_t /*valid_until*/, int /*ietf_tls_id*/, const char* /*alpn*/,
+                                std::size_t /*early_data_max*/) {
+  auto* exported = static_cast<ExportedSession*>(user_data);
+  if (!exported->session_data.empty() || salted_hash == nullptr || salted_hash_size == 0 ||
+      salted_hash_size > kMaxSessionHashSize || session_data == nullptr || session_data_size == 0 ||
+      session_data_size > kMaxSessionDataSize) {
+    return CURLE_OK;
+  }
+  exported->salted_hash.assign(salted_hash, salted_hash + salted_hash_size);
+  exported->session_data.assign(session_data, session_data + session_data_size);
+  return CURLE_OK;
+}
 
 /// Isolate the server and curl client even though both OpenSSL instances run
 /// on one thread. SSL_get_error requires an empty queue before its I/O call;
@@ -474,7 +504,11 @@ TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile cer
 /// Construct the shared TLS transport with one fixed ALPN outcome.
 TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
                              curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)), saw_live_tls_session_(false) {}
+    : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)),
+      saw_live_tls_session_(false),
+      session_export_attempt_count_(0),
+      exported_session_count_(0),
+      imported_session_count_(0) {}
 
 /// Release SSL objects before their owning server context. OpenSSL reference
 /// counting makes the reverse order legal, but making the ownership order
@@ -495,6 +529,12 @@ void TlsMockServer::Install(CURL* easy) {
 
 /// Report whether the drive reached curl's live TLS backend-query path.
 bool TlsMockServer::saw_live_tls_session() const { return saw_live_tls_session_; }
+
+/// Report the number of callback-owned session representations copied.
+std::size_t TlsMockServer::exported_session_count() const { return exported_session_count_; }
+
+/// Report the number of copied representations accepted by curl's import path.
+std::size_t TlsMockServer::imported_session_count() const { return imported_session_count_; }
 
 /// Report the protocol selected by the latest successful server handshake.
 int TlsMockServer::negotiated_tls_version() const {
@@ -537,24 +577,47 @@ std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() {
   return std::make_unique<TlsMockConnection>(context_.get());
 }
 
-/// Query while the connection filters are attached. Stop after the first live
-/// result so these coverage probes add a bounded handful of calls during the
-/// handshake rather than recurring throughout every HTTP parser iteration.
+/// Query while the connection filters are attached. Result-info probes stop
+/// after the first live result, and session export has its own fixed attempt
+/// bound, so neither recurs throughout every HTTP parser iteration.
 /// @param easy Active easy handle whose connection filters remain attached.
 void TlsMockServer::ObserveActiveTransfer(CURL* easy) {
-  if (saw_live_tls_session_) {
+  if (!saw_live_tls_session_) {
+    long verify_result = 0;
+    curl_off_t appconnect_time = 0;
+    struct curl_certinfo* certificate_info = nullptr;
+    struct curl_tlssessioninfo* tls_session = nullptr;
+    (void)curl_easy_getinfo(easy, CURLINFO_SSL_VERIFYRESULT, &verify_result);
+    (void)curl_easy_getinfo(easy, CURLINFO_APPCONNECT_TIME_T, &appconnect_time);
+    (void)curl_easy_getinfo(easy, CURLINFO_CERTINFO, &certificate_info);
+    if (curl_easy_getinfo(easy, CURLINFO_TLS_SSL_PTR, &tls_session) == CURLE_OK && tls_session != nullptr &&
+        tls_session->internals != nullptr) {
+      saw_live_tls_session_ = true;
+    }
+  }
+
+  // A TLS 1.3 ticket may arrive after the peer first completes its handshake.
+  // Retry only a small fixed number of outer-loop observations, and stop
+  // permanently once one copied ticket has made one import attempt.
+  const bool completed_live_handshake = context_ != nullptr && context_->completed_handshake_count() != 0;
+  if (!completed_live_handshake || exported_session_count_ != 0 ||
+      session_export_attempt_count_ >= kMaxSessionExportAttempts) {
     return;
   }
-  long verify_result = 0;
-  curl_off_t appconnect_time = 0;
-  struct curl_certinfo* certificate_info = nullptr;
-  struct curl_tlssessioninfo* tls_session = nullptr;
-  (void)curl_easy_getinfo(easy, CURLINFO_SSL_VERIFYRESULT, &verify_result);
-  (void)curl_easy_getinfo(easy, CURLINFO_APPCONNECT_TIME_T, &appconnect_time);
-  (void)curl_easy_getinfo(easy, CURLINFO_CERTINFO, &certificate_info);
-  if (curl_easy_getinfo(easy, CURLINFO_TLS_SSL_PTR, &tls_session) == CURLE_OK && tls_session != nullptr &&
-      tls_session->internals != nullptr) {
-    saw_live_tls_session_ = true;
+  ++session_export_attempt_count_;
+  ExportedSession exported;
+  const CURLcode export_result = curl_easy_ssls_export(easy, &CaptureExportedSession, &exported);
+  if (export_result != CURLE_OK || exported.session_data.empty()) {
+    return;
+  }
+  ++exported_session_count_;
+
+  // curl holds the SSL session-cache lock throughout CaptureExportedSession.
+  // This deliberately separate call therefore exercises import without
+  // recursive API use or retaining any callback-owned pointer.
+  if (curl_easy_ssls_import(easy, nullptr, exported.salted_hash.data(), exported.salted_hash.size(),
+                            exported.session_data.data(), exported.session_data.size()) == CURLE_OK) {
+    ++imported_session_count_;
   }
 }
 

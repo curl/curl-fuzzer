@@ -175,9 +175,66 @@ void TestFastHttpsPolicy() {
          "fast HTTPS policy discarded its certificate-chain selector");
 }
 
+void TestHttpsH2Policy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("mutated.invalid:8443/path?query#fragment");
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.add_request_headers("X-H2: retained");
+  scenario.mutable_connection()->add_on_readable("raw HTTP/2 frames");
+  scenario.mutable_connection()->add_server_frames()->set_payload(
+      "WebSocket-only frame");
+  scenario.mutable_connection()->mutable_manual_probes()->set_flag_matrix(true);
+  scenario.add_subsequent_connections()->set_initial_response(
+      "unrepresentable second HTTP/2 connection");
+  scenario.mutable_mime_post()->add_parts()->set_data("MIME body");
+  scenario.mutable_upload()->set_data("upload body");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
+
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_SSL_ENABLE_ALPN);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kHttpsH2);
+
+  Expect(scenario.scheme() == SCHEME_HTTPS,
+         "HTTPS/H2 policy did not force HTTPS");
+  Expect(scenario.host_path() == "tls.test/path?query#fragment",
+         "HTTPS/H2 policy did not isolate the verified TLS authority");
+  Expect(scenario.tls_certificate_chain() ==
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
+         "HTTPS/H2 policy discarded its certificate-chain selector");
+  Expect(!scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0 &&
+             !scenario.connection().has_manual_probes() &&
+             scenario.subsequent_connections_size() == 0,
+         "HTTPS/H2 policy retained shapes its raw-frame peer cannot use");
+  Expect(scenario.connection().on_readable(0) == "raw HTTP/2 frames",
+         "HTTPS/H2 policy removed its raw frame stream");
+  Expect(scenario.request_headers(0) == "X-H2: retained" &&
+             scenario.has_mime_post() && scenario.has_upload(),
+         "HTTPS/H2 policy removed request-side HTTP state");
+  Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+             !scenario.has_multi_plan(),
+         "HTTPS/H2 policy retained another target's work");
+  Expect(scenario.options_size() == 2 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_POST &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION,
+         "HTTPS/H2 policy retained an option that can bypass fixed ALPN h2");
+}
+
 void TestTlsPoliciesRejectUnknownCertificateChain() {
   constexpr TargetProfile kTlsPolicies[] = {
       TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp3,
   };
   for (const TargetProfile profile : kTlsPolicies) {
@@ -342,8 +399,8 @@ void TestFastHttp3PolicyBoundsOrderedActions() {
                  proto_fuzzer::scenario_limits::kMaxHttp3RawWriteBytes &&
              bounded_open.finish_stream(),
          "fast HTTP/3 policy did not bound a fresh raw stream in place");
-       const std::uint64_t max_quic_varint =
-                     proto_fuzzer::scenario_limits::kMaxQuicVarint;
+  const std::uint64_t max_quic_varint =
+      proto_fuzzer::scenario_limits::kMaxQuicVarint;
   const auto &bounded_reset = scenario.http3_plan().actions(3).stream_reset();
   Expect(bounded_reset.role() == curl::fuzzer::proto::HTTP3_STREAM_RESPONSE &&
              bounded_reset.application_error_code() == max_quic_varint,
@@ -365,12 +422,19 @@ void TestFastHttp3PolicyBoundsOrderedActions() {
 
 void TestNonHttp3PoliciesDiscardPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kApi,
-      TargetProfile::kMulti,         TargetProfile::kTiming,
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kApi,
+      TargetProfile::kMulti,
+      TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kOtherPolicies) {
@@ -580,6 +644,12 @@ void TestFastFtpPolicy() {
   auto *file_method = scenario.add_options();
   file_method->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD);
   file_method->set_uint_value(99);
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+  auto *use_eprt = scenario.add_options();
+  use_eprt->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT);
+  use_eprt->set_uint_value(7);
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
 
   ApplyTargetPolicy(&scenario, TargetProfile::kFastFtp);
@@ -599,15 +669,19 @@ void TestFastFtpPolicy() {
          "controls");
   Expect(static_cast<std::size_t>(scenario.subsequent_connections_size()) ==
              proto_fuzzer::scenario_limits::kMaxConnections - 1,
-         "fast FTP policy exceeded its passive data-channel budget");
+         "fast FTP policy exceeded its data-channel budget");
   Expect(!scenario.subsequent_connections(0).has_backpressure() &&
              scenario.subsequent_connections(0).server_frames_size() == 0,
          "fast FTP policy retained ignored data-channel controls");
-  Expect(scenario.options_size() == 3,
+  Expect(scenario.options_size() == 5,
          "fast FTP policy retained a non-FTP option");
   Expect(scenario.options(0).uint_value() < 3 &&
              scenario.options(1).uint_value() < 4,
          "fast FTP policy left small enums outside curl's valid domains");
+  Expect(scenario.options(2).string_value() == "127.0.0.1",
+         "fast FTP policy retained a resolving active-mode address");
+  Expect(scenario.options(3).bool_value(),
+         "fast FTP policy did not canonicalize the EPRT selector");
 }
 
 void TestFastTftpPolicy() {
@@ -653,6 +727,50 @@ void TestFastTftpPolicy() {
          "fast TFTP policy retained a non-TFTP option");
   Expect(scenario.options(0).uint_value() == 65464,
          "fast TFTP policy did not clamp block size to curl's upper boundary");
+}
+
+void TestResolverPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("untrusted.invalid:8080/path?query#fragment");
+  scenario.set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A);
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.mutable_mime_post()->add_parts()->set_data("ignored");
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxResolveEntries + 3; ++index) {
+    scenario.add_resolve_entries(std::string(
+        proto_fuzzer::scenario_limits::kMaxResolveEntryBytes + 11, 'r'));
+  }
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kResolver);
+
+  Expect(scenario.scheme() == SCHEME_HTTP,
+         "resolver policy did not force plaintext HTTP");
+  Expect(scenario.host_path() == "resolve.test/path?query#fragment",
+         "resolver policy did not select the cache-backed authority");
+  Expect(static_cast<std::size_t>(scenario.resolve_entries_size()) ==
+             proto_fuzzer::scenario_limits::kMaxResolveEntries,
+         "resolver policy retained entries beyond its slist budget");
+  Expect(scenario.resolve_entries(0).size() ==
+             proto_fuzzer::scenario_limits::kMaxResolveEntryBytes,
+         "resolver policy retained an invisible entry suffix");
+  Expect(!scenario.has_api_plan() && !scenario.has_multi_plan() &&
+             !scenario.has_mime_post() &&
+             scenario.socks_proxy_mode() ==
+                 curl::fuzzer::proto::SOCKS_PROXY_SOCKS4,
+         "resolver policy retained another dedicated lane's shape");
+
+  Scenario localhost;
+  localhost.set_host_path("untrusted.invalid/no-cache");
+  ApplyTargetPolicy(&localhost, TargetProfile::kResolver);
+  Expect(localhost.host_path() == "localhost/no-cache",
+         "empty resolver policy did not retain the localhost path");
+
+  Scenario ordinary;
+  ordinary.add_resolve_entries("example.test:80:127.0.0.1");
+  ApplyTargetPolicy(&ordinary, TargetProfile::kFastHttp);
+  Expect(ordinary.resolve_entries_size() == 0,
+         "non-resolver policy retained structured DNS work");
 }
 
 void TestPauseTerminalIsTelnetOnly() {
@@ -991,6 +1109,7 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
   plan->set_attach_share(true);
   plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
   plan->set_wake_multi(true);
+  plan->set_pause_response_once(true);
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxApiShareDataSelectors + 3;
        ++index) {
@@ -1018,7 +1137,8 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
              scenario.api_plan().attach_share() &&
              scenario.api_plan().drive_mode() ==
                  curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET &&
-             scenario.api_plan().wake_multi(),
+             scenario.api_plan().wake_multi() &&
+             scenario.api_plan().pause_response_once(),
          "API policy changed mutation-controlled lifecycle choices");
   Expect(static_cast<std::size_t>(
              scenario.api_plan().share_data_selectors_size()) ==
@@ -1035,17 +1155,12 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
 
 void TestProtocolPoliciesDiscardApiPlans() {
   constexpr TargetProfile kProtocolPolicies[] = {
-      TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,
-      TargetProfile::kFastHttp3,
-      TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,
-      TargetProfile::kMulti,
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
 
@@ -1122,17 +1237,12 @@ void TestMultiPolicyRetainsAndBoundsItsPlan() {
 
 void TestOtherPoliciesDiscardMultiPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,
-      TargetProfile::kFastHttp3,
-      TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,
-      TargetProfile::kApi,
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kApi,
       TargetProfile::kTiming,
   };
   for (const TargetProfile profile : kOtherPolicies) {
@@ -1145,19 +1255,27 @@ void TestOtherPoliciesDiscardMultiPlans() {
   }
 }
 
-void TestApiEasyDriveDropsMultiOnlyWakeup() {
-  Scenario scenario;
-  scenario.mutable_api_plan()->set_drive_mode(
-      curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
-  scenario.mutable_api_plan()->set_wake_multi(true);
+void TestApiEasyDrivesDropMultiOnlyWork() {
+  constexpr curl::fuzzer::proto::ApiDriveMode kEasyModes[] = {
+      curl::fuzzer::proto::API_DRIVE_EASY_PERFORM,
+      curl::fuzzer::proto::API_DRIVE_EASY_EVENTS,
+      curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY,
+  };
+  for (const auto drive_mode : kEasyModes) {
+    Scenario scenario;
+    scenario.mutable_api_plan()->set_drive_mode(drive_mode);
+    scenario.mutable_api_plan()->set_wake_multi(true);
+    scenario.mutable_api_plan()->set_pause_response_once(true);
 
-  ApplyTargetPolicy(&scenario, TargetProfile::kApi);
+    ApplyTargetPolicy(&scenario, TargetProfile::kApi);
 
-  Expect(scenario.api_plan().drive_mode() ==
-             curl::fuzzer::proto::API_DRIVE_EASY_PERFORM,
-         "API policy changed the selected easy entrypoint");
-  Expect(!scenario.api_plan().wake_multi(),
-         "easy drive retained a multi-only wakeup mutation");
+    Expect(scenario.api_plan().drive_mode() == drive_mode,
+           "API policy changed the selected easy entrypoint");
+    Expect(!scenario.api_plan().wake_multi(),
+           "easy drive retained a multi-only wakeup mutation");
+    Expect(!scenario.api_plan().pause_response_once(),
+           "blocking easy drive retained an unresumable output pause");
+  }
 }
 
 void TestProfileRunModes() {
@@ -1175,12 +1293,20 @@ void TestProfileRunModes() {
          "multi profile does not authorize concurrent transfers");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
+  Expect(RunModeFor(TargetProfile::kHttpsH2) ==
+             ScenarioRunMode::kTlsHttp2Coverage,
+         "HTTPS/H2 profile does not authorize its fixed-ALPN origin peer");
   Expect(RunModeFor(TargetProfile::kFastHttp3) ==
              ScenarioRunMode::kHttp3Coverage,
          "fast HTTP/3 profile does not authorize the QUIC peer");
   Expect(RunModeFor(TargetProfile::kH2Proxy) ==
              ScenarioRunMode::kH2ProxyCoverage,
          "HTTP/2 proxy profile does not authorize its CONNECT peer");
+  Expect(RunModeFor(TargetProfile::kSocks4) == ScenarioRunMode::kSocks4Coverage,
+         "SOCKS4 profile does not authorize its proxy peer");
+  Expect(RunModeFor(TargetProfile::kResolver) ==
+             ScenarioRunMode::kResolverCoverage,
+         "resolver profile does not authorize DNS/cache work");
   Expect(RunModeFor(TargetProfile::kFastFtp) == ScenarioRunMode::kFtpCoverage,
          "fast FTP profile does not authorize the two-channel peer");
   Expect(RunModeFor(TargetProfile::kFastTftp) == ScenarioRunMode::kTftpCoverage,
@@ -1224,6 +1350,7 @@ int main() {
   TestFastHttpPolicy();
   TestDeepHttpPolicy();
   TestFastHttpsPolicy();
+  TestHttpsH2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestFastHttp3PolicyMaterializesUsefulPlan();
   TestFastHttp3PolicyBoundsOrderedActions();
@@ -1235,6 +1362,7 @@ int main() {
   TestFastTelnetPolicy();
   TestFastFtpPolicy();
   TestFastTftpPolicy();
+  TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();
   TestFastTelnetResponseBudgets();
@@ -1250,7 +1378,7 @@ int main() {
   TestProtocolPoliciesDiscardApiPlans();
   TestMultiPolicyRetainsAndBoundsItsPlan();
   TestOtherPoliciesDiscardMultiPlans();
-  TestApiEasyDriveDropsMultiOnlyWakeup();
+  TestApiEasyDrivesDropMultiOnlyWork();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
   return 0;

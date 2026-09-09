@@ -1,0 +1,19 @@
+# Follow a relative redirect over the same HTTP/2 TLS connection. Stream 1
+# redirects to /reuse, a server PING exercises automatic ACK generation, and
+# stream 3 completes the reused request. The fixed peer also calls
+# curl_easy_upkeep once with a zero interval after completion, producing a
+# bounded client-origin PING without sleeping.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/h2-start"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  # SETTINGS ack, then END_STREAM response headers on stream 1. HPACK encodes
+  # literal :status 302 and literal location /reuse using static-table names.
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x0e\x01\x05\x00\x00\x00\x01\x08\x03\x33\x30\x32\x0f\x1f\x06/reuse"
+  # Server-origin PING. Curl must ACK it while scheduling the redirected GET.
+  on_readable: "\x00\x00\x08\x06\x00\x00\x00\x00\x00h2-reuse"
+  # :status=200 plus content-type on stream 3, then END_STREAM body.
+  on_readable: "\x00\x00\x0d\x01\x04\x00\x00\x00\x03\x88\x5f\x0atext/plain\x00\x00\x06\x00\x01\x00\x00\x00\x03reused"
+}

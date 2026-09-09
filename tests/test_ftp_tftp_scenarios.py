@@ -17,8 +17,8 @@ def _supported_options() -> set[str]:
     }
 
 
-def test_file_transfer_controls_are_reachable_without_active_networking() -> None:
-    """Expose passive/scalar controls while the harness owns all routing."""
+def test_file_transfer_controls_are_reachable_with_owned_networking() -> None:
+    """Expose passive/active controls while the harness owns all routing."""
     supported = _supported_options()
     assert {
         "CURLOPT_DIRLISTONLY",
@@ -31,13 +31,13 @@ def test_file_transfer_controls_are_reachable_without_active_networking() -> Non
         "CURLOPT_FTP_FILEMETHOD",
         "CURLOPT_FTP_ALTERNATIVE_TO_USER",
         "CURLOPT_FTP_USE_PRET",
+        "CURLOPT_FTPPORT",
+        "CURLOPT_FTP_USE_EPRT",
         "CURLOPT_WILDCARDMATCH",
         "CURLOPT_TFTP_BLKSIZE",
         "CURLOPT_TFTP_NO_OPTIONS",
     } <= supported
     assert {
-        "CURLOPT_FTPPORT",
-        "CURLOPT_FTP_USE_EPRT",
         "CURLOPT_USE_SSL",
         "CURLOPT_QUOTE",
         "CURLOPT_PREQUOTE",
@@ -77,6 +77,16 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "150 data",
             'on_readable: ""',
             'initial_response: "body"',
+        ),
+        "ftp_active_eprt.textproto": (
+            'CURLOPT_FTPPORT string_value: "127.0.0.1"',
+            "200 EPRT accepted",
+            'initial_response: "active-eprt"',
+        ),
+        "ftp_active_port.textproto": (
+            "CURLOPT_FTP_USE_EPRT bool_value: false",
+            "200 PORT accepted",
+            'initial_response: "active-port"',
         ),
     }
     ftp_root = SCENARIO_ROOT / "ftp"

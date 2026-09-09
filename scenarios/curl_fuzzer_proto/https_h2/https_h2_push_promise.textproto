@@ -1,0 +1,17 @@
+# A verified TLS/ALPN h2 exchange with one valid server push offer. The fixed
+# lane installs CURLMOPT_PUSHFUNCTION before curl sends its SETTINGS, so the
+# PUSH_PROMISE reaches the application callback. The callback inspects the
+# public push-header accessors and rejects stream 2, keeping ownership bounded.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/h2-push"
+connection {
+  # Empty server SETTINGS.
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  # ACK curl's SETTINGS after its request on stream 1 is live.
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00"
+  # PUSH_PROMISE(stream 1 -> stream 2), followed by an HPACK request block:
+  # :method GET, :scheme https, :authority tls.test, :path /pushed.
+  on_readable: "\x00\x00\x19\x05\x04\x00\x00\x00\x01\x00\x00\x00\x02\x82\x87\x01\x08tls.test\x04\x07/pushed"
+  # Complete the parent with indexed :status=200 and END_STREAM DATA.
+  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88\x00\x00\x02\x00\x01\x00\x00\x00\x01OK"
+}

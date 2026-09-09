@@ -21,16 +21,19 @@ LEGACY_TARGET_PATTERN = re.compile(
 PROTO_TARGET_PATTERN = re.compile(
     r"^\s*curl_add_proto_fuzzer\(\s*([a-z0-9_]+)", re.MULTILINE
 )
-STANDALONE_TARGETS = {"fuzz_bufq", "fuzz_doh", "fuzz_url"}
+STANDALONE_TARGETS = {"fuzz_bufq", "fuzz_doh", "fuzz_netrc", "fuzz_url"}
 PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto": "kCompatibility",
     "curl_fuzzer_proto_http": "kFastHttp",
     "curl_fuzzer_proto_http_deep": "kDeepHttp",
     "curl_fuzzer_proto_https": "kFastHttps",
+    "curl_fuzzer_proto_https_h2": "kHttpsH2",
     "curl_fuzzer_proto_https_gnutls": "kFastHttps",
     "curl_fuzzer_proto_https_mbedtls": "kFastHttps",
     "curl_fuzzer_proto_http3": "kFastHttp3",
     "curl_fuzzer_proto_h2_proxy": "kH2Proxy",
+    "curl_fuzzer_proto_socks4": "kSocks4",
+    "curl_fuzzer_proto_resolver": "kResolver",
     "curl_fuzzer_proto_ws": "kFastWebSocket",
     "curl_fuzzer_proto_wss": "kFastSecureWebSocket",
     "curl_fuzzer_proto_telnet": "kFastTelnet",

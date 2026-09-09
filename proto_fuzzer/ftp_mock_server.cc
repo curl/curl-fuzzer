@@ -9,9 +9,16 @@
 
 #include "proto_fuzzer/ftp_mock_server.h"
 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <algorithm>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <string>
@@ -28,6 +35,9 @@ namespace proto_fuzzer {
 FtpMockServer::FtpMockServer()
     : scenario_(nullptr),
       next_data_script_(0),
+      active_listener_fd_(-1),
+      active_listener_client_fd_(CURL_SOCKET_BAD),
+      pending_active_channel_(kMaxDataChannels),
       control_reply_count_(0),
       next_control_reply_(0),
       control_opened_(false) {}
@@ -35,7 +45,7 @@ FtpMockServer::FtpMockServer()
 /// Loopback peers are ordinary unique_ptr-owned transports; the out-of-line
 /// destructor also permits MockConnection to remain forward-declared
 /// in the header.
-FtpMockServer::~FtpMockServer() = default;
+FtpMockServer::~FtpMockServer() { CloseActiveDescriptors(); }
 
 /// Return the bounded command capture accumulated by the most recent drive.
 const std::string& FtpMockServer::control_transcript() const { return control_transcript_; }
@@ -51,9 +61,11 @@ std::size_t FtpMockServer::opened_data_connection_count() const { return next_da
 /// FtpMockServer can be reused serially, but no connection or response cursor
 /// is meaningful across easy-handle drives.
 void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenario) {
+  CloseActiveDescriptors();
   control_connection_.reset();
   for (DataChannel& channel : data_channels_) {
     channel.connection.reset();
+    channel.active_fd = -1;
     channel.script = nullptr;
     channel.transfer_started = false;
     channel.upload = false;
@@ -61,6 +73,7 @@ void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenar
 
   scenario_ = &scenario;
   next_data_script_ = 0;
+  pending_active_channel_ = kMaxDataChannels;
   control_reply_count_ = std::min<std::size_t>(scenario_limits::kMaxResponseChunks,
                                                static_cast<std::size_t>(scenario.connection().on_readable_size()));
   next_control_reply_ = 0;
@@ -68,6 +81,23 @@ void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenar
   control_transcript_.clear();
   uploaded_data_.clear();
   control_opened_ = false;
+}
+
+/// Close only descriptors owned by the peer. Curl owns every listener fd
+/// returned by HandleOpenSocket; active_listener_fd_ is a private duplicate.
+void FtpMockServer::CloseActiveDescriptors() {
+  active_listener_client_fd_ = CURL_SOCKET_BAD;
+  if (active_listener_fd_ >= 0) {
+    close(active_listener_fd_);
+    active_listener_fd_ = -1;
+  }
+  for (DataChannel& channel : data_channels_) {
+    if (channel.active_fd >= 0) {
+      close(channel.active_fd);
+      channel.active_fd = -1;
+    }
+  }
+  pending_active_channel_ = kMaxDataChannels;
 }
 
 /// Clamp a compatibility input's raw protobuf socket size before crossing the
@@ -84,21 +114,79 @@ void FtpMockServer::ApplyScriptBackpressure(MockConnection* connection, const cu
   connection->ApplyBackpressure(receive_buffer, static_cast<std::size_t>(backpressure.drain_limit()));
 }
 
+/// Return whether the final FTPPORT setopt retained by the Scenario selected
+/// active mode. Target policy constrains the actual value to loopback.
+bool FtpMockServer::UsesActiveMode() const {
+  if (scenario_ == nullptr) {
+    return false;
+  }
+  for (int index = scenario_->options_size() - 1; index >= 0; --index) {
+    const auto& option = scenario_->options(index);
+    if (option.option_id() == curl::fuzzer::proto::CURLOPT_FTPPORT) {
+      return option.value_case() == curl::fuzzer::proto::SetOption::kStringValue && !option.string_value().empty();
+    }
+  }
+  return false;
+}
+
+/// Control/passive sockets are connected AF_UNIX pairs, while active FTP
+/// needs curl to bind and listen on the real TCP descriptor returned by
+/// OpenActiveListener. The descriptor identity is recorded when opened, so
+/// this decision never depends on a sandbox-sensitive getsockopt call.
+SocketSetupDisposition FtpMockServer::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const {
+  if (purpose == CURLSOCKTYPE_ACCEPT || curlfd == active_listener_client_fd_) {
+    return SocketSetupDisposition::kNeedsSetup;
+  }
+  return SocketSetupDisposition::kAlreadyConnected;
+}
+
+/// Give curl a genuine INET socket for bind/listen while retaining a duplicate
+/// that can discover the ephemeral loopback port after those operations.
+curl_socket_t FtpMockServer::OpenActiveListener(struct curl_sockaddr* address) {
+  if (address == nullptr || (address->family != AF_INET && address->family != AF_INET6)) {
+    return CURL_SOCKET_BAD;
+  }
+
+  if (pending_active_channel_ == kMaxDataChannels) {
+    const std::size_t available_scripts =
+        std::min<std::size_t>(kMaxDataChannels, static_cast<std::size_t>(scenario_->subsequent_connections_size()));
+    if (next_data_script_ >= available_scripts) {
+      return CURL_SOCKET_BAD;
+    }
+    pending_active_channel_ = next_data_script_++;
+    DataChannel& channel = data_channels_[pending_active_channel_];
+    channel.script = &scenario_->subsequent_connections(static_cast<int>(pending_active_channel_));
+  }
+
+  if (active_listener_fd_ >= 0) {
+    close(active_listener_fd_);
+    active_listener_fd_ = -1;
+  }
+  active_listener_client_fd_ = CURL_SOCKET_BAD;
+
+  const int listener = socket(address->family, address->socktype, address->protocol);
+  if (listener < 0) {
+    return CURL_SOCKET_BAD;
+  }
+  active_listener_fd_ = dup(listener);
+  if (active_listener_fd_ < 0) {
+    close(listener);
+    return CURL_SOCKET_BAD;
+  }
+  active_listener_client_fd_ = listener;
+  (void)fcntl(active_listener_fd_, F_SETFD, FD_CLOEXEC);
+  return listener;
+}
+
 /// Allocate one control socket followed by a bounded sequence of passive data
-/// sockets. Data is intentionally not preloaded here: curl opens EPSV/PASV's
-/// socket before it has sent the command that determines whether the stream is
-/// a listing, download, or upload.
-/// @param purpose Socket role requested by curl; active-mode accepts are
-///                deliberately unsupported.
+/// sockets, or a real listener when CURLOPT_FTPPORT selected active mode.
+/// Data is intentionally not preloaded here: curl has not yet sent the command
+/// that determines whether the stream is a listing, download, or upload.
 /// @param address Original IP destination retained by curl for FTP's passive
 ///                host selection; the connected socketpair need not alter it.
 /// @return An already-connected client fd, or CURL_SOCKET_BAD when the bounded
 ///         control/data script has no matching peer.
 curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
-  (void)address;
-  // Passive control/data sockets are ordinary outbound connections. Reject an
-  // active-mode accept request rather than handing curl a connected socketpair
-  // whose semantics cannot model listen/accept or a server callback.
   if (scenario_ == nullptr || purpose != CURLSOCKTYPE_IPCXN) {
     return CURL_SOCKET_BAD;
   }
@@ -124,6 +212,10 @@ curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_
     return control_connection_->take_client_fd();
   }
 
+  if (UsesActiveMode()) {
+    return OpenActiveListener(address);
+  }
+
   const std::size_t available_scripts =
       std::min<std::size_t>(kMaxDataChannels, static_cast<std::size_t>(scenario_->subsequent_connections_size()));
   if (next_data_script_ >= available_scripts) {
@@ -142,6 +234,81 @@ curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_
   ApplyScriptBackpressure(channel.connection.get(), *channel.script);
   ++next_data_script_;
   return channel.connection->take_client_fd();
+}
+
+/// Retry writes only while they can make immediate progress. Scenario bytes
+/// are bounded, and dropping a suffix on EAGAIN is preferable to introducing
+/// a wall-clock wait into one fuzz iteration.
+bool FtpMockServer::WriteActiveBytes(int fd, const unsigned char* data, std::size_t size) {
+  std::size_t offset = 0;
+  while (offset < size) {
+    const ssize_t written = send(fd, data + offset, size - offset, MSG_NOSIGNAL | MSG_DONTWAIT);
+    if (written > 0) {
+      offset += static_cast<std::size_t>(written);
+      continue;
+    }
+    if (written < 0 && errno == EINTR) {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/// Drain an active upload without waiting for curl. The accepted peer is
+/// nonblocking and the outer perform loop calls this again after more output.
+bool FtpMockServer::ReadActiveBytes(int fd, std::string* output) {
+  bool made_progress = false;
+  char buffer[16 * 1024];
+  for (;;) {
+    const ssize_t amount = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT);
+    if (amount > 0) {
+      output->append(buffer, static_cast<std::size_t>(amount));
+      made_progress = true;
+      continue;
+    }
+    if (amount < 0 && errno == EINTR) {
+      continue;
+    }
+    return made_progress;
+  }
+}
+
+/// Connect to the exact listener curl bound. Since active_listener_fd_ is a
+/// duplicate of that socket, getsockname observes the assigned port without
+/// trusting or reparsing bytes from the control transcript.
+void FtpMockServer::ConnectActiveDataChannel() {
+  if (active_listener_fd_ < 0 || pending_active_channel_ >= kMaxDataChannels) {
+    return;
+  }
+
+  struct sockaddr_storage address;
+  std::memset(&address, 0, sizeof(address));
+  socklen_t address_length = sizeof(address);
+  if (getsockname(active_listener_fd_, reinterpret_cast<struct sockaddr*>(&address), &address_length) != 0) {
+    return;
+  }
+
+  const int fd = socket(address.ss_family, SOCK_STREAM, IPPROTO_TCP);
+  if (fd < 0) {
+    return;
+  }
+  if (connect(fd, reinterpret_cast<struct sockaddr*>(&address), address_length) != 0) {
+    close(fd);
+    return;
+  }
+  const int flags = fcntl(fd, F_GETFL, 0);
+  if (flags >= 0) {
+    (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+  }
+  (void)fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+  DataChannel& channel = data_channels_[pending_active_channel_];
+  channel.active_fd = fd;
+  close(active_listener_fd_);
+  active_listener_fd_ = -1;
+  active_listener_client_fd_ = CURL_SOCKET_BAD;
+  pending_active_channel_ = kMaxDataChannels;
 }
 
 /// Retain only a bounded prefix for assertions. Parsing and draining continue
@@ -326,22 +493,33 @@ void FtpMockServer::QueueTransferCompletion() {
 /// prefix lets curl drain its data state without event-loop sleeps while each
 /// protobuf fragment still affects byte content and parser behavior.
 void FtpMockServer::PreloadDownload(DataChannel* channel) {
-  if (channel == nullptr || channel->connection == nullptr || channel->script == nullptr) {
+  if (channel == nullptr || channel->script == nullptr || (channel->connection == nullptr && channel->active_fd < 0)) {
     return;
   }
 
   const std::string& initial = channel->script->initial_response();
-  bool complete = initial.empty() ||
-                  channel->connection->WriteAll(reinterpret_cast<const unsigned char*>(initial.data()), initial.size());
+  const auto write_bytes = [channel](const std::string& bytes) {
+    if (bytes.empty()) {
+      return true;
+    }
+    if (channel->connection != nullptr) {
+      return channel->connection->WriteAll(reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size());
+    }
+    return WriteActiveBytes(channel->active_fd, reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size());
+  };
+  bool complete = write_bytes(initial);
   const std::size_t chunk_count = std::min<std::size_t>(scenario_limits::kMaxResponseChunks,
                                                         static_cast<std::size_t>(channel->script->on_readable_size()));
   for (std::size_t index = 0; complete && index < chunk_count; ++index) {
     const std::string& chunk = channel->script->on_readable(static_cast<int>(index));
-    complete = chunk.empty() ||
-               channel->connection->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
+    complete = write_bytes(chunk);
   }
   (void)complete;
-  channel->connection->ShutdownWrite();
+  if (channel->connection != nullptr) {
+    channel->connection->ShutdownWrite();
+  } else {
+    (void)shutdown(channel->active_fd, SHUT_WR);
+  }
 }
 
 /// Pair the next transfer command with the oldest passive socket that EPSV or
@@ -350,7 +528,7 @@ void FtpMockServer::PreloadDownload(DataChannel* channel) {
 void FtpMockServer::StartNextTransfer(TransferDirection direction) {
   for (std::size_t index = 0; index < next_data_script_; ++index) {
     DataChannel& channel = data_channels_[index];
-    if (channel.connection == nullptr || channel.transfer_started) {
+    if ((channel.connection == nullptr && channel.active_fd < 0) || channel.transfer_started) {
       continue;
     }
 
@@ -380,6 +558,9 @@ void FtpMockServer::HandleControlCommand(std::string_view command) {
   (void)WriteControlBytes(*response);
 
   const std::string_view verb = CommandVerb(command);
+  if ((VerbEquals(verb, "EPRT") || VerbEquals(verb, "PORT")) && response_code >= 200 && response_code < 300) {
+    ConnectActiveDataChannel();
+  }
   TransferDirection direction = DirectionForVerb(verb);
   if (direction == TransferDirection::kNone && IsConfiguredCustomDownload(verb)) {
     direction = TransferDirection::kDownload;
@@ -434,12 +615,16 @@ bool FtpMockServer::ServiceUploadConnections() {
   bool made_progress = false;
   for (std::size_t index = 0; index < next_data_script_; ++index) {
     DataChannel& channel = data_channels_[index];
-    if (!channel.upload || channel.connection == nullptr) {
+    if (!channel.upload || (channel.connection == nullptr && channel.active_fd < 0)) {
       continue;
     }
 
     std::string bytes;
-    channel.connection->ReadAvailable(&bytes);
+    if (channel.connection != nullptr) {
+      channel.connection->ReadAvailable(&bytes);
+    } else {
+      (void)ReadActiveBytes(channel.active_fd, &bytes);
+    }
     if (!bytes.empty()) {
       CapturePrefix(bytes, kMaxCapturedUploadBytes, &uploaded_data_);
       made_progress = true;
@@ -463,7 +648,15 @@ void FtpMockServer::FinishConnections(bool completed) {
     if (data_channels_[index].connection != nullptr) {
       data_channels_[index].connection->ShutdownWrite();
     }
+    if (data_channels_[index].active_fd >= 0) {
+      (void)shutdown(data_channels_[index].active_fd, SHUT_WR);
+    }
   }
+  if (active_listener_fd_ >= 0) {
+    close(active_listener_fd_);
+    active_listener_fd_ = -1;
+  }
+  active_listener_client_fd_ = CURL_SOCKET_BAD;
 }
 
 /// Alternate curl transitions with immediate peer service until the transfer

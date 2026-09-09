@@ -288,6 +288,27 @@ def test_h2_proxy_lane_uses_only_its_frame_aware_corpus() -> None:
     assert "curl_fuzzer_proto_h2_proxy" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
 
 
+def test_https_h2_lane_uses_only_its_frame_aware_corpus() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_proto_https_h2" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_https_h2" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
+
+
+def test_socks4_lane_uses_only_its_proxy_aware_corpus() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_proto_socks4" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_socks4" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
+
+
+def test_resolver_lane_uses_only_its_structured_corpus() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_proto_resolver" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_resolver" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
+
+
 def test_gnutls_https_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
     module = _load_module()
     corpus_root = tmp_path / "corpora"

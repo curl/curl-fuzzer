@@ -86,6 +86,14 @@ message Scenario {
   Http3Plan http3_plan = 13;
   // Enable verbose curl tracing with LIB-IDS prefixes for this scenario.
   bool trace_ids = 14;
+  // Select the resolution side for the dedicated SOCKS4 proxy lane. Other
+  // fixed targets clear this field, and the compatibility target ignores it,
+  // preserving the semantics of historical serialized inputs.
+  SocksProxyMode socks_proxy_mode = 15;
+  // Harness-owned CURLOPT_RESOLVE entries for the dedicated resolver lane.
+  // The runtime appends a fixed mapping for the requested origin after these
+  // fuzzed entries so removals and wildcards cannot escape the mock transport.
+  repeated bytes resolve_entries = 16;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -94,6 +102,14 @@ message Scenario {
 enum TlsCertificateChainProfile {
   TLS_CERTIFICATE_CHAIN_DEFAULT_EC = 0;
   TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES = 1;
+}
+
+enum SocksProxyMode {
+  // Resolve the canonical localhost origin on the curl side and send its
+  // numeric IPv4 address in the request.
+  SOCKS_PROXY_SOCKS4 = 0;
+  // Send the canonical hostname after SOCKS4A's 0.0.0.1 marker.
+  SOCKS_PROXY_SOCKS4A = 1;
 }
 
 // A bounded, ordered HTTP/3 server script. Structured responses keep common
@@ -205,6 +221,10 @@ message ApiPlan {
   // Each selector indexes a runtime descriptor carrying both a CURLINFO value
   // and its required output type.
   repeated uint32 easy_info_selectors = 7;
+  // Make the first response-body callback pause receiving, then resume it
+  // from the bounded multi event loop. Easy-only drives clear this flag
+  // because their blocking entrypoints provide no safe external resume point.
+  bool pause_response_once = 8;
 }
 
 // Public transfer entrypoints covered by the API lane. An enum prevents
@@ -214,6 +234,13 @@ enum ApiDriveMode {
   API_DRIVE_MULTI_PERFORM = 0;
   API_DRIVE_MULTI_SOCKET = 1;
   API_DRIVE_EASY_PERFORM = 2;
+  // Debug builds expose a blocking easy entrypoint implemented on top of the
+  // socket-action API. curl-fuzzer builds curl with ENABLE_DEBUG so this mode
+  // is deterministic in both CI and OSS-Fuzz.
+  API_DRIVE_EASY_EVENTS = 3;
+  // Establish the HTTP transport without issuing a request, then exercise
+  // curl_easy_send/curl_easy_recv directly against the in-process peer.
+  API_DRIVE_CONNECT_ONLY = 4;
 }
 
 // A bounded shared-multi lifecycle. All handles use the containing Scenario's

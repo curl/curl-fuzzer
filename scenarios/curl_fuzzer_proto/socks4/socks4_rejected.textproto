@@ -1,0 +1,7 @@
+# A complete rejection drives reply-code handling without opening a tunnel.
+scheme: SCHEME_HTTP
+socks_proxy_mode: SOCKS_PROXY_SOCKS4
+host_path: "localhost/rejected"
+connection {
+  on_readable: "\000\133\000\000\000\000\000\000"
+}

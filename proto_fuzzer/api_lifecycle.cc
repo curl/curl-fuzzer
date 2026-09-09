@@ -20,6 +20,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -277,6 +278,14 @@ ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan,
   ProbeKnownErrorStringsOnce();
   ProbeEasyOptionMetadataOnce();
   ProbeUrlAndEscaping(url);
+  if (plan_.pause_response_once()) {
+    response_callback_state_.pause_once = true;
+    // Install userdata first: if the callback setopt were ever rejected, the
+    // baseline sink safely ignores the non-null pointer. The opposite order
+    // could dispatch this callback with libcurl's default FILE* userdata.
+    (void)curl_easy_setopt(easy_, CURLOPT_WRITEDATA, &response_callback_state_);
+    (void)curl_easy_setopt(easy_, CURLOPT_WRITEFUNCTION, &ApiLifecycle::ResponseWrite);
+  }
   if (plan_.attach_share()) {
     ConfigureShare();
   }
@@ -285,6 +294,30 @@ ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan,
 /// RunScenario keeps this owner alive through easy cleanup, which releases
 /// even an incomplete connection's share reference before CleanupShare runs.
 ApiLifecycle::~ApiLifecycle() { CleanupShare(); }
+
+/// Pause only one non-empty delivery. curl replays the same bytes when the
+/// event loop calls curl_easy_pause(CURLPAUSE_CONT), at which point accepting
+/// the full count exercises its callback-output buffering path.
+std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, std::size_t nmemb, void* user_data) {
+  auto* state = static_cast<ResponseCallbackState*>(user_data);
+  if (state == nullptr || (size != 0 && nmemb > std::numeric_limits<std::size_t>::max() / size)) {
+    return 0;
+  }
+  const std::size_t bytes = size * nmemb;
+  if (bytes != 0 && state->pause_once && !state->pause_returned) {
+    state->pause_returned = true;
+    return CURL_WRITEFUNC_PAUSE;
+  }
+  if (bytes > std::numeric_limits<std::size_t>::max() - state->bytes_received) {
+    return 0;
+  }
+  state->bytes_received += bytes;
+  return bytes;
+}
+
+bool ApiLifecycle::response_pause_returned() const { return response_callback_state_.pause_returned; }
+
+std::size_t ApiLifecycle::response_bytes_received() const { return response_callback_state_.bytes_received; }
 
 /// Count callback dispatch while leaving synchronization to applications that
 /// actually use multiple threads. The state is owned by this lifecycle and

@@ -317,10 +317,11 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
     case OptionValueKind::kString: {
       const std::string& value = option.string_value();
 
-      // POSTFIELDS borrows its pointer and accepts embedded NULs only when its
-      // size is explicit. Apply the size first so curl never observes the
-      // protobuf bytes with strlen semantics, even transiently.
-      if (desc->curlopt == CURLOPT_POSTFIELDS) {
+      // POSTFIELDS borrows its pointer and COPYPOSTFIELDS copies exactly the
+      // previously configured size. Apply the correlated byte length first so
+      // either option accepts embedded NULs without strlen semantics and the
+      // copying variant can never read beyond the protobuf-owned buffer.
+      if (desc->curlopt == CURLOPT_POSTFIELDS || desc->curlopt == CURLOPT_COPYPOSTFIELDS) {
         CURLcode result = curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(value.size()));
         if (result != CURLE_OK) {
           return result;

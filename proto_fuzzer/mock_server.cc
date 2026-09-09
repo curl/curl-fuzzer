@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "proto_fuzzer/multi_socket_driver.h"
@@ -29,7 +30,15 @@
 
 namespace proto_fuzzer {
 
+// curl's debug-only event-based easy entrypoint is intentionally used by the
+// API coverage lane. curl-fuzzer builds every bundled curl with ENABLE_DEBUG
+// and visible symbols, matching curl's own command-line tool declaration.
+extern "C" CURLcode curl_easy_perform_ev(CURL* easy);
+
 namespace {
+
+constexpr int kMaxConnectOnlyIoIterations = 16;
+constexpr std::size_t kConnectOnlyBufferSize = 1024;
 
 // fd_set can only represent file descriptors < FD_SETSIZE. Reject any pair that couldn't participate in select()
 // without memory corruption.
@@ -367,7 +376,7 @@ curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_soc
 /// @param easy Configured easy handle whose open-socket callback targets this
 ///        mock.
 /// @param scenario Bounded response script to preload before performing.
-void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events) {
   SetScripts(scenario);
   preload_all_chunks_ = true;
   (void)curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, 50L);
@@ -380,8 +389,58 @@ void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenar
   // one because CONNECT_ONLY=1 also disables the timeout and stays bounded only
   // through a curl-internal shortcut this harness should not depend on.
   (void)curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 0L);
-  (void)curl_easy_perform(easy);
+  if (use_events) {
+    (void)curl_easy_perform_ev(easy);
+  } else {
+    (void)curl_easy_perform(easy);
+  }
   preload_all_chunks_ = false;
+}
+
+/// Establish only the HTTP transport, then pass bounded application bytes
+/// through curl's public direct-I/O wrappers. Preloading makes receive
+/// readiness deterministic without a helper thread; the socketpair peer stays
+/// readable after ShutdownWrite and continues accepting the outgoing probe.
+ConnectOnlyRunStats MockServer::DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  ConnectOnlyRunStats stats;
+  SetScripts(scenario);
+  preload_all_chunks_ = true;
+  (void)curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, 50L);
+  (void)curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 50L);
+  (void)curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 1L);
+  stats.connect_result = curl_easy_perform(easy);
+  preload_all_chunks_ = false;
+  if (stats.connect_result != CURLE_OK || connection_ == nullptr) {
+    return stats;
+  }
+
+  constexpr std::string_view kFallbackRequest = "GET / HTTP/1.0\r\n\r\n";
+  const std::string& upload = scenario.upload().data();
+  const std::string_view source = upload.empty() ? kFallbackRequest : std::string_view(upload);
+  const std::string_view outgoing = source.substr(0, scenario_limits::kMaxApiStringBytes);
+  stats.send_result = CURLE_OK;
+  for (int iteration = 0; stats.sent_bytes < outgoing.size() && iteration < kMaxConnectOnlyIoIterations; ++iteration) {
+    std::size_t sent = 0;
+    stats.send_result =
+        curl_easy_send(easy, outgoing.data() + stats.sent_bytes, outgoing.size() - stats.sent_bytes, &sent);
+    stats.sent_bytes += sent;
+    (void)connection_->DrainIncoming();
+    if (stats.send_result != CURLE_OK && stats.send_result != CURLE_AGAIN) {
+      break;
+    }
+  }
+
+  std::array<unsigned char, kConnectOnlyBufferSize> incoming{};
+  for (int iteration = 0; iteration < kMaxConnectOnlyIoIterations; ++iteration) {
+    std::size_t received = 0;
+    stats.recv_result = curl_easy_recv(easy, incoming.data(), incoming.size(), &received);
+    stats.received_bytes += received;
+    if ((stats.recv_result != CURLE_OK && stats.recv_result != CURLE_AGAIN) ||
+        (stats.recv_result == CURLE_OK && received == 0)) {
+      break;
+    }
+  }
+  return stats;
 }
 
 /// Push the next queued chunk. Called by the drive loop when curl is ready
@@ -458,6 +517,7 @@ void MockServer::RunSocketActionLoop(CURLM* multi, CURL* easy) {
   int still_running = 1;
   CURLMcode rc = driver->Start(&still_running);
   ObserveActiveTransfer(easy);
+  ResumeResponseIfRequested(easy);
   int idle_iterations = 0;
   int drive_iterations = 0;
   while (rc == CURLM_OK && still_running && idle_iterations < kMaxIdleIterations &&
@@ -466,6 +526,7 @@ void MockServer::RunSocketActionLoop(CURLM* multi, CURL* easy) {
     const MultiSocketDriver::DriveResult drive_result = driver->DriveReady(&still_running);
     rc = drive_result.code;
     ObserveActiveTransfer(easy);
+    ResumeResponseIfRequested(easy);
     made_progress = drive_result.made_progress || made_progress;
     if (made_progress) {
       idle_iterations = 0;
@@ -512,6 +573,7 @@ void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Sc
       break;
     }
     ObserveActiveTransfer(easy);
+    ResumeResponseIfRequested(easy);
     made_progress = still_running != running_before;
     if (timed_drive && still_running && !pollset_probed) {
       // Probe only after curl has built the socket/filter chain. A zero-timeout

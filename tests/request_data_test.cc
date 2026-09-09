@@ -578,6 +578,38 @@ void TestEmptyAndNullInputsRemainCheap() {
   curl_easy_cleanup(easy);
 }
 
+void TestResolveEntriesAreExplicitBoundedPointerState() {
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for resolve entries");
+
+  curl::fuzzer::proto::Scenario scenario;
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxResolveEntries + 4; ++index) {
+    scenario.add_resolve_entries(std::string(
+        proto_fuzzer::scenario_limits::kMaxResolveEntryBytes + 9, 'r'));
+  }
+
+  {
+    proto_fuzzer::ScenarioRequestData ordinary(easy, scenario);
+    Expect(ordinary.stats().resolve_entries == 0,
+           "ordinary lane applied resolver-only pointer state");
+    Expect(ordinary.resolve_entries_ready(),
+           "ordinary lane reported a resolver setup failure");
+  }
+  {
+    proto_fuzzer::ScenarioRequestData resolver(easy, scenario, true);
+    Expect(resolver.stats().resolve_entries ==
+               proto_fuzzer::scenario_limits::kMaxResolveEntries,
+           "resolver runtime exceeded its entry budget");
+    Expect(resolver.resolve_entries_ready(),
+           "resolver runtime did not install its final loopback mapping");
+  }
+
+  // ASan validates that destruction detached CURLOPT_RESOLVE before freeing
+  // both the fuzzed list and the final harness-owned loopback mapping.
+  curl_easy_cleanup(easy);
+}
+
 void TestUploadCallbackInstallationIsDemandDriven() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "curl_easy_init failed for callback policy");
@@ -624,6 +656,7 @@ int main() {
          "curl_global_init failed");
   TestConstructionBudgetsAndOwnership();
   TestEmptyAndNullInputsRemainCheap();
+  TestResolveEntriesAreExplicitBoundedPointerState();
   TestUploadCallbackInstallationIsDemandDriven();
   TestFallbackUploadRemainsDeterministic();
   TestTelnetWithoutUploadUsesImmediateEof();

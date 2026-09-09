@@ -34,9 +34,9 @@ fuzz_local_corpus_dir() {
 
 # List public corpus identities worth replaying for a target. Fixed lanes whose
 # response grammar remains compatible also inherit the original target's
-# historical mixed protobuf corpus. The HTTP/2 proxy lane intentionally does
-# not: interpreting its mostly-HTTP/1 response bytes as HTTP/2 frames would
-# spend nearly every replay on the same decoder rejection before CONNECT.
+# historical mixed protobuf corpus. The raw HTTP/2 origin and proxy lanes
+# intentionally do not: interpreting mostly-HTTP/1 response bytes as HTTP/2
+# frames would spend nearly every replay on the same decoder rejection.
 fuzz_public_corpus_names() {
     echo "$1"
     case "$1" in
