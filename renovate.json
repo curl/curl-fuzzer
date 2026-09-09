@@ -55,6 +55,15 @@
     },
     {
       "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "groupName": "Python dependencies"
+    },
+    {
+      "matchManagers": [
         "pep621"
       ],
       "groupName": "Python dependencies"
