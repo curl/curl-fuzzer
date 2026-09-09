@@ -13,14 +13,11 @@
 
 #include <curl/curl.h>
 
-#include <cerrno>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <string>
 
-#include <sys/types.h>
-#include <unistd.h>
+#include "proto_fuzzer/bounded_anonymous_input_file.h"
 
 extern "C" {
 #include "creds.h"
@@ -31,60 +28,34 @@ namespace {
 
 constexpr std::size_t kMaxNetrcBytes = 128 * 1024;
 
-class NetrcInputFile {
-public:
-  NetrcInputFile() : file_(std::tmpfile()) {
-    if (file_ != nullptr) {
-      path_ = "/proc/self/fd/" + std::to_string(fileno(file_));
-    }
-  }
-
-  ~NetrcInputFile() {
-    if (file_ != nullptr) {
-      std::fclose(file_);
-    }
-  }
-
-  NetrcInputFile(const NetrcInputFile &) = delete;
-  NetrcInputFile &operator=(const NetrcInputFile &) = delete;
-
-  bool Write(const std::uint8_t *data, std::size_t size) {
-    if (file_ == nullptr || size > kMaxNetrcBytes) {
-      return false;
-    }
-    const int fd = fileno(file_);
-    if (ftruncate(fd, 0) != 0) {
-      return false;
-    }
-    std::size_t offset = 0;
-    while (offset < size) {
-      const ssize_t written =
-          pwrite(fd, data + offset, size - offset, static_cast<off_t>(offset));
-      if (written < 0 && errno == EINTR) {
-        continue;
-      }
-      if (written <= 0) {
-        return false;
-      }
-      offset += static_cast<std::size_t>(written);
-    }
-    return true;
-  }
-
-  const char *path() const { return path_.empty() ? nullptr : path_.c_str(); }
-
-private:
-  std::FILE *file_;
-  std::string path_;
-};
-
 struct CurlBootstrap {
   CurlBootstrap() { (void)curl_global_init(CURL_GLOBAL_ALL); }
   ~CurlBootstrap() { curl_global_cleanup(); }
 };
 
 CurlBootstrap kCurlBootstrap;
-NetrcInputFile kInputFile;
+proto_fuzzer::BoundedAnonymousInputFile kInputFile(kMaxNetrcBytes + 1);
+
+/// Preserve every fuzz byte while ensuring curl's filtered file buffer is
+/// non-null. curl currently drops comment lines before calling its lexer and
+/// passes nullptr when that leaves an empty file; one leading newline is
+/// parser-neutral but gives the lexer a valid empty string in that case.
+/// @param data Fuzz-controlled NETRC bytes after the harness selector.
+/// @param size Number of fuzz-controlled bytes to retain.
+/// @return true when the complete prefixed input is ready to scan.
+bool WriteNetrcInput(const std::uint8_t *data, std::size_t size) {
+  if (size > kMaxNetrcBytes) {
+    return false;
+  }
+
+  std::string file_contents(1, '\n');
+  if (size != 0) {
+    file_contents.append(reinterpret_cast<const char *>(data), size);
+  }
+  return kInputFile.Write(
+      reinterpret_cast<const std::uint8_t *>(file_contents.data()),
+      file_contents.size());
+}
 
 void ProbeErrorStringsOnce() {
   static const bool probed = [] {
@@ -100,7 +71,7 @@ void ProbeErrorStringsOnce() {
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
-  if (size == 0 || !kInputFile.Write(data + 1, size - 1) ||
+  if (size == 0 || !WriteNetrcInput(data + 1, size - 1) ||
       kInputFile.path() == nullptr) {
     return 0;
   }

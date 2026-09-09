@@ -1093,13 +1093,16 @@ add_dependencies(fuzz_doh ${FUZZ_DEPS})
 
 # NETRC parser fuzzer. Curl_netrc_scan is exposed by curl's UNITTESTS build;
 # the harness supplies a bounded anonymous file through /proc/self/fd.
-add_executable(fuzz_netrc fuzz_netrc.cc)
+add_executable(fuzz_netrc
+    fuzz_netrc.cc
+    proto_fuzzer/bounded_anonymous_input_file.cc)
 target_compile_options(fuzz_netrc PRIVATE ${COMMON_FLAGS})
 target_compile_definitions(fuzz_netrc PRIVATE
     BUILDING_LIBCURL
     DEBUGBUILD
     HAVE_CONFIG_H)
 target_include_directories(fuzz_netrc PRIVATE
+    ${CMAKE_SOURCE_DIR}
     ${CURL_INCLUDE_DIRS}
     ${CURL_PRIVATE_INCLUDE_DIRS})
 target_link_libraries(fuzz_netrc PRIVATE ${COMMON_LINK_LIBS})
@@ -1371,6 +1374,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # about its QUIC peer without pulling nghttp3/OpenSSL server references into
     # every structured fuzzer executable.
     add_library(curl_fuzzer_proto_runner OBJECT
+        proto_fuzzer/bounded_anonymous_input_file.cc
         proto_fuzzer/scenario_runner.cc)
     target_compile_features(curl_fuzzer_proto_runner PRIVATE cxx_std_17)
     target_compile_options(curl_fuzzer_proto_runner PRIVATE
@@ -1393,6 +1397,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
 
     if(BUILD_HTTP3_VARIANT)
         add_library(curl_fuzzer_proto_http3_runner OBJECT
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/scenario_runner.cc
             proto_fuzzer/http3_mock_server.cc)
         target_compile_features(curl_fuzzer_proto_http3_runner PRIVATE
@@ -1532,6 +1537,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(SCENARIO_SRC_DIR ${CMAKE_SOURCE_DIR}/scenarios/curl_fuzzer_proto)
     file(GLOB HTTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/http/*.textproto)
+    file(GLOB HTTP_DEEP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/http_deep/*.textproto)
     file(GLOB HTTPS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/https/*.textproto)
     file(GLOB HTTPS_H2_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -1568,10 +1575,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     # the compatibility corpus and dedicated timing target. The deep HTTP lane
     # retains every other HTTP seed so coverage-rich behavior remains available
     # without imposing its mutation cost on the throughput-oriented lane.
-    set(DEEP_HTTP_SCENARIO_TEXTPROTOS ${HTTP_SCENARIO_TEXTPROTOS})
+    set(HTTP_COVERAGE_SCENARIO_TEXTPROTOS ${HTTP_SCENARIO_TEXTPROTOS})
     set(FAST_WS_SCENARIO_TEXTPROTOS ${WS_SCENARIO_TEXTPROTOS})
-    list(FILTER DEEP_HTTP_SCENARIO_TEXTPROTOS EXCLUDE REGEX "backpressure")
+    list(FILTER HTTP_COVERAGE_SCENARIO_TEXTPROTOS
+         EXCLUDE REGEX "backpressure")
     list(FILTER FAST_WS_SCENARIO_TEXTPROTOS EXCLUDE REGEX "backpressure")
+    set(DEEP_HTTP_SCENARIO_TEXTPROTOS
+        ${HTTP_COVERAGE_SCENARIO_TEXTPROTOS}
+        ${HTTP_DEEP_SCENARIO_TEXTPROTOS})
 
     # Keep the fast seed population deliberately small and explicit. LPM's
     # seed choice materially affects executions per second even when the lane
@@ -1692,7 +1703,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_http_deep ${DEEP_HTTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
         curl_fuzzer_proto_https
-        ${DEEP_HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS})
+        ${HTTP_COVERAGE_SCENARIO_TEXTPROTOS}
+        ${HTTPS_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_h2_corpus
         curl_fuzzer_proto_https_h2 ${HTTPS_H2_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http3_corpus

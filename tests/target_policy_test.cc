@@ -156,11 +156,68 @@ void TestDeepHttpPolicy() {
          "deep HTTP policy filtered a coverage option");
 }
 
+void TestDeepHttpBoundsFileInputs() {
+  Scenario scenario;
+  scenario.set_cookie_file(
+      std::string(proto_fuzzer::scenario_limits::kMaxFileInputBytes + 1, 'c'));
+  scenario.set_altsvc_file(
+      std::string(proto_fuzzer::scenario_limits::kMaxFileInputBytes + 1, 'a'));
+  scenario.set_hsts_file("must be removed by the shared budget");
+  scenario.set_netrc_file("must also be removed by the shared budget");
+  scenario.set_crl_file("TLS-only input");
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kDeepHttp);
+
+  Expect(scenario.cookie_file().size() ==
+             proto_fuzzer::scenario_limits::kMaxFileInputBytes,
+         "deep HTTP policy did not cap the cookie-file input");
+  Expect(scenario.altsvc_file().size() ==
+             proto_fuzzer::scenario_limits::kMaxFileInputBytes,
+         "deep HTTP policy did not cap the Alt-Svc-file input");
+  Expect(scenario.hsts_file().empty(),
+         "deep HTTP policy exceeded the shared file-input byte budget");
+  Expect(scenario.netrc_file().empty(),
+         "deep HTTP policy exceeded the shared budget with netrc input");
+  Expect(scenario.crl_file().empty(),
+         "deep HTTP policy retained TLS-only CRL input");
+
+  Scenario fast;
+  fast.set_cookie_file("cookie");
+  fast.set_altsvc_file("alt-svc");
+  fast.set_hsts_file("hsts");
+  fast.set_netrc_file("netrc");
+  fast.set_crl_file("crl");
+  ApplyTargetPolicy(&fast, TargetProfile::kFastHttp);
+  Expect(fast.cookie_file().empty() && fast.altsvc_file().empty() &&
+             fast.hsts_file().empty() && fast.netrc_file().empty() &&
+             fast.crl_file().empty(),
+         "fast HTTP policy retained deep filename-parser inputs");
+}
+
+void TestDeepHttpAltSvcCanonicalAuthority() {
+  Scenario scenario;
+  scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
+  scenario.set_altsvc_file("h1 altsvc-origin.test 80 h1 alternate.test 80");
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kDeepHttp);
+
+  Expect(scenario.host_path() == "altsvc-origin.test/a/path?query#fragment",
+         "deep HTTP Alt-Svc policy did not select its cache-backed authority");
+
+  Scenario ordinary;
+  ordinary.set_host_path("mutated.example:8443/a/path?query#fragment");
+  ApplyTargetPolicy(&ordinary, TargetProfile::kDeepHttp);
+  Expect(ordinary.host_path() == "mutated.example:8443/a/path?query#fragment",
+         "deep HTTP policy canonicalized an authority without Alt-Svc input");
+}
+
 void TestFastHttpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.set_cookie_file("HTTP-only input");
+  scenario.set_crl_file("TLS CRL input");
 
   ApplyTargetPolicy(&scenario, TargetProfile::kFastHttps);
 
@@ -173,6 +230,10 @@ void TestFastHttpsPolicy() {
   Expect(scenario.tls_certificate_chain() ==
              curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
          "fast HTTPS policy discarded its certificate-chain selector");
+  Expect(scenario.cookie_file().empty(),
+         "fast HTTPS policy retained deep HTTP filename input");
+  Expect(scenario.crl_file() == "TLS CRL input",
+         "fast HTTPS policy discarded its CRL input");
 }
 
 void TestHttpsH2Policy() {
@@ -1311,9 +1372,11 @@ void TestProfileRunModes() {
          "fast FTP profile does not authorize the two-channel peer");
   Expect(RunModeFor(TargetProfile::kFastTftp) == ScenarioRunMode::kTftpCoverage,
          "fast TFTP profile does not authorize the UDP peer");
+  Expect(RunModeFor(TargetProfile::kDeepHttp) ==
+             ScenarioRunMode::kDeepHttpCoverage,
+         "deep HTTP profile does not authorize filename-parser inputs");
 
   constexpr TargetProfile kCoverageProfiles[] = {
-      TargetProfile::kDeepHttp,
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
       TargetProfile::kTiming,
@@ -1349,6 +1412,8 @@ void TestCompatibilityProfileIsNoOp() {
 int main() {
   TestFastHttpPolicy();
   TestDeepHttpPolicy();
+  TestDeepHttpBoundsFileInputs();
+  TestDeepHttpAltSvcCanonicalAuthority();
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();

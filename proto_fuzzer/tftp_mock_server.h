@@ -88,6 +88,9 @@ class TftpMockServer final : public MockServerBase {
 
   /// TFTP returns an unconnected IPv4 datagram descriptor, so curl must still
   /// bind/configure it before the first sendto.
+  /// @param curlfd Descriptor returned by HandleOpenSocket.
+  /// @param purpose Role curl assigned to the descriptor.
+  /// @return Whether curl must perform its normal socket setup.
   SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override;
 
   /// Alternate curl and peer state-machine turns without blocking. This makes

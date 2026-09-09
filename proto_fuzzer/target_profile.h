@@ -61,6 +61,8 @@ enum class ScenarioRunMode {
   kFastProtocol,
   /// Drive the protocol and inspect a compact set of public result APIs.
   kProtocolCoverage,
+  /// Drive deep HTTP plus its bounded filename-backed parser inputs.
+  kDeepHttpCoverage,
   /// Drive HTTPS through a real TLS peer and inspect live TLS result state.
   kTlsCoverage,
   /// Drive an HTTPS origin through fixed ALPN h2 with push/upkeep probes.
@@ -130,11 +132,13 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
       return ScenarioRunMode::kGopherCoverage;
 
     case TargetProfile::kCompatibility:
-    case TargetProfile::kDeepHttp:
     case TargetProfile::kFastWebSocket:
     case TargetProfile::kFastSecureWebSocket:
     case TargetProfile::kTiming:
       return ScenarioRunMode::kProtocolCoverage;
+
+    case TargetProfile::kDeepHttp:
+      return ScenarioRunMode::kDeepHttpCoverage;
   }
   return ScenarioRunMode::kProtocolCoverage;
 }

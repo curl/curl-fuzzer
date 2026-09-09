@@ -66,6 +66,20 @@ void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("tls.test" + host_path.substr(suffix_start));
 }
 
+/// Alt-Svc lookup cannot run while the harness's wildcard CONNECT_TO route is
+/// active. Give file-backed Alt-Svc inputs one fixed origin whose port can be
+/// populated in curl's DNS cache before that override is safely detached,
+/// while preserving all mutation-controlled path, query, and fragment bytes.
+void CanonicalizeAltSvcAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("altsvc-origin.test/");
+    return;
+  }
+  scenario->set_host_path("altsvc-origin.test" + host_path.substr(suffix_start));
+}
+
 /// Both fixed TLS peers support the same closed set of checked-in certificate
 /// bundles. Unknown proto3 enum values fall back to the historical EC chain.
 void CanonicalizeTlsCertificateChain(curl::fuzzer::proto::Scenario* scenario) {
@@ -187,6 +201,25 @@ void BoundConnectionShape(curl::fuzzer::proto::Connection* connection) {
   TrimRepeated(connection->mutable_on_readable(), scenario_limits::kMaxResponseChunks);
   const std::size_t raw_count = static_cast<std::size_t>(connection->on_readable_size());
   TrimRepeated(connection->mutable_server_frames(), scenario_limits::kMaxResponseChunks - raw_count);
+}
+
+/// Retain the observable prefix of one filename-backed parser input while
+/// debiting the shared per-scenario file-byte budget.
+void BoundFileInput(std::string* input, std::size_t* remaining_bytes) {
+  const std::size_t limit = std::min(scenario_limits::kMaxFileInputBytes, *remaining_bytes);
+  if (input->size() > limit) {
+    input->resize(limit);
+  }
+  *remaining_bytes -= input->size();
+}
+
+void BoundFileInputs(curl::fuzzer::proto::Scenario* scenario) {
+  std::size_t remaining_bytes = scenario_limits::kMaxFileInputTotalBytes;
+  BoundFileInput(scenario->mutable_cookie_file(), &remaining_bytes);
+  BoundFileInput(scenario->mutable_altsvc_file(), &remaining_bytes);
+  BoundFileInput(scenario->mutable_hsts_file(), &remaining_bytes);
+  BoundFileInput(scenario->mutable_netrc_file(), &remaining_bytes);
+  BoundFileInput(scenario->mutable_crl_file(), &remaining_bytes);
 }
 
 /// Apply the metadata/header limits shared by both MIME part message types.
@@ -546,6 +579,7 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   for (auto& connection : *scenario->mutable_subsequent_connections()) {
     BoundConnectionShape(&connection);
   }
+  BoundFileInputs(scenario);
 }
 
 /// Return whether an option belongs in the high-throughput HTTP lane. This is
@@ -1116,6 +1150,23 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     scenario->clear_resolve_entries();
   }
 
+  // Anonymous parser files add syscalls and line parsing that belong only in
+  // the deep HTTP lane. Clear them before every protocol-specific early path
+  // so fast targets never pay to normalize content they cannot consume.
+  if (profile != TargetProfile::kDeepHttp) {
+    scenario->clear_cookie_file();
+    scenario->clear_altsvc_file();
+    scenario->clear_hsts_file();
+    scenario->clear_netrc_file();
+  }
+
+  // A CRL is useful only when the target completes a real origin TLS setup.
+  // Keep malformed or oversized CRLs from turning every other lane into an
+  // early TLS-option failure.
+  if (profile != TargetProfile::kFastHttps) {
+    scenario->clear_crl_file();
+  }
+
   if (profile == TargetProfile::kFastHttp3) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
     RemoveIgnoredHttp3Shape(scenario);
@@ -1318,6 +1369,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
 
     case TargetProfile::kDeepHttp:
       ClearAllBackpressure(scenario);
+      if (!scenario->altsvc_file().empty()) {
+        CanonicalizeAltSvcAuthority(scenario);
+      }
       return;
 
     case TargetProfile::kApi:

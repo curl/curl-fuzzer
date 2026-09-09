@@ -66,11 +66,18 @@ class FtpMockServer final : public MockServerBase {
   /// Assign the first socket to the control script. Passive connection
   /// requests receive socketpairs; an active request receives an unbound
   /// loopback TCP socket that curl can bind/listen on normally.
+  /// @param purpose Socket role requested by curl.
+  /// @param address Mutable description of curl's intended destination.
+  /// @return Client descriptor for the selected FTP channel, or
+  ///         CURL_SOCKET_BAD when no channel is available.
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
 
   /// Distinguish socketpair-backed control/passive transports from curl's
   /// real active-mode listener without querying either descriptor.
+  /// @param curlfd Descriptor returned by HandleOpenSocket.
+  /// @param purpose Role curl assigned to the descriptor.
+  /// @return Whether curl must perform its normal socket setup.
   SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override;
 
   /// Drive curl and the command-aware peer in alternating, bounded turns.

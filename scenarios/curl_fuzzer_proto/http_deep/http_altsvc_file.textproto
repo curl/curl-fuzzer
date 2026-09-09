@@ -1,0 +1,10 @@
+# Parse curl's persisted Alt-Svc cache grammar, then match an entry while curl
+# selects its connection peer. Both endpoints use the harness's port-80 DNS
+# cache entry, and OPENSOCKET still supplies the in-process socketpair.
+scheme: SCHEME_HTTP
+host_path: "altsvc-origin.test/cache"
+options { option_id: CURLOPT_ALTSVC_CTRL uint_value: 24 }
+altsvc_file: "h1 altsvc-origin.test 80 h1 alt.example 80 \"20351231 23:59:59\" 1 0\nh2 [::1] 8443 h1 destination.test 8080 \"20351231 23:59:59\" 0 0\n"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

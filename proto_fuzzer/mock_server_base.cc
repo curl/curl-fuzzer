@@ -39,6 +39,11 @@ curl_socket_t MockServerBaseOpenSocketTrampoline(void* clientp, curlsocktype pur
 /// contract. The descriptor is used only as an opaque identity; sandbox
 /// policy must not decide whether an otherwise valid in-process transport can
 /// run.
+/// @param clientp Pointer to the MockServerBase instance.
+/// @param curlfd Descriptor returned by the open-socket callback.
+/// @param purpose Socket role assigned by curl.
+/// @return CURL_SOCKOPT_ALREADY_CONNECTED for prepared stream peers, otherwise
+///         CURL_SOCKOPT_OK.
 int MockServerBaseSockOptTrampoline(void* clientp, curl_socket_t curlfd, curlsocktype purpose) {
   const auto disposition = static_cast<MockServerBase*>(clientp)->GetSocketSetupDisposition(curlfd, purpose);
   return disposition == SocketSetupDisposition::kAlreadyConnected ? CURL_SOCKOPT_ALREADY_CONNECTED : CURL_SOCKOPT_OK;
