@@ -33,6 +33,8 @@ namespace proto_fuzzer {
 // curl's debug-only event-based easy entrypoint is intentionally used by the
 // API coverage lane. curl-fuzzer builds every bundled curl with ENABLE_DEBUG
 // and visible symbols, matching curl's own command-line tool declaration.
+/// @param easy Configured easy handle to perform.
+/// @return The transfer result reported by the event-based entrypoint.
 extern "C" CURLcode curl_easy_perform_ev(CURL* easy);
 
 namespace {
@@ -376,6 +378,7 @@ curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_soc
 /// @param easy Configured easy handle whose open-socket callback targets this
 ///        mock.
 /// @param scenario Bounded response script to preload before performing.
+/// @param use_events Select curl's debug event-based easy entrypoint.
 void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events) {
   SetScripts(scenario);
   preload_all_chunks_ = true;
@@ -401,6 +404,9 @@ void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenar
 /// through curl's public direct-I/O wrappers. Preloading makes receive
 /// readiness deterministic without a helper thread; the socketpair peer stays
 /// readable after ShutdownWrite and continues accepting the outgoing probe.
+/// @param easy Configured easy handle whose transport this mock supplies.
+/// @param scenario Source of the bounded response and direct-I/O probe bytes.
+/// @return Results and byte counts from connect, send, and receive operations.
 ConnectOnlyRunStats MockServer::DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   ConnectOnlyRunStats stats;
   SetScripts(scenario);

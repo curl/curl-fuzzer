@@ -94,6 +94,22 @@ message Scenario {
   // The runtime appends a fixed mapping for the requested origin after these
   // fuzzed entries so removals and wildcards cannot escape the mock transport.
   repeated bytes resolve_entries = 16;
+  // HTTP file-format parsers that have only filename-based public APIs receive
+  // these bytes through bounded anonymous files exposed as /proc/self/fd
+  // paths. Only the deep HTTP lane retains them. Empty values preserve the
+  // historical /dev/null inputs without opening a temporary file.
+  bytes cookie_file = 17;
+  bytes altsvc_file = 18;
+  bytes hsts_file = 19;
+  // The deep HTTP lane enables REQUIRED netrc processing when this field is
+  // non-empty, so the file scanner runs during URL credential setup before
+  // the isolated mock connection is opened.
+  bytes netrc_file = 20;
+  // Only the verified HTTP/1.1 TLS lane retains this field. The harness passes
+  // its anonymous path to CURLOPT_CRLFILE after installing the in-process
+  // peer's trust anchor; no plaintext or unrelated protocol target pays the
+  // TLS backend's CRL parsing cost.
+  bytes crl_file = 21;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

@@ -35,6 +35,12 @@ inline constexpr std::size_t kMaxRequestHeaders = 16;
 inline constexpr std::size_t kMaxResolveEntries = 16;
 /// CURLOPT_RESOLVE consumes NUL-terminated host:port:address records.
 inline constexpr std::size_t kMaxResolveEntryBytes = 4096;
+/// One filename-only parser input can span many lines and cross curl's normal
+/// transfer buffer boundary without permitting mutation-sized temporary files.
+inline constexpr std::size_t kMaxFileInputBytes = 64 * 1024;
+/// Share a ceiling across filename-backed fixtures so populating several in
+/// one scenario cannot multiply the per-file allowance.
+inline constexpr std::size_t kMaxFileInputTotalBytes = 128 * 1024;
 /// TELNET has only a handful of meaningful negotiated preferences. A short
 /// list reaches their combinations without letting response-triggered
 /// subnegotiation multiply client output inside curl's blocking driver.

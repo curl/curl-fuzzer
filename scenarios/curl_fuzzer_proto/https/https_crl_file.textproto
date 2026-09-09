@@ -1,0 +1,15 @@
+# Feed a syntactically valid, empty PEM CRL through curl's TLS-backend file
+# path. It is signed by the fixed tls.test key and has the matching issuer;
+# the fixed certificate intentionally lacks cRLSign, which also reaches the
+# backend's post-parse verification failure without any external filesystem.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/crl-file"
+crl_file: "-----BEGIN X509 CRL-----\n"
+          "MIGuMFUCAQEwCgYIKoZIzj0EAwIwEzERMA8GA1UEAxMIdGxzLnRlc3QXDTI2MDkw\n"
+          "OTEyNDMyM1oYDzIxMjYwODE2MTI0MzIzWqAPMA0wCwYDVR0UBAQCAhAAMAoGCCqG\n"
+          "SM49BAMCA0kAMEYCIQDGX2CxcPcAk6612aRc9mEoHw+gOQNkLJe9OPX4EVJHMgIh\n"
+          "AMoE/jyJS8GnBxuNhpF6/bC4qFlMsrh/d/g0QjGQdniv\n"
+          "-----END X509 CRL-----\n"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ncrl"
+}

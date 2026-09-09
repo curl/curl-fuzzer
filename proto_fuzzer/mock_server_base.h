@@ -39,11 +39,11 @@ enum class SocketSetupDisposition {
 /// makes focused tests distinguish a successful connection from actual
 /// curl_easy_send/curl_easy_recv execution.
 struct ConnectOnlyRunStats {
-  CURLcode connect_result = CURLE_FAILED_INIT;
-  CURLcode send_result = CURLE_FAILED_INIT;
-  CURLcode recv_result = CURLE_FAILED_INIT;
-  std::size_t sent_bytes = 0;
-  std::size_t received_bytes = 0;
+  CURLcode connect_result = CURLE_FAILED_INIT;  ///< Result of establishing the connect-only transport.
+  CURLcode send_result = CURLE_FAILED_INIT;     ///< Final result returned by curl_easy_send.
+  CURLcode recv_result = CURLE_FAILED_INIT;     ///< Final result returned by curl_easy_recv.
+  std::size_t sent_bytes = 0;                   ///< Total application bytes accepted by curl_easy_send.
+  std::size_t received_bytes = 0;               ///< Total application bytes returned by curl_easy_recv.
 };
 
 /// @class proto_fuzzer::MockServerBase
@@ -99,10 +99,15 @@ class MockServerBase {
   /// ordinary multi drive; HTTP overrides this with a true easy perform.
   /// @param easy curl easy handle already Install()ed on this mock.
   /// @param scenario Scenario whose response the mock must prepare.
+  /// @param use_events Select curl's debug event-based easy entrypoint when
+  ///        the concrete mock supports it.
   virtual void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false);
 
   /// Establish a CONNECT_ONLY transport, then perform bounded direct I/O.
   /// HTTP overrides this; other protocol mocks retain a safe fallback.
+  /// @param easy curl easy handle already Install()ed on this mock.
+  /// @param scenario Scenario supplying response and direct-I/O bytes.
+  /// @return Results and byte counts from connect, send, and receive probes.
   virtual ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
   /// @return the active MockConnection, or nullptr if none has been opened.
@@ -125,6 +130,9 @@ class MockServerBase {
   /// Describe the socket returned by HandleOpenSocket without issuing native
   /// descriptor queries. Stream peers return connected socketpairs; accepted
   /// sockets and datagram peers require curl's ordinary setup.
+  /// @param curlfd Descriptor returned by HandleOpenSocket.
+  /// @param purpose Role curl assigned to the descriptor.
+  /// @return Whether curl must perform its normal socket setup.
   virtual SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const;
 
   /// Subclass hook invoked from DriveScenario. Runs the protocol-specific
@@ -161,6 +169,7 @@ class MockServerBase {
   /// the dedicated API plan requested it. Calling CONT before the callback
   /// pauses is harmless; repeating it ensures a later response chunk cannot
   /// leave the transfer suspended until timeout.
+  /// @param easy Active easy handle whose receive callbacks may be paused.
   void ResumeResponseIfRequested(CURL* easy);
 
   /// Hard operation budget for one scenario. This bounds cases that continue

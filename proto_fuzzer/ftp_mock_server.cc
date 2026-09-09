@@ -182,10 +182,6 @@ curl_socket_t FtpMockServer::OpenActiveListener(struct curl_sockaddr* address) {
 /// sockets, or a real listener when CURLOPT_FTPPORT selected active mode.
 /// Data is intentionally not preloaded here: curl has not yet sent the command
 /// that determines whether the stream is a listing, download, or upload.
-/// @param address Original IP destination retained by curl for FTP's passive
-///                host selection; the connected socketpair need not alter it.
-/// @return An already-connected client fd, or CURL_SOCKET_BAD when the bounded
-///         control/data script has no matching peer.
 curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
   if (scenario_ == nullptr || purpose != CURLSOCKTYPE_IPCXN) {
     return CURL_SOCKET_BAD;

@@ -1,0 +1,9 @@
+# Load both cookie-file syntaxes from a bounded anonymous file. The matching
+# Netscape and #HttpOnly_ entries become request cookies; the Set-Cookie form
+# enters the HTTP-header parser through the file loader rather than a response.
+scheme: SCHEME_HTTP
+host_path: "cookie-file.test/deep/path"
+cookie_file: "# Netscape HTTP Cookie File\n#HttpOnly_.cookie-file.test\tTRUE\t/deep\tFALSE\t2147483647\thttp_only\tsecret\n.cookie-file.test\tTRUE\t/\tFALSE\t2147483647\tnetscape\tloaded\nSet-Cookie: header_form=loaded; Domain=cookie-file.test; Path=/; Max-Age=3600; HttpOnly\n"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

@@ -132,6 +132,8 @@ class ScenarioRequestData {
   /// @param easy Easy handle that will perform this scenario.
   /// @param scenario Source headers/TELNET options, optional MIME body, and
   ///                 upload script.
+  /// @param apply_resolve_entries Whether to install the scenario's bounded
+  ///        resolver mappings plus the mandatory loopback mapping.
   ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool apply_resolve_entries = false);
 
   /// A temporary Scenario cannot outlive the upload view retained for curl.
@@ -160,6 +162,7 @@ class ScenarioRequestData {
 
   /// Return whether resolver-only slist construction installed its mandatory
   /// final loopback mapping. Ordinary lanes always report true.
+  /// @return True when the resolver mapping is ready for the transfer.
   bool resolve_entries_ready() const;
 
   /// Arrange protocol-specific work immediately before every upload read.

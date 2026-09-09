@@ -26,10 +26,13 @@ namespace proto_fuzzer {
 /// push callback before curl emits its initial SETTINGS frame.
 class H2OriginMockServer final : public TlsMockServer {
  public:
+  /// Construct an HTTP/2 TLS peer with the selected certificate chain.
+  /// @param certificate_chain Fixed certificate-chain profile to present.
   explicit H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
                                   curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
 
   /// Install TLS routing plus fixed HTTP/2 and immediate upkeep policy.
+  /// @param easy Easy handle to configure.
   void Install(CURL* easy) override;
 
   /// @return number of syntactically valid pushes offered to the callback.
@@ -45,6 +48,10 @@ class H2OriginMockServer final : public TlsMockServer {
   CURLcode upkeep_result() const;
 
  protected:
+  /// Run the raw HTTP/2 response driver and probe server push and upkeep APIs.
+  /// @param multi Multi handle containing `easy`.
+  /// @param easy Easy handle attached to this mock.
+  /// @param scenario Source of bounded HTTP/2 response bytes.
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:

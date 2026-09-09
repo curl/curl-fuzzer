@@ -1,0 +1,18 @@
+# Supply credentials through curl's file-backed netrc scanner, then make the
+# HTTP authentication state machine consume them on a Basic challenge. The
+# harness maps netrc_file to a bounded anonymous /proc/self/fd path and keeps
+# that descriptor alive through both connections.
+scheme: SCHEME_HTTP
+host_path: "netrc.test/protected"
+netrc_file: "machine ignored.test login ignored password ignored\n"
+            "default login netrc-user password netrc-pass\n"
+# BASIC|DIGEST leaves the first request unauthenticated. The server's Basic
+# challenge then selects Basic for the retry, proving that the credentials
+# loaded from netrc flow into HTTP authentication.
+options { option_id: CURLOPT_HTTPAUTH uint_value: 3 }
+connection {
+  initial_response: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"netrc\"\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nnetrc"
+}
