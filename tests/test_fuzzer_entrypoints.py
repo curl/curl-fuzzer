@@ -44,11 +44,17 @@ PROTO_TARGET_PROFILES = {
 
 
 def _packaged_targets(
-    *, architecture: str = "x86_64", sanitizer: str = "address"
+    *,
+    architecture: str = "x86_64",
+    sanitizer: str = "address",
+    selected_target: str | None = None,
 ) -> set[str]:
     environment = os.environ.copy()
+    environment.pop("CURL_FUZZ_TARGET", None)
     environment["ARCHITECTURE"] = architecture
     environment["SANITIZER"] = sanitizer
+    if selected_target is not None:
+        environment["CURL_FUZZ_TARGET"] = selected_target
     result = subprocess.run(
         [
             "bash",
@@ -63,6 +69,15 @@ def _packaged_targets(
         env=environment,
     )
     return set(result.stdout.splitlines())
+
+
+def test_packaging_can_select_one_fuzzer() -> None:
+    """Keep the CI-only build and packaging selection on one executable."""
+    target = "curl_fuzzer_proto_multi"
+
+    assert _packaged_targets(sanitizer="introspector", selected_target=target) == {
+        target
+    }
 
 
 def test_optional_proto_targets_are_limited_to_supported_builds() -> None:

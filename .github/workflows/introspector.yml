@@ -13,8 +13,12 @@ name: Fuzz Introspector
       - 'ossfuzz.sh'
       - 'proto_fuzzer/**'
       - 'scripts/check_introspector_report.py'
+      - 'scripts/generate_introspector_calltree.py'
       - 'scripts/compile_target.sh'
       - 'scripts/fuzz_targets'
+      - 'tests/ftp_mock_server_test.cc'
+      - 'tests/http3_mock_server_test.cc'
+      - 'tests/tftp_mock_server_test.cc'
   pull_request:
     branches:
       - master
@@ -27,8 +31,12 @@ name: Fuzz Introspector
       - 'ossfuzz.sh'
       - 'proto_fuzzer/**'
       - 'scripts/check_introspector_report.py'
+      - 'scripts/generate_introspector_calltree.py'
       - 'scripts/compile_target.sh'
       - 'scripts/fuzz_targets'
+      - 'tests/ftp_mock_server_test.cc'
+      - 'tests/http3_mock_server_test.cc'
+      - 'tests/tftp_mock_server_test.cc'
   workflow_dispatch: {}
 
 concurrency:
@@ -43,6 +51,61 @@ env:
 jobs:
   CallGraph:
     name: 'Proto call graph'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out curl-fuzzer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Keep this aligned with the revision pinned by OSS-Fuzz's base-clang
+      # checkout_build_install_llvm.sh.
+      - name: Check out Fuzz Introspector
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ossf/fuzz-introspector
+          ref: 341ebbd72bc9116733bcfcfab5adfd7f9b633e07
+          path: fuzz-introspector
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install source frontend dependencies
+        run: >-
+          python -m pip --disable-pip-version-check --no-input --no-cache-dir
+          install --progress-bar off --only-binary=:all: --no-deps
+          PyYAML==6.0.2
+          tree-sitter==0.23.2
+          tree-sitter-cpp==0.23.4
+          tree-sitter-go==0.23.4
+          tree-sitter-java==0.23.5
+          tree-sitter-rust==0.23.2
+
+      - name: Generate focused source call graph
+        env:
+          PYTHONPATH: '${{ github.workspace }}/fuzz-introspector/src'
+        run: python scripts/generate_introspector_calltree.py introspector-output
+
+      - name: Check proto runner ancestry
+        run: >-
+          python scripts/check_introspector_report.py
+          introspector-output/fuzzerLogFile-curl_fuzzer_proto_multi.data
+
+      - name: Upload diagnostic metadata
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-introspector-source-callgraph
+          path: introspector-output/
+          if-no-files-found: warn
+
+  FullCallGraph:
+    name: 'Full proto call graph'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -56,22 +119,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: google/oss-fuzz
+          ref: 6f96dc4ca0805f56c1405e7c1606e8b73099f8b7
           path: oss-fuzz
           persist-credentials: false
 
-      # A sanitizer build runs the same light source analysis and binary
-      # correlation used by the published report. No corpus replay is needed
-      # to catch a severed static call-graph edge.
+      # The multi target contains both runner edges under test. Limiting the
+      # build avoids exhausting a hosted runner on unrelated dependency stacks.
       - name: Build Fuzz Introspector metadata
         run: >-
           python3 oss-fuzz/infra/helper.py build_fuzzers
-          --sanitizer=introspector --clean curl
+          --sanitizer=introspector --clean
+          -e CURL_FUZZ_TARGET=curl_fuzzer_proto_multi curl
           "${GITHUB_WORKSPACE}/curl-fuzzer"
 
       - name: Check proto runner ancestry
         run: >-
           python3 curl-fuzzer/scripts/check_introspector_report.py
-          oss-fuzz/build/out/curl/inspector
+          oss-fuzz/build/out/curl/inspector/fuzzerLogFile-curl_fuzzer_proto_multi.data
 
       - name: Upload diagnostic metadata
         if: failure()
@@ -80,5 +144,5 @@ jobs:
           name: fuzz-introspector-callgraph
           path: |
             oss-fuzz/build/out/curl/inspector/summary.json
-            oss-fuzz/build/out/curl/inspector/fuzzerLogFile-curl_fuzzer_proto*.data
+            oss-fuzz/build/out/curl/inspector/fuzzerLogFile-curl_fuzzer_proto_multi.data
           if-no-files-found: warn
