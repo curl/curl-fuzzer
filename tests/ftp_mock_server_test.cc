@@ -211,6 +211,40 @@ void TestExplicitEmptyCompletionExposesControlEof() {
          "control EOF prevented the passive body from being delivered");
 }
 
+void AddActiveModeOptions(Scenario *scenario, bool use_eprt) {
+  auto *ftp_port = scenario->add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("127.0.0.1");
+  auto *eprt = scenario->add_options();
+  eprt->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT);
+  eprt->set_bool_value(use_eprt);
+}
+
+void TestActiveDownload(bool use_eprt) {
+  Scenario scenario;
+  AddActiveModeOptions(&scenario, use_eprt);
+  AddLoginAndPwdReplies(&scenario);
+  auto *control = scenario.mutable_connection();
+  control->add_on_readable(use_eprt ? "200 EPRT accepted\r\n"
+                                    : "200 PORT accepted\r\n");
+  control->add_on_readable("200 type set\r\n");
+  control->add_on_readable("213 11\r\n");
+  control->add_on_readable("150 opening data\r\n");
+  control->add_on_readable("226 complete\r\n");
+  scenario.add_subsequent_connections()->set_initial_response("active-data");
+
+  const FtpRunResult result =
+      RunScenario(scenario, "ftp://ftp.test/active.bin");
+  Expect(result.code == CURLE_OK, "active FTP download did not complete");
+  Expect(result.body == "active-data",
+         "active FTP download produced the wrong body");
+  Expect(result.data_connections == 1,
+         "active FTP download did not allocate one data channel");
+  const char *verb = use_eprt ? "EPRT " : "PORT ";
+  Expect(result.transcript.find(verb) != std::string::npos,
+         "active FTP download used the wrong setup command");
+}
+
 } // namespace
 
 int main() {
@@ -222,6 +256,8 @@ int main() {
   TestUploadIsDrainedWithoutLosingControlChannel();
   TestCustomListingCommandReceivesPassiveData();
   TestExplicitEmptyCompletionExposesControlEof();
+  TestActiveDownload(true);
+  TestActiveDownload(false);
   curl_global_cleanup();
   return 0;
 }

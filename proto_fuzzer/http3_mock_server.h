@@ -70,6 +70,10 @@ class Http3MockServer final : public MockServerBase {
   /// @return client UDP descriptor, or CURL_SOCKET_BAD on setup failure.
   curl_socket_t HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) override;
 
+  /// HTTP/3 returns an unconnected UDP descriptor, so curl must perform its
+  /// normal socket setup before using the rewritten loopback destination.
+  SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override;
+
   /// Alternate nonblocking curl and QUIC server turns under fixed operation
   /// and idle budgets.
   /// @param multi Multi handle containing the scenario's easy handle.

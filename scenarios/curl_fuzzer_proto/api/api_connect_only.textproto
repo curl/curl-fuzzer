@@ -1,0 +1,11 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/connect-only"
+connection {
+  initial_response: "direct-response"
+}
+upload {
+  data: "direct-request"
+}
+api_plan {
+  drive_mode: API_DRIVE_CONNECT_ONLY
+}

@@ -100,7 +100,10 @@ class MockServer : public MockServerBase {
   /// Preload the bounded HTTP response, half-close the peer, and invoke
   /// curl_easy_perform. This avoids a helper thread while guaranteeing that
   /// curl never waits for the outer chunk-delivery loop.
-  void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+  void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false) override;
+
+  /// Exercise direct send/receive APIs after a bounded CONNECT_ONLY setup.
+  ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
   /// Deliver one queued response chunk.
   /// @return true when a chunk was consumed from the script.

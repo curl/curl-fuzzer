@@ -1,0 +1,17 @@
+# Disabling EPRT forces the IPv4 PORT command through the same owned listener.
+scheme: SCHEME_FTP
+host_path: "ftp.test/active-port"
+options { option_id: CURLOPT_FTPPORT string_value: "127.0.0.1" }
+options { option_id: CURLOPT_FTP_USE_EPRT bool_value: false }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "200 PORT accepted\r\n"
+  on_readable: "200 type set\r\n"
+  on_readable: "213 11\r\n"
+  on_readable: "150 opening data\r\n"
+  on_readable: "226 complete\r\n"
+}
+subsequent_connections { initial_response: "active-port" }

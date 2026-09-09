@@ -1,0 +1,4 @@
+0macdef init
+echo ignored
+
+default login fallback password fallback-secret

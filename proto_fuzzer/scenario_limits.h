@@ -30,6 +30,11 @@ inline constexpr std::size_t kMaxResponseChunks = 16;
 inline constexpr std::size_t kMaxOptions = 64;
 /// Request headers retain useful combinatorial interactions at this size.
 inline constexpr std::size_t kMaxRequestHeaders = 16;
+/// Host-cache mutations need only a compact sequence of add/remove/wildcard
+/// entries. The runtime appends one harness-owned loopback mapping separately.
+inline constexpr std::size_t kMaxResolveEntries = 16;
+/// CURLOPT_RESOLVE consumes NUL-terminated host:port:address records.
+inline constexpr std::size_t kMaxResolveEntryBytes = 4096;
 /// TELNET has only a handful of meaningful negotiated preferences. A short
 /// list reaches their combinations without letting response-triggered
 /// subnegotiation multiply client output inside curl's blocking driver.

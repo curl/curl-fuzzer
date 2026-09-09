@@ -12,7 +12,6 @@
 #include "proto_fuzzer/mock_server_base.h"
 
 #include <sys/select.h>
-#include <sys/socket.h>
 
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/mock_server.h"
@@ -23,25 +22,6 @@ namespace proto_fuzzer {
 namespace {
 
 constexpr long kSelectTimeoutUs = 1000;  // 1 ms; explicit timing cases only.
-
-/// Tell curl whether the peer supplied an already-connected socketpair or a
-/// real datagram socket that still needs protocol-owned setup. Returning the
-/// socketpair answer unconditionally made the old TFTP harness skip the wrong
-/// setup assumptions and eventually call IP operations on an AF_UNIX stream.
-/// Accepted sockets are already established by curl itself, where the callback
-/// contract treats any non-zero result as an error rather than as a shortcut.
-int SockOptTrampoline(void* /*clientp*/, curl_socket_t curlfd, curlsocktype purpose) {
-  if (purpose == CURLSOCKTYPE_ACCEPT) {
-    return CURL_SOCKOPT_OK;
-  }
-
-  int socket_type = 0;
-  socklen_t socket_type_size = sizeof(socket_type);
-  if (getsockopt(curlfd, SOL_SOCKET, SO_TYPE, &socket_type, &socket_type_size) != 0) {
-    return CURL_SOCKOPT_ERROR;
-  }
-  return socket_type == SOCK_DGRAM ? CURL_SOCKOPT_OK : CURL_SOCKOPT_ALREADY_CONNECTED;
-}
 
 }  // namespace
 
@@ -55,9 +35,22 @@ curl_socket_t MockServerBaseOpenSocketTrampoline(void* clientp, curlsocktype pur
   return static_cast<MockServerBase*>(clientp)->HandleOpenSocket(purpose, address);
 }
 
+/// Translate explicit peer transport metadata into curl's sockopt callback
+/// contract. The descriptor is used only as an opaque identity; sandbox
+/// policy must not decide whether an otherwise valid in-process transport can
+/// run.
+int MockServerBaseSockOptTrampoline(void* clientp, curl_socket_t curlfd, curlsocktype purpose) {
+  const auto disposition = static_cast<MockServerBase*>(clientp)->GetSocketSetupDisposition(curlfd, purpose);
+  return disposition == SocketSetupDisposition::kAlreadyConnected ? CURL_SOCKOPT_ALREADY_CONNECTED : CURL_SOCKOPT_OK;
+}
+
 /// Default-construct an empty base instance with no connection.
 MockServerBase::MockServerBase()
-    : connection_(nullptr), pending_recv_buf_bytes_(0), pending_drain_limit_(0), multi_socket_driver_(nullptr) {}
+    : connection_(nullptr),
+      pending_recv_buf_bytes_(0),
+      pending_drain_limit_(0),
+      multi_socket_driver_(nullptr),
+      resume_response_(false) {}
 
 /// Out-of-line destructor so MockConnection can stay forward-declared in the
 /// base header (its complete type is only needed where unique_ptr is
@@ -72,7 +65,16 @@ MockConnection* MockServerBase::connection() { return connection_.get(); }
 void MockServerBase::Install(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_OPENSOCKETFUNCTION, &MockServerBaseOpenSocketTrampoline);
   curl_easy_setopt(easy, CURLOPT_OPENSOCKETDATA, this);
-  curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, &SockOptTrampoline);
+  curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, &MockServerBaseSockOptTrampoline);
+  curl_easy_setopt(easy, CURLOPT_SOCKOPTDATA, this);
+}
+
+SocketSetupDisposition MockServerBase::GetSocketSetupDisposition(curl_socket_t /*curlfd*/, curlsocktype purpose) const {
+  // curl itself accepted CURLSOCKTYPE_ACCEPT descriptors, so they must follow
+  // its normal post-accept option path. Every IPCXN socket returned by the
+  // ordinary stream mocks is one end of an already-connected socketpair.
+  return purpose == CURLSOCKTYPE_ACCEPT ? SocketSetupDisposition::kNeedsSetup
+                                        : SocketSetupDisposition::kAlreadyConnected;
 }
 
 /// Ordinary event-driven mocks need no upload-callback hook; their RunLoop
@@ -84,16 +86,18 @@ void MockServerBase::ConfigureRequestData(ScenarioRequestData* /*request_data*/)
 /// stable sentinel; fuzzer callers may ignore it while unit tests can assert
 /// the protocol result without adding another callback or global.
 CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket,
-                                       bool wake_multi) {
+                                       bool wake_multi, bool resume_response) {
   // Cache backpressure knobs so HandleOpenSocket can apply them the moment
   // connection_ exists. Both default to 0, which matches the legacy "drain
   // greedily, kernel-default buffers" behaviour exactly.
   const auto& bp = scenario.connection().backpressure();
   pending_recv_buf_bytes_ = static_cast<int>(bp.recv_buf_bytes());
   pending_drain_limit_ = static_cast<std::size_t>(bp.drain_limit());
+  resume_response_ = resume_response;
 
   CurlMultiPtr multi(curl_multi_init());
   if (multi == nullptr) {
+    resume_response_ = false;
     return CURLE_FAILED_INIT;
   }
 
@@ -136,19 +140,33 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
   }
   multi.reset();
   multi_socket_driver_ = nullptr;
+  resume_response_ = false;
   return transfer_result;
 }
 
 /// Preserve a safe fallback for protocol mocks that require an outer driver
 /// to make progress. The API policy currently forces HTTP, whose override can
 /// preload its bounded response and call curl_easy_perform without a thread.
-void MockServerBase::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+void MockServerBase::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool /*use_events*/) {
   DriveScenario(easy, scenario);
+}
+
+ConnectOnlyRunStats MockServerBase::DriveConnectOnlyScenario(CURL* easy,
+                                                             const curl::fuzzer::proto::Scenario& scenario) {
+  ConnectOnlyRunStats stats;
+  stats.connect_result = DriveScenario(easy, scenario);
+  return stats;
 }
 
 /// Expose only the current callback state to protocol drive loops. Ownership
 /// remains in DriveScenario so no subclass can accidentally shorten it.
 MultiSocketDriver* MockServerBase::multi_socket_driver() { return multi_socket_driver_; }
+
+void MockServerBase::ResumeResponseIfRequested(CURL* easy) {
+  if (resume_response_) {
+    (void)curl_easy_pause(easy, CURLPAUSE_CONT);
+  }
+}
 
 /// Hand the cached backpressure config to the connection. Safe to call when
 /// connection_ is null (no-op) or when both knobs are 0 (ApplyBackpressure

@@ -533,6 +533,11 @@ set(CURL_COMMON_CMAKE_ARGS
 set(_CURL_BASE_C_FLAGS "$ENV{CFLAGS} -DUNITTESTS")
 set(_CURL_BASE_CXX_FLAGS "$ENV{CXXFLAGS} -DUNITTESTS")
 
+# The structured TLS peers retain one live session export and immediately
+# import its copied representation. Enable curl's experimental API in every
+# build that has a TLS backend; the backend-free MSan build remains unchanged.
+set(CURL_TLS_SESSION_EXPORT_CMAKE_ARGS -DUSE_SSLS_EXPORT=ON)
+
 # If coverage is requested, layer the instrumentation flags on top. CMake
 # treats the list elements here as space-separated once rendered into
 # CMAKE_C_FLAGS / CXX_FLAGS on curl's own CMake command line, so we pass them
@@ -551,6 +556,7 @@ set(CURL_DEFAULT_CMAKE_ARGS
 )
 if(TARGET openssl_external)
     list(APPEND CURL_DEFAULT_CMAKE_ARGS
+        ${CURL_TLS_SESSION_EXPORT_CMAKE_ARGS}
         -DCURL_ENABLE_SSL=ON
         -DCURL_USE_OPENSSL=ON
         -DCURL_USE_GNUTLS=OFF
@@ -569,6 +575,7 @@ if(BUILD_MBEDTLS_VARIANT)
     set(CURL_MBEDTLS_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${CURL_MBEDTLS_INSTALL_DIR}
         ${CURL_COMMON_CMAKE_ARGS}
+        ${CURL_TLS_SESSION_EXPORT_CMAKE_ARGS}
         "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
         "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
         ${MBEDTLS_CURL_CMAKE_ARGS}
@@ -584,6 +591,7 @@ if(BUILD_GNUTLS_VARIANT)
     set(CURL_GNUTLS_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${CURL_GNUTLS_INSTALL_DIR}
         ${CURL_COMMON_CMAKE_ARGS}
+        ${CURL_TLS_SESSION_EXPORT_CMAKE_ARGS}
         # Nettle's public bignum.h includes gmp.h. Keep curl's Ed25519 build
         # on the vendored GMP headers rather than whichever version happens
         # to be installed on the host.
@@ -604,6 +612,7 @@ if(BUILD_HTTP3_VARIANT)
     set(CURL_HTTP3_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${CURL_HTTP3_INSTALL_DIR}
         ${CURL_COMMON_CMAKE_ARGS}
+        ${CURL_TLS_SESSION_EXPORT_CMAKE_ARGS}
         "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
         "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
         -DCURL_ENABLE_SSL=ON
@@ -734,6 +743,14 @@ if(BUILD_MBEDTLS_VARIANT)
         SOURCE_ARGS ${CURL_TLS_VARIANT_SOURCE_ARGS}
         DEPENDS ${CURL_MBEDTLS_DEPS})
 endif()
+
+# Direct parser fuzzers intentionally use a small number of curl-private
+# UNITTESTS entrypoints. Obtain the ExternalProject's real source and generated
+# config directories instead of duplicating private C layouts in C++.
+ExternalProject_Get_Property(curl_external SOURCE_DIR BINARY_DIR)
+set(CURL_PRIVATE_INCLUDE_DIRS ${SOURCE_DIR}/lib ${BINARY_DIR}/lib)
+unset(SOURCE_DIR)
+unset(BINARY_DIR)
 
 set(CURL_STATIC_LIB ${CURL_INSTALL_DIR}/lib/libcurl.a)
 set(CURL_GNUTLS_STATIC_LIB
@@ -1074,6 +1091,21 @@ target_link_libraries(fuzz_doh PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(fuzz_doh PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(fuzz_doh ${FUZZ_DEPS})
 
+# NETRC parser fuzzer. Curl_netrc_scan is exposed by curl's UNITTESTS build;
+# the harness supplies a bounded anonymous file through /proc/self/fd.
+add_executable(fuzz_netrc fuzz_netrc.cc)
+target_compile_options(fuzz_netrc PRIVATE ${COMMON_FLAGS})
+target_compile_definitions(fuzz_netrc PRIVATE
+    BUILDING_LIBCURL
+    DEBUGBUILD
+    HAVE_CONFIG_H)
+target_include_directories(fuzz_netrc PRIVATE
+    ${CURL_INCLUDE_DIRS}
+    ${CURL_PRIVATE_INCLUDE_DIRS})
+target_link_libraries(fuzz_netrc PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(fuzz_netrc PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(fuzz_netrc ${FUZZ_DEPS})
+
 # Create a custom target for all fuzzers
 add_custom_target(fuzz
     DEPENDS
@@ -1095,6 +1127,7 @@ add_custom_target(fuzz
         fuzz_bufq
         fuzz_url
         fuzz_doh
+        fuzz_netrc
 )
 
 # -----------------------------------------------------------------------------
@@ -1282,6 +1315,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(PROTO_FUZZER_TLS_SOURCES)
     if(TARGET openssl_external)
         list(APPEND PROTO_FUZZER_TLS_SOURCES
+            proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
             proto_fuzzer/tls_mock_server.cc)
     endif()
@@ -1291,6 +1325,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/ftp_mock_server.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/request_data.cc
+        proto_fuzzer/socks4_mock_server.cc
         proto_fuzzer/mock_server.cc
         proto_fuzzer/mock_server_base.cc
         proto_fuzzer/multi_socket_driver.cc
@@ -1458,6 +1493,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_http)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
     curl_add_proto_fuzzer(curl_fuzzer_proto_https)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_https_h2)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_socks4)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_resolver)
     if(BUILD_GNUTLS_VARIANT)
         curl_add_proto_fuzzer(curl_fuzzer_proto_https_gnutls
             CLIENT curl_proto_client_gnutls
@@ -1496,10 +1534,16 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/http/*.textproto)
     file(GLOB HTTPS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/https/*.textproto)
+    file(GLOB HTTPS_H2_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/https_h2/*.textproto)
     file(GLOB HTTP3_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/http3/*.textproto)
     file(GLOB H2_PROXY_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/h2_proxy/*.textproto)
+    file(GLOB SOCKS4_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/socks4/*.textproto)
+    file(GLOB RESOLVER_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/resolver/*.textproto)
     file(GLOB WS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/ws/*.textproto)
     file(GLOB WSS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -1649,10 +1693,16 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
         curl_fuzzer_proto_https
         ${DEEP_HTTP_SCENARIO_TEXTPROTOS} ${HTTPS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_https_h2_corpus
+        curl_fuzzer_proto_https_h2 ${HTTPS_H2_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http3_corpus
         curl_fuzzer_proto_http3 ${HTTP3_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_h2_proxy_corpus
         curl_fuzzer_proto_h2_proxy ${H2_PROXY_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_socks4_corpus
+        curl_fuzzer_proto_socks4 ${SOCKS4_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_resolver_corpus
+        curl_fuzzer_proto_resolver ${RESOLVER_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_ws_corpus
         curl_fuzzer_proto_ws ${FAST_WS_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_wss_corpus
@@ -1677,6 +1727,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_http_deep
         curl_fuzzer_proto_http_deep_corpus)
     add_dependencies(curl_fuzzer_proto_https curl_fuzzer_proto_https_corpus)
+    add_dependencies(curl_fuzzer_proto_https_h2
+        curl_fuzzer_proto_https_h2_corpus)
     if(BUILD_GNUTLS_VARIANT)
         add_dependencies(curl_fuzzer_proto_https_gnutls
             curl_fuzzer_proto_https_corpus)
@@ -1691,6 +1743,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     endif()
     add_dependencies(curl_fuzzer_proto_h2_proxy
         curl_fuzzer_proto_h2_proxy_corpus)
+    add_dependencies(curl_fuzzer_proto_socks4
+        curl_fuzzer_proto_socks4_corpus)
+    add_dependencies(curl_fuzzer_proto_resolver
+        curl_fuzzer_proto_resolver_corpus)
     add_dependencies(curl_fuzzer_proto_ws curl_fuzzer_proto_ws_corpus)
     add_dependencies(curl_fuzzer_proto_wss curl_fuzzer_proto_wss_corpus)
     add_dependencies(curl_fuzzer_proto_telnet
@@ -1837,6 +1893,55 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             curl_add_mock_server_test(mock_server_mbedtls_test
                 curl_proto_client_mbedtls
                 DEFINITIONS CURL_FUZZER_EXPECT_MBEDTLS)
+        endif()
+
+        if(TARGET openssl_external)
+            # Keep the fixed H2-origin callback/reuse assertions independent
+            # of the broad mock-server matrix. The production lane uses the
+            # default curl build and the OpenSSL-backed in-process TLS peer.
+            add_executable(h2_origin_mock_server_test
+                tests/h2_origin_mock_server_test.cc
+                proto_fuzzer/h2_origin_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC}
+            )
+            target_compile_features(h2_origin_mock_server_test PRIVATE
+                cxx_std_17)
+            target_compile_options(h2_origin_mock_server_test PRIVATE
+                ${COMMON_FLAGS})
+            target_compile_definitions(h2_origin_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(h2_origin_mock_server_test PRIVATE
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include
+                ${CURL_INCLUDE_DIRS}
+            )
+            target_link_libraries(h2_origin_mock_server_test PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m
+            )
+            target_link_options(h2_origin_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(h2_origin_mock_server_test
+                ${FUZZ_DEPS}
+                libprotobuf_mutator_external
+                lpm_link_rsp
+            )
+            add_test(NAME h2_origin_mock_server_test
+                COMMAND h2_origin_mock_server_test)
+            set_tests_properties(h2_origin_mock_server_test PROPERTIES
+                TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests h2_origin_mock_server_test)
         endif()
 
         # Keep concurrent scheduling checks independent of the TLS and

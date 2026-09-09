@@ -1,0 +1,2 @@
+2machine fuzz.test login fuzz-user password selected
+machine other.test login another password ignored

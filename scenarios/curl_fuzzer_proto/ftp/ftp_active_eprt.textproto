@@ -1,0 +1,17 @@
+# Active-mode download through curl's EPRT listener. The peer discovers the
+# kernel-selected port from a duplicate fd and connects from loopback.
+scheme: SCHEME_FTP
+host_path: "ftp.test/active-eprt"
+options { option_id: CURLOPT_FTPPORT string_value: "127.0.0.1" }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "200 EPRT accepted\r\n"
+  on_readable: "200 type set\r\n"
+  on_readable: "213 11\r\n"
+  on_readable: "150 opening data\r\n"
+  on_readable: "226 complete\r\n"
+}
+subsequent_connections { initial_response: "active-eprt" }

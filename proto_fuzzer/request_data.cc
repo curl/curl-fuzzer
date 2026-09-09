@@ -388,15 +388,31 @@ void UploadScriptState::SetBeforeReadCallback(BeforeReadCallback callback, void*
 /// to the easy handle. Setup errors are deliberately non-fatal: malformed or
 /// partially allocated scenarios should still exercise whatever curl state
 /// was built.
-ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario)
+ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario,
+                                         bool apply_resolve_entries)
     : easy_(easy),
       request_headers_(nullptr),
+      resolve_entries_(nullptr),
       telnet_options_(nullptr),
       mime_post_(nullptr),
       upload_state_(scenario),
-      upload_callbacks_installed_(false) {
+      upload_callbacks_installed_(false),
+      resolve_entries_ready_(!apply_resolve_entries) {
   if (easy_ == nullptr) {
     return;
+  }
+
+  if (apply_resolve_entries) {
+    resolve_entries_ = BuildStringList(scenario.resolve_entries(), scenario_limits::kMaxResolveEntries,
+                                       scenario_limits::kMaxResolveEntryBytes, &stats_.resolve_entries);
+    // This mapping is deliberately last: preceding wildcard or removal
+    // mutations may exercise host-cache parsing, but cannot redirect the
+    // canonical resolver-lane origin away from the in-process mock.
+    curl_slist* appended = curl_slist_append(resolve_entries_, "resolve.test:80:127.0.0.1");
+    if (appended != nullptr) {
+      resolve_entries_ = appended;
+      resolve_entries_ready_ = curl_easy_setopt(easy_, CURLOPT_RESOLVE, resolve_entries_) == CURLE_OK;
+    }
   }
 
   if (NeedsUploadCallbacks(scenario)) {
@@ -458,12 +474,16 @@ ScenarioRequestData::~ScenarioRequestData() {
     if (request_headers_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, nullptr);
     }
+    if (resolve_entries_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_RESOLVE, nullptr);
+    }
     if (telnet_options_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, nullptr);
     }
   }
   curl_mime_free(mime_post_);
   curl_slist_free_all(telnet_options_);
+  curl_slist_free_all(resolve_entries_);
   curl_slist_free_all(request_headers_);
 }
 
@@ -474,6 +494,8 @@ const RequestBuildStats& ScenarioRequestData::stats() const { return stats_; }
 const UploadScriptState& ScenarioRequestData::upload_state() const { return upload_state_; }
 
 bool ScenarioRequestData::upload_callbacks_installed() const { return upload_callbacks_installed_; }
+
+bool ScenarioRequestData::resolve_entries_ready() const { return resolve_entries_ready_; }
 
 void ScenarioRequestData::SetBeforeUploadReadCallback(UploadScriptState::BeforeReadCallback callback, void* userdata) {
   upload_state_.SetBeforeReadCallback(callback, userdata);

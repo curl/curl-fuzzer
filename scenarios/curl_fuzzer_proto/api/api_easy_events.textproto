@@ -1,0 +1,9 @@
+scheme: SCHEME_HTTP
+host_path: "api.test/events"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n"
+  on_readable: "events"
+}
+api_plan {
+  drive_mode: API_DRIVE_EASY_EVENTS
+}

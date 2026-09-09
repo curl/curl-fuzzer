@@ -86,6 +86,10 @@ class TftpMockServer final : public MockServerBase {
   /// @return client UDP descriptor, or CURL_SOCKET_BAD on setup failure.
   curl_socket_t HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) override;
 
+  /// TFTP returns an unconnected IPv4 datagram descriptor, so curl must still
+  /// bind/configure it before the first sendto.
+  SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override;
+
   /// Alternate curl and peer state-machine turns without blocking. This makes
   /// packet ordering deterministic and lets incomplete scripts terminate by an
   /// operation/idle budget instead of curl's wall-clock TFTP retransmit timer.

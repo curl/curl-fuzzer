@@ -24,10 +24,16 @@ enum class TargetProfile {
   kDeepHttp,
   /// Exercise a complete HTTPS exchange against the in-process TLS peer.
   kFastHttps,
+  /// Exercise raw HTTP/2 origin frames after a verified TLS/ALPN handshake.
+  kHttpsH2,
   /// Exercise HTTP/3 over a valid in-process QUIC/TLS connection.
   kFastHttp3,
   /// Exercise an HTTP/1.1 origin through an HTTPS/HTTP2 CONNECT proxy.
   kH2Proxy,
+  /// Exercise HTTP through an in-process SOCKS4/SOCKS4A proxy.
+  kSocks4,
+  /// Exercise localhost lookup and structured CURLOPT_RESOLVE host-cache work.
+  kResolver,
   /// Exercise plaintext WebSocket framing without wall-clock waits.
   kFastWebSocket,
   /// Exercise secure WebSocket setup without wall-clock waits.
@@ -57,10 +63,16 @@ enum class ScenarioRunMode {
   kProtocolCoverage,
   /// Drive HTTPS through a real TLS peer and inspect live TLS result state.
   kTlsCoverage,
+  /// Drive an HTTPS origin through fixed ALPN h2 with push/upkeep probes.
+  kTlsHttp2Coverage,
   /// Drive ordered plaintext HTTP/3 actions through the QUIC peer.
   kHttp3Coverage,
   /// Drive raw HTTP/2 proxy frames around one CONNECT tunnel.
   kH2ProxyCoverage,
+  /// Drive a request-triggered SOCKS4 reply followed by tunneled HTTP.
+  kSocks4Coverage,
+  /// Let curl resolve the origin while the socket callback still owns I/O.
+  kResolverCoverage,
   /// Drive FTP through its concurrent control/passive-data peer.
   kFtpCoverage,
   /// Drive TFTP through its datagram-preserving loopback peer.
@@ -93,11 +105,20 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
     case TargetProfile::kFastHttps:
       return ScenarioRunMode::kTlsCoverage;
 
+    case TargetProfile::kHttpsH2:
+      return ScenarioRunMode::kTlsHttp2Coverage;
+
     case TargetProfile::kFastHttp3:
       return ScenarioRunMode::kHttp3Coverage;
 
     case TargetProfile::kH2Proxy:
       return ScenarioRunMode::kH2ProxyCoverage;
+
+    case TargetProfile::kSocks4:
+      return ScenarioRunMode::kSocks4Coverage;
+
+    case TargetProfile::kResolver:
+      return ScenarioRunMode::kResolverCoverage;
 
     case TargetProfile::kFastFtp:
       return ScenarioRunMode::kFtpCoverage;

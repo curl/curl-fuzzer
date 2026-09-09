@@ -15,6 +15,7 @@
 
 #include <curl/curl.h>
 
+#include <cstddef>
 #include <memory>
 
 #include "curl_fuzzer.pb.h"
@@ -24,6 +25,26 @@ namespace proto_fuzzer {
 class MockConnection;
 class MultiSocketDriver;
 class ScenarioRequestData;
+
+/// Tell curl whether an application-provided socket still needs its normal
+/// connect/options setup or already represents a connected stream transport.
+/// This is explicit peer metadata: querying the descriptor from a callback is
+/// both redundant and unavailable in some fuzzing sandboxes.
+enum class SocketSetupDisposition {
+  kNeedsSetup,
+  kAlreadyConnected,
+};
+
+/// Results from the bounded CONNECT_ONLY public-API probe. Keeping byte counts
+/// makes focused tests distinguish a successful connection from actual
+/// curl_easy_send/curl_easy_recv execution.
+struct ConnectOnlyRunStats {
+  CURLcode connect_result = CURLE_FAILED_INIT;
+  CURLcode send_result = CURLE_FAILED_INIT;
+  CURLcode recv_result = CURLE_FAILED_INIT;
+  std::size_t sent_bytes = 0;
+  std::size_t received_bytes = 0;
+};
 
 /// @class proto_fuzzer::MockServerBase
 /// @brief Abstract base for protocol-specific in-process mock servers. Owns a
@@ -66,17 +87,23 @@ class MockServerBase {
   /// @param scenario the Scenario proto to drive.
   /// @param use_multi_socket Select the callback-driven socket-action loop.
   /// @param wake_multi Probe wakeup/timeout control APIs while multi is live.
+  /// @param resume_response Repeatedly resume an opt-in paused write callback
+  ///        at bounded event-loop boundaries until the transfer completes.
   /// @return the completed transfer's CURLcode, or CURLE_FAILED_INIT when the
   /// bounded drive could not produce a completion message.
   CURLcode DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket = false,
-                         bool wake_multi = false);
+                         bool wake_multi = false, bool resume_response = false);
 
   /// Run through the public easy entrypoint when a protocol mock can preload
   /// all peer work before curl takes control. The base falls back to the
   /// ordinary multi drive; HTTP overrides this with a true easy perform.
   /// @param easy curl easy handle already Install()ed on this mock.
   /// @param scenario Scenario whose response the mock must prepare.
-  virtual void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
+  virtual void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false);
+
+  /// Establish a CONNECT_ONLY transport, then perform bounded direct I/O.
+  /// HTTP overrides this; other protocol mocks retain a safe fallback.
+  virtual ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
   /// @return the active MockConnection, or nullptr if none has been opened.
   MockConnection* connection();
@@ -94,6 +121,11 @@ class MockServerBase {
   /// @param address Mutable destination and native socket description.
   /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD.
   virtual curl_socket_t HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) = 0;
+
+  /// Describe the socket returned by HandleOpenSocket without issuing native
+  /// descriptor queries. Stream peers return connected socketpairs; accepted
+  /// sockets and datagram peers require curl's ordinary setup.
+  virtual SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const;
 
   /// Subclass hook invoked from DriveScenario. Runs the protocol-specific
   /// perform loop against a caller-owned multi that already has 'easy' added.
@@ -124,6 +156,12 @@ class MockServerBase {
   /// inputs containing the newly-added field retain their old behavior.
   /// @return active driver, or nullptr for the ordinary perform path.
   MultiSocketDriver* multi_socket_driver();
+
+  /// Resume receive-side callback output at one bounded drive boundary when
+  /// the dedicated API plan requested it. Calling CONT before the callback
+  /// pauses is harmless; repeating it ensures a later response chunk cannot
+  /// leave the transfer suspended until timeout.
+  void ResumeResponseIfRequested(CURL* easy);
 
   /// Hard operation budget for one scenario. This bounds cases that continue
   /// making tiny amounts of progress (for example a one-byte backpressure
@@ -166,8 +204,12 @@ class MockServerBase {
   /// still fire.
   MultiSocketDriver* multi_socket_driver_;
 
+  /// True only for an API-plan multi drive with its one-shot write callback.
+  bool resume_response_;
+
  private:
   friend curl_socket_t MockServerBaseOpenSocketTrampoline(void*, curlsocktype, struct curl_sockaddr*);
+  friend int MockServerBaseSockOptTrampoline(void*, curl_socket_t, curlsocktype);
 };
 
 }  // namespace proto_fuzzer

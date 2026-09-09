@@ -7,6 +7,7 @@ CURLOPT_HTTPGET
 CURLOPT_NOBODY
 CURLOPT_POST
 CURLOPT_POSTFIELDS
+CURLOPT_COPYPOSTFIELDS
 CURLOPT_FOLLOWLOCATION
 CURLOPT_MAXREDIRS
 CURLOPT_USERAGENT
@@ -88,9 +89,9 @@ CURLOPT_MIME_OPTIONS
 CURLOPT_MAXFILESIZE_LARGE
 CURLOPT_BUFFERSIZE
 
-# Plain FTP control/data state. Active-mode FTPPORT/EPRT, FTPS knobs, and
-# slist-backed QUOTE variants stay out until their transports and ownership
-# have protocol-specific peers rather than relying on scalar setopt dispatch.
+# Plain FTP control/data state. The peer confines active FTP to a loopback
+# listener and supports both EPRT and PORT. FTPS and slist-backed QUOTE variants
+# stay out until they have protocol-specific transport/ownership support.
 CURLOPT_DIRLISTONLY
 CURLOPT_APPEND
 CURLOPT_TRANSFERTEXT
@@ -101,6 +102,8 @@ CURLOPT_FTP_SKIP_PASV_IP
 CURLOPT_FTP_FILEMETHOD
 CURLOPT_FTP_ALTERNATIVE_TO_USER
 CURLOPT_FTP_USE_PRET
+CURLOPT_FTPPORT
+CURLOPT_FTP_USE_EPRT
 CURLOPT_WILDCARDMATCH
 
 # TFTP uses the existing upload body and size options. These two switches

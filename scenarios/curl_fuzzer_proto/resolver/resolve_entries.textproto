@@ -1,0 +1,12 @@
+# Parse permanent, temporary, wildcard, and removal CURLOPT_RESOLVE entries.
+# The runtime appends resolve.test's loopback mapping after this sequence.
+scheme: SCHEME_HTTP
+host_path: "resolve.test/resolve"
+resolve_entries: "+cache.test:443:127.0.0.2"
+resolve_entries: "cache.test:80:127.0.0.3,127.0.0.4"
+resolve_entries: "*:80:127.0.0.5"
+resolve_entries: "-cache.test:443"
+resolve_entries: "-resolve.test:80"
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nresolve"
+}

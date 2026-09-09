@@ -93,6 +93,35 @@ void CanonicalizeH2ProxyOriginAuthority(curl::fuzzer::proto::Scenario* scenario)
   scenario->set_host_path("origin.test" + host_path.substr(suffix_start));
 }
 
+/// SOCKS4 must resolve a real local name before constructing its request,
+/// while SOCKS4A deliberately carries a hostname to the proxy. Both
+/// authorities remain fixed and the path/query/fragment stays mutable.
+void CanonicalizeSocksAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host =
+      scenario->socks_proxy_mode() == curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A ? "socks.test" : "localhost";
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path(std::string(host) + "/");
+    return;
+  }
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
+}
+
+/// Use libc/curl's localhost path when there are no structured entries, and a
+/// fixed cache-backed name when entries are present. In both cases the path,
+/// query, and fragment remain mutation-controlled.
+void CanonicalizeResolverAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->resolve_entries().empty() ? "localhost" : "resolve.test";
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path(std::string(host) + "/");
+    return;
+  }
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
+}
+
 /// Give the TFTP lane a parseable filename-bearing URL while retaining the
 /// fuzz-controlled path, query, and fragment. The UDP peer rewrites curl's
 /// destination after URL parsing, so authority mutations cannot reach another
@@ -255,9 +284,14 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
     case curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET:
       break;
     case curl::fuzzer::proto::API_DRIVE_EASY_PERFORM:
+    case curl::fuzzer::proto::API_DRIVE_EASY_EVENTS:
+    case curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY:
       // Wakeup is a multi-handle API and has no live object in easy mode.
-      // Clearing it keeps every retained mutation observable.
+      // Likewise, a body callback cannot be resumed while one of these
+      // blocking entrypoints owns the thread. Clearing both mutations keeps
+      // every retained API-plan value observable and bounded.
       plan->set_wake_multi(false);
+      plan->set_pause_response_once(false);
       break;
     default:
       plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
@@ -682,9 +716,8 @@ void RetainCheapTelnetOptions(curl::fuzzer::proto::Scenario* scenario) {
 }
 
 /// Return whether an option can change a plaintext FTP transfer serviced by
-/// the bounded control/data peer. Active mode and FTPS settings are omitted:
-/// retaining them would select socket and TLS behavior this target does not
-/// provide, turning otherwise-useful mutations into early setup failures.
+/// the bounded control/data peer. Active mode is confined to the mock's
+/// loopback listener; FTPS settings remain omitted until that peer speaks TLS.
 bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_APPEND:
@@ -700,6 +733,8 @@ bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_FTP_SKIP_PASV_IP:
     case curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV:
     case curl::fuzzer::proto::CURLOPT_FTP_USE_PRET:
+    case curl::fuzzer::proto::CURLOPT_FTPPORT:
+    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
     case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
     case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
     case curl::fuzzer::proto::CURLOPT_NOBODY:
@@ -779,6 +814,14 @@ void CanonicalizeFtpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
       case curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD:
         option.set_uint_value(IntegralMutationValue(option) % 4U);
         break;
+      case curl::fuzzer::proto::CURLOPT_FTPPORT:
+        // Never let a mutated active-mode address resolve or bind outside the
+        // process. Empty remains reachable only by omitting the option.
+        option.set_string_value("127.0.0.1");
+        break;
+      case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
+        option.set_bool_value(IntegralMutationValue(option) != 0U);
+        break;
       default:
         break;
     }
@@ -816,6 +859,8 @@ bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_FTP_SKIP_PASV_IP:
     case curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV:
     case curl::fuzzer::proto::CURLOPT_FTP_USE_PRET:
+    case curl::fuzzer::proto::CURLOPT_FTPPORT:
+    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
     case curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE:
     case curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS:
     case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
@@ -1052,7 +1097,8 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   // Only the dedicated TLS and QUIC peers consume a certificate-chain
   // selector. Remove it before protocol-specific early returns so other fixed
   // targets do not spend mutations on inert TLS server state.
-  if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kFastHttp3) {
+  if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kHttpsH2 &&
+      profile != TargetProfile::kFastHttp3) {
     scenario->clear_tls_certificate_chain();
   }
 
@@ -1060,6 +1106,14 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   // but every other fixed lane must discard work its peer cannot consume.
   if (profile != TargetProfile::kFastHttp3) {
     scenario->clear_http3_plan();
+  }
+
+  if (profile != TargetProfile::kSocks4) {
+    scenario->clear_socks_proxy_mode();
+  }
+
+  if (profile != TargetProfile::kResolver) {
+    scenario->clear_resolve_entries();
   }
 
   if (profile == TargetProfile::kFastHttp3) {
@@ -1109,6 +1163,49 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     RetainH2ProxyOriginOptions(scenario);
     BoundScenarioShape(scenario);
     CanonicalizeH2ProxyOriginAuthority(scenario);
+    return;
+  }
+
+  if (profile == TargetProfile::kHttpsH2) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+    RemoveApiOnlyShape(scenario);
+    RemoveMultiOnlyShape(scenario);
+    RemoveTelnetOnlyShape(scenario);
+    RemoveIgnoredH2ProxyShape(scenario);
+    RetainH2ProxyOriginOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeTlsAuthority(scenario);
+    CanonicalizeTlsCertificateChain(scenario);
+    return;
+  }
+
+  if (profile == TargetProfile::kSocks4) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    if (scenario->socks_proxy_mode() != curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A) {
+      scenario->set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4);
+    }
+    RemoveApiOnlyShape(scenario);
+    RemoveMultiOnlyShape(scenario);
+    RemoveTelnetOnlyShape(scenario);
+    RemoveDeepHttpShape(scenario);
+    RetainCheapHttpOptions(scenario);
+    scenario->mutable_connection()->clear_initial_response();
+    BoundScenarioShape(scenario);
+    CanonicalizeSocksAuthority(scenario);
+    return;
+  }
+
+  if (profile == TargetProfile::kResolver) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    RemoveApiOnlyShape(scenario);
+    RemoveMultiOnlyShape(scenario);
+    RemoveTelnetOnlyShape(scenario);
+    RemoveDeepHttpShape(scenario);
+    RetainCheapHttpOptions(scenario);
+    BoundStringValues(scenario->mutable_resolve_entries(), scenario_limits::kMaxResolveEntries,
+                      scenario_limits::kMaxResolveEntryBytes);
+    BoundScenarioShape(scenario);
+    CanonicalizeResolverAuthority(scenario);
     return;
   }
 
@@ -1162,12 +1259,22 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastHttps:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       break;
+    case TargetProfile::kHttpsH2:
+      // The protocol-specific early path fixes ALPN and prunes incompatible
+      // response shapes while retaining the raw frame script.
+      return;
     case TargetProfile::kFastHttp3:
       // The protocol-specific early path owns the QUIC response plan.
       return;
     case TargetProfile::kH2Proxy:
       // The early path removes proxy-incompatible fields before general
       // bounds, keeping raw frame mutation dense.
+      return;
+    case TargetProfile::kSocks4:
+      // The early path fixes proxy routing and request-triggered replies.
+      return;
+    case TargetProfile::kResolver:
+      // The early path fixes safe DNS/cache routing and bounds its slist.
       return;
     case TargetProfile::kFastWebSocket:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_WS);
@@ -1182,6 +1289,7 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kFastTelnet:
     case TargetProfile::kFastFtp:
     case TargetProfile::kFastTftp:
+    case TargetProfile::kFastGopher:
       // Protocol-specific early-return paths selected their scheme above.
       return;
   }
@@ -1237,6 +1345,10 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
       CanonicalizeTlsCertificateChain(scenario);
       return;
 
+    case TargetProfile::kHttpsH2:
+      // Handled by the raw HTTP/2 protocol-specific early path above.
+      return;
+
     case TargetProfile::kFastHttp3:
       // Handled before generic connection bounding because Http3Plan replaces
       // the stream-socket response script.
@@ -1244,6 +1356,14 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
 
     case TargetProfile::kH2Proxy:
       // Handled by the protocol-specific early path above.
+      return;
+
+    case TargetProfile::kSocks4:
+      // Handled by the protocol-specific early path above.
+      return;
+
+    case TargetProfile::kResolver:
+      // Handled by the resolver-specific early path above.
       return;
 
     case TargetProfile::kFastWebSocket:

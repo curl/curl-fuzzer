@@ -56,6 +56,12 @@ class TlsMockServer : public MockServer {
   /// @return true once curl exposed a live TLS backend session during drive.
   bool saw_live_tls_session() const;
 
+  /// @return number of live SSL sessions copied out of curl's cache.
+  std::size_t exported_session_count() const;
+
+  /// @return number of copied SSL sessions successfully imported again.
+  std::size_t imported_session_count() const;
+
   /// @return protocol version selected by the most recent completed handshake,
   /// or zero when no connection completed TLS negotiation.
   int negotiated_tls_version() const;
@@ -101,6 +107,9 @@ class TlsMockServer : public MockServer {
  private:
   std::unique_ptr<TlsServerContext> context_;
   bool saw_live_tls_session_;
+  std::size_t session_export_attempt_count_;
+  std::size_t exported_session_count_;
+  std::size_t imported_session_count_;
 };
 
 }  // namespace proto_fuzzer

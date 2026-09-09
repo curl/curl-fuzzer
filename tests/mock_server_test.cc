@@ -60,8 +60,21 @@ size_t CollectResponse(char *contents, size_t size, size_t nmemb,
 /// production path reaches exactly the same method through curl's trampoline.
 class TestMockServer : public proto_fuzzer::MockServer {
 public:
+  using proto_fuzzer::MockServer::GetSocketSetupDisposition;
   using proto_fuzzer::MockServer::HandleOpenSocket;
 };
+
+void TestStreamSocketDispositionIsExplicit() {
+  TestMockServer server;
+  Expect(
+      server.GetSocketSetupDisposition(CURL_SOCKET_BAD, CURLSOCKTYPE_IPCXN) ==
+          proto_fuzzer::SocketSetupDisposition::kAlreadyConnected,
+      "stream mock did not mark its socketpair already connected");
+  Expect(
+      server.GetSocketSetupDisposition(CURL_SOCKET_BAD, CURLSOCKTYPE_ACCEPT) ==
+          proto_fuzzer::SocketSetupDisposition::kNeedsSetup,
+      "accepted socket skipped curl's ordinary setup");
+}
 
 /// Read a fully half-closed scripted response. Every test script either has no
 /// chunks or explicitly delivers its final chunk before calling this helper,
@@ -335,6 +348,8 @@ struct TlsTransferResult {
   int certificate_count = 0;
   std::vector<std::string> certificate_info;
   bool saw_live_tls_session = false;
+  std::size_t exported_session_count = 0;
+  std::size_t imported_session_count = 0;
   int negotiated_version = 0;
   std::size_t handshake_count = 0;
   std::size_t reused_session_count = 0;
@@ -556,6 +571,8 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
     }
   }
   result.saw_live_tls_session = server.saw_live_tls_session();
+  result.exported_session_count = server.exported_session_count();
+  result.imported_session_count = server.imported_session_count();
   result.negotiated_version = server.negotiated_tls_version();
   result.handshake_count = server.completed_handshake_count();
   result.reused_session_count = server.reused_session_count();
@@ -666,6 +683,10 @@ void TestTls12OptionsForceNegotiatedVersion() {
          "SSLVERSION limits did not force TLS 1.2");
   Expect(result.handshake_count == 1,
          "TLS 1.2 transfer completed an unexpected number of handshakes");
+  Expect(result.exported_session_count == 1,
+         "TLS 1.2 transfer did not retain one exported session");
+  Expect(result.imported_session_count == 1,
+         "TLS 1.2 transfer did not import its copied session");
 }
 
 void TestTlsPublicKeyPins() {
@@ -753,10 +774,9 @@ void TestTlsWriteRetryKeepsItsOriginalBoundary() {
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
 void TestTlsEchCompletesEncryptedClientHello() {
   Scenario scenario = MakeTlsScenario("ech-success", "ech");
-  AddStringOption(
-      &scenario, curl::fuzzer::proto::CURLOPT_ECH,
-      std::string("ecl:") +
-          proto_fuzzer::tls_test_credentials::kEchConfigListBase64);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_ECH,
+                  std::string("ecl:") +
+                      proto_fuzzer::tls_test_credentials::kEchConfigListBase64);
 
   const TlsTransferResult result = DriveTlsScenario(scenario);
   Expect(result.code == CURLE_OK && result.response == "ech",
@@ -904,6 +924,101 @@ void TestEasyPerformPreloadsIncrementalResponse() {
       "curl_easy_perform did not consume the preloaded incremental response");
 
   curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+void TestEasyEventsPreloadsIncrementalResponse() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/events");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("events");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "event-based easy test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/events");
+
+  std::string response;
+  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  TestMockServer server;
+  server.Install(easy);
+  server.DriveEasyScenario(easy, scenario, true);
+
+  Expect(response == "events",
+         "curl_easy_perform_ev did not consume the preloaded response");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+void TestConnectOnlyExercisesDirectIo() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/connect-only");
+  scenario.mutable_connection()->set_initial_response("server-data");
+  scenario.mutable_upload()->set_data("client-data");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "CONNECT_ONLY test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/connect-only");
+
+  TestMockServer server;
+  server.Install(easy);
+  const proto_fuzzer::ConnectOnlyRunStats stats =
+      server.DriveConnectOnlyScenario(easy, scenario);
+
+  Expect(stats.connect_result == CURLE_OK,
+         "CONNECT_ONLY easy setup did not complete");
+  Expect(stats.send_result == CURLE_OK &&
+             stats.sent_bytes == scenario.upload().data().size(),
+         "curl_easy_send did not transmit the bounded direct-I/O probe");
+  Expect(stats.received_bytes ==
+             scenario.connection().initial_response().size(),
+         "curl_easy_recv did not consume the preloaded direct-I/O response");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+void TestApiResponseCallbackPausesAndResumes() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/pause");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("paused");
+  auto *plan = scenario.mutable_api_plan();
+  plan->set_pause_response_once(true);
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "API response-pause test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/pause");
+
+  TestMockServer server;
+  server.Install(easy);
+  auto lifecycle = std::make_unique<proto_fuzzer::ApiLifecycle>(
+      easy, *plan, "http://api.test/pause");
+  Expect(server.DriveScenario(easy, scenario, false, false, true) == CURLE_OK,
+         "paused API response did not finish after resume");
+  Expect(lifecycle->response_pause_returned(),
+         "API response callback never returned CURL_WRITEFUNC_PAUSE");
+  Expect(lifecycle->response_bytes_received() == 6,
+         "paused response bytes were not replayed exactly once");
+
+  curl_easy_cleanup(easy);
+  lifecycle.reset();
   curl_slist_free_all(connect_to);
 }
 
@@ -1092,6 +1207,7 @@ void TestTelnetMaximumAmplificationCannotBlock() {
 } // namespace
 
 int main() {
+  TestStreamSocketDispositionIsExplicit();
   TestFollowOnScriptsAndOldConnectionLifetime();
   TestConnectionBudgetIncludesPrimarySocket();
   TestRawChunksPrecedeFramesWithinSharedBudget();
@@ -1118,6 +1234,9 @@ int main() {
 #endif
   TestApiLifecycleCompletesSocketActionTransfer();
   TestEasyPerformPreloadsIncrementalResponse();
+  TestEasyEventsPreloadsIncrementalResponse();
+  TestConnectOnlyExercisesDirectIo();
+  TestApiResponseCallbackPausesAndResumes();
   TestEasyPerformBoundsConnectOnlyUpload();
   TestTelnetPreloadsChunksAndNeverReadsStdin();
   TestTelnetMaximumAmplificationCannotBlock();
