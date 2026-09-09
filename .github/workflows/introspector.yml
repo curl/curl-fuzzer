@@ -15,6 +15,7 @@ name: Fuzz Introspector
       - 'scripts/check_introspector_report.py'
       - 'scripts/generate_introspector_calltree.py'
       - 'scripts/compile_target.sh'
+      - 'pyproject.toml'
       - 'scripts/fuzz_targets'
       - 'tests/ftp_mock_server_test.cc'
       - 'tests/http3_mock_server_test.cc'
@@ -33,6 +34,7 @@ name: Fuzz Introspector
       - 'scripts/check_introspector_report.py'
       - 'scripts/generate_introspector_calltree.py'
       - 'scripts/compile_target.sh'
+      - 'pyproject.toml'
       - 'scripts/fuzz_targets'
       - 'tests/ftp_mock_server_test.cc'
       - 'tests/http3_mock_server_test.cc'
@@ -78,12 +80,7 @@ jobs:
         run: >-
           python -m pip --disable-pip-version-check --no-input --no-cache-dir
           install --progress-bar off --only-binary=:all: --no-deps
-          PyYAML==6.0.2
-          tree-sitter==0.23.2
-          tree-sitter-cpp==0.23.4
-          tree-sitter-go==0.23.4
-          tree-sitter-java==0.23.5
-          tree-sitter-rust==0.23.2
+          --group introspector
 
       - name: Generate focused source call graph
         env:
