@@ -13,4 +13,18 @@ if [ "${ARCHITECTURE:-}" != "i386" ]; then
     fi
 fi
 
+# A caller may narrow an OSS-Fuzz build to one supported executable. Apply the
+# architecture and sanitizer gates first so unavailable variants are rejected.
+if [[ -n "${CURL_FUZZ_TARGET:-}" ]]; then
+    if [[ "${CURL_FUZZ_TARGET}" == *[[:space:]]* ]]; then
+        echo "CURL_FUZZ_TARGET must name exactly one target" >&2
+        return 1
+    fi
+    if [[ " ${FUZZ_TARGETS_LIST} " != *" ${CURL_FUZZ_TARGET} "* ]]; then
+        echo "Unknown or unsupported CURL_FUZZ_TARGET: ${CURL_FUZZ_TARGET}" >&2
+        return 1
+    fi
+    FUZZ_TARGETS_LIST="${CURL_FUZZ_TARGET}"
+fi
+
 export FUZZ_TARGETS="${FUZZ_TARGETS_LIST}"

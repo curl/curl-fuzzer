@@ -32,6 +32,9 @@ SCRIPTDIR=${BUILD_ROOT}/scripts
 # Introspector's compiler wrappers consume it while producing their metadata.
 export FUZZ_INTROSPECTOR_CONFIG=${BUILD_ROOT}/fuzz_introspector_exclusion.config
 
+# The normal build uses the aggregate `fuzz` target. CI can request one CMake
+# target to compile and package through the curl-specific override.
+FUZZ_BUILD_TARGET=${CURL_FUZZ_TARGET:-fuzz}
 . "${SCRIPTDIR}"/fuzz_targets
 
 echo "BUILD_ROOT: $BUILD_ROOT"
@@ -67,7 +70,7 @@ if [[ "${CIFUZZ:-}" == "True" || -n "${REPLAY_ENABLED:-}" ]]; then
 fi
 
 # Compile the fuzzers.
-"${SCRIPTDIR}"/compile_target.sh fuzz
+"${SCRIPTDIR}"/compile_target.sh "${FUZZ_BUILD_TARGET}"
 
 # Build GDB separately if requested (it's a tool, not a fuzzer dependency).
 if [[ -n ${GDBMODE:-} ]]; then
