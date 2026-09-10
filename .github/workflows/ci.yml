@@ -12,9 +12,6 @@ name: CI
     branches:
       - master
       - main
-  # Periodically test the latest curl master independently of curl/curl CI.
-  schedule:
-    - cron: '23 3,9,15,21 * * *'  # Every six hours at :23 UTC.
   # This makes the workflow callable by curl/curl
   workflow_call: {}
 
@@ -37,16 +34,16 @@ jobs:
       # Must match the path ossfuzz.sh writes to when CIFUZZ=True.
       CACHE_PATH: .ossfuzz-build-cache-address-x86_64
     steps:
-      # Check out the calling repo (curl/curl on workflow_call, curl-fuzzer
-      # on push/PR). CIFuzz mounts this into the build container.
+      # Check out the caller repository (curl/curl for its caller, curl-fuzzer
+      # otherwise). CIFuzz mounts this into the build container.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # Check out curl-fuzzer into a subdirectory so the cache key can hash
       # the build-definition files and trim_cache.sh is available. When
-      # running on curl-fuzzer itself, use the PR/push ref; when called from
-      # curl/curl via workflow_call, default to master.
+      # running in curl-fuzzer, use its triggering ref; when called from
+      # curl/curl, default to master.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
