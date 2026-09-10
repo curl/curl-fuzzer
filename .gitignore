@@ -43,8 +43,10 @@ __pycache__/
 logs/
 *.egg-info/
 
-# Docs
-docs/
+# Generated documentation site
+_site/
+/mermaid-init.js
+/mermaid.min.js
 
 # oss-fuzz checkout
 .oss-fuzz/

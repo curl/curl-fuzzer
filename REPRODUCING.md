@@ -1,81 +1,103 @@
-# Reproducing Fuzzer Findings
+# Reproducing fuzzer findings
 
-## Decode Structured Scenarios
+OSS-Fuzz reports identify the target binary, fuzzing engine, sanitizer, and
+platform that found a failure. Reproduce with the closest available
+configuration: a crash found under UndefinedBehaviorSanitizer, for example,
+may not be visible in the default AddressSanitizer build.
 
-ACR repro images include the build-specific scenario schema and a `decode-scenario`
-command. To decode a ClusterFuzz testcase on the host, mount it into the container:
+These instructions assume that the testcase has been downloaded from the
+OSS-Fuzz report.
+
+## Inspect the testcase
+
+### Legacy TLV targets
+
+Decode a legacy input with the Python tool:
+
+```shell
+read_corpus clusterfuzz-testcase-minimized-curl_fuzzer_http-<id>
+```
+
+For example, a URL-only input is displayed as:
+
+```text
+TLVContents(type='CURLOPT_URL' (1), length=16, data=b'http://127.0.0.1')
+```
+
+The hosted [legacy corpus decoder](https://fuzz.curl.se/corpus-decoder/)
+provides the same kind of inspection in a browser without uploading the file.
+
+### Structured protobuf targets
+
+After building the project, `read_proto_corpus` uses the expanded schema under
+`build/schemas/` to print field names:
+
+```shell
+read_proto_corpus \
+  clusterfuzz-testcase-minimized-curl_fuzzer_proto_http-<id>
+```
+
+The command requires `protoc`. If it cannot find the expanded schema, it falls
+back to `protoc --decode_raw`; pass `--proto-file` to select one explicitly.
+
+Published reproduction images also include the build-specific schema and a
+`decode-scenario` command:
 
 ```shell
 docker run --rm -i \
-  -v "$PWD/clusterfuzz-testcase-minimized-curl_fuzzer_proto_multi-5329718237528064:/testcase:ro" \
+  -v "$PWD/clusterfuzz-testcase-minimized-curl_fuzzer_proto_multi-<id>:/testcase:ro" \
   curlfuzzer.azurecr.io/address-libfuzzer \
   decode-scenario /testcase
 ```
 
-The command also accepts scenario data on standard input:
+It also accepts the testcase on standard input:
 
 ```shell
 docker run --rm -i curlfuzzer.azurecr.io/address-libfuzzer decode-scenario \
-  < clusterfuzz-testcase-minimized-curl_fuzzer_proto_multi-5329718237528064
+  < clusterfuzz-testcase-minimized-curl_fuzzer_proto_multi-<id>
 ```
-# Reproducing OSS-Fuzz issues
-## Reproducible vs non-reproducible
-OSS-Fuzz generates two kinds of issues; reproducible and non-reproducible. It _generally_ only raises issues for reproducible problems; that is, a testcase that can be passed to the relevant fuzzer which causes a crash. They are marked as such in the OSS-Fuzz dashboard.
 
-These instructions are for diagnosing reproducible problems.
+Direct parser targets consume target-specific raw bytes and generally have no
+separate decoder.
 
-## Getting started
-### Reading the testcase
-OSS-Fuzz should have given you a testcase that causes a crash in a fuzzer. Often the general area of the problem can be divined by reading the contents.
+## Reproduce with a local standalone build
 
-For most fuzzers, this is done using `read_corpus`:
+Build the target, optionally against a local curl checkout:
+
+```shell
+./mainline.sh -t curl_fuzzer_http
+./mainline.sh -c /path/to/curl -t curl_fuzzer_http
 ```
-$ read_corpus corpora/curl_fuzzer_http/test_url_http
-TLVContents(type='CURLOPT_URL' (1), length=16, data=b'http://127.0.0.1')
+
+The resulting binary is under `build/`. Set `FUZZ_VERBOSE` to enable detailed
+libcurl logging:
+
+```shell
+FUZZ_VERBOSE=1 ./build/curl_fuzzer_http \
+  clusterfuzz-testcase-minimized-curl_fuzzer_http-<id>
 ```
-This example shows a testcase consisting of a configured URL (`CURLOPT_URL`). There are many other options available; run `generate_corpus --help` for a comprehensive list.
 
-## Determining how to reproduce
-Assuming the previous step didn't immediately reveal the problem, you can run the testcase against the fuzzer. OSS-Fuzz uses lots of different types of fuzzing engine, so it's worth checking if you can run against the mainline fuzzer.
+The default build uses AddressSanitizer. It is suitable for many
+`libfuzzer_asan` findings and provides a fast edit-build-replay loop. A matching
+OSS-Fuzz container is preferable when the report uses another sanitizer,
+engine, architecture, or dependency configuration.
 
-When OSS-Fuzz raises an issue, it includes information at the top of the report:
+## Reproduce in OSS-Fuzz
 
+Follow the upstream
+[OSS-Fuzz reproduction guide](https://google.github.io/oss-fuzz/advanced-topics/reproducing/)
+for complete instructions. From an OSS-Fuzz checkout, an UndefinedBehaviorSanitizer
+HTTP reproduction is:
+
+```shell
+python3 infra/helper.py build_image curl
+python3 infra/helper.py build_fuzzers --sanitizer undefined curl
+python3 infra/helper.py reproduce \
+  curl curl_fuzzer_http \
+  /path/to/clusterfuzz-testcase-minimized-curl_fuzzer_http-<id>
 ```
-Detailed report: https://oss-fuzz.com/testcase?key=<testcase-key>
 
-Project: curl
-Fuzzer: libFuzzer_curl_fuzzer_http
-Fuzz target binary: curl_fuzzer_http
-Job Type: libfuzzer_asan_curl
-Platform Id: linux
-```
-This shows:
-- which fuzzing binary was being run
-- what engine was being used (libfuzzer, afl)
-- what sanitization options were being used (libasan = address sanitization, libubsan = undefined behaviour sanitization)
-
-The fuzzing binaries built by `mainline.sh` can be used to reproduce issues which are using `libasan`. **For issues hit using libubsan, these should be reproduced using the OSS-Fuzz environment!**
-
-## Reproducing using a `mainline.sh` binary
-To reproduce, execute the fuzzer with the testcase as a parameter. Setting the environment variable FUZZ_VERBOSE=yes will cause the fuzzer to output in-depth information about what it's doing at each stage:
-```
-$ FUZZ_VERBOSE=yes ./curl_fuzzer_http ../clusterfuzz-testcase-minimized-<testcase-key>
-```
-If reproduction succeeds, the fuzzer will emit the same sanitizer report or crash described by OSS-Fuzz.
-
-From here, you can either:
-- modify libcurl to output extra diagnostics and rerun after recompiling
-- use GDB to diagnose the fuzzer live
-  - Setting a breakpoint on `__asan::ReportGenericError` will stop execution at the point where libasan detects a failure; this can be very useful to get to the correct point of failure.
-
-If this hasn't worked then you may want to run in the OSS-Fuzz environment.
-
-## Running in the OSS-Fuzz environment
-Rather than reiterate OSS-Fuzz's guidance, you can read it at [https://github.com/google/oss-fuzz/blob/master/docs/reproducing.md](https://github.com/google/oss-fuzz/blob/master/docs/reproducing.md).
-
-For an HTTP testcase, the equivalent commands are:
-```
-$ python infra/helper.py build_image curl
-$ python infra/helper.py build_fuzzers --sanitizer undefined curl
-$ python infra/helper.py reproduce curl curl_fuzzer_http ../clusterfuzz-testcase-minimized-<testcase-key>
-```
+Once reproduced, use the normal sanitizer stack trace, debugger, and targeted
+logging to narrow the fault. For AddressSanitizer investigations in GDB, a
+breakpoint on `__asan::ReportGenericError` can stop at the point where the
+runtime reports the invalid access.

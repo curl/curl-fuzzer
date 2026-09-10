@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate an interactive HTML page for decoding curl corpus files."""
+"""Generate an interactive HTML page for decoding legacy TLV corpus files."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .corpus import BaseType
 from .logger import common_logging
 
 _TEMPLATE_NAME = "corpus_decoder.html"
-_DEFAULT_OUTPUT = Path("docs/corpus-decoder/index.html")
+_DEFAULT_OUTPUT = Path("_site/corpus-decoder/index.html")
 
 
 def _jinja_env() -> Environment:

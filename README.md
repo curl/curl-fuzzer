@@ -1,181 +1,141 @@
 # curl-fuzzer
 
-Code and corpora for curl and libcurl fuzzing.
+Fuzz targets, seed corpora, and developer tooling for curl and libcurl. This
+repository supplies the harnesses used by curl's
+[OSS-Fuzz project](https://github.com/google/oss-fuzz/tree/master/projects/curl).
 
-This is the curl fuzzing [OSS-Fuzz](https://github.com/google/oss-fuzz/tree/master/projects/curl) runs for us, non-stop.
+[Documentation](https://fuzz.curl.se/) ·
+[Legacy TLV corpus decoder](https://fuzz.curl.se/corpus-decoder/) ·
+[Reproducing findings](REPRODUCING.md) ·
+[Benchmarking](BENCHMARKING.md)
 
-## I just want to get fuzzing!
+## Fuzzer families
 
-Great! Run `./mainline.sh`. It will download you a fresh copy of curl, compile
-it with `clang`, install it to a temporary directory, then compile the fuzzer
-against curl. It'll also run the regression testcases.
+| Family | Purpose | Seed source |
+| --- | --- | --- |
+| Legacy `curl_fuzzer` and protocol variants | Protocol-specific libcurl transfers driven by the established TLV format | `corpora/<target>/` |
+| Structured `curl_fuzzer_proto*` | Protobuf scenarios with target-specific policies and in-process protocol peers | `scenarios/curl_fuzzer_proto/` |
+| Direct `fuzz_*` targets | Focused fuzzing of URL, buffer queue, DoH, and netrc parsing | `corpora/<target>/` |
 
-If you have a local copy of curl that you want to use instead, pass the path as
-an argument to `./mainline.sh`. It will compile and install that curl to a
-temporary directory instead.
+The conditional list in [`scripts/fuzz_targets`](scripts/fuzz_targets) is the
+source of truth for targets packaged for OSS-Fuzz. Structured targets are not
+built for i386, and some TLS and HTTP/3 variants are omitted from
+MemorySanitizer builds.
 
-`./mainline.sh` is run regressibly by Github Actions.
+## Build and replay locally
 
-## I want to see code coverage
+The primary local workflow targets Linux and requires Bash, Clang, CMake 3.24
+or newer, Python 3, a build tool such as Ninja or Make, and network access for
+the initial dependency build.
 
-Run `./codecoverage.sh`. It builds every fuzzer with LLVM source-based coverage
-instrumentation, replays the checked-in corpora through them, and produces:
-
-- `build-coverage/coverage/summary.txt` - `llvm-cov report` (per-file line/region/function
-  percentages, restricted to curl's `lib/` and `src/`).
-- `build-coverage/coverage/html/index.html` - browsable HTML report.
-
-Like `mainline.sh`, pass `-c /path/to/curl` to measure coverage against a local
-curl checkout instead of the git master tip.
-
-The `Coverage` GitHub Actions workflow runs the same script on demand
-(Actions → Coverage → "Run workflow") and uploads the report as an
-artifact; the summary is also posted into the job summary page so the
-overall number is visible without downloading anything. It's manual
-rather than per-push to keep the main CI path fast.
-
-## I want more information when running a testcase or multiple testcases
-
-Setting the `FUZZ_VERBOSE` environment variable turns on curl verbose logging.
-This can be useful when debugging a single testcase.
-
-## I want to download public corpus test files from OSS-Fuzz
-
-Run `./scripts/download_public_corpus.sh`. It pulls the public `public.zip`
-for every target listed in `scripts/fuzz_targets` into
-`ossfuzz_corpus/<target>/`, skipping any that don't have a published zip.
-Pass `-f` to force a refresh of already-downloaded corpora.
-
-`./codecoverage.sh` automatically replays `ossfuzz_corpus/<target>/`
-alongside the checked-in `corpora/<target>/` when the directory exists, so
-local coverage numbers reflect what the OSS-Fuzz fleet has discovered. The
-`Coverage` CI workflow runs the same download weekly (cached by ISO week).
-
-The public corpus links for each target are also accessible directly:
-
-- [curl_fuzzer_dict](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_dict/public.zip)
-- [curl_fuzzer_file](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_file/public.zip)
-- [curl_fuzzer_ftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ftp/public.zip)
-- [curl_fuzzer_gopher](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_gopher/public.zip)
-- [curl_fuzzer_http](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_http/public.zip)
-- [curl_fuzzer_https](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_https/public.zip)
-- [curl_fuzzer_imap](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_imap/public.zip)
-- [curl_fuzzer_ldap](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ldap/public.zip)
-- [curl_fuzzer_mqtt](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_mqtt/public.zip)
-- [curl_fuzzer_pop3](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_pop3/public.zip)
-- [curl_fuzzer_rtmp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_rtmp/public.zip)
-- [curl_fuzzer_rtsp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_rtsp/public.zip)
-- [curl_fuzzer_scp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_scp/public.zip)
-- [curl_fuzzer_sftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_sftp/public.zip)
-- [curl_fuzzer_smtp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_smtp/public.zip)
-- [curl_fuzzer_tftp](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_tftp/public.zip)
-- [curl_fuzzer_ws](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_ws/public.zip)
-- [curl_fuzzer](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer/public.zip)
-- [fuzz_url](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzz_url/public.zip) (OSS-Fuzz prefixes with `curl_`)
-- fuzz_bufq: the target was renamed from `curl_fuzzer_bufq`; until OSS-Fuzz
-  picks up the new name, the live corpus remains at
-  [curl_fuzzer_bufq](https://storage.googleapis.com/curl-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer/curl_fuzzer_bufq/public.zip)
-  and the new location `curl_fuzz_bufq` will start filling in once the
-  rebuild propagates.
-- fuzz_doh: no public link yet (new targets take a while to land on OSS-Fuzz).
-
-## I want to reproduce an error hit overnight by OSS-Fuzz
-
-Check out [REPRODUCING.md](REPRODUCING.md) for more detailed instructions.
-
-## How do I install the Python tooling?
-
-- Create a virtual environment using your favourite method.
-  - For example:
-    ```shell
-    python3 -m venv .venv
-    ```
-- Within that virtual environment, from the root directory of this repository, install the tooling with
-  ```shell
-  pip install .
-  ```
-- Alternatively you can use `uv`; either
-  ```shell
-  uv sync
-  uv pip install -e .
-  ```
-  to sync your environment, or
-  ```shell
-  uv run <tool>
-  ```
-  directly.
-
-## What's in this testcase?
-
-To look at the contents of a testcase, run
-```shell
-read_corpus <path/to/file>
-```
-This will print out a list of contents inside the file.
-
-## I want an HTML decoder for corpus files
-
-Generate a standalone HTML page that can inspect TLV corpora directly in your browser:
+Build all targets against the latest curl source:
 
 ```shell
-python -m curl_fuzzer_tools.generate_decoder_html
+./mainline.sh
 ```
 
-By default the generator writes to `docs/corpus-decoder/index.html`. The page is entirely client-side; it never uploads the selected file. You can open the output straight from the filesystem, for example `file:///.../docs/corpus-decoder/index.html`.
-
-**View the latest published decoder:**
-
-[curl corpus decoder (GitHub Pages)](https://curl.github.io/curl-fuzzer/corpus-decoder/index.html)
-
-GitHub Pages is configured to deploy automatically from the `docs/` folder whenever the `main` branch is updated. Use the command above locally before pushing if you need to refresh the published site.
-
-### Optional browser smoke-test (Playwright)
-
-The Playwright regression test is opt-in so the default install stays light. If you want to run it:
+Use `-c` to build a local curl checkout, or `-t` to build one target:
 
 ```shell
-pip install -e '.[browser-tests]'
-playwright install chromium
-pytest tests/browser/test_corpus_decoder.py
+./mainline.sh -c /path/to/curl
+./mainline.sh -t curl_fuzzer_http
 ```
 
-These commands exercise the generated HTML by uploading a sample TLV corpus in a headless Chromium run.
+The default AddressSanitizer build creates standalone replay binaries under
+`build/` and runs the CTest suite. A binary accepts either individual inputs or
+directories:
 
-## I want to generate a new testcase
-
-To generate a new testcase, run
 ```shell
-generate_corpus
+FUZZ_VERBOSE=1 ./build/curl_fuzzer_http \
+  corpora/curl_fuzzer_http/test_url_http
+./build/curl_fuzzer_http corpora/curl_fuzzer_http/
 ```
-with appropriate options - pass `--help` for all options.
 
-# I want to enhance the fuzzer!
+These standalone binaries replay inputs; they do not perform mutation fuzzing.
+See the [local fuzzing guide](https://fuzz.curl.se/getting-started.html#run-mutation-fuzzing)
+for the OSS-Fuzz workflow and sanitizer options.
 
-Wonderful! Here's a bit of information you may need to know.
+## Python tools
 
-## File format
+The Python package requires Python 3.10 or newer. With
+[`uv`](https://docs.astral.sh/uv/):
 
-Testcases are written in a Type-Length-Value or TLV format. Each TLV has:
+```shell
+uv sync
+uv run read_corpus corpora/curl_fuzzer_http/test_url_http
+```
 
-- 16 bits for the Type
-- 32 bits for the Length of the TLV data
-- 0 - length bytes of data.
+Or use a conventional virtual environment:
 
-TLV type numbers are defined in both corpus.py and curl_fuzzer.h.
+```shell
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+read_corpus corpora/curl_fuzzer_http/test_url_http
+```
 
-## Adding a new TLV.
+Useful commands include:
 
-To add a new TLV:
+- `read_corpus` for legacy TLV inputs.
+- `read_proto_corpus` for binary protobuf scenarios; named fields require
+  `protoc` and the generated schema from a build.
+- `generate_corpus` for legacy TLV seeds.
+- `tlv_to_proto` for converting legacy HTTP corpus entries to textproto.
+- `generate_decoder_html` for the standalone legacy corpus decoder.
 
-- Add support for it in the Python scripts: `generate_corpus.py`, `corpus.py`.
-  This means adding options for reading the value of the TLV from the user (or
-  from a file, or from test data)
-- Add support for it in the shared legacy fuzzer: `legacy_fuzzer.cc`,
-  `curl_fuzzer.h`. The files under `fuzzer_entrypoints/` remain thin wrappers
-  so each packaged binary retains an independently attributable entrypoint.
-  This likely means adding handling of the TLV to `fuzz_parse_tlv()`.
-- Ensure that `FUZZ_CURLOPT_TRACKER_SPACE` can encompass your additional TLVs!
-- If you decide to change a TLV number after you have created it and have
-  generated test cases before you changed the TLV, rerun the test case
-  generation to ensure your current TLV numbering maps your test cases as you
-  expect.
+Each command supports `--help`. The complete list of installed entry points is
+in [`pyproject.toml`](pyproject.toml).
+
+## Corpora
+
+Download the public OSS-Fuzz corpora for every currently supported target:
+
+```shell
+./scripts/download_public_corpus.sh
+```
+
+Inputs are extracted to `ossfuzz_corpus/<target>/`. Existing non-empty target
+directories are retained; pass `-f` to refresh them. Missing public corpora are
+reported and skipped because newly added targets may not have one yet.
+
+For legacy targets, checked-in binary seeds live in `corpora/`. For structured
+targets, checked-in textproto files under `scenarios/` are the source of truth;
+CMake generates their binary corpus entries in the build tree.
+
+## Coverage
+
+Build coverage-instrumented targets, replay local and downloaded corpora, and
+produce text and HTML reports with:
+
+```shell
+./codecoverage.sh
+```
+
+The reports are written to:
+
+- `build-coverage/coverage/summary.txt`
+- `build-coverage/coverage/html/index.html`
+
+Pass `-c /path/to/curl` to cover a local curl checkout. The manual `Coverage`
+GitHub Actions workflow publishes the same reports and reuses a public-corpus
+cache keyed by ISO week.
+
+## Development
+
+Install the Python test dependencies and run the repository checks with:
+
+```shell
+uv sync --extra python-tests
+uv run pytest tests/test_*.py
+./lint.sh
+```
+
+Contributor documentation for the legacy and structured harnesses is in the
+[documentation site](https://fuzz.curl.se/). See
+[REPRODUCING.md](REPRODUCING.md) for crash investigation and
+[BENCHMARKING.md](BENCHMARKING.md) for controlled performance and source
+coverage comparisons.
+
+## License
+
+curl-fuzzer is distributed under the curl license. See [LICENSE](LICENSE).

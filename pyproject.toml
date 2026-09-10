@@ -25,6 +25,10 @@ dependencies = [
     "jinja2>=3.1.0,<4.0.0",
 ]
 
+[project.urls]
+Documentation = "https://fuzz.curl.se/"
+Repository = "https://github.com/curl/curl-fuzzer"
+
 [project.optional-dependencies]
 browser-tests = [
     "playwright>=1.62,<1.63",

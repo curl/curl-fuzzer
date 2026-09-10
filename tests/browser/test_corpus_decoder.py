@@ -51,6 +51,8 @@ def test_upload_repository_corpus(tmp_path: Path) -> None:
         page = browser.new_page()
         page.goto(file_url)
 
+        assert page.title() == "curl legacy corpus decoder"
+
         page.set_input_files("#corpus-input", str(corpus_path))
         page.wait_for_selector(f"text=Decoded {expected_tlvs} TLVs successfully.")
 

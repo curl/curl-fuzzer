@@ -1,4 +1,4 @@
-name: Playwright browser test for corpus decoder
+name: Documentation and decoder tests
 
 'on':
   push:
@@ -17,6 +17,11 @@ permissions: {}
 
 env:
   DO_NOT_TRACK: '1'
+  DOCS_SITE: ${{ vars.DOCS_SITE }}
+  # renovate: datasource=crate depName=mdbook
+  MDBOOK_VERSION: '0.5.4'
+  # renovate: datasource=crate depName=mdbook-mermaid
+  MDBOOK_MERMAID_VERSION: '0.17.1'
 
 jobs:
   test:
@@ -31,15 +36,35 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Install documentation tools
+        run: |
+          cargo install mdbook --version "=${MDBOOK_VERSION}" --locked
+          cargo install mdbook-mermaid \
+            --version "=${MDBOOK_MERMAID_VERSION}" --locked
+
       - name: Install dependencies
         run: |
           pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[browser-tests]'
-          python -m playwright install
+          python -m playwright install chromium
 
       - name: Install Playwright system dependencies
         run: |
           sudo find /etc/apt/sources.list.d -type f -not -name 'ubuntu.sources' -delete -print
-          playwright install-deps
+          python -m playwright install-deps chromium
+
+      - name: Build documentation site
+        run: |
+          test -n "${DOCS_SITE}"
+          mdbook-mermaid install .
+          git diff --exit-code -- book.toml
+          test -s mermaid.min.js
+          test -s mermaid-init.js
+          mdbook build
+          python -m curl_fuzzer_tools.generate_decoder_html --output _site/corpus-decoder/index.html
+          test -s _site/index.html
+          test -s _site/corpus-decoder/index.html
+          grep --fixed-strings --quiet '<pre class="mermaid">' _site/proto/overview.html
+          grep --fixed-strings --line-regexp --quiet -- "${DOCS_SITE}" _site/CNAME
 
       - name: Run Playwright browser test
-        run: pytest tests/browser/test_corpus_decoder.py
+        run: pytest tests/browser
