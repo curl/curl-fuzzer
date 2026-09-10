@@ -1,0 +1,188 @@
+name: Scheduled CI alert
+
+'on':
+  # This never checks out or executes code from the triggering run. The job is
+  # also restricted to scheduled runs whose head repository is this repository.
+  workflow_run:  # zizmor: ignore[dangerous-triggers]
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions: {}
+
+jobs:
+  update-alert:
+    name: 'Update scheduled CI alert'
+    # workflow_run cannot filter by the source event. Keep this privileged job
+    # limited to scheduled CI runs originating in this repository.
+    if: >-
+      github.event.workflow_run.event == 'schedule' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: scheduled-ci-alert
+      cancel-in-progress: false
+    permissions:
+      issues: write  # Needed to create, assign, update, and close alert issues
+    steps:
+      - name: Open or resolve alert issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SCHEDULED_ISSUE_ASSIGNEE: ${{ vars.SCHEDULED_ISSUE_ASSIGNEE }}
+        with:
+          github-token: ${{ github.token }}
+          retries: 3
+          script: |
+            const run = context.payload.workflow_run;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const assignee = process.env.SCHEDULED_ISSUE_ASSIGNEE?.trim();
+            const title = '[automation] Scheduled CI is failing';
+            const marker = '<!-- curl-fuzzer-scheduled-ci-alert:v1 -->';
+
+            // Defense in depth: never process an untrusted workflow run in
+            // this job, which has permission to modify issues.
+            if (run.event !== 'schedule' ||
+                run.head_repository?.full_name !== `${owner}/${repo}`) {
+              core.setFailed('Refusing to process a non-scheduled or foreign run');
+              return;
+            }
+
+            if (!assignee) {
+              core.setFailed(
+                'SCHEDULED_ISSUE_ASSIGNEE repository variable must be set'
+              );
+              return;
+            }
+
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner,
+                repo,
+                state: 'all',
+                creator: 'github-actions[bot]',
+                per_page: 100
+              }
+            );
+            const matches = issues
+              .filter(issue =>
+                !issue.pull_request &&
+                issue.user?.login === 'github-actions[bot]' &&
+                issue.body?.includes(marker)
+              )
+              .sort((a, b) => a.number - b.number);
+            if (matches.length > 1) {
+              core.warning(
+                `Found ${matches.length} scheduled-CI alerts; using #${matches[0].number}`
+              );
+            }
+            const alert = matches[0];
+
+            const observed = new Date().toISOString();
+            const runLink = `[scheduled CI run #${run.run_number}](${run.html_url})`;
+            const failureBody = [
+              marker,
+              `@${assignee}, the periodic curl build in curl-fuzzer is failing.`,
+              '',
+              `Latest failure: ${runLink}`,
+              `Conclusion: \`${run.conclusion}\``,
+              `Commit: \`${run.head_sha}\``,
+              `Observed: ${observed}`,
+              '',
+              'This issue is maintained automatically and will close after ' +
+                'the next successful scheduled run.'
+            ].join('\n');
+            const failingConclusions = new Set([
+              'failure',
+              'timed_out'
+            ]);
+
+            async function ensureAssignee(issue) {
+              if (issue.assignees?.some(user => user.login === assignee)) {
+                return;
+              }
+              try {
+                await github.rest.issues.addAssignees({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  assignees: [assignee]
+                });
+              } catch (error) {
+                // The @mention above still sends the alert if assignment is
+                // unavailable or GitHub silently rejects the assignee.
+                core.warning(`Could not assign @${assignee}: ${error.message}`);
+              }
+            }
+
+            if (failingConclusions.has(run.conclusion)) {
+              if (!alert) {
+                const created = await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title,
+                  body: failureBody
+                });
+                await ensureAssignee(created.data);
+                core.notice(`Opened #${created.data.number}`);
+              } else if (alert.state === 'closed') {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  state: 'open',
+                  title,
+                  body: failureBody
+                });
+                await ensureAssignee(alert);
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  body: `@${assignee}, scheduled CI is failing again: ${runLink}.`
+                });
+                core.notice(`Reopened #${alert.number}`);
+              } else {
+                // Update the last failure without sending four duplicate
+                // notifications per day while the incident remains open.
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  title,
+                  body: failureBody
+                });
+                await ensureAssignee(alert);
+                core.notice(`Updated open alert #${alert.number}`);
+              }
+              return;
+            }
+
+            if (run.conclusion === 'success') {
+              if (alert?.state === 'open') {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  body: `Recovered in ${runLink} at ${observed}.`
+                });
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  state: 'closed',
+                  state_reason: 'completed'
+                });
+                core.notice(`Closed recovered alert #${alert.number}`);
+              } else {
+                core.notice('Scheduled CI is healthy; no open alert');
+              }
+              return;
+            }
+
+            // Cancellation and neutral/skipped results are inconclusive: do
+            // not open a false incident or close a real one.
+            core.notice(`Leaving alert unchanged for conclusion: ${run.conclusion}`);

@@ -12,11 +12,14 @@ name: CI
     branches:
       - master
       - main
+  # Periodically test the latest curl master independently of curl/curl CI.
+  schedule:
+    - cron: '23 3,9,15,21 * * *'  # Every six hours at :23 UTC.
   # This makes the workflow callable by curl/curl
   workflow_call: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 permissions: {}
