@@ -181,7 +181,6 @@ def create_shards(
             {
                 "fuzzer": target,
                 "shard": target_shards[target],
-                "artifact": f"fuzz-shard-{target_shards[target]}",
             }
             for target in sorted(targets)
         ]

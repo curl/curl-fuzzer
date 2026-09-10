@@ -114,12 +114,10 @@ def test_script_can_create_shards_when_invoked_directly(tmp_path: Path) -> None:
             {
                 "fuzzer": "fuzzer_a",
                 "shard": "00",
-                "artifact": "fuzz-shard-00",
             },
             {
                 "fuzzer": "fuzzer_b",
                 "shard": "00",
-                "artifact": "fuzz-shard-00",
             },
         ]
     }
@@ -166,11 +164,6 @@ def test_create_shards_is_deterministic_and_balances_sizes(tmp_path: Path) -> No
         "fuzzer_e": "01",
         "fuzzer_c": "02",
         "fuzzer_d": "02",
-    }
-    assert {row["artifact"] for row in forwards["include"]} == {
-        "fuzz-shard-00",
-        "fuzz-shard-01",
-        "fuzz-shard-02",
     }
 
 
