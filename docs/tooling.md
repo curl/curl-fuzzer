@@ -33,7 +33,8 @@ python -m pip install -e .
 | `tlv_to_proto`             | Convert a directory of legacy HTTP inputs to textproto                                          |
 | `generate_decoder_html`    | Build the standalone legacy TLV browser decoder                                                 |
 | `corpus_to_pcap`           | Convert response TLVs to a packet capture; requires Scapy from the development dependency group |
-| `generate_matrix`          | Produce the target matrix consumed by CI                                                        |
+| `generate_matrix`          | Package built fuzzers into balanced artifact shards and produce the CI matrix                    |
+| `prepare_fuzzer`           | Extract one fuzzer and its supporting files from a CI artifact shard                             |
 | `generate_option_manifest` | Generate the build-specific protobuf curl-option enum and manifest                              |
 
 Run any command with `--help` for its complete interface.
