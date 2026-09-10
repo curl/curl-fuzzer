@@ -1,4 +1,4 @@
-name: Deploy decoder to GitHub Pages
+name: Deploy documentation to GitHub Pages
 
 'on':
   push:
@@ -14,6 +14,11 @@ permissions: {}
 
 env:
   DO_NOT_TRACK: '1'
+  DOCS_SITE: ${{ vars.DOCS_SITE }}
+  # renovate: datasource=crate depName=mdbook
+  MDBOOK_VERSION: '0.5.4'
+  # renovate: datasource=crate depName=mdbook-mermaid
+  MDBOOK_MERMAID_VERSION: '0.17.1'
 
 jobs:
   build:
@@ -28,16 +33,33 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Install documentation tools
+        run: |
+          cargo install mdbook --version "=${MDBOOK_VERSION}" --locked
+          cargo install mdbook-mermaid \
+            --version "=${MDBOOK_MERMAID_VERSION}" --locked
+
       - name: Install dependencies
         run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
 
-      - name: Generate decoder HTML
-        run: python -m curl_fuzzer_tools.generate_decoder_html
+      - name: Build documentation site
+        run: |
+          test -n "${DOCS_SITE}"
+          mdbook-mermaid install .
+          git diff --exit-code -- book.toml
+          test -s mermaid.min.js
+          test -s mermaid-init.js
+          mdbook build
+          python -m curl_fuzzer_tools.generate_decoder_html --output _site/corpus-decoder/index.html
+          test -s _site/index.html
+          test -s _site/corpus-decoder/index.html
+          grep --fixed-strings --quiet '<pre class="mermaid">' _site/proto/overview.html
+          grep --fixed-strings --line-regexp --quiet -- "${DOCS_SITE}" _site/CNAME
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: docs
+          path: _site
 
   deploy:
     name: 'Deploy pages'

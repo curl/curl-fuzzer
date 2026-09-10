@@ -29,6 +29,17 @@
         "# Install OpenLDAP\\nset\\(OPENLDAP_VERSION (?<currentValue>.*)\\)"
       ],
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/pages(?:-ci)?\\.yml$/",
+        "/^docs/development\\.md$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\r?\\n\\s*[A-Z0-9_]+_VERSION(?::\\s*['\\\"]|=)(?<currentValue>\\d+(?:\\.\\d+)+)"
+      ],
+      "versioningTemplate": "semver"
     }
   ],
   "customDatasources": {

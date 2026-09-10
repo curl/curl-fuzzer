@@ -1,0 +1,20 @@
+[book]
+authors = ["curl-fuzzer contributors"]
+language = "en"
+src = "docs"
+title = "curl-fuzzer documentation"
+
+[build]
+build-dir = "_site"
+create-missing = false
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+# The domain must also be configured in the repository's Pages settings.
+cname = "fuzz.curl.se"
+git-repository-icon = "fab-github"
+git-repository-url = "https://github.com/curl/curl-fuzzer"
+site-url = "/"
