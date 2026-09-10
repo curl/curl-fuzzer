@@ -25,27 +25,11 @@ env:
   DO_NOT_TRACK: '1'
 
 jobs:
-  DetermineMatrix:
-    name: 'Determine matrix'
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          repository: curl/curl-fuzzer
-
-      - name: Set matrix
-        id: set-matrix
-        run: |
-          . ./scripts/fuzz_targets
-          cd src/curl_fuzzer_tools
-          python3 -m generate_matrix | tee $GITHUB_OUTPUT
-
   BuildFuzzers:
     name: 'Build fuzzers'
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-shards.outputs.matrix }}
     env:
       # Must match the path ossfuzz.sh writes to when CIFUZZ=True.
       CACHE_PATH: .ossfuzz-build-cache-address-x86_64
@@ -95,33 +79,124 @@ jobs:
           path: ${{ env.CACHE_PATH }}
           key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
 
-      # Archive the fuzzer output (which maintains permissions)
-      - name: Create fuzz tar
-        run: tar cvf fuzz.tar build-out/
+      # The tar files preserve executable permissions, which GitHub artifacts
+      # do not retain on their own.
+      - name: Create fuzzer shards
+        id: create-shards
+        run: |
+          set -o pipefail
+          . .curl-fuzzer/scripts/fuzz_targets
+          python3 .curl-fuzzer/src/curl_fuzzer_tools/generate_matrix.py \
+            --build-out build-out \
+            --output-dir fuzz-shards \
+            --shard-count 8 | tee "${GITHUB_OUTPUT}"
+          for shard in 00 01 02 03 04 05 06 07; do
+            test -f "fuzz-shards/fuzz-shard-${shard}.tar"
+          done
+          cp .curl-fuzzer/src/curl_fuzzer_tools/prepare_fuzzer.py fuzz-shards/
 
-      # Upload the fuzzer output
-      - name: Archive fuzz tar
+      - name: Upload fuzzer shard 00
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: fuzz_tar
-          path: fuzz.tar
+          name: fuzz-shard-00
+          path: |
+            fuzz-shards/fuzz-shard-00.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 01
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-01
+          path: |
+            fuzz-shards/fuzz-shard-01.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-02
+          path: |
+            fuzz-shards/fuzz-shard-02.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 03
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-03
+          path: |
+            fuzz-shards/fuzz-shard-03.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 04
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-04
+          path: |
+            fuzz-shards/fuzz-shard-04.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 05
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-05
+          path: |
+            fuzz-shards/fuzz-shard-05.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 06
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-06
+          path: |
+            fuzz-shards/fuzz-shard-06.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fuzzer shard 07
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-shard-07
+          path: |
+            fuzz-shards/fuzz-shard-07.tar
+            fuzz-shards/prepare_fuzzer.py
+          if-no-files-found: error
+          retention-days: 1
 
   RunFuzzers:
     name: 'Run fuzzers'
-    needs: [BuildFuzzers, DetermineMatrix]
+    needs: [BuildFuzzers]
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     strategy:
-      matrix: ${{ fromJSON(needs.DetermineMatrix.outputs.matrix) }}
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.BuildFuzzers.outputs.matrix) }}
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        timeout-minutes: 2
+        timeout-minutes: 5
         with:
-          name: fuzz_tar
-      - name: Unpack fuzzer ${{ matrix.fuzzer }}
+          name: ${{ matrix.artifact }}
+          path: fuzz-shards
+      - name: Prepare fuzzer ${{ matrix.fuzzer }}
         env:
           MATRIX_FUZZER: '${{ matrix.fuzzer }}'
-        run: tar xvf fuzz.tar build-out/"${MATRIX_FUZZER}" build-out/"${MATRIX_FUZZER}"_seed_corpus.zip
+          MATRIX_SHARD: '${{ matrix.shard }}'
+        run: |
+          python3 fuzz-shards/prepare_fuzzer.py \
+            --archive "fuzz-shards/fuzz-shard-${MATRIX_SHARD}.tar" \
+            --target "${MATRIX_FUZZER}"
       - name: Display extracted files
         run: ls -laR build-out/
       - name: Run Fuzzer ${{ matrix.fuzzer }}
@@ -135,8 +210,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ failure() }}
         with:
-          name: artifacts
+          name: artifacts-${{ matrix.fuzzer }}
           path: ./out/artifacts
+          if-no-files-found: ignore
 
   Success:
     name: 'Success'
