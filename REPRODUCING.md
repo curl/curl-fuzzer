@@ -29,18 +29,19 @@ provides the same kind of inspection in a browser without uploading the file.
 
 ### Structured protobuf targets
 
-After building the project, `read_proto_corpus` uses the expanded schema under
-`build/schemas/` to print field names:
+From a source checkout, `read_proto_corpus` uses the checked-in schema to print
+field names. It can also use a staged copy under `build/schemas/` when the
+source schema is unavailable:
 
 ```shell
 read_proto_corpus \
   clusterfuzz-testcase-minimized-curl_fuzzer_proto_http-<id>
 ```
 
-The command requires `protoc`. If it cannot find the expanded schema, it falls
-back to `protoc --decode_raw`; pass `--proto-file` to select one explicitly.
+The command requires `protoc`. If it cannot find either schema, it falls back
+to `protoc --decode_raw`; pass `--proto-file` to select one explicitly.
 
-Published reproduction images also include the build-specific schema and a
+Published reproduction images also include the staged schema and a
 `decode-scenario` command:
 
 ```shell

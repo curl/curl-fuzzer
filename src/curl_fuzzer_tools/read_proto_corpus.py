@@ -7,11 +7,11 @@ libprotobuf-mutator fuzzer (e.g. ``crash-<sha1>`` files under oss-fuzz ``out``
 directories) can be inspected as human-readable textproto without writing one
 off decoders.
 
-Resolves the expanded ``.proto`` (the one with CurlOptionId populated) in this
-order: ``--proto-file`` flag, ``$CURL_FUZZER_PROTO`` env var, the in-tree
-``build/schemas/curl_fuzzer.proto`` next to this checkout. Falls back to
-``protoc --decode_raw`` (wire-level field numbers) if no proto file is
-available.
+Resolves the complete ``.proto`` in this order: ``--proto-file`` flag,
+``$CURL_FUZZER_PROTO`` env var, the checked-in
+``schemas/curl_fuzzer.proto`` next to this checkout, then the staged
+``build/schemas/curl_fuzzer.proto``. Falls back to ``protoc --decode_raw``
+(wire-level field numbers) if no proto file is available.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ SCENARIO_MESSAGE = "curl.fuzzer.proto.Scenario"
 
 
 def find_proto_file(explicit: pathlib.Path | None) -> pathlib.Path | None:
-    """Resolve the expanded curl_fuzzer.proto, or None if not found."""
+    """Resolve curl_fuzzer.proto, or None if no usable schema is found."""
     if explicit is not None:
         if not explicit.is_file():
             raise FileNotFoundError(f"--proto-file {explicit} does not exist")
@@ -36,8 +36,14 @@ def find_proto_file(explicit: pathlib.Path | None) -> pathlib.Path | None:
         path = pathlib.Path(env)
         if path.is_file():
             return path
-    # Walk up from this file looking for build/schemas/curl_fuzzer.proto.
+    # Prefer the authoritative checked-in schema so a stale local build copy
+    # cannot affect decoding. The staged copy remains useful in distributions
+    # such as the reproduction image, which do not contain the source tree.
     here = pathlib.Path(__file__).resolve()
+    for ancestor in here.parents:
+        candidate = ancestor / "schemas" / "curl_fuzzer.proto"
+        if candidate.is_file():
+            return candidate
     for ancestor in here.parents:
         candidate = ancestor / "build" / "schemas" / "curl_fuzzer.proto"
         if candidate.is_file():
@@ -76,15 +82,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=pathlib.Path,
         default=None,
         help=(
-            "Path to the expanded curl_fuzzer.proto (with CurlOptionId body "
-            "populated). Default: auto-detect in build/schemas/, or fall back "
-            "to protoc --decode_raw."
+            "Path to curl_fuzzer.proto. Default: auto-detect the checked-in "
+            "schema or staged build copy, or fall back to protoc --decode_raw."
         ),
     )
     parser.add_argument(
         "--raw",
         action="store_true",
-        help="Force protoc --decode_raw even if an expanded proto is available.",
+        help="Force protoc --decode_raw even if a schema is available.",
     )
     return parser.parse_args(argv)
 
@@ -98,9 +103,9 @@ def run(argv: list[str] | None = None) -> int:
     proto_file = None if args.raw else find_proto_file(args.proto_file)
     if not args.raw and proto_file is None:
         print(
-            "warning: no expanded curl_fuzzer.proto found; falling back to "
-            "protoc --decode_raw (field numbers only). Build the project "
-            "once or pass --proto-file to get named fields.",
+            "warning: no curl_fuzzer.proto found; falling back to "
+            "protoc --decode_raw (field numbers only). Run from a source "
+            "checkout or pass --proto-file to get named fields.",
             file=sys.stderr,
         )
 

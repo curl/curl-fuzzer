@@ -62,7 +62,7 @@ also be configured in the repository's Pages settings.
 
 ## Generated files
 
-Do not commit `_site/`, `build/generated_corpora/`, expanded protobuf schemas,
-or downloaded public corpora. Commit authored Markdown under `docs/`, legacy
-binary seeds under `corpora/`, and structured textproto seeds under
-`scenarios/curl_fuzzer_proto/`.
+Do not commit `_site/`, `build/generated_corpora/`, staged schema copies under
+`build/`, or downloaded public corpora. Commit the schema under `schemas/`,
+authored Markdown under `docs/`, legacy binary seeds under `corpora/`, and
+structured textproto seeds under `scenarios/curl_fuzzer_proto/`.

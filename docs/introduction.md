@@ -33,7 +33,9 @@ Avoid copying lists that must be kept synchronized:
 - [`scripts/fuzz_targets`](https://github.com/curl/curl-fuzzer/blob/master/scripts/fuzz_targets)
   defines the targets packaged for each architecture and sanitizer.
 - [`schemas/curl_fuzzer.proto`](https://github.com/curl/curl-fuzzer/blob/master/schemas/curl_fuzzer.proto)
-  is the structured scenario schema template.
+  is the complete structured scenario schema, including the stable
+  `CurlOptionId` values used by serialized corpora. Its marker-delimited enum
+  block also defines the active `SetOption` surface.
 - [`corpora/`](https://github.com/curl/curl-fuzzer/tree/master/corpora)
   contains checked-in legacy and direct-fuzzer inputs.
 - [`scenarios/curl_fuzzer_proto/`](https://github.com/curl/curl-fuzzer/tree/master/scenarios/curl_fuzzer_proto)

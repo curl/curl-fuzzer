@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from curl_fuzzer_tools.corpus import BaseType, TLVDecoder
 
 # Tag classification. The HTTP-relevant subset mirrors
-# schemas/curl_fuzzer_supported_curlopts.txt; a TLV tag landing in one of
+# schemas/curl_fuzzer.proto's CurlOptionId enum; a TLV tag landing in one of
 # these sets becomes a SetOption, with its CURLOPT name pulled straight
 # from BaseType.TYPEMAP. Tags outside the sets are reported as skipped.
 STRING_TAGS = frozenset(

@@ -78,7 +78,7 @@ Useful commands include:
 
 - `read_corpus` for legacy TLV inputs.
 - `read_proto_corpus` for binary protobuf scenarios; named fields require
-  `protoc` and the generated schema from a build.
+  `protoc`, but do not require a prior build from a source checkout.
 - `generate_corpus` for legacy TLV seeds.
 - `tlv_to_proto` for converting legacy HTTP corpus entries to textproto.
 - `generate_decoder_html` for the standalone legacy corpus decoder.

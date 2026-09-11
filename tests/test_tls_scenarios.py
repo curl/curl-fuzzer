@@ -5,17 +5,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SUPPORTED_OPTIONS = REPO_ROOT / "schemas" / "curl_fuzzer_supported_curlopts.txt"
+SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 TLS_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "https"
 TLS_CREDENTIALS = REPO_ROOT / "proto_fuzzer" / "tls_test_credentials.h"
 
 
 def _supported_options() -> set[str]:
     return {
-        line
-        for raw_line in SUPPORTED_OPTIONS.read_text(encoding="utf-8").splitlines()
-        if (line := raw_line.strip()) and not line.startswith("#")
+        option.name
+        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
     }
 
 

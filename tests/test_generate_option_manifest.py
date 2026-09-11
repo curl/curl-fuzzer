@@ -2,7 +2,46 @@
 
 from __future__ import annotations
 
-from curl_fuzzer_tools.generate_option_manifest import CurlOption, render_manifest
+from pathlib import Path
+
+import pytest
+
+from curl_fuzzer_tools.generate_option_manifest import (
+    CurlOption,
+    SchemaOption,
+    parse_proto_options,
+    render_manifest,
+    resolve_schema_options,
+)
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _entries() -> list[CurlOption]:
+    return [
+        CurlOption(
+            name="CURLOPT_POSTFIELDS",
+            type_token="CURLOPTTYPE_OBJECTPOINT",
+            curl_value=10015,
+        ),
+        CurlOption(
+            name="CURLOPT_FOLLOWLOCATION",
+            type_token="CURLOPTTYPE_LONG",
+            curl_value=52,
+        ),
+    ]
+
+
+def _schema(option_lines: str) -> str:
+    return f"""syntax = \"proto3\";
+
+enum CurlOptionId {{
+  CURL_OPTION_UNSPECIFIED = 0;
+  // CURL-OPTIONS-BEGIN
+{option_lines}
+  // CURL-OPTIONS-END
+}}
+"""
 
 
 def _kind(name: str, type_token: str = "CURLOPTTYPE_LONG") -> str:
@@ -53,20 +92,7 @@ def test_postfield_pointer_options_use_bounded_strings() -> None:
 
 def test_manifest_generates_direct_switch_lookup() -> None:
     """Both runtime users should dispatch without scanning every option."""
-    entries = [
-        CurlOption(
-            name="CURLOPT_POSTFIELDS",
-            type_token="CURLOPTTYPE_OBJECTPOINT",
-            curl_value=10015,
-        ),
-        CurlOption(
-            name="CURLOPT_FOLLOWLOCATION",
-            type_token="CURLOPTTYPE_LONG",
-            curl_value=52,
-        ),
-    ]
-
-    rendered = render_manifest(entries)
+    rendered = render_manifest(_entries())
 
     assert "switch (id)" in rendered
     assert "case curl::fuzzer::proto::CURLOPT_POSTFIELDS:" in rendered
@@ -76,3 +102,71 @@ def test_manifest_generates_direct_switch_lookup() -> None:
     assert "default:\n      return nullptr;" in rendered
     assert "kOptionManifestSize" not in rendered
     assert "for (" not in rendered
+
+
+def test_proto_options_are_parsed_in_alphabetical_order() -> None:
+    schema = _schema("  CURLOPT_FOLLOWLOCATION = 52;\n  CURLOPT_POSTFIELDS = 10015;")
+
+    assert parse_proto_options(schema) == [
+        SchemaOption(name="CURLOPT_FOLLOWLOCATION", curl_value=52),
+        SchemaOption(name="CURLOPT_POSTFIELDS", curl_value=10015),
+    ]
+
+
+def test_proto_options_must_be_alphabetized() -> None:
+    schema = _schema("  CURLOPT_POSTFIELDS = 10015;\n  CURLOPT_FOLLOWLOCATION = 52;")
+
+    with pytest.raises(ValueError, match="alphabetized"):
+        parse_proto_options(schema)
+
+
+def test_proto_options_reject_duplicate_values() -> None:
+    schema = _schema("  CURLOPT_FOLLOWLOCATION = 52;\n  CURLOPT_POSTFIELDS = 52;")
+
+    with pytest.raises(ValueError, match="Duplicate CurlOptionId values"):
+        parse_proto_options(schema)
+
+
+def test_proto_options_reject_duplicate_names() -> None:
+    schema = _schema("  CURLOPT_FOLLOWLOCATION = 52;\n  CURLOPT_FOLLOWLOCATION = 53;")
+
+    with pytest.raises(ValueError, match="Duplicate CurlOptionId names"):
+        parse_proto_options(schema)
+
+
+def test_proto_options_reject_malformed_entries() -> None:
+    schema = _schema("  CURLOPT_FOLLOWLOCATION: 52;")
+
+    with pytest.raises(ValueError, match="Malformed CurlOptionId entry"):
+        parse_proto_options(schema)
+
+
+def test_proto_options_require_exactly_one_marker_pair() -> None:
+    schema = _schema("  CURLOPT_FOLLOWLOCATION = 52;").replace(
+        "  // CURL-OPTIONS-END", ""
+    )
+
+    with pytest.raises(ValueError, match="exactly one CURL-OPTIONS-BEGIN"):
+        parse_proto_options(schema)
+
+
+def test_schema_values_must_match_curl_header() -> None:
+    schema_options = [SchemaOption(name="CURLOPT_FOLLOWLOCATION", curl_value=51)]
+    header_options = {entry.name: entry for entry in _entries()}
+
+    with pytest.raises(ValueError, match="51 in the schema but 52 in curl.h"):
+        resolve_schema_options(schema_options, header_options)
+
+
+def test_schema_options_must_exist_in_curl_header() -> None:
+    schema_options = [SchemaOption(name="CURLOPT_NOT_REAL", curl_value=123)]
+
+    with pytest.raises(ValueError, match="CURLOPT_NOT_REAL is not defined"):
+        resolve_schema_options(schema_options, {})
+
+
+def test_checked_in_option_block_is_valid() -> None:
+    schema = (REPO_ROOT / "schemas" / "curl_fuzzer.proto").read_text()
+    entries = parse_proto_options(schema)
+
+    assert "CURLOPT_COPYPOSTFIELDS" in {entry.name for entry in entries}
