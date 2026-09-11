@@ -1248,7 +1248,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(GENERATOR_PROTOC_DEP host_protoc)
     endif()
 
-    # Generate the expanded .proto and the C++ option manifest from curl.h.
+    # Validate the checked-in CurlOptionId values against curl.h, stage the
+    # schema in the build tree, and generate the C++ option manifest.
     set(CURL_HEADER ${CURL_INSTALL_DIR}/include/curl/curl.h)
     set(PROTO_FUZZER_SCHEMA_DIR ${CMAKE_BINARY_DIR}/schemas)
     set(GEN_PROTO ${PROTO_FUZZER_SCHEMA_DIR}/curl_fuzzer.proto)
@@ -1262,15 +1263,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
                 --curl-header    ${CURL_HEADER}
-                --supported-list ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer_supported_curlopts.txt
-                --proto-template ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
+                --proto-schema   ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
                 --proto-out      ${GEN_PROTO}
                 --manifest-out   ${GEN_MANIFEST}
         DEPENDS curl_external
                 ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
-                ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer_supported_curlopts.txt
                 ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
-        COMMENT "Generating CurlOptionId enum and manifest from curl.h"
+        COMMENT "Validating CurlOptionId enum and generating option manifest"
         VERBATIM
     )
 

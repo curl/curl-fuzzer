@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SUPPORTED_OPTIONS = REPO_ROOT / "schemas" / "curl_fuzzer_supported_curlopts.txt"
+SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 SCENARIO_ROOT = REPO_ROOT / "scenarios" / "curl_fuzzer_proto"
 
 
 def _supported_options() -> set[str]:
     return {
-        line
-        for raw_line in SUPPORTED_OPTIONS.read_text(encoding="utf-8").splitlines()
-        if (line := raw_line.strip()) and not line.startswith("#")
+        option.name
+        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
     }
 
 
@@ -112,9 +113,7 @@ def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
             "\\000\\003\\000\\001abcdefgh",
             "\\000\\003\\000\\002z",
         ),
-        "tftp_error_not_found.textproto": (
-            "\\000\\005\\000\\001not found\\000",
-        ),
+        "tftp_error_not_found.textproto": ("\\000\\005\\000\\001not found\\000",),
     }
     tftp_root = SCENARIO_ROOT / "tftp"
     for name, tokens in expected_tokens.items():

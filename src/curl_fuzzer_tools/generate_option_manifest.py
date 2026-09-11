@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Regenerate option manifest artefacts from the supported CURLOPT list.
+Validate the Scenario schema and generate its curl option manifest.
 
-This script derives, at build time, the numeric values and value kinds of a
-curated list of CURLOPTs directly from curl.h, and emits:
+This script reads the active CURLOPTs from the checked-in Scenario schema and
+derives their value kinds from curl.h at build time. It:
 
-* An expanded ``.proto`` file whose ``CurlOptionId`` enum body contains one
-  entry per supported option, using curl's own numeric value.
-* A C++ ``.inc`` fragment defining ``kOptionManifest[]`` and a direct
+* Verifies that every active ``CurlOptionId`` has the value defined by the
+  selected curl.h, then stages an identical copy of the schema for the build.
+* Emits a C++ ``.inc`` fragment defining ``kOptionManifest[]`` and a direct
   switch-based descriptor lookup for the fuzzer to dispatch on.
 
 Every input and output path is passed on the command line so the script stays
@@ -22,7 +22,10 @@ import dataclasses
 import pathlib
 import re
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+
+CURL_OPTIONS_BEGIN = "  // CURL-OPTIONS-BEGIN"
+CURL_OPTIONS_END = "  // CURL-OPTIONS-END"
 
 # Base numeric offsets for CURLOPTTYPE_* families. See curl.h.
 TYPE_BASE_VALUES: dict[str, int] = {
@@ -109,15 +112,67 @@ class CurlOption:
         return resolved
 
 
-def load_supported_options(path: pathlib.Path) -> list[str]:
-    options: list[str] = []
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+@dataclasses.dataclass(frozen=True)
+class SchemaOption:
+    name: str
+    curl_value: int
+
+
+def parse_proto_options(schema_text: str) -> list[SchemaOption]:
+    """Parse and validate the active CurlOptionId entries from the schema."""
+    if (
+        schema_text.count(CURL_OPTIONS_BEGIN) != 1
+        or schema_text.count(CURL_OPTIONS_END) != 1
+    ):
+        raise ValueError(
+            "Proto schema must contain exactly one CURL-OPTIONS-BEGIN marker "
+            "followed by exactly one CURL-OPTIONS-END marker."
+        )
+
+    begin_idx = schema_text.index(CURL_OPTIONS_BEGIN) + len(CURL_OPTIONS_BEGIN)
+    end_idx = schema_text.index(CURL_OPTIONS_END)
+    if end_idx < begin_idx:
+        raise ValueError(
+            "Proto schema CURL-OPTIONS-BEGIN marker must precede CURL-OPTIONS-END."
+        )
+
+    assignment = re.compile(r"^  (CURLOPT_[A-Z0-9_]+) = ([0-9]+);$")
+    options: list[SchemaOption] = []
+    for line in schema_text[begin_idx:end_idx].splitlines():
+        if not line:
             continue
-        options.append(line)
+        match = assignment.fullmatch(line)
+        if match is None:
+            raise ValueError(
+                f"Malformed CurlOptionId entry between CURL-OPTIONS markers: {line!r}."
+            )
+        name, value = match.groups()
+        options.append(SchemaOption(name=name, curl_value=int(value)))
+
     if not options:
-        raise ValueError(f"No options found in {path}")
+        raise ValueError("No CurlOptionId entries found between CURL-OPTIONS markers.")
+
+    names = [option.name for option in options]
+    duplicate_names = sorted({name for name in names if names.count(name) > 1})
+    if duplicate_names:
+        raise ValueError(
+            "Duplicate CurlOptionId names between CURL-OPTIONS markers: "
+            f"{', '.join(duplicate_names)}."
+        )
+    if names != sorted(names):
+        raise ValueError(
+            "CurlOptionId entries between CURL-OPTIONS markers must be "
+            "alphabetized by name."
+        )
+
+    values = [option.curl_value for option in options]
+    duplicate_values = sorted({value for value in values if values.count(value) > 1})
+    if duplicate_values:
+        rendered = ", ".join(str(value) for value in duplicate_values)
+        raise ValueError(
+            f"Duplicate CurlOptionId values between CURL-OPTIONS markers: {rendered}."
+        )
+
     return options
 
 
@@ -142,6 +197,25 @@ def parse_curl_header(path: pathlib.Path) -> dict[str, CurlOption]:
     if not options:
         raise ValueError(f"No CURLOPT definitions found in {path}")
     return options
+
+
+def resolve_schema_options(
+    schema_options: Iterable[SchemaOption],
+    header_options: Mapping[str, CurlOption],
+) -> list[CurlOption]:
+    """Resolve schema entries to curl.h definitions and verify their IDs."""
+    resolved: list[CurlOption] = []
+    for schema_option in schema_options:
+        header_option = header_options.get(schema_option.name)
+        if header_option is None:
+            raise ValueError(f"{schema_option.name} is not defined in curl.h.")
+        if schema_option.curl_value != header_option.curl_value:
+            raise ValueError(
+                f"{schema_option.name} is {schema_option.curl_value} in the schema "
+                f"but {header_option.curl_value} in curl.h."
+            )
+        resolved.append(header_option)
+    return resolved
 
 
 def render_manifest(entries: Iterable[CurlOption]) -> str:
@@ -177,27 +251,10 @@ def render_manifest(entries: Iterable[CurlOption]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_proto(entries: Iterable[CurlOption], template_text: str) -> str:
-    begin = "// GENERATED-OPTIONS-BEGIN"
-    end = "// GENERATED-OPTIONS-END"
-    begin_idx = template_text.find(begin)
-    end_idx = template_text.find(end)
-    if begin_idx == -1 or end_idx == -1 or end_idx < begin_idx:
-        raise ValueError(
-            "Proto template missing GENERATED-OPTIONS markers; expected "
-            f"{begin!r} followed by {end!r}."
-        )
-    head = template_text[: begin_idx + len(begin)]
-    tail = template_text[end_idx:]
-    body = "\n".join(f"  {opt.name} = {opt.curl_value};" for opt in entries)
-    return f"{head}\n{body}\n  {tail}"
-
-
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--curl-header", required=True, type=pathlib.Path)
-    parser.add_argument("--supported-list", required=True, type=pathlib.Path)
-    parser.add_argument("--proto-template", required=True, type=pathlib.Path)
+    parser.add_argument("--proto-schema", required=True, type=pathlib.Path)
     parser.add_argument("--proto-out", required=True, type=pathlib.Path)
     parser.add_argument("--manifest-out", required=True, type=pathlib.Path)
     return parser.parse_args(argv)
@@ -213,21 +270,13 @@ def write_if_changed(path: pathlib.Path, content: str) -> None:
 def run(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
 
-    supported = load_supported_options(args.supported_list)
+    schema_text = args.proto_schema.read_text()
+    schema_options = parse_proto_options(schema_text)
     header_options = parse_curl_header(args.curl_header)
+    resolved_options = resolve_schema_options(schema_options, header_options)
 
-    ordered: list[CurlOption] = []
-    for name in supported:
-        if name not in header_options:
-            raise KeyError(
-                f"CURLOPT {name} (from {args.supported_list}) "
-                f"not found in {args.curl_header}."
-            )
-        ordered.append(header_options[name])
-
-    template_text = args.proto_template.read_text()
-    write_if_changed(args.proto_out, render_proto(ordered, template_text))
-    write_if_changed(args.manifest_out, render_manifest(ordered))
+    write_if_changed(args.proto_out, schema_text)
+    write_if_changed(args.manifest_out, render_manifest(resolved_options))
     return 0
 
 

@@ -14,8 +14,8 @@ binary protobuf corpus entries under `build/generated_corpora/`.
 ```mermaid
 flowchart TD
     subgraph build["Build time"]
-        sources["Schema template, supported CURLOPT list,<br/>and selected curl.h"]
-        generator["Generate the expanded schema<br/>and C++ option manifest"]
+        sources["Checked-in schema<br/>and selected curl.h"]
+        generator["Validate and stage the schema;<br/>generate the C++ option manifest"]
         schema["build/schemas/curl_fuzzer.proto"]
         messages["Generated C++ Scenario type"]
         manifest["C++ option dispatch manifest"]
@@ -56,10 +56,13 @@ flowchart TD
     target --> input
 ```
 
-The build expands the schema's `CurlOptionId` enum from the selected curl
-checkout. This keeps the protobuf option identifiers and the C++ dispatch
-manifest aligned with that checkout's `curl.h`. The remaining message types
-describe request data, peer responses, and focused API-lifecycle work.
+The `CurlOptionId` values are checked in because they are part of the serialized
+corpus format. During the build, the option-manifest generator
+reads the active options between the schema's `CURL-OPTIONS` markers, checks
+their values against the selected curl checkout's `curl.h`, stages the schema
+under `build/schemas/`, and generates the C++ dispatch manifest. The remaining
+message types describe request data, peer responses, and focused API-lifecycle
+work.
 
 Each thin entrypoint binds the shared runtime to one `TargetProfile`. Fixed
 profiles select a protocol, remove fields and options that their peer cannot

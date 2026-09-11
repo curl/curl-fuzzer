@@ -6,7 +6,7 @@ Orchestrates the oss-fuzz build pipeline:
 1. Clone oss-fuzz (if needed)
 2. Build the curl builder image
 3. Build fuzzers with GDB support
-4. Package the fuzzers, GDB, and expanded scenario schema into a repro image
+4. Package the fuzzers, GDB, and staged scenario schema into a repro image
 """
 
 import argparse
@@ -119,13 +119,13 @@ def main() -> None:
     build_cmd.append(str(source_root))
     run(build_cmd)
 
-    # Step 3: Stage the build outputs and generated decoder schema.
+    # Step 3: Stage the build outputs and scenario decoder schema.
     out_dir = oss_fuzz_dir / "build" / "out" / "curl"
     if not out_dir.exists():
         sys.exit(f"Build output not found at {out_dir}")
     scenario_schema = source_root / "build" / "schemas" / "curl_fuzzer.proto"
     if not scenario_schema.is_file():
-        sys.exit(f"Generated scenario schema not found at {scenario_schema}")
+        sys.exit(f"Staged scenario schema not found at {scenario_schema}")
 
     date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
     tag = args.tag or f"curl-fuzzer:{args.sanitizer}-{args.engine}-{date_tag}"
@@ -137,7 +137,9 @@ def main() -> None:
         schema_dir = context / "schema"
         schema_dir.mkdir()
         shutil.copy2(scenario_schema, schema_dir / scenario_schema.name)
-        shutil.copy2(REPO_ROOT / "docker" / "decode-scenario", context / "decode-scenario")
+        shutil.copy2(
+            REPO_ROOT / "docker" / "decode-scenario", context / "decode-scenario"
+        )
         run(
             [
                 "docker",

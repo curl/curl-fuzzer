@@ -27,17 +27,21 @@ structure.
 
 ## Build-time generation
 
-The structured build derives several artifacts rather than checking them in:
+The structured build derives several artifacts from the checked-in schema:
 
-1. The supported curl option list and curl headers populate the generated
-   `CurlOptionId` enum.
+1. The option-manifest generator reads the active `CurlOptionId` names and
+   values from the schema, checks them against the selected curl headers,
+   stages a copy of the schema in the build tree, and writes the C++ option
+   dispatch manifest.
 2. `protoc` generates the C++ message implementation.
 3. Textproto files under `scenarios/` are encoded into binary entries under
    `build/generated_corpora/`.
 4. OSS-Fuzz packaging creates one seed archive per target.
 
-The textproto scenarios remain reviewable, and the generated enum values match
-the curl revision being built.
+The checked-in enum values are part of the corpus wire format. Build-time
+validation catches drift between that format and the curl revision being
+built. The entries between the schema's `CURL-OPTIONS` markers are the single
+source of truth for options exposed through `SetOption`.
 
 ## Conditional targets
 

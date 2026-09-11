@@ -10,7 +10,10 @@ policy, and local transport isolation together.
 `SetOption` is for scalar values and copied or scenario-owned strings. To add
 one:
 
-1. Add its name to `schemas/curl_fuzzer_supported_curlopts.txt`.
+1. Add its stable numeric value in alphabetical order between the
+   `CURL-OPTIONS` markers in the `CurlOptionId` enum in
+   `schemas/curl_fuzzer.proto`. This block is the active option list. Existing
+   values are part of the corpus wire format and must not be changed or reused.
 2. If its `curl.h` type does not determine the intended protobuf value kind,
    update the overrides in
    `src/curl_fuzzer_tools/generate_option_manifest.py`.
@@ -20,16 +23,28 @@ one:
 4. Add a correlated textproto seed when reaching useful code requires other
    options or particular peer bytes.
 
-At build time the generator reads the selected checkout's `curl.h`, inserts
-the native numeric value into the expanded protobuf enum, and emits the C++
-value-kind dispatch table. Do not hand-copy numeric `CURLoption` values into
-the schema.
+At build time the generator reads the selected checkout's `curl.h`, validates
+the marker-delimited names and numbers against it, stages the schema in the
+build tree, and emits the C++ value-kind dispatch table.
 
 Callbacks, slists, files, and other pointer-bearing options usually need a
 schema-native field plus explicit harness-owned storage. Their backing objects
 must remain alive through transfer completion and easy-handle cleanup. Existing
 examples include request headers, MIME, upload state, TELNET options, resolver
 entries, and bounded anonymous parser files.
+
+Keep filename-backed cookie, Alt-Svc, and HSTS options out of `SetOption`; the
+baseline owns their fixed `/dev/null` sinks, while the enum exposes only their
+in-memory controls. `CURLOPT_FTPPORT` and `CURLOPT_FTP_USE_EPRT` are safe
+because the FTP peer confines active listeners to loopback. FTPS and the
+slist-backed QUOTE options need protocol-specific transport and ownership
+before they can join this surface. The TFTP controls reuse the schema's upload
+body and size fields to exercise option negotiation and raw RRQ/WRQ creation.
+
+Some scalar options still need correlated seeds. The HTTP Message Signature
+key, key ID, header list, and algorithm options are one example: keep their
+values together in the deep HTTP corpus so mutations can reach both parsing
+and rejection paths.
 
 ## Add or change a schema field
 

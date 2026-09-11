@@ -35,7 +35,7 @@ python -m pip install -e .
 | `corpus_to_pcap`           | Convert response TLVs to a packet capture; requires Scapy from the development dependency group |
 | `generate_matrix`          | Package built fuzzers into balanced artifact shards and produce the CI matrix                    |
 | `prepare_fuzzer`           | Extract one fuzzer and its supporting files from a CI artifact shard                             |
-| `generate_option_manifest` | Generate the build-specific protobuf curl-option enum and manifest                              |
+| `generate_option_manifest` | Validate and stage the protobuf schema, then generate its C++ curl-option manifest              |
 
 Run any command with `--help` for its complete interface.
 
