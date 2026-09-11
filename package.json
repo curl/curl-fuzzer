@@ -1,0 +1,14 @@
+{
+  "name": "curl-fuzzer-docs",
+  "private": true,
+  "description": "Browser dependencies bundled into the curl-fuzzer documentation",
+  "license": "curl",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "long": "5.3.2",
+    "protobufjs": "8.8.0"
+  }
+}

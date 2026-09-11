@@ -33,6 +33,11 @@ jobs:
         with:
           python-version: '3.14'
 
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: npm
+
       - name: Install documentation tools
         run: |
           cargo install mdbook --version "=${MDBOOK_VERSION}" --locked
@@ -40,7 +45,9 @@ jobs:
             --version "=${MDBOOK_MERMAID_VERSION}" --locked
 
       - name: Install dependencies
-        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
 
       - name: Build documentation site
         run: |

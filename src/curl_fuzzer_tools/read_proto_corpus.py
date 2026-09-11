@@ -36,15 +36,23 @@ def find_proto_file(explicit: pathlib.Path | None) -> pathlib.Path | None:
         path = pathlib.Path(env)
         if path.is_file():
             return path
+    # Search both the working tree and the module location. The former matters
+    # when this tool is installed into site-packages and then run from a source
+    # checkout, as the documentation workflows do.
+    search_roots: list[pathlib.Path] = []
+    for location in (pathlib.Path.cwd(), pathlib.Path(__file__).resolve().parent):
+        for ancestor in (location, *location.parents):
+            if ancestor not in search_roots:
+                search_roots.append(ancestor)
+
     # Prefer the authoritative checked-in schema so a stale local build copy
     # cannot affect decoding. The staged copy remains useful in distributions
     # such as the reproduction image, which do not contain the source tree.
-    here = pathlib.Path(__file__).resolve()
-    for ancestor in here.parents:
+    for ancestor in search_roots:
         candidate = ancestor / "schemas" / "curl_fuzzer.proto"
         if candidate.is_file():
             return candidate
-    for ancestor in here.parents:
+    for ancestor in search_roots:
         candidate = ancestor / "build" / "schemas" / "curl_fuzzer.proto"
         if candidate.is_file():
             return candidate

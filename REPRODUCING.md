@@ -24,10 +24,15 @@ For example, a URL-only input is displayed as:
 TLVContents(type='CURLOPT_URL' (1), length=16, data=b'http://127.0.0.1')
 ```
 
-The hosted [legacy corpus decoder](https://fuzz.curl.se/corpus-decoder/)
-provides the same kind of inspection in a browser without uploading the file.
+The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) provides the
+same kind of inspection in a browser without uploading the file. It recognizes
+legacy TLV inputs automatically.
 
 ### Structured protobuf targets
+
+The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) also decodes
+protobuf `Scenario` files entirely in the browser. It normally detects the
+format, or you can select it manually for ambiguous inputs.
 
 From a source checkout, `read_proto_corpus` uses the checked-in schema to print
 field names. It can also use a staged copy under `build/schemas/` when the

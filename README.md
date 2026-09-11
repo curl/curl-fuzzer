@@ -5,7 +5,7 @@ repository supplies the harnesses used by curl's
 [OSS-Fuzz project](https://github.com/google/oss-fuzz/tree/master/projects/curl).
 
 [Documentation](https://fuzz.curl.se/) ·
-[Legacy TLV corpus decoder](https://fuzz.curl.se/corpus-decoder/) ·
+[Corpus decoder](https://fuzz.curl.se/corpus-decoder/) ·
 [Reproducing findings](REPRODUCING.md) ·
 [Benchmarking](BENCHMARKING.md)
 
@@ -81,7 +81,9 @@ Useful commands include:
   `protoc`, but do not require a prior build from a source checkout.
 - `generate_corpus` for legacy TLV seeds.
 - `tlv_to_proto` for converting legacy HTTP corpus entries to textproto.
-- `generate_decoder_html` for the standalone legacy corpus decoder.
+- `generate_decoder_html` for the standalone browser decoder for legacy TLV
+  and protobuf `Scenario` inputs. Run `npm ci --ignore-scripts` once before
+  building it so the pinned protobuf.js runtime can be bundled into the page.
 
 Each command supports `--help`. The complete list of installed entry points is
 in [`pyproject.toml`](pyproject.toml).

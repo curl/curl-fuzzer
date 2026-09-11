@@ -52,7 +52,7 @@ tlv_to_proto = "curl_fuzzer_tools.tlv_to_proto:run"
 
 
 [tool.setuptools.package-data]
-curl_fuzzer_tools = ["templates/*.html"]
+curl_fuzzer_tools = ["browser/*.js", "templates/*.html"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

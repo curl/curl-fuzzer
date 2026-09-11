@@ -32,6 +32,13 @@ cargo install mdbook --version "=${MDBOOK_VERSION}" --locked
 cargo install mdbook-mermaid --version "=${MDBOOK_MERMAID_VERSION}" --locked
 ```
 
+With Node.js 18 or newer, install the locked JavaScript dependencies used by
+the browser decoder:
+
+```shell
+npm ci --ignore-scripts --no-audit --no-fund
+```
+
 Then generate Mermaid's JavaScript assets and build the documentation from the
 repository root:
 
@@ -47,7 +54,8 @@ does not overwrite existing assets. For live editing, run
 `mdbook serve --open`. The browser decoder is generated separately and is
 therefore not refreshed by the mdBook development server.
 
-Run its optional browser tests with:
+Run its optional browser tests for both legacy TLV and protobuf `Scenario`
+inputs with:
 
 ```shell
 uv sync --extra browser-tests

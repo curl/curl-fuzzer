@@ -108,6 +108,10 @@ check in `CMakeLists.txt`.
 
 ## Decode a binary input
 
+For interactive inspection, use the published
+[corpus decoder](../corpus-decoder/). It recognizes protobuf `Scenario` files
+and reads the selected file entirely in the browser.
+
 `read_proto_corpus` wraps `protoc` and prints named textproto fields using the
 checked-in schema. It falls back to the staged build copy when the source
 schema is unavailable:

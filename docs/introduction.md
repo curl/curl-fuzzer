@@ -21,9 +21,11 @@ changing a harness or adding seeds.
 
 ## Online tools
 
-The [legacy TLV corpus decoder](https://fuzz.curl.se/corpus-decoder/)
-runs entirely in the browser. Selected testcase data never leaves the device.
-Structured protobuf inputs can be decoded locally with `read_proto_corpus`; see
+The [corpus decoder](https://fuzz.curl.se/corpus-decoder/) accepts legacy TLV
+and structured protobuf `Scenario` files. It normally detects the format,
+allows manual selection for ambiguous inputs, and runs entirely in the browser.
+Selected testcase data never leaves the device. For command-line protobuf
+decoding, see
 [Scenarios and corpora](proto/scenarios.md).
 
 ## Sources of truth

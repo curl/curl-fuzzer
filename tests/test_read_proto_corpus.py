@@ -14,6 +14,7 @@ def _place_module(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
     module.parent.mkdir(parents=True)
     module.touch()
     monkeypatch.setattr(read_proto_corpus, "__file__", str(module))
+    monkeypatch.chdir(root)
 
 
 def test_explicit_schema_takes_precedence(
@@ -70,6 +71,19 @@ def test_checked_in_schema_is_used_without_a_build(
     checked_in = tmp_path / "schemas" / "curl_fuzzer.proto"
     checked_in.parent.mkdir(parents=True)
     checked_in.touch()
+
+    assert read_proto_corpus.find_proto_file(None) == checked_in
+
+
+def test_checked_in_schema_is_found_from_working_tree_after_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _place_module(monkeypatch, tmp_path / "installed")
+    checkout = tmp_path / "checkout"
+    checked_in = checkout / "schemas" / "curl_fuzzer.proto"
+    checked_in.parent.mkdir(parents=True)
+    checked_in.touch()
+    monkeypatch.chdir(checkout)
 
     assert read_proto_corpus.find_proto_file(None) == checked_in
 
