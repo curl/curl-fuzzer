@@ -27,8 +27,9 @@ TLVContents(type='CURLOPT_URL' (1), length=16, data=b'http://127.0.0.1')
 ```
 
 For interactive inspection, use the published
-[legacy corpus decoder](../corpus-decoder/). It reads the selected file in the
-browser. To generate a standalone copy locally:
+[corpus decoder](../corpus-decoder/). It recognizes legacy TLV inputs and reads
+the selected file entirely in the browser. To generate a standalone copy
+locally:
 
 ```shell
 generate_decoder_html --output /tmp/curl-corpus-decoder.html

@@ -31,7 +31,7 @@ python -m pip install -e .
 | `read_proto_corpus`        | Decode one binary protobuf scenario using `protoc`                                              |
 | `generate_corpus`          | Generate a legacy TLV testcase                                                                  |
 | `tlv_to_proto`             | Convert a directory of legacy HTTP inputs to textproto                                          |
-| `generate_decoder_html`    | Build the standalone legacy TLV browser decoder                                                 |
+| `generate_decoder_html`    | Build the standalone browser decoder for legacy TLV and protobuf `Scenario` inputs              |
 | `corpus_to_pcap`           | Convert response TLVs to a packet capture; requires Scapy from the development dependency group |
 | `generate_matrix`          | Package built fuzzers into balanced artifact shards and produce the CI matrix                    |
 | `prepare_fuzzer`           | Extract one fuzzer and its supporting files from a CI artifact shard                             |
@@ -39,13 +39,18 @@ python -m pip install -e .
 
 Run any command with `--help` for its complete interface.
 
-## Legacy browser decoder
+## Browser decoder
 
 The [published decoder](https://fuzz.curl.se/corpus-decoder/)
-accepts legacy TLV inputs without uploading them. Build the complete
-documentation site and decoder locally with:
+accepts legacy TLV and protobuf `Scenario` inputs. It detects the format
+automatically, allows manual selection, and does not upload the selected file.
+Empty, unknown-only, or damaged inputs may require selecting a format manually.
+The generator bundles the locked protobuf.js runtime and the checked-in schema
+into the HTML, so the resulting page does not load a decoder from a CDN.
+Build the complete documentation site and decoder locally with:
 
 ```shell
+npm ci --ignore-scripts --no-audit --no-fund
 mdbook-mermaid install .
 mdbook build
 uv run generate_decoder_html --output _site/corpus-decoder/index.html
