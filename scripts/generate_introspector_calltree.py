@@ -40,6 +40,41 @@ def parse_arguments(arguments: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(arguments)
 
 
+def _install_tree_sitter_compatibility() -> None:
+    """Provide the tree-sitter behavior expected by Introspector."""
+    import tree_sitter
+    from tree_sitter import Language, Point, Query
+
+    # tree-sitter 0.26.0's Point accessors return borrowed references. Values
+    # outside CPython's immortal-integer range can then be freed while still
+    # in use, corrupting the heap during traversal. Tuple indexing has the
+    # correct ownership semantics and is equivalent to the two accessors.
+    # https://github.com/tree-sitter/py-tree-sitter/issues/472
+    if getattr(tree_sitter, "__version__", "") == "0.26.0":
+        Point.row = property(lambda point: point[0])
+        Point.column = property(lambda point: point[1])
+
+    if hasattr(Language, "query") and hasattr(Query, "captures"):
+        return
+
+    from tree_sitter import Node, QueryCursor
+
+    class QueryAdapter:
+        def __init__(self, language: Language, source: str) -> None:
+            self._query = Query(language, source)
+
+        def captures(self, node: Node) -> dict[str, list[Node]]:
+            return QueryCursor(self._query).captures(node)
+
+    def query(language: Language, source: str) -> QueryAdapter:
+        return QueryAdapter(language, source)
+
+    # tree-sitter 0.25 moved Query.captures(), and 0.26 removed
+    # Language.query(). Fuzz Introspector still uses that convenient pair
+    # throughout its source frontends, so adapt it at our integration edge.
+    Language.query = query
+
+
 def generate_calltree(
     output_directory: Path, analyse_folder: Callable[..., object]
 ) -> Path:
@@ -90,9 +125,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
     """Run the pinned Fuzz Introspector source frontend."""
     parsed = parse_arguments(sys.argv[1:] if arguments is None else arguments)
     try:
+        _install_tree_sitter_compatibility()
         from fuzz_introspector.frontends import oss_fuzz
-    except ModuleNotFoundError as error:
-        print(f"Could not import Fuzz Introspector: {error}", file=sys.stderr)
+    except ImportError as error:
+        print(
+            f"Could not import Fuzz Introspector dependencies: {error}",
+            file=sys.stderr,
+        )
         return 2
 
     try:

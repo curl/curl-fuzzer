@@ -62,13 +62,13 @@ jobs:
         with:
           persist-credentials: false
 
-      # Keep this aligned with the revision pinned by OSS-Fuzz's base-clang
-      # checkout_build_install_llvm.sh.
+      # Pin upstream source for reproducibility. Its Python dependencies are
+      # maintained independently in this repository.
       - name: Check out Fuzz Introspector
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ossf/fuzz-introspector
-          ref: 341ebbd72bc9116733bcfcfab5adfd7f9b633e07
+          ref: 8bc858d7dd66f390e5bbd38c44d31fce41b72103
           path: fuzz-introspector
           persist-credentials: false
 

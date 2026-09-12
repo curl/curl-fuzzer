@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -56,6 +57,56 @@ def test_generate_calltree_uses_only_the_curated_sources(tmp_path: Path) -> None
         "proto_fuzzer/scenario_runner.cc",
         "proto_fuzzer/multi_transfer_runner.cc",
     )
+
+
+def test_tree_sitter_compatibility_uses_current_apis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    tree_sitter = ModuleType("tree_sitter")
+    tree_sitter.__version__ = "0.26.0"
+
+    class Language:
+        pass
+
+    class Point(tuple):
+        row = property(lambda _point: None)
+        column = property(lambda _point: None)
+
+    created_queries = []
+
+    class Query:
+        def __init__(self, language, source):  # type: ignore[no-untyped-def]
+            self.language = language
+            self.source = source
+            created_queries.append(self)
+
+    class QueryCursor:
+        def __init__(self, query):  # type: ignore[no-untyped-def]
+            self.query = query
+
+        def captures(self, node):  # type: ignore[no-untyped-def]
+            return {"capture": [node]}
+
+    tree_sitter.Language = Language
+    tree_sitter.Node = object
+    tree_sitter.Point = Point
+    tree_sitter.Query = Query
+    tree_sitter.QueryCursor = QueryCursor
+    monkeypatch.setitem(sys.modules, "tree_sitter", tree_sitter)
+
+    module._install_tree_sitter_compatibility()
+
+    language = Language()
+    node = object()
+    query = language.query("(call_expression) @call")
+    assert created_queries[0].source == "(call_expression) @call"
+    assert created_queries[0].language is language
+    assert query.captures(node) == {"capture": [node]}
+
+    point = Point((300, 400))
+    assert point.row == 300
+    assert point.column == 400
 
 
 def test_generate_calltree_rejects_missing_output_and_removes_stale_file(
