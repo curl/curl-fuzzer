@@ -303,7 +303,7 @@ dev = [
     { name = "scapy", specifier = ">=2.6.1,<3.0.0" },
 ]
 introspector = [
-    { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "tree-sitter", specifier = "==0.26.0" },
     { name = "tree-sitter-cpp", specifier = "==0.23.4" },
     { name = "tree-sitter-go", specifier = "==0.25.0" },
