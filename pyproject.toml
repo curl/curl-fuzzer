@@ -68,9 +68,9 @@ dev = [
 
 # Dependencies of the Fuzz Introspector source frontend checked out by
 # .github/workflows/introspector.yml. Not imported by curl_fuzzer_tools;
-# listed here so Renovate keeps the pins fresh.
+# listed here so dependency updates are managed in this repository.
 introspector = [
-    "PyYAML==6.0.3",
+    "PyYAML>=6.0.3,<7",
     "tree-sitter==0.26.0",
     "tree-sitter-cpp==0.23.4",
     "tree-sitter-go==0.25.0",
