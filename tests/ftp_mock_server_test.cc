@@ -135,6 +135,48 @@ void TestEpsvFailureFallsBackToPasv() {
          "FTP EPSV rejection did not issue PASV");
 }
 
+void TestMalformedEpsvFallsBackToPasv() {
+  Scenario scenario;
+  AddLoginAndPwdReplies(&scenario);
+  auto *control = scenario.mutable_connection();
+  control->add_on_readable("200 EPSV reply missing port tuple\r\n");
+  control->add_on_readable("227 Entering Passive Mode (127,0,0,1,48,57)\r\n");
+  control->add_on_readable("200 type set\r\n");
+  control->add_on_readable("213 13\r\n");
+  control->add_on_readable("150 opening data\r\n");
+  control->add_on_readable("226 complete\r\n");
+  scenario.add_subsequent_connections()->set_initial_response("pasv-fallback");
+
+  const FtpRunResult result =
+      RunScenario(scenario, "ftp://ftp.test/malformed-epsv.bin");
+  Expect(result.code == CURLE_OK, "malformed EPSV fallback did not complete");
+  Expect(result.body == "pasv-fallback",
+         "malformed EPSV fallback produced the wrong body");
+  const std::size_t epsv = result.transcript.find("EPSV\r\n");
+  const std::size_t pasv = result.transcript.find("PASV\r\n");
+  Expect(epsv != std::string::npos && pasv != std::string::npos && epsv < pasv,
+         "malformed EPSV response did not lead to a PASV retry");
+}
+
+void TestMalformed229EpsvIsTerminal() {
+  Scenario scenario;
+  AddLoginAndPwdReplies(&scenario);
+  scenario.mutable_connection()->add_on_readable(
+      "229 Entering Extended Passive Mode (||1025|)\r\n");
+
+  const FtpRunResult result =
+      RunScenario(scenario, "ftp://ftp.test/malformed-epsv-tuple.bin");
+  Expect(result.code == CURLE_FTP_WEIRD_PASV_REPLY,
+         "malformed EPSV tuple did not produce a malformed-reply error");
+  Expect(result.transcript.find("EPSV\r\n") != std::string::npos,
+         "malformed EPSV tuple scenario did not issue EPSV");
+  Expect(
+      result.transcript.find("PASV\r\n") == std::string::npos,
+      "curl unexpectedly retried PASV after a malformed positive EPSV reply");
+  Expect(result.data_connections == 0,
+         "malformed EPSV tuple unexpectedly opened a data connection");
+}
+
 void TestUploadIsDrainedWithoutLosingControlChannel() {
   Scenario scenario;
   auto *upload_option = scenario.add_options();
@@ -245,6 +287,33 @@ void TestActiveDownload(bool use_eprt) {
          "active FTP download used the wrong setup command");
 }
 
+void TestEprtFailureFallsBackToPort() {
+  Scenario scenario;
+  AddActiveModeOptions(&scenario, true);
+  AddLoginAndPwdReplies(&scenario);
+  auto *control = scenario.mutable_connection();
+  control->add_on_readable("500 EPRT unsupported\r\n");
+  control->add_on_readable("200 PORT accepted\r\n");
+  control->add_on_readable("200 type set\r\n");
+  control->add_on_readable("213 15\r\n");
+  control->add_on_readable("150 opening data\r\n");
+  control->add_on_readable("226 complete\r\n");
+  scenario.add_subsequent_connections()->set_initial_response(
+      "active-fallback");
+
+  const FtpRunResult result =
+      RunScenario(scenario, "ftp://ftp.test/eprt-port-fallback.bin");
+  Expect(result.code == CURLE_OK, "EPRT-to-PORT fallback did not complete");
+  Expect(result.body == "active-fallback",
+         "EPRT-to-PORT fallback produced the wrong body");
+  Expect(result.data_connections == 1,
+         "EPRT-to-PORT fallback allocated the wrong number of data channels");
+  const std::size_t eprt = result.transcript.find("EPRT ");
+  const std::size_t port = result.transcript.find("PORT ");
+  Expect(eprt != std::string::npos && port != std::string::npos && eprt < port,
+         "EPRT rejection did not lead to a PORT retry");
+}
+
 } // namespace
 
 int main() {
@@ -253,11 +322,14 @@ int main() {
   }
   TestEpsvDownloadAndFinalReply();
   TestEpsvFailureFallsBackToPasv();
+  TestMalformedEpsvFallsBackToPasv();
+  TestMalformed229EpsvIsTerminal();
   TestUploadIsDrainedWithoutLosingControlChannel();
   TestCustomListingCommandReceivesPassiveData();
   TestExplicitEmptyCompletionExposesControlEof();
   TestActiveDownload(true);
   TestActiveDownload(false);
+  TestEprtFailureFallsBackToPort();
   curl_global_cleanup();
   return 0;
 }

@@ -54,10 +54,19 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "150 opening data connection",
             'initial_response: "hello world"',
         ),
+        "ftp_epsv_malformed_tuple.textproto": (
+            "229 Entering Extended Passive Mode (||1025|)",
+            'host_path: "ftp.test/malformed-epsv-tuple.bin"',
+        ),
         "ftp_pasv_fallback.textproto": (
             "500 EPSV unsupported",
             "227 Entering Passive Mode",
             'initial_response: "fallback"',
+        ),
+        "ftp_malformed_epsv_pasv_fallback.textproto": (
+            "200 EPSV reply missing port tuple",
+            "227 Entering Passive Mode",
+            'initial_response: "pasv-fallback"',
         ),
         "ftp_upload_stor.textproto": (
             "CURLOPT_UPLOAD bool_value: true",
@@ -88,6 +97,11 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "CURLOPT_FTP_USE_EPRT bool_value: false",
             "200 PORT accepted",
             'initial_response: "active-port"',
+        ),
+        "ftp_eprt_port_fallback.textproto": (
+            "CURLOPT_FTP_USE_EPRT bool_value: true",
+            "500 EPRT unsupported",
+            "200 PORT accepted",
         ),
     }
     ftp_root = SCENARIO_ROOT / "ftp"
