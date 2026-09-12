@@ -1,0 +1,18 @@
+# Reset an accepted pushed response, then send a graceful GOAWAY while its
+# parent stream is still active. Stream 1 remains permitted by last_stream_id
+# and completes after both control transitions.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/h2-push-reset"
+accept_h2_push: true
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00"
+  # PUSH_PROMISE(stream 1 -> stream 2), then begin its 200 response.
+  on_readable: "\x00\x00\x19\x05\x04\x00\x00\x00\x01\x00\x00\x00\x02\x82\x87\x01\x08tls.test\x04\x07/pushed"
+  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x02\x88"
+  # RST_STREAM(stream 2, CANCEL).
+  on_readable: "\x00\x00\x04\x03\x00\x00\x00\x00\x02\x00\x00\x00\x08"
+  # GOAWAY(last_stream_id=1, NO_ERROR), followed later by stream 1 completion.
+  on_readable: "\x00\x00\x08\x07\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88\x00\x00\x02\x00\x01\x00\x00\x00\x01OK"
+}

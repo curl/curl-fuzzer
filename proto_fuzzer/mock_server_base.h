@@ -165,6 +165,12 @@ class MockServerBase {
   /// @return active driver, or nullptr for the ordinary perform path.
   MultiSocketDriver* multi_socket_driver();
 
+  /// @return extra easy handles removed and cleaned after the latest drive.
+  /// Server push is currently the only path that can add one behind the
+  /// caller's back; exposing the count to subclasses keeps ownership in this
+  /// multi-owning base while allowing focused lifecycle assertions.
+  std::size_t additional_handle_cleanup_count() const;
+
   /// Resume receive-side callback output at one bounded drive boundary when
   /// the dedicated API plan requested it. Calling CONT before the callback
   /// pauses is harmless; repeating it ensures a later response chunk cannot
@@ -212,6 +218,10 @@ class MockServerBase {
   /// removal and multi cleanup, the complete interval in which callbacks may
   /// still fire.
   MultiSocketDriver* multi_socket_driver_;
+
+  /// Number of application-created handles, excluding the caller's parent,
+  /// successfully removed from the current multi and cleaned up.
+  std::size_t additional_handle_cleanup_count_;
 
   /// True only for an API-plan multi drive with its one-shot write callback.
   bool resume_response_;

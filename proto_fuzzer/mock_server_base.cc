@@ -11,6 +11,7 @@
 
 #include "proto_fuzzer/mock_server_base.h"
 
+#include <curl/multi.h>
 #include <sys/select.h>
 
 #include "proto_fuzzer/curl_raii.h"
@@ -55,6 +56,7 @@ MockServerBase::MockServerBase()
       pending_recv_buf_bytes_(0),
       pending_drain_limit_(0),
       multi_socket_driver_(nullptr),
+      additional_handle_cleanup_count_(0),
       resume_response_(false) {}
 
 /// Out-of-line destructor so MockConnection can stay forward-declared in the
@@ -98,6 +100,7 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
   const auto& bp = scenario.connection().backpressure();
   pending_recv_buf_bytes_ = static_cast<int>(bp.recv_buf_bytes());
   pending_drain_limit_ = static_cast<std::size_t>(bp.drain_limit());
+  additional_handle_cleanup_count_ = 0;
   resume_response_ = resume_response;
 
   CurlMultiPtr multi(curl_multi_init());
@@ -128,17 +131,33 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
     RunLoop(multi.get(), easy, scenario);
 
     // Completion messages are the multi API's only durable record of the
-    // transfer result. Consume them while the easy handle is still attached:
+    // transfer result. Consume them while all easy handles are still attached:
     // otherwise every scenario systematically skips curl_multi_info_read's
-    // result path and removal discards the opportunity. With one easy handle
-    // attached, this drain has at most one completion message regardless of
-    // fuzzed response size or redirect count.
+    // result path and removal discards the opportunity. An accepted HTTP/2
+    // push can contribute one additional completion message; only the caller's
+    // parent determines DriveScenario's result.
     int messages_remaining = 0;
     CURLMsg* message = nullptr;
     while ((message = curl_multi_info_read(multi.get(), &messages_remaining)) != nullptr) {
       if (message->msg == CURLMSG_DONE && message->easy_handle == easy) {
         transfer_result = message->data.result;
       }
+    }
+
+    // CURL_PUSH_OK transfers ownership of each automatically-added easy to
+    // the application. Enumerate attached handles only after draining their
+    // completion messages, then honor the public remove-before-cleanup
+    // lifecycle. The original `easy` remains caller-owned.
+    CURL** handles = curl_multi_get_handles(multi.get());
+    if (handles != nullptr) {
+      for (std::size_t index = 0; handles[index] != nullptr; ++index) {
+        CURL* handle = handles[index];
+        if (handle != easy && curl_multi_remove_handle(multi.get(), handle) == CURLM_OK) {
+          curl_easy_cleanup(handle);
+          ++additional_handle_cleanup_count_;
+        }
+      }
+      curl_free(handles);
     }
 
     curl_multi_remove_handle(multi.get(), easy);
@@ -166,6 +185,8 @@ ConnectOnlyRunStats MockServerBase::DriveConnectOnlyScenario(CURL* easy,
 /// Expose only the current callback state to protocol drive loops. Ownership
 /// remains in DriveScenario so no subclass can accidentally shorten it.
 MultiSocketDriver* MockServerBase::multi_socket_driver() { return multi_socket_driver_; }
+
+std::size_t MockServerBase::additional_handle_cleanup_count() const { return additional_handle_cleanup_count_; }
 
 void MockServerBase::ResumeResponseIfRequested(CURL* easy) {
   if (resume_response_) {

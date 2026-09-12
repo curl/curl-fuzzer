@@ -1,0 +1,21 @@
+# Hold the parent's request body behind a zero stream window while an accepted
+# push completes. Releasing stream 1 afterward makes WINDOW_UPDATE ordering
+# interact with two live HTTP/2 easy handles instead of an idle connection.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/h2-push-flow"
+accept_h2_push: true
+options { option_id: CURLOPT_POST bool_value: true }
+options { option_id: CURLOPT_POSTFIELDS string_value: "queued-body" }
+connection {
+  # SETTINGS_INITIAL_WINDOW_SIZE=0 blocks DATA, but not stream 1 HEADERS.
+  initial_response: "\x00\x00\x06\x04\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00"
+  # Promise and open stream 2 while stream 1's POST DATA remains queued.
+  on_readable: "\x00\x00\x19\x05\x04\x00\x00\x00\x01\x00\x00\x00\x02\x82\x87\x01\x08tls.test\x04\x07/pushed"
+  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x02\x88"
+  # WINDOW_UPDATE(stream 1, 65535) releases the pending request body while
+  # both the parent and pushed response streams remain live.
+  on_readable: "\x00\x00\x04\x08\x00\x00\x00\x00\x01\x00\x00\xff\xff"
+  on_readable: "\x00\x00\x06\x00\x01\x00\x00\x00\x02pushed"
+  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88\x00\x00\x02\x00\x01\x00\x00\x00\x01OK"
+}

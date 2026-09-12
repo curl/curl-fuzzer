@@ -17,6 +17,23 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
             "\\x19\\x05\\x04",
             "\\x82\\x87\\x01\\x08tls.test\\x04\\x07/pushed",
         ),
+        "https_h2_push_accepted.textproto": (
+            "accept_h2_push: true",
+            "promised stream 2",
+            "\\x00\\x00\\x06\\x00\\x01\\x00\\x00\\x00\\x02pushed",
+        ),
+        "https_h2_push_reset_goaway.textproto": (
+            "accept_h2_push: true",
+            "RST_STREAM",
+            "\\x04\\x03",
+            "\\x08\\x07",
+        ),
+        "https_h2_push_flow_control.textproto": (
+            "accept_h2_push: true",
+            "CURLOPT_POSTFIELDS",
+            "SETTINGS_INITIAL_WINDOW_SIZE=0",
+            "\\x04\\x08",
+        ),
         "https_h2_reuse_ping_upkeep.textproto": (
             "CURLOPT_FOLLOWLOCATION",
             "\\x08\\x06",

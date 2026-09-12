@@ -253,6 +253,7 @@ void TestHttpsH2Policy() {
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.set_accept_h2_push(true);
 
   scenario.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
@@ -284,6 +285,8 @@ void TestHttpsH2Policy() {
   Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
              !scenario.has_multi_plan(),
          "HTTPS/H2 policy retained another target's work");
+  Expect(scenario.accept_h2_push(),
+         "HTTPS/H2 policy discarded its accepted-push mode");
   Expect(scenario.options_size() == 2 &&
              scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_POST &&
@@ -1392,6 +1395,7 @@ void TestCompatibilityProfileIsNoOp() {
   scenario.set_host_path("compatibility.example/");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.set_accept_h2_push(true);
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
   scenario.mutable_http3_plan()
@@ -1405,6 +1409,37 @@ void TestCompatibilityProfileIsNoOp() {
 
   Expect(scenario.SerializeAsString() == before,
          "compatibility profile changed an accumulated-corpus input");
+}
+
+void TestNonHttpsH2PoliciesDiscardAcceptedPushMode() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kFastGopher,
+      TargetProfile::kSocks4,
+      TargetProfile::kResolver,
+      TargetProfile::kApi,
+      TargetProfile::kMulti,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_accept_h2_push(true);
+
+    ApplyTargetPolicy(&scenario, profile);
+
+    Expect(!scenario.accept_h2_push(),
+           "a non-HTTPS/H2 policy retained accepted-push work");
+  }
 }
 
 } // namespace
@@ -1446,5 +1481,6 @@ int main() {
   TestApiEasyDrivesDropMultiOnlyWork();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
+  TestNonHttpsH2PoliciesDiscardAcceptedPushMode();
   return 0;
 }

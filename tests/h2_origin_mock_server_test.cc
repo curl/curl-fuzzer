@@ -46,6 +46,9 @@ struct H2TransferResult {
   std::size_t push_callback_count = 0;
   std::size_t push_header_count = 0;
   bool saw_push_path = false;
+  std::size_t accepted_push_count = 0;
+  std::size_t cleaned_push_count = 0;
+  std::size_t pushed_body_bytes = 0;
   CURLcode upkeep_result = CURLE_FAILED_INIT;
 };
 
@@ -76,6 +79,9 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   result.push_callback_count = server.push_callback_count();
   result.push_header_count = server.push_header_count();
   result.saw_push_path = server.saw_push_path();
+  result.accepted_push_count = server.accepted_push_count();
+  result.cleaned_push_count = server.cleaned_push_count();
+  result.pushed_body_bytes = server.pushed_body_bytes();
   result.upkeep_result = server.upkeep_result();
 
   curl_easy_cleanup(easy);
@@ -83,10 +89,12 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   return result;
 }
 
-Scenario MakePushScenario() {
+Scenario MakePushScenario(bool accept_push = false,
+                          bool offer_second_push = false) {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
   scenario.set_host_path("tls.test/h2-push");
+  scenario.set_accept_h2_push(accept_push);
   auto *connection = scenario.mutable_connection();
   connection->set_initial_response(
       std::string("\x00\x00\x00\x04\x00\x00\x00\x00\x00", 9));
@@ -97,6 +105,19 @@ Scenario MakePushScenario() {
                   "\x00\x00\x00\x02\x82\x87\x01\x08tls.test"
                   "\x04\x07/pushed",
                   34));
+  if (offer_second_push) {
+    connection->add_on_readable(
+        std::string("\x00\x00\x19\x05\x04\x00\x00\x00\x01"
+                    "\x00\x00\x00\x04\x82\x87\x01\x08tls.test"
+                    "\x04\x07/second",
+                    34));
+  }
+  if (accept_push) {
+    connection->add_on_readable(
+        std::string("\x00\x00\x01\x01\x04\x00\x00\x00\x02\x88"
+                    "\x00\x00\x06\x00\x01\x00\x00\x00\x02pushed",
+                    25));
+  }
   connection->add_on_readable(
       std::string("\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
                   "\x00\x00\x02\x00\x01\x00\x00\x00\x01OK",
@@ -144,8 +165,27 @@ void TestValidPushPromiseReachesCallback() {
   Expect(result.push_callback_count == 1 && result.push_header_count == 4 &&
              result.saw_push_path,
          "valid PUSH_PROMISE did not reach both public header accessors");
+  Expect(result.accepted_push_count == 0 && result.cleaned_push_count == 0 &&
+             result.pushed_body_bytes == 0,
+         "default H2 push mode did not preserve rejection semantics");
   Expect(result.upkeep_result == CURLE_OK,
          "H2 push transfer did not complete its upkeep probe");
+}
+
+void TestAcceptedPushCompletesAndCleansUpOneHandle() {
+  const H2TransferResult result = DriveH2Scenario(MakePushScenario(true, true));
+
+  Expect(result.code == CURLE_OK && result.response == "OK",
+         "accepted H2 push prevented the parent transfer from completing");
+  Expect(result.push_callback_count == 2 && result.push_header_count == 8 &&
+             result.saw_push_path,
+         "accepted H2 push did not inspect both valid promises");
+  Expect(result.accepted_push_count == 1 && result.cleaned_push_count == 1,
+         "accepted H2 push did not enforce and clean up its one-handle bound");
+  Expect(result.pushed_body_bytes == 6,
+         "accepted H2 push did not consume the promised response body");
+  Expect(result.upkeep_result == CURLE_OK,
+         "accepted H2 push did not complete its upkeep probe");
 }
 
 void TestRedirectReusesH2ConnectionAroundPingAndUpkeep() {
@@ -163,6 +203,7 @@ void TestRedirectReusesH2ConnectionAroundPingAndUpkeep() {
 
 int main() {
   TestValidPushPromiseReachesCallback();
+  TestAcceptedPushCompletesAndCleansUpOneHandle();
   TestRedirectReusesH2ConnectionAroundPingAndUpkeep();
   return 0;
 }

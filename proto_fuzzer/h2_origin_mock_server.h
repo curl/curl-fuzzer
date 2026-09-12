@@ -44,6 +44,15 @@ class H2OriginMockServer final : public TlsMockServer {
   /// @return true when the callback found the promised :path header.
   bool saw_push_path() const;
 
+  /// @return number of pushed transfers accepted by the bounded callback.
+  std::size_t accepted_push_count() const;
+
+  /// @return number of accepted pushed handles explicitly cleaned up.
+  std::size_t cleaned_push_count() const;
+
+  /// @return response-body bytes delivered by accepted pushed transfers.
+  std::size_t pushed_body_bytes() const;
+
   /// @return result of the bounded post-transfer curl_easy_upkeep call.
   CURLcode upkeep_result() const;
 
@@ -57,10 +66,14 @@ class H2OriginMockServer final : public TlsMockServer {
  private:
   static int PushCallback(CURL* parent, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
                           void* userdata);
+  static std::size_t PushedWriteCallback(char* contents, std::size_t size, std::size_t nmemb, void* userdata);
 
   std::size_t push_callback_count_;
   std::size_t push_header_count_;
   bool saw_push_path_;
+  bool accept_h2_push_;
+  std::size_t accepted_push_count_;
+  std::size_t pushed_body_bytes_;
   CURLcode upkeep_result_;
 };
 
