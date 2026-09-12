@@ -110,6 +110,12 @@ message Scenario {
   // peer's trust anchor; no plaintext or unrelated protocol target pays the
   // TLS backend's CRL parsing cost.
   bytes crl_file = 21;
+  // Accept at most one server-pushed stream in the dedicated HTTPS/HTTP2
+  // lane. The default keeps the historical rejection path, while an explicit
+  // opt-in transfers ownership of one server-created easy handle to the
+  // harness so a corpus entry can drive the promised response to completion.
+  // Other fixed target policies discard this field.
+  bool accept_h2_push = 22;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

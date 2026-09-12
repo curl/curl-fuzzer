@@ -1128,6 +1128,13 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
+  // Accepted server push adds a harness-owned easy handle and therefore
+  // belongs only in the fixed-ALPN H2 origin lane. Compatibility remains a
+  // no-op above so accumulated mixed corpus entries keep their wire meaning.
+  if (profile != TargetProfile::kHttpsH2) {
+    scenario->clear_accept_h2_push();
+  }
+
   // Only the dedicated TLS and QUIC peers consume a certificate-chain
   // selector. Remove it before protocol-specific early returns so other fixed
   // targets do not spend mutations on inert TLS server state.
