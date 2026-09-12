@@ -1,0 +1,11 @@
+# A positive EPSV reply with a malformed delimiter tuple reaches curl's
+# terminal malformed-229 parser path; curl deliberately does not retry PASV.
+scheme: SCHEME_FTP
+host_path: "ftp.test/malformed-epsv-tuple.bin"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "229 Entering Extended Passive Mode (||1025|)\r\n"
+}

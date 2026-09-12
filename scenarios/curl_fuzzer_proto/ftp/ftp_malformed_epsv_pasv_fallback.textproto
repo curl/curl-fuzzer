@@ -1,0 +1,17 @@
+# A success-class response without EPSV's required 229 status/port tuple makes
+# curl disable EPSV, issue PASV, and finish through the ordinary IPv4 parser.
+scheme: SCHEME_FTP
+host_path: "ftp.test/malformed-epsv.bin"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "200 EPSV reply missing port tuple\r\n"
+  on_readable: "227 Entering Passive Mode (127,0,0,1,48,57)\r\n"
+  on_readable: "200 type set\r\n"
+  on_readable: "213 13\r\n"
+  on_readable: "150 opening data\r\n"
+  on_readable: "226 complete\r\n"
+}
+subsequent_connections { initial_response: "pasv-fallback" }
