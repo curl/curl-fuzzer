@@ -339,6 +339,7 @@ void TrimRepeatedScalar(RepeatedScalar* values, std::size_t limit) {
 void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
   TrimRepeatedScalar(plan->mutable_share_data_selectors(), scenario_limits::kMaxApiShareDataSelectors);
   TrimRepeatedScalar(plan->mutable_easy_info_selectors(), scenario_limits::kMaxApiInfoSelectors);
+  TrimRepeatedScalar(plan->mutable_reentrant_probe_selectors(), scenario_limits::kMaxApiReentrantSelectors);
 
   switch (plan->drive_mode()) {
     case curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM:

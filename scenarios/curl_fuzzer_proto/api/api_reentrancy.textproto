@@ -1,0 +1,27 @@
+# Firing public API calls from inside the response callback must make libcurl's
+# eapi/mapi guards reject the non-reentrant entrypoints (perform/reset/upkeep,
+# multi perform/setopt/add/wait) while admitting the reentrant ones.
+# Every selector index is present so a single seed reaches each typed probe; the
+# small body still delivers one callback before completion.
+scheme: SCHEME_HTTP
+host_path: "api.test/reentrancy"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nok"
+}
+api_plan {
+  drive_mode: API_DRIVE_MULTI_PERFORM
+  reentrant_probe_selectors: 0
+  reentrant_probe_selectors: 1
+  reentrant_probe_selectors: 2
+  reentrant_probe_selectors: 3
+  reentrant_probe_selectors: 4
+  reentrant_probe_selectors: 5
+  reentrant_probe_selectors: 6
+  reentrant_probe_selectors: 7
+  reentrant_probe_selectors: 8
+  reentrant_probe_selectors: 9
+  reentrant_probe_selectors: 10
+  reentrant_probe_selectors: 11
+  reentrant_probe_selectors: 12
+  reentrant_probe_selectors: 13
+}
