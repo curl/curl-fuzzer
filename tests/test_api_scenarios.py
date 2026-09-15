@@ -40,6 +40,11 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
             "Content-Encoding: gzip",
             "Content-Length: 12311",
         ),
+        "api_reentrancy.textproto": (
+            "reentrant_probe_selectors: 0",
+            "reentrant_probe_selectors: 13",
+            "API_DRIVE_MULTI_PERFORM",
+        ),
         "api_copy_postfields.textproto": (
             "CURLOPT_COPYPOSTFIELDS",
             'string_value: "copy\\000body"',

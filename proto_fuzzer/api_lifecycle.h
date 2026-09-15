@@ -11,6 +11,7 @@
 #define PROTO_FUZZER_API_LIFECYCLE_H_
 
 #include <curl/curl.h>
+#include <curl/multi.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -60,6 +61,19 @@ class ApiLifecycle {
   /// @return response bytes accepted after the paused chunk was replayed.
   std::size_t response_bytes_received() const;
 
+  /// Hand the driving multi handle to the reentrancy probes so the multi-entry
+  /// probes can target the live object. Called before the drive loop starts;
+  /// null in easy-only drives, where multi probes are skipped.
+  /// @param multi Live multi handle driving the transfer, or null in easy-only
+  ///        drives where multi probes are skipped.
+  void SetActiveMulti(CURLM* multi);
+
+  /// @return number of public API probes fired from the response callback.
+  std::size_t reentrant_probes_run() const;
+
+  /// @return number of probes libcurl rejected with a recursive-API-call code.
+  std::size_t reentrant_recursive_rejections() const;
+
  private:
   /// Counters provide real callback userdata without synchronization: this
   /// fuzzer drives one easy handle on one thread.
@@ -70,9 +84,13 @@ class ApiLifecycle {
 
   /// State borrowed by CURLOPT_WRITEDATA for the complete easy lifetime.
   struct ResponseCallbackState {
+    ApiLifecycle* owner = nullptr;
     bool pause_once = false;
     bool pause_returned = false;
     std::size_t bytes_received = 0;
+    bool probes_done = false;
+    std::size_t probes_run = 0;
+    std::size_t recursive_rejections = 0;
   };
 
   /// Pause the first non-empty body delivery, then accept its replay.
@@ -96,11 +114,17 @@ class ApiLifecycle {
   /// against bytes already selected by the scenario.
   void ProbeUrlAndEscaping(std::string_view url);
 
+  /// Fire each selected public API call once from inside the response
+  /// callback, recording how many ran and how many libcurl rejected as
+  /// recursive. Runs on the first body delivery only.
+  void RunReentrantProbes();
+
   CURL* easy_;
   const curl::fuzzer::proto::ApiPlan& plan_;
   ResponseCallbackState response_callback_state_;
   CURLSH* share_;
   ShareCallbackState share_callback_state_;
+  CURLM* active_multi_;
 };
 
 }  // namespace proto_fuzzer
