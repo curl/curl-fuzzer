@@ -1084,6 +1084,55 @@ void TestApiPausedDecodingBuffersEncodedRemainder() {
   curl_slist_free_all(connect_to);
 }
 
+/// Public API calls fired from inside the response callback must be screened by
+/// libcurl's eapi/mapi guards: the non-reentrant entrypoints return a
+/// recursive-API-call code without changing transfer state, while the reentrant
+/// ones run normally. Every probe is selected so the callback covers the whole
+/// typed table in one transfer.
+void TestApiReentrancyProbesAreRejectedInsideCallback() {
+  constexpr std::size_t kProbeSelectors = proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors;
+
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/reentrancy");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: "
+      "2\r\n\r\nok");
+  auto *plan = scenario.mutable_api_plan();
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
+  for (std::size_t selector = 0; selector < kProbeSelectors; ++selector) {
+    plan->add_reentrant_probe_selectors(static_cast<std::uint32_t>(selector));
+  }
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "API reentrancy test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/reentrancy");
+
+  TestMockServer server;
+  server.Install(easy);
+  auto lifecycle = std::make_unique<proto_fuzzer::ApiLifecycle>(
+      easy, *plan, "http://api.test/reentrancy");
+  proto_fuzzer::ApiLifecycle *lifecycle_ptr = lifecycle.get();
+  server.SetMultiObserver(
+      [lifecycle_ptr](CURLM *multi) { lifecycle_ptr->SetActiveMulti(multi); });
+
+  Expect(server.DriveScenario(easy, scenario) == CURLE_OK,
+         "reentrancy scenario did not complete the scripted response");
+  Expect(lifecycle->reentrant_probes_run() == kProbeSelectors,
+         "response callback did not fire every selected API probe");
+  Expect(lifecycle->reentrant_recursive_rejections() >= 1,
+         "libcurl did not reject any in-callback API call as recursive");
+  Expect(lifecycle->response_bytes_received() == 2,
+         "reentrancy probes interfered with body delivery");
+
+  curl_easy_cleanup(easy);
+  lifecycle.reset();
+  curl_slist_free_all(connect_to);
+}
+
 /// CURLOPT_CONNECT_ONLY disables curl's own transfer timeout, and value 2 keeps
 /// a full request running. Combined with an upload that provokes
 /// Expect: 100-continue, that left curl_easy_perform waiting out the entire
@@ -1300,6 +1349,7 @@ int main() {
   TestConnectOnlyExercisesDirectIo();
   TestApiResponseCallbackPausesAndResumes();
   TestApiPausedDecodingBuffersEncodedRemainder();
+  TestApiReentrancyProbesAreRejectedInsideCallback();
   TestEasyPerformBoundsConnectOnlyUpload();
   TestTelnetPreloadsChunksAndNeverReadsStdin();
   TestTelnetMaximumAmplificationCannotBlock();

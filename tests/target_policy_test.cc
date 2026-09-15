@@ -1184,6 +1184,11 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
        ++index) {
     plan->add_easy_info_selectors(static_cast<std::uint32_t>(index + 200));
   }
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors + 3;
+       ++index) {
+    plan->add_reentrant_probe_selectors(static_cast<std::uint32_t>(index + 300));
+  }
   ApplyTargetPolicy(&scenario, TargetProfile::kApi);
 
   Expect(scenario.scheme() == SCHEME_HTTP,
@@ -1212,8 +1217,13 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
              scenario.api_plan().easy_info_selectors_size()) ==
              proto_fuzzer::scenario_limits::kMaxApiInfoSelectors,
          "API policy retained too many typed getinfo selectors");
+  Expect(static_cast<std::size_t>(
+             scenario.api_plan().reentrant_probe_selectors_size()) ==
+             proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors,
+         "API policy retained too many reentrancy probes");
   Expect(scenario.api_plan().share_data_selectors(0) == 100 &&
-             scenario.api_plan().easy_info_selectors(0) == 200,
+             scenario.api_plan().easy_info_selectors(0) == 200 &&
+             scenario.api_plan().reentrant_probe_selectors(0) == 300,
          "API policy changed the retained selector prefix");
 }
 

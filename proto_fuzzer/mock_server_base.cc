@@ -119,6 +119,9 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
     multi_socket_driver_ = &socket_driver;
   }
   if (curl_multi_add_handle(multi.get(), easy) == CURLM_OK) {
+    if (multi_observer_) {
+      multi_observer_(multi.get());
+    }
     if (wake_multi) {
       if (multi_socket_driver_ != nullptr) {
         multi_socket_driver_->ProbeControlApis();

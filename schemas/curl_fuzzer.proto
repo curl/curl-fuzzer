@@ -247,6 +247,14 @@ message ApiPlan {
   // from the bounded multi event loop. Easy-only drives clear this flag
   // because their blocking entrypoints provide no safe external resume point.
   bool pause_response_once = 8;
+  // Public API probes to fire once from inside the response callback. Each
+  // selector indexes a runtime table of typed calls that exercises the
+  // eapi/mapi guard bookkeeping without casting selector bytes to CURLINFO or
+  // other varargs values. Non-reentrant entrypoints are rejected with a
+  // recursive-API-call result while a multi API call is on the stack; the
+  // callback is also reachable outside one, so the table only holds calls that
+  // stay safe even when the guard admits them.
+  repeated uint32 reentrant_probe_selectors = 9;
 }
 
 // Public transfer entrypoints covered by the API lane. An enum prevents

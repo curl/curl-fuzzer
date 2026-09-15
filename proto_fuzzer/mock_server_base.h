@@ -16,7 +16,9 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <functional>
 #include <memory>
+#include <utility>
 
 #include "curl_fuzzer.pb.h"
 
@@ -109,6 +111,16 @@ class MockServerBase {
   /// @param scenario Scenario supplying response and direct-I/O bytes.
   /// @return Results and byte counts from connect, send, and receive probes.
   virtual ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
+
+  /// Callback type used to publish the driving multi handle to observers.
+  using MultiObserver = std::function<void(CURLM*)>;
+
+  /// Register an observer invoked with the live multi handle after 'easy' is
+  /// attached and before the drive loop starts. The API lifecycle lane uses it
+  /// so public API probes fired from inside callbacks can target the multi that
+  /// actually owns the transfer. Passing an empty observer clears it.
+  /// @param observer Callback receiving the live multi handle.
+  void SetMultiObserver(MultiObserver observer) { multi_observer_ = std::move(observer); }
 
   /// @return the active MockConnection, or nullptr if none has been opened.
   MockConnection* connection();
@@ -225,6 +237,9 @@ class MockServerBase {
 
   /// True only for an API-plan multi drive with its one-shot write callback.
   bool resume_response_;
+
+  /// Observer receiving the live multi handle at the start of a drive.
+  MultiObserver multi_observer_;
 
  private:
   friend curl_socket_t MockServerBaseOpenSocketTrampoline(void*, curlsocktype, struct curl_sockaddr*);

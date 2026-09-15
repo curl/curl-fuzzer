@@ -101,6 +101,10 @@ inline constexpr std::size_t kMaxApiShareDataSelectors = 16;
 /// One API iteration can cheaply inspect several result families, but an
 /// unbounded list would repeatedly query identical handle-owned state.
 inline constexpr std::size_t kMaxApiInfoSelectors = 32;
+/// Each reentrancy selector fires one public API call from inside a callback.
+/// A small list covers every typed probe without turning mutation length into
+/// callback work.
+inline constexpr std::size_t kMaxApiReentrantSelectors = 16;
 /// URL escaping can expand input threefold. Four KiB crosses parser buffer
 /// boundaries without letting one convenience-API probe dominate a transfer.
 inline constexpr std::size_t kMaxApiStringBytes = 4 * 1024;

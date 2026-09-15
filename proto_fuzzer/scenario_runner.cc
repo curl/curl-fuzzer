@@ -391,6 +391,10 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
 
   if (api_plan != nullptr) {
     api_lifecycle = std::make_unique<ApiLifecycle>(easy.get(), *api_plan, url);
+    // Publish the live multi to the lifecycle so API probes fired from inside
+    // the response callback can target the multi that owns the transfer.
+    ApiLifecycle* lifecycle = api_lifecycle.get();
+    mock->SetMultiObserver([lifecycle](CURLM* multi) { lifecycle->SetActiveMulti(multi); });
   }
 
   {

@@ -174,6 +174,129 @@ constexpr curl_lock_data kShareData[] = {
 };
 constexpr std::size_t kShareDataCount = sizeof(kShareData) / sizeof(kShareData[0]);
 
+/// One public API probe that runs from inside the response callback. The kinds
+/// are limited to calls that are safe to attempt while a callback owns the
+/// thread: libcurl's eapi/mapi guards reject most non-reentrant entries before
+/// they can change transfer state, and the reentrant ones have defined
+/// in-callback behaviour. Refusal is not guaranteed for multi entrypoints
+/// because it only happens while a multi API call is on the stack, and the
+/// write callback is also reachable outside it (see the table below), so every
+/// probe must stay safe even when the guard admits it.
+enum class ReentrantProbeKind {
+  kEasySetopt,
+  kEasyGetinfo,
+  kEasyHeader,
+  kEasyDuphandle,
+  kEasyReset,
+  kEasyPerform,
+  kEasyUpkeep,
+  kEasySend,
+  kEasyRecv,
+  kEasyPause,
+  kMultiPerform,
+  kMultiSetopt,
+  kMultiAddHandle,
+  kMultiWait,
+};
+
+/// A probe plus whether it needs the live multi handle. Multi probes are
+/// skipped in easy-only drives, where no multi object is exposed.
+struct ReentrantProbe {
+  ReentrantProbeKind kind;
+  bool needs_multi;
+};
+
+/// curl_multi_cleanup and curl_multi_remove_handle are deliberately absent.
+/// Both are admitted when the write callback runs outside a multi API call,
+/// where multi->callstack.count is zero and Curl_mapi_enter cannot refuse them.
+/// cleanup would free the multi that DriveScenario keeps driving (use-after-free
+/// plus a second cleanup in multi.reset()); remove_handle would run multi_done()
+/// and detach the still-driven easy, leaving the drive loop on a detached
+/// transfer so it never reports CURLE_OK. The probes below neither release the
+/// multi nor detach the driven easy.
+constexpr ReentrantProbe kReentrantProbes[] = {
+    {ReentrantProbeKind::kEasySetopt, false},    {ReentrantProbeKind::kEasyGetinfo, false},
+    {ReentrantProbeKind::kEasyHeader, false},    {ReentrantProbeKind::kEasyDuphandle, false},
+    {ReentrantProbeKind::kEasyReset, false},     {ReentrantProbeKind::kEasyPerform, false},
+    {ReentrantProbeKind::kEasyUpkeep, false},    {ReentrantProbeKind::kEasySend, false},
+    {ReentrantProbeKind::kEasyRecv, false},      {ReentrantProbeKind::kEasyPause, false},
+    {ReentrantProbeKind::kMultiPerform, true},   {ReentrantProbeKind::kMultiSetopt, true},
+    {ReentrantProbeKind::kMultiAddHandle, true}, {ReentrantProbeKind::kMultiWait, true},
+};
+constexpr std::size_t kReentrantProbeCount = sizeof(kReentrantProbes) / sizeof(kReentrantProbes[0]);
+
+/// @return true when libcurl refused an easy entrypoint because a callback was
+///         already on the handle's call stack.
+bool RecursiveRejected(CURLcode code) { return code == CURLE_RECURSIVE_API_CALL; }
+
+/// @return true when libcurl refused a multi entrypoint for the same reason.
+bool RecursiveRejected(CURLMcode code) { return code == CURLM_RECURSIVE_API_CALL; }
+
+/// Fire one probe and report whether the guard rejected it as recursive. The
+/// reentrant calls run for real, so their return values are intentionally not
+/// interpreted beyond that check.
+bool ProbePublicApiOnce(CURL* easy, CURLM* multi, ReentrantProbeKind kind) {
+  switch (kind) {
+    case ReentrantProbeKind::kEasySetopt:
+      return RecursiveRejected(curl_easy_setopt(easy, CURLOPT_REFERER, "reentrant.test"));
+    case ReentrantProbeKind::kEasyGetinfo: {
+      long response_code = 0;
+      return RecursiveRejected(curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &response_code));
+    }
+    case ReentrantProbeKind::kEasyHeader: {
+      // curl_easy_header is reentrant and maps any guard failure to a header
+      // error code, so it never reports a recursive call here.
+      struct curl_header* header = nullptr;
+      (void)curl_easy_header(easy, "Content-Type", 0, kAllHeaderOrigins, -1, &header);
+      return false;
+    }
+    case ReentrantProbeKind::kEasyDuphandle: {
+      // duphandle is reentrant; duplicate, reset, and release immediately so
+      // the copied option pointers never outlive this callback.
+      CURL* duplicate = curl_easy_duphandle(easy);
+      if (duplicate != nullptr) {
+        curl_easy_reset(duplicate);
+        curl_easy_cleanup(duplicate);
+      }
+      return false;
+    }
+    case ReentrantProbeKind::kEasyReset:
+      // curl_easy_reset returns void, so the guard's rejection is observable
+      // only as the reset not happening. It still exercises the refusal path.
+      curl_easy_reset(easy);
+      return false;
+    case ReentrantProbeKind::kEasyPerform:
+      return RecursiveRejected(curl_easy_perform(easy));
+    case ReentrantProbeKind::kEasyUpkeep:
+      return RecursiveRejected(curl_easy_upkeep(easy));
+    case ReentrantProbeKind::kEasySend: {
+      char byte = 'x';
+      std::size_t sent = 0;
+      return RecursiveRejected(curl_easy_send(easy, &byte, 1, &sent));
+    }
+    case ReentrantProbeKind::kEasyRecv: {
+      char byte = 0;
+      std::size_t received = 0;
+      return RecursiveRejected(curl_easy_recv(easy, &byte, 1, &received));
+    }
+    case ReentrantProbeKind::kEasyPause:
+      return RecursiveRejected(curl_easy_pause(easy, CURLPAUSE_CONT));
+    case ReentrantProbeKind::kMultiPerform: {
+      int running = 0;
+      return RecursiveRejected(curl_multi_perform(multi, &running));
+    }
+    case ReentrantProbeKind::kMultiSetopt:
+      return RecursiveRejected(curl_multi_setopt(multi, CURLMOPT_MAXCONNECTS, 0L));
+    case ReentrantProbeKind::kMultiAddHandle:
+      return RecursiveRejected(curl_multi_add_handle(multi, easy));
+    case ReentrantProbeKind::kMultiWait: {
+      int numfds = 0;
+      return RecursiveRejected(curl_multi_wait(multi, nullptr, 0, 0, &numfds));
+    }
+  }
+  return false;
+}
+
 /// Call one CURLINFO descriptor with storage matching its encoded type.
 void ProbeInfoDescriptor(CURL* easy, const InfoDescriptor& descriptor) {
   switch (descriptor.result_type) {
@@ -274,12 +397,14 @@ void ProbeEasyOptionMetadataOnce() {
 /// Preserve the caller's plan by reference because RunScenario keeps the
 /// source Scenario alive and unmodified for this object's complete lifetime.
 ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan, std::string_view url)
-    : easy_(easy), plan_(plan), share_(nullptr) {
+    : easy_(easy), plan_(plan), share_(nullptr), active_multi_(nullptr) {
   ProbeKnownErrorStringsOnce();
   ProbeEasyOptionMetadataOnce();
   ProbeUrlAndEscaping(url);
-  if (plan_.pause_response_once()) {
-    response_callback_state_.pause_once = true;
+  response_callback_state_.owner = this;
+  const bool wants_response_callback = plan_.pause_response_once() || plan_.reentrant_probe_selectors_size() > 0;
+  if (wants_response_callback) {
+    response_callback_state_.pause_once = plan_.pause_response_once();
     // Install userdata first: if the callback setopt were ever rejected, the
     // baseline sink safely ignores the non-null pointer. The opposite order
     // could dispatch this callback with libcurl's default FILE* userdata.
@@ -312,12 +437,43 @@ std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, st
     return 0;
   }
   state->bytes_received += bytes;
+  if (bytes != 0 && state->owner != nullptr && !state->probes_done) {
+    state->probes_done = true;
+    state->owner->RunReentrantProbes();
+  }
   return bytes;
 }
 
 bool ApiLifecycle::response_pause_returned() const { return response_callback_state_.pause_returned; }
 
 std::size_t ApiLifecycle::response_bytes_received() const { return response_callback_state_.bytes_received; }
+
+void ApiLifecycle::SetActiveMulti(CURLM* multi) { active_multi_ = multi; }
+
+std::size_t ApiLifecycle::reentrant_probes_run() const { return response_callback_state_.probes_run; }
+
+std::size_t ApiLifecycle::reentrant_recursive_rejections() const {
+  return response_callback_state_.recursive_rejections;
+}
+
+/// Fire every selected probe once, in scenario order. Multi probes are skipped
+/// when the drive exposes no multi handle. Each easy/multi rejection is counted
+/// so the tests can prove the guard branch was actually taken.
+void ApiLifecycle::RunReentrantProbes() {
+  const std::size_t count = std::min<std::size_t>(scenario_limits::kMaxApiReentrantSelectors,
+                                                  static_cast<std::size_t>(plan_.reentrant_probe_selectors_size()));
+  for (std::size_t index = 0; index < count; ++index) {
+    const auto selector = static_cast<std::size_t>(plan_.reentrant_probe_selectors(static_cast<int>(index)));
+    const ReentrantProbe& probe = kReentrantProbes[selector % kReentrantProbeCount];
+    if (probe.needs_multi && active_multi_ == nullptr) {
+      continue;
+    }
+    ++response_callback_state_.probes_run;
+    if (ProbePublicApiOnce(easy_, active_multi_, probe.kind)) {
+      ++response_callback_state_.recursive_rejections;
+    }
+  }
+}
 
 /// Count callback dispatch while leaving synchronization to applications that
 /// actually use multiple threads. The state is owned by this lifecycle and
