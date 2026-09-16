@@ -14,7 +14,8 @@ permissions: {}
 
 env:
   DO_NOT_TRACK: '1'
-  DOCS_SITE: ${{ vars.DOCS_SITE }}
+  # Must match book.toml's [output.html] cname and pages-ci.yml's DOCS_SITE.
+  DOCS_SITE: 'fuzz.curl.se'
   # renovate: datasource=crate depName=mdbook
   MDBOOK_VERSION: '0.5.4'
   # renovate: datasource=crate depName=mdbook-mermaid
