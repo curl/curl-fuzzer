@@ -34,6 +34,17 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
             "pause_response_once: true",
             'on_readable: "paused"',
         ),
+        "api_pause_buffered.textproto": (
+            "pause_response_once: true",
+            'option_id: CURLOPT_ACCEPT_ENCODING string_value: "gzip"',
+            "Content-Encoding: gzip",
+            "Content-Length: 12311",
+        ),
+        "api_reentrancy.textproto": (
+            "reentrant_probe_selectors: 0",
+            "reentrant_probe_selectors: 13",
+            "API_DRIVE_MULTI_PERFORM",
+        ),
         "api_copy_postfields.textproto": (
             "CURLOPT_COPYPOSTFIELDS",
             'string_value: "copy\\000body"',
