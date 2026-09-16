@@ -1325,6 +1325,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/api_lifecycle.cc
         proto_fuzzer/fuzzer_main.cc
         proto_fuzzer/ftp_mock_server.cc
+        proto_fuzzer/h2_cleartext_mock_server.cc
+        proto_fuzzer/h2_plan.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/socks4_mock_server.cc
@@ -1354,6 +1356,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # needs to reach inside the `libprotobuf-mutator/` subdirectory too.
         ${LPM_INSTALL_DIR}/include/libprotobuf-mutator
         ${LPM_PB_INCLUDE}
+        ${NGHTTP2_INSTALL_DIR}/include
     )
     if(TARGET openssl_external)
         target_compile_definitions(curl_fuzzer_proto_runtime PRIVATE
@@ -1382,7 +1385,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${CURL_INCLUDE_DIRS}
         ${CMAKE_BINARY_DIR}
         ${CMAKE_SOURCE_DIR}
-        ${LPM_PB_INCLUDE})
+        ${LPM_PB_INCLUDE}
+        ${NGHTTP2_INSTALL_DIR}/include)
     if(TARGET openssl_external)
         target_compile_definitions(curl_fuzzer_proto_runner PRIVATE
             PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
@@ -1410,7 +1414,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             ${CURL_HTTP3_INCLUDE_DIRS}
             ${CMAKE_BINARY_DIR}
             ${CMAKE_SOURCE_DIR}
-            ${LPM_PB_INCLUDE})
+            ${LPM_PB_INCLUDE}
+            ${NGHTTP2_INSTALL_DIR}/include)
         target_link_libraries(curl_fuzzer_proto_http3_runner PRIVATE
             curl_fuzzer::http3_dependencies)
         add_dependencies(curl_fuzzer_proto_http3_runner
@@ -1496,6 +1501,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http)
     curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http2)
     curl_add_proto_fuzzer(curl_fuzzer_proto_https)
     curl_add_proto_fuzzer(curl_fuzzer_proto_https_h2)
     curl_add_proto_fuzzer(curl_fuzzer_proto_socks4)
@@ -1700,6 +1706,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_http ${FAST_HTTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http_deep_corpus
         curl_fuzzer_proto_http_deep ${DEEP_HTTP_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_http2_corpus
+        curl_fuzzer_proto_http2 ${HTTPS_H2_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
         curl_fuzzer_proto_https
         ${HTTP_COVERAGE_SCENARIO_TEXTPROTOS}
@@ -1737,6 +1745,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_http curl_fuzzer_proto_http_corpus)
     add_dependencies(curl_fuzzer_proto_http_deep
         curl_fuzzer_proto_http_deep_corpus)
+    add_dependencies(curl_fuzzer_proto_http2
+        curl_fuzzer_proto_http2_corpus)
     add_dependencies(curl_fuzzer_proto_https curl_fuzzer_proto_https_corpus)
     add_dependencies(curl_fuzzer_proto_https_h2
         curl_fuzzer_proto_https_h2_corpus)
@@ -1834,6 +1844,72 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_test(NAME request_data_test COMMAND request_data_test)
         add_dependencies(fuzzer_unit_tests request_data_test)
 
+        add_executable(h2_plan_test
+            tests/h2_plan_test.cc
+            proto_fuzzer/h2_plan.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(h2_plan_test PRIVATE cxx_std_17)
+        target_compile_options(h2_plan_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(h2_plan_test PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE}
+            ${NGHTTP2_INSTALL_DIR}/include
+        )
+        target_link_libraries(h2_plan_test PRIVATE
+            ${NGHTTP2_STATIC_LIB}
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(h2_plan_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(h2_plan_test
+            nghttp2_external
+            curl_fuzzer_proto_generated
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME h2_plan_test COMMAND h2_plan_test)
+        add_dependencies(fuzzer_unit_tests h2_plan_test)
+
+        add_executable(h2_cleartext_mock_server_test
+            tests/h2_cleartext_mock_server_test.cc
+            proto_fuzzer/h2_cleartext_mock_server.cc
+            proto_fuzzer/h2_plan.cc
+            proto_fuzzer/mock_server.cc
+            proto_fuzzer/mock_server_base.cc
+            proto_fuzzer/multi_socket_driver.cc
+            proto_fuzzer/option_apply.cc
+            proto_fuzzer/ws_frame.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(h2_cleartext_mock_server_test PRIVATE cxx_std_17)
+        target_compile_options(h2_cleartext_mock_server_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(h2_cleartext_mock_server_test PRIVATE
+            ${CURL_INCLUDE_DIRS}
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_PB_INCLUDE}
+            ${NGHTTP2_INSTALL_DIR}/include
+        )
+        target_link_libraries(h2_cleartext_mock_server_test PRIVATE
+            ${CURL_LIB_DIR}/libcurl.a
+            ${CURL_STATIC_DEPENDENCY_LIBS}
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(h2_cleartext_mock_server_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(h2_cleartext_mock_server_test
+            ${FUZZ_DEPS}
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME h2_cleartext_mock_server_test COMMAND h2_cleartext_mock_server_test)
+        set_tests_properties(h2_cleartext_mock_server_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests h2_cleartext_mock_server_test)
+
         # Exercise the real socketpair implementation without involving DNS or
         # wall-clock waits. This catches script-order, connection-budget, and
         # old-peer lifetime regressions at the callback boundary where they
@@ -1841,6 +1917,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(MOCK_SERVER_TEST_SOURCES
             tests/mock_server_test.cc
             proto_fuzzer/api_lifecycle.cc
+            proto_fuzzer/h2_plan.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
@@ -1863,7 +1940,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             target_include_directories(${_name} PRIVATE
                 ${CMAKE_BINARY_DIR}
                 ${CMAKE_SOURCE_DIR}
-                ${LPM_PB_INCLUDE})
+                ${LPM_PB_INCLUDE}
+                ${NGHTTP2_INSTALL_DIR}/include)
             if(TARGET openssl_external)
                 target_compile_definitions(${_name} PRIVATE
                     PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
@@ -1912,6 +1990,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             # default curl build and the OpenSSL-backed in-process TLS peer.
             add_executable(h2_origin_mock_server_test
                 tests/h2_origin_mock_server_test.cc
+                proto_fuzzer/h2_plan.cc
                 proto_fuzzer/h2_origin_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/mock_server.cc
@@ -1932,6 +2011,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 ${CMAKE_SOURCE_DIR}
                 ${LPM_PB_INCLUDE}
                 ${OPENSSL_INSTALL_DIR}/include
+                ${NGHTTP2_INSTALL_DIR}/include
                 ${CURL_INCLUDE_DIRS}
             )
             target_link_libraries(h2_origin_mock_server_test PRIVATE

@@ -1,18 +1,55 @@
 # Reset an accepted pushed response, then send a graceful GOAWAY while its
-# parent stream is still active. Stream 1 remains permitted by last_stream_id
-# and completes after both control transitions.
+# parent stream is still active. The first request remains permitted by
+# last_stream_id and completes after both control transitions.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/h2-push-reset"
 accept_h2_push: true
-connection {
-  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
-  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00"
-  # PUSH_PROMISE(stream 1 -> stream 2), then begin its 200 response.
-  on_readable: "\x00\x00\x19\x05\x04\x00\x00\x00\x01\x00\x00\x00\x02\x82\x87\x01\x08tls.test\x04\x07/pushed"
-  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x02\x88"
-  # RST_STREAM(stream 2, CANCEL).
-  on_readable: "\x00\x00\x04\x03\x00\x00\x00\x00\x02\x00\x00\x00\x08"
-  # GOAWAY(last_stream_id=1, NO_ERROR), followed later by stream 1 completion.
-  on_readable: "\x00\x00\x08\x07\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00"
-  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88\x00\x00\x02\x00\x01\x00\x00\x00\x01OK"
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  # Promise the first pushed stream, then begin its 200 response.
+  actions {
+    push_promise {
+      parent_stream { request_index: 0 }
+      promised_stream { push_index: 0 }
+    }
+  }
+  actions {
+    headers {
+      stream { push_index: 0 }
+      status_code: 200
+    }
+  }
+  # RST_STREAM(first pushed stream, CANCEL).
+  actions {
+    rst_stream {
+      stream { push_index: 0 }
+      error_code: 8
+    }
+  }
+  # GOAWAY(first request, NO_ERROR), followed by parent completion.
+  actions {
+    goaway {
+      last_stream { request_index: 0 }
+      error_code: 0
+    }
+  }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "OK"
+      end_stream: true
+    }
+  }
 }

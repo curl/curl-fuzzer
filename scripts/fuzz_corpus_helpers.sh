@@ -54,6 +54,13 @@ fuzz_public_corpus_names() {
             echo "curl_fuzzer_proto_https"
             echo "curl_fuzzer_proto"
             ;;
+        curl_fuzzer_proto_http2)
+            # The cleartext prior-knowledge lane consumes the same Scenario
+            # and H2 frame grammar as the TLS lane. Its target policy rewrites
+            # the scheme while leaving structured and malformed frame work
+            # intact.
+            echo "curl_fuzzer_proto_https_h2"
+            ;;
         curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_ftp|curl_fuzzer_proto_tftp|curl_fuzzer_proto_api|curl_fuzzer_proto_multi|curl_fuzzer_proto_timing)
             echo "curl_fuzzer_proto"
             ;;

@@ -62,6 +62,7 @@ class TestMockServer : public proto_fuzzer::MockServer {
 public:
   using proto_fuzzer::MockServer::GetSocketSetupDisposition;
   using proto_fuzzer::MockServer::HandleOpenSocket;
+  using proto_fuzzer::MockServer::MockServer;
 };
 
 void TestStreamSocketDispositionIsExplicit() {
@@ -873,17 +874,14 @@ void TestApiLifecycleCompletesSocketActionTransfer() {
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
 
-  TestMockServer server;
+  TestMockServer server(proto_fuzzer::MultiDrivePolicy::kFromApiPlan);
   server.Install(easy);
   auto lifecycle = std::make_unique<proto_fuzzer::ApiLifecycle>(
       easy, *plan, "http://api.test/");
   {
     proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
     server.ConfigureRequestData(&request_data);
-    server.DriveScenario(easy, scenario,
-                         plan->drive_mode() ==
-                             curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
-                         plan->wake_multi());
+    server.DriveScenario(easy, scenario);
     lifecycle->ProbeTransferResults(false);
     lifecycle->ProbeEasyDuplication();
   }
@@ -1006,11 +1004,11 @@ void TestApiResponseCallbackPausesAndResumes() {
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/pause");
 
-  TestMockServer server;
+  TestMockServer server(proto_fuzzer::MultiDrivePolicy::kFromApiPlan);
   server.Install(easy);
   auto lifecycle = std::make_unique<proto_fuzzer::ApiLifecycle>(
       easy, *plan, "http://api.test/pause");
-  Expect(server.DriveScenario(easy, scenario, false, false, true) == CURLE_OK,
+  Expect(server.DriveScenario(easy, scenario) == CURLE_OK,
          "paused API response did not finish after resume");
   Expect(lifecycle->response_pause_returned(),
          "API response callback never returned CURL_WRITEFUNC_PAUSE");

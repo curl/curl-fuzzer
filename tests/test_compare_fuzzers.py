@@ -295,6 +295,16 @@ def test_https_h2_lane_uses_only_its_frame_aware_corpus() -> None:
     assert "curl_fuzzer_proto_https_h2" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
 
 
+def test_http2_lane_reuses_the_https_h2_frame_corpus() -> None:
+    module = _load_module()
+
+    assert "curl_fuzzer_proto_http2" in module.DEFAULT_TARGETS
+    assert module.COMPATIBLE_CORPUS_TARGETS["curl_fuzzer_proto_http2"] == (
+        "curl_fuzzer_proto_https_h2",
+    )
+    assert "curl_fuzzer_proto_http2" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
+
+
 def test_socks4_lane_uses_only_its_proxy_aware_corpus() -> None:
     module = _load_module()
 

@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/incoming_data_observer.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/scenario_limits.h"
 
@@ -56,6 +57,11 @@ class MockConnection {
   /// not mistake useful protocol progress for an idle connection.
   /// @return amount of transport progress made during this call.
   virtual std::size_t DrainIncoming();
+  /// Register a non-owning sink for bytes consumed from curl. TLS transports
+  /// notify it after decryption, while plaintext transports report socket
+  /// bytes directly. The observer must outlive this connection.
+  /// @param observer Observer to notify, or nullptr to disable observation.
+  void SetIncomingDataObserver(IncomingDataObserver* observer);
   void ReadAvailable(std::string* out);
   virtual void ShutdownWrite();
 
@@ -68,10 +74,17 @@ class MockConnection {
   /// @param drain_limit    Max bytes drained per DrainIncoming call, 0 for unlimited.
   void ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit);
 
+ protected:
+  /// Forward one application-data fragment to the optional observer.
+  /// @param data First byte of the fragment.
+  /// @param size Number of bytes available at `data`.
+  void NotifyIncomingData(const unsigned char* data, std::size_t size);
+
  private:
   int server_fd_;
   int client_fd_;
   std::size_t drain_limit_;
+  IncomingDataObserver* incoming_data_observer_;
 };
 
 /// @class proto_fuzzer::MockServer
@@ -81,7 +94,8 @@ class MockConnection {
 ///        graph. WebSocketMockServer keeps its separate single-socket model.
 class MockServer : public MockServerBase {
  public:
-  MockServer();
+  /// @param drive_policy Multi interface loop selected for this server.
+  explicit MockServer(MultiDrivePolicy drive_policy = MultiDrivePolicy::kPerform);
   ~MockServer() override;
 
   /// Borrow the primary and bounded follow-on HTTP scripts from `scenario`.

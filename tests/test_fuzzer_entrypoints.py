@@ -26,6 +26,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto": "kCompatibility",
     "curl_fuzzer_proto_http": "kFastHttp",
     "curl_fuzzer_proto_http_deep": "kDeepHttp",
+    "curl_fuzzer_proto_http2": "kFastHttp2",
     "curl_fuzzer_proto_https": "kFastHttps",
     "curl_fuzzer_proto_https_h2": "kHttpsH2",
     "curl_fuzzer_proto_https_gnutls": "kFastHttps",

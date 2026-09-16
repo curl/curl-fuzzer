@@ -117,6 +117,8 @@ struct RequestBuildStats {
   std::size_t mime_parts = 0;
   /// Number of per-part header entries transferred to curl MIME ownership.
   std::size_t mime_headers = 0;
+  /// Materialized bytes supplied by compact generated MIME sources.
+  std::size_t generated_mime_bytes = 0;
 };
 
 /// Builds HTTP headers or TELNET options, MIME state, and upload callbacks

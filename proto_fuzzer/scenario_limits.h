@@ -72,6 +72,12 @@ inline constexpr std::size_t kMaxMimeHeadersPerPart = 8;
 inline constexpr std::size_t kMaxMetadataBytes = 4096;
 /// MIME payloads remain large enough to cross encoder buffer boundaries.
 inline constexpr std::size_t kMaxMimeDataBytes = 16384;
+/// Longer repeated patterns are better expressed as ordinary MIME data and
+/// make the compact source less useful to the protobuf mutator.
+inline constexpr std::size_t kMaxGeneratedMimePatternBytes = 256;
+/// Retain both sides of curl's 64 KiB send-buffer boundary. This budget is
+/// shared by all generated MIME parts in one scenario.
+inline constexpr std::size_t kMaxGeneratedMimeDataBytes = 64 * 1024 + 1;
 // Match the legacy callback's 16 KiB stream: it is large enough to fill the
 // deliberately tightened timing-lane socket while remaining cheap per case.
 /// Maximum callback-backed body bytes visible in one scenario.
@@ -113,6 +119,27 @@ inline constexpr std::size_t kMaxMultiTransfers = 4;
 /// remove/re-add); sixteen permit several handles to interact without making
 /// action processing proportional to mutated protobuf size.
 inline constexpr std::size_t kMaxMultiActions = 16;
+/// Ordered H2 work can express startup, barriers, informational responses,
+/// flow-control changes, and a final response within a compact sequence.
+inline constexpr std::size_t kMaxHttp2Actions = 32;
+/// Sixteen turns preserve meaningful scheduler boundaries without letting a
+/// single scalar consume the complete outer drive budget.
+inline constexpr std::size_t kMaxHttp2YieldTurns = 16;
+/// Bound each SETTINGS payload while retaining every standard identifier and
+/// several unknown extension values.
+inline constexpr std::size_t kMaxHttp2Settings = 16;
+/// Keep structured HPACK work proportional to the action budget.
+inline constexpr std::size_t kMaxHttp2Headers = 16;
+/// Share one metadata ceiling across all H2 header blocks in a scenario.
+inline constexpr std::size_t kMaxHttp2HeaderBytes = 16 * 1024;
+/// Structured DATA remains large enough to cross curl's callback boundary.
+inline constexpr std::size_t kMaxHttp2DataBytes = 32 * 1024;
+/// Raw frame payloads target malformed parsing rather than bulk-body work.
+inline constexpr std::size_t kMaxHttp2RawFrameBytes = 4 * 1024;
+/// Bound aggregate raw escape data across an action sequence.
+inline constexpr std::size_t kMaxHttp2RawBytes = 16 * 1024;
+/// Client tracking only needs frame headers and one maximum ordinary payload.
+inline constexpr std::size_t kMaxHttp2ObservedBytes = 64 * 1024;
 /// Ordered H3 work needs enough slots to interleave response fragments with
 /// stream and connection state changes without becoming mutation-sized.
 inline constexpr std::size_t kMaxHttp3Actions = 16;

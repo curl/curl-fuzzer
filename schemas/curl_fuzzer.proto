@@ -116,6 +116,12 @@ message Scenario {
   // harness so a corpus entry can drive the promised response to completion.
   // Other fixed target policies discard this field.
   bool accept_h2_push = 22;
+  // Ordered HTTP/2 peer work for the fixed H2 origin lanes. Common frames
+  // keep their correlated length, stream, flag, and HPACK fields valid while
+  // wire_frame and raw_bytes preserve malformed and truncated input. A
+  // symbolic stream reference follows requests as mutations add redirects or
+  // concurrent streams. Non-H2 target policies discard this plan.
+  Http2Plan http2_plan = 23;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -215,6 +221,138 @@ message Http3Goaway {
 
 message Http3ConnectionClose {
   uint64 application_error_code = 1;
+}
+
+// A bounded HTTP/2 server script. The peer emits the connection SETTINGS and
+// its acknowledgement automatically so an action mutation can focus on the
+// frame sequence that follows protocol startup.
+message Http2Plan {
+  repeated Http2Action actions = 1;
+  // Sent as the peer's first application frame. INITIAL_WINDOW_SIZE can
+  // therefore constrain an upload before any response action is released.
+  Http2Settings initial_settings = 2;
+}
+
+// One peer operation or delivery boundary. Structured frames use the peer's
+// HPACK context and symbolic stream table; wire_frame and raw_bytes bypass
+// those correlations for parser error paths.
+message Http2Action {
+  oneof action {
+    Http2Settings settings = 1;
+    Http2Headers headers = 2;
+    Http2Data data = 3;
+    Http2WindowUpdate window_update = 4;
+    Http2RstStream rst_stream = 5;
+    Http2Ping ping = 6;
+    Http2Goaway goaway = 7;
+    Http2PushPromise push_promise = 8;
+    Http2Wait wait = 9;
+    uint32 yield_turns = 10;
+    Http2WireFrame wire_frame = 11;
+    bytes raw_bytes = 12;
+  }
+}
+
+// Select a stream by its role in this scenario rather than requiring LPM to
+// rediscover the relationship between client-assigned IDs and later frames.
+// An unset selector means the latest request stream. Explicit IDs retain
+// protocol-invalid stream targeting.
+message Http2StreamRef {
+  oneof target {
+    bool connection = 1;
+    uint32 request_index = 2;
+    bool latest_request = 3;
+    uint32 push_index = 4;
+    uint32 explicit_id = 5;
+  }
+}
+
+message Http2Setting {
+  uint32 identifier = 1;
+  uint32 value = 2;
+}
+
+message Http2Settings {
+  repeated Http2Setting entries = 1;
+  bool ack = 2;
+}
+
+message Http2Header {
+  bytes name = 1;
+  bytes value = 2;
+}
+
+// Response HEADERS prepend :status unless trailers is set. Long HPACK blocks
+// are split into HEADERS plus CONTINUATION frames by the serializer.
+message Http2Headers {
+  Http2StreamRef stream = 1;
+  uint32 status_code = 2;
+  repeated Http2Header fields = 3;
+  bool end_stream = 4;
+  bool trailers = 5;
+}
+
+message Http2Data {
+  Http2StreamRef stream = 1;
+  bytes data = 2;
+  bool end_stream = 3;
+}
+
+message Http2WindowUpdate {
+  Http2StreamRef stream = 1;
+  uint32 increment = 2;
+}
+
+message Http2RstStream {
+  Http2StreamRef stream = 1;
+  uint32 error_code = 2;
+}
+
+message Http2Ping {
+  bytes opaque_data = 1;
+  bool ack = 2;
+}
+
+message Http2Goaway {
+  Http2StreamRef last_stream = 1;
+  uint32 error_code = 2;
+  bytes debug_data = 3;
+}
+
+// The parent stream defaults to the latest request. The promised stream
+// defaults to the next even server stream, and is recorded for push_index
+// references used by later HEADERS, DATA, and RST_STREAM actions.
+message Http2PushPromise {
+  Http2StreamRef parent_stream = 1;
+  Http2StreamRef promised_stream = 2;
+  repeated Http2Header request_headers = 3;
+}
+
+enum Http2ClientEvent {
+  HTTP2_CLIENT_EVENT_SETTINGS = 0;
+  HTTP2_CLIENT_EVENT_HEADERS = 1;
+  HTTP2_CLIENT_EVENT_DATA = 2;
+  HTTP2_CLIENT_EVENT_END_STREAM = 3;
+}
+
+// Hold later actions until the client has produced a correlated event. The
+// bounded driver abandons an unsatisfied wait rather than sleeping.
+message Http2Wait {
+  Http2ClientEvent event = 1;
+  Http2StreamRef stream = 2;
+  uint32 count = 3;
+}
+
+// A raw frame header with a separately mutable declared length. When
+// use_declared_length is false the payload size is used, retaining a compact
+// frame-aware malformed path alongside completely arbitrary raw_bytes.
+message Http2WireFrame {
+  uint32 type = 1;
+  uint32 flags = 2;
+  uint32 stream_id = 3;
+  bytes payload = 4;
+  uint32 declared_length = 5;
+  bool use_declared_length = 6;
 }
 
 // A bounded plan for public libcurl APIs that are adjacent to, rather than
@@ -369,6 +507,7 @@ message MimePart {
   oneof content {
     bytes data = 2;
     MimeSubparts subparts = 7;
+    GeneratedBytes generated_data = 8;
   }
   bytes filename = 3;
   bytes content_type = 4;
@@ -382,16 +521,28 @@ message MimeSubparts {
   repeated MimeDataPart parts = 1;
 }
 
-// A leaf MIME part. Leaf data is always applied, including an empty value;
+// A leaf MIME part. An absent content source is applied as empty data;
 // empty-body form fields are valid and cover different size/encoder handling
-// from a part whose content source was never configured.
+// from an omitted MIME part.
 message MimeDataPart {
   bytes name = 1;
-  bytes data = 2;
+  oneof content {
+    bytes data = 2;
+    GeneratedBytes generated_data = 7;
+  }
   bytes filename = 3;
   bytes content_type = 4;
   MimeEncoder encoder = 5;
   repeated bytes headers = 6;
+}
+
+// A compact request-body source for buffer-boundary tests. Repeating a short
+// pattern keeps corpus entries small enough for mutations elsewhere in the
+// scenario while still letting curl's MIME encoders produce large writes.
+// Both the postprocessor and runtime cap the materialized byte count.
+message GeneratedBytes {
+  bytes pattern = 1;
+  uint32 repeat_count = 2;
 }
 
 // Restrict mutations to curl's supported transfer encoders. Arbitrary strings

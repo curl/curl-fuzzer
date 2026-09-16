@@ -84,7 +84,7 @@ Http3RunResult RunScenario(const Scenario &scenario, const char *path) {
   server.Install(easy.get());
   {
     proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
-    result.code = server.DriveScenario(easy.get(), scenario, true);
+    result.code = server.DriveScenario(easy.get(), scenario);
   }
   (void)curl_easy_getinfo(easy.get(), CURLINFO_RESPONSE_CODE,
                           &result.response_code);

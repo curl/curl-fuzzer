@@ -54,7 +54,7 @@ bool FdFitsInFdSet(int fd) { return fd >= 0 && fd < FD_SETSIZE; }
 
 /// Construct a non-blocking AF_UNIX/SOCK_STREAM socketpair. Both fds are validated to fit inside FD_SETSIZE; on any
 /// failure ok() returns false and the instance is unusable.
-MockConnection::MockConnection() : server_fd_(-1), client_fd_(-1), drain_limit_(0) {
+MockConnection::MockConnection() : server_fd_(-1), client_fd_(-1), drain_limit_(0), incoming_data_observer_(nullptr) {
   int fds[2];
 
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
@@ -184,9 +184,18 @@ std::size_t MockConnection::DrainIncoming() {
     if (n <= 0) {
       break;
     }
+    NotifyIncomingData(scratch, static_cast<std::size_t>(n));
     drained += static_cast<std::size_t>(n);
   }
   return drained;
+}
+
+void MockConnection::SetIncomingDataObserver(IncomingDataObserver* observer) { incoming_data_observer_ = observer; }
+
+void MockConnection::NotifyIncomingData(const unsigned char* data, std::size_t size) {
+  if (incoming_data_observer_ != nullptr) {
+    incoming_data_observer_->ObserveIncomingData(data, size);
+  }
 }
 
 /// Tighten both halves of the socketpair buffer and/or cap DrainIncoming's
@@ -240,9 +249,11 @@ void MockConnection::ShutdownWrite() {
 /// socket, and feeds queued chunks as libcurl reads them.
 
 /// Construct an idle MockServer with no scripted responses or open peers.
-/// DriveScenario() configures it from a Scenario before curl can open a socket.
-MockServer::MockServer()
-    : script_count_(0),
+/// DriveScenario() configures it from a Scenario before curl can open a socket;
+/// the fixed policy decides whether that scenario's ApiPlan controls the loop.
+MockServer::MockServer(MultiDrivePolicy drive_policy)
+    : MockServerBase(drive_policy),
+      script_count_(0),
       next_script_(0),
       active_script_(nullptr),
       preload_all_chunks_(false),

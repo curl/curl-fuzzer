@@ -9,9 +9,10 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto` | Compatibility target for the historical mixed HTTP, HTTPS, WebSocket, and TELNET corpus. It deliberately has no profile postprocessor. |
 | `curl_fuzzer_proto_http` | High-throughput plaintext HTTP. Retains cheap request options and raw response parsing; removes MIME, uploads, follow-on sockets, and timing controls. |
 | `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, authentication, MIME, uploads, result APIs, and bounded cookie, Alt-Svc, HSTS, and netrc files. |
+| `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
 | `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, and bounded CRL-input coverage. |
 | `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a GnuTLS or mbedTLS curl client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
-| `curl_fuzzer_proto_https_h2` | Raw HTTP/2 origin frames after a verified TLS/ALPN handshake, plus push and upkeep probes. |
+| `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, plus push and upkeep probes. |
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS/HTTP/2 CONNECT proxy; mutations control bounded raw proxy frames and origin request settings. |
 | `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4 or SOCKS4A proxy. |
@@ -30,7 +31,8 @@ The exact target inventory and platform gates are maintained in
 `scripts/fuzz_targets`. Structured targets are excluded from i386 builds. The
 GnuTLS, mbedTLS, and HTTP/3 variants are also excluded from MemorySanitizer
 builds, and HTTP/3 is created only when its dependency variant is enabled.
-MemorySanitizer omits OpenSSL and the TLS mock peer. In that build,
+MemorySanitizer omits OpenSSL and the TLS mock peer. The plaintext
+`curl_fuzzer_proto_http2` lane remains active in that build. In contrast,
 `curl_fuzzer_proto_https_h2` and `curl_fuzzer_proto_h2_proxy` return without
 driving their peer-dependent scenarios, while `curl_fuzzer_proto_https` cannot
 complete its ordinary verified-TLS path.
@@ -72,8 +74,8 @@ Use the narrowest target that owns the behavior:
 
 - Prefer `http` for cheap request/response parsing, `http_deep` for stateful or
   file-backed work, and `timing` for intentional backpressure.
-- Use `https`, `https_h2`, or `http3` according to the actual transport rather
-  than putting TLS or frame setup into an HTTP seed.
+- Use `https`, `http2`, `https_h2`, or `http3` according to the actual transport
+  rather than putting protocol frame setup into an HTTP seed.
 - Put lifecycle-only work in `api` or `multi`, keeping it out of protocol-hot
   loops.
 - Replay a crash with the binary named by OSS-Fuzz. Although fixed lanes share

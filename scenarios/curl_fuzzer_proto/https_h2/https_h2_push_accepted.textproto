@@ -4,14 +4,46 @@
 scheme: SCHEME_HTTPS
 host_path: "tls.test/h2-push-accepted"
 accept_h2_push: true
-connection {
-  # Empty server SETTINGS followed by its ACK of curl's SETTINGS.
-  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
-  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00"
-  # PUSH_PROMISE(stream 1 -> promised stream 2): GET /pushed.
-  on_readable: "\x00\x00\x19\x05\x04\x00\x00\x00\x01\x00\x00\x00\x02\x82\x87\x01\x08tls.test\x04\x07/pushed"
-  # Open the parent response, then complete stream 2 before stream 1.
-  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
-  on_readable: "\x00\x00\x01\x01\x04\x00\x00\x00\x02\x88\x00\x00\x06\x00\x01\x00\x00\x00\x02pushed"
-  on_readable: "\x00\x00\x02\x00\x01\x00\x00\x00\x01OK"
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  # PUSH_PROMISE(first request -> first promised stream): GET /push.
+  actions {
+    push_promise {
+      parent_stream { request_index: 0 }
+      promised_stream { push_index: 0 }
+    }
+  }
+  # Open the parent response, then complete the promised stream before it.
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    headers {
+      stream { push_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { push_index: 0 }
+      data: "pushed"
+      end_stream: true
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "OK"
+      end_stream: true
+    }
+  }
 }

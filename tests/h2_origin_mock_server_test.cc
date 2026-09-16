@@ -49,6 +49,8 @@ struct H2TransferResult {
   std::size_t accepted_push_count = 0;
   std::size_t cleaned_push_count = 0;
   std::size_t pushed_body_bytes = 0;
+  std::size_t observed_request_count = 0;
+  std::size_t observed_client_settings_count = 0;
   CURLcode upkeep_result = CURLE_FAILED_INIT;
 };
 
@@ -82,6 +84,9 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   result.accepted_push_count = server.accepted_push_count();
   result.cleaned_push_count = server.cleaned_push_count();
   result.pushed_body_bytes = server.pushed_body_bytes();
+  result.observed_request_count = server.observed_request_count();
+  result.observed_client_settings_count =
+      server.observed_client_settings_count();
   result.upkeep_result = server.upkeep_result();
 
   curl_easy_cleanup(easy);
@@ -154,6 +159,34 @@ Scenario MakeReuseScenario() {
   return scenario;
 }
 
+Scenario MakeStructuredScenario() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/h2-structured");
+  auto *plan = scenario.mutable_http2_plan();
+  auto *window = plan->mutable_initial_settings()->add_entries();
+  window->set_identifier(4);
+  window->set_value(65535);
+
+  auto *wait = plan->add_actions()->mutable_wait();
+  wait->set_event(curl::fuzzer::proto::HTTP2_CLIENT_EVENT_HEADERS);
+  wait->mutable_stream()->set_request_index(0);
+  wait->set_count(1);
+
+  auto *headers = plan->add_actions()->mutable_headers();
+  headers->mutable_stream()->set_request_index(0);
+  headers->set_status_code(200);
+  auto *content_type = headers->add_fields();
+  content_type->set_name("Content-Type");
+  content_type->set_value("text/plain");
+
+  auto *data = plan->add_actions()->mutable_data();
+  data->mutable_stream()->set_request_index(0);
+  data->set_data("structured");
+  data->set_end_stream(true);
+  return scenario;
+}
+
 void TestValidPushPromiseReachesCallback() {
   const H2TransferResult result = DriveH2Scenario(MakePushScenario());
 
@@ -199,11 +232,22 @@ void TestRedirectReusesH2ConnectionAroundPingAndUpkeep() {
          "reused H2 connection did not complete its upkeep PING probe");
 }
 
+void TestStructuredPlanTracksRequestAndEncodesResponse() {
+  const H2TransferResult result = DriveH2Scenario(MakeStructuredScenario());
+
+  Expect(result.code == CURLE_OK && result.response == "structured",
+         "structured H2 response did not complete");
+  Expect(result.observed_client_settings_count >= 1 &&
+             result.observed_request_count == 1,
+         "structured H2 peer did not track client setup and request HEADERS");
+}
+
 } // namespace
 
 int main() {
   TestValidPushPromiseReachesCallback();
   TestAcceptedPushCompletesAndCleansUpOneHandle();
   TestRedirectReusesH2ConnectionAroundPingAndUpkeep();
+  TestStructuredPlanTracksRequestAndEncodesResponse();
   return 0;
 }

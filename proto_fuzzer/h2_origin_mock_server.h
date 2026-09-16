@@ -13,7 +13,9 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <memory>
 
+#include "proto_fuzzer/h2_plan.h"
 #include "proto_fuzzer/tls_mock_server.h"
 
 struct curl_pushheaders;
@@ -30,6 +32,7 @@ class H2OriginMockServer final : public TlsMockServer {
   /// @param certificate_chain Fixed certificate-chain profile to present.
   explicit H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
                                   curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
+  ~H2OriginMockServer() override;
 
   /// Install TLS routing plus fixed HTTP/2 and immediate upkeep policy.
   /// @param easy Easy handle to configure.
@@ -56,12 +59,27 @@ class H2OriginMockServer final : public TlsMockServer {
   /// @return result of the bounded post-transfer curl_easy_upkeep call.
   CURLcode upkeep_result() const;
 
+  /// @return number of client request streams observed by a structured plan.
+  std::size_t observed_request_count() const;
+
+  /// @return number of non-ACK client SETTINGS frames observed.
+  std::size_t observed_client_settings_count() const;
+
  protected:
+  /// Attach the reusable H2 client-frame tracker after TLS decryption.
+  /// @return newly allocated TLS connection with the tracker attached.
+  std::unique_ptr<MockConnection> CreateConnection() override;
+
   /// Run the raw HTTP/2 response driver and probe server push and upkeep APIs.
   /// @param multi Multi handle containing `easy`.
   /// @param easy Easy handle attached to this mock.
   /// @param scenario Source of bounded HTTP/2 response bytes.
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+
+  /// Keep the connection cache alive until this mock is destroyed, after the
+  /// caller has cleaned the detached easy handle.
+  /// @param multi Detached multi handle and its live connection cache.
+  void HandleDetachedMulti(CurlMultiPtr multi) override;
 
  private:
   static int PushCallback(CURL* parent, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
@@ -75,6 +93,8 @@ class H2OriginMockServer final : public TlsMockServer {
   std::size_t accepted_push_count_;
   std::size_t pushed_body_bytes_;
   CURLcode upkeep_result_;
+  H2PlanDriver plan_driver_;
+  CurlMultiPtr retained_multi_;
 };
 
 }  // namespace proto_fuzzer
