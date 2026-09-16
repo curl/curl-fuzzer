@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/curl_raii.h"
 
 namespace proto_fuzzer {
 
@@ -44,6 +45,13 @@ struct ConnectOnlyRunStats {
   CURLcode recv_result = CURLE_FAILED_INIT;     ///< Final result returned by curl_easy_recv.
   std::size_t sent_bytes = 0;                   ///< Total application bytes accepted by curl_easy_send.
   std::size_t received_bytes = 0;               ///< Total application bytes returned by curl_easy_recv.
+};
+
+/// Fixed policy for interpreting a scenario's multi-drive fields.
+enum class MultiDrivePolicy {
+  kPerform,       ///< Use the ordinary curl_multi_perform loop.
+  kSocketAction,  ///< Use the callback-driven curl_multi_socket_action loop.
+  kFromApiPlan,   ///< Read the multi-loop choice and probes from Scenario::api_plan.
 };
 
 /// @class proto_fuzzer::MockServerBase
@@ -85,14 +93,9 @@ class MockServerBase {
   /// specific behaviour still lives inside the subclass.
   /// @param easy     curl easy handle already Install()ed on this mock.
   /// @param scenario the Scenario proto to drive.
-  /// @param use_multi_socket Select the callback-driven socket-action loop.
-  /// @param wake_multi Probe wakeup/timeout control APIs while multi is live.
-  /// @param resume_response Repeatedly resume an opt-in paused write callback
-  ///        at bounded event-loop boundaries until the transfer completes.
   /// @return the completed transfer's CURLcode, or CURLE_FAILED_INIT when the
   /// bounded drive could not produce a completion message.
-  CURLcode DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket = false,
-                         bool wake_multi = false, bool resume_response = false);
+  CURLcode DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
   /// Run through the public easy entrypoint when a protocol mock can preload
   /// all peer work before curl takes control. The base falls back to the
@@ -114,7 +117,17 @@ class MockServerBase {
   MockConnection* connection();
 
  protected:
-  MockServerBase();
+  /// Construct a mock with its target-authorized multi execution policy.
+  /// @param drive_policy Whether to perform, use socket actions, or honor the
+  ///        containing Scenario's ApiPlan.
+  explicit MockServerBase(MultiDrivePolicy drive_policy = MultiDrivePolicy::kPerform);
+
+  /// Dispose of or retain the multi after its easy handle has been removed.
+  /// The default destroys it before DriveScenario returns. A protocol mock
+  /// may retain it as member state when its fixed lifecycle requires easy
+  /// cleanup to happen first.
+  /// @param multi Detached multi handle and its live connection cache.
+  virtual void HandleDetachedMulti(CurlMultiPtr multi);
 
   /// Subclass hook invoked by the OPENSOCKET trampoline. The subclass owns the
   /// decision to construct `connection_`, push any initial bytes, and hand the
@@ -227,6 +240,9 @@ class MockServerBase {
   bool resume_response_;
 
  private:
+  /// Target-authorized source of multi execution behavior.
+  MultiDrivePolicy drive_policy_;
+
   friend curl_socket_t MockServerBaseOpenSocketTrampoline(void*, curlsocktype, struct curl_sockaddr*);
   friend int MockServerBaseSockOptTrampoline(void*, curl_socket_t, curlsocktype);
 };

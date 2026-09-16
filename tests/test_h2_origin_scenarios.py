@@ -14,30 +14,34 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
     expected_tokens = {
         "https_h2_push_promise.textproto": (
             "PUSH_PROMISE",
-            "\\x19\\x05\\x04",
-            "\\x82\\x87\\x01\\x08tls.test\\x04\\x07/pushed",
+            "http2_plan",
+            "push_promise",
+            "parent_stream { request_index: 0 }",
+            "promised_stream { push_index: 0 }",
         ),
         "https_h2_push_accepted.textproto": (
             "accept_h2_push: true",
-            "promised stream 2",
-            "\\x00\\x00\\x06\\x00\\x01\\x00\\x00\\x00\\x02pushed",
+            "stream { push_index: 0 }",
+            'data: "pushed"',
         ),
         "https_h2_push_reset_goaway.textproto": (
             "accept_h2_push: true",
             "RST_STREAM",
-            "\\x04\\x03",
-            "\\x08\\x07",
+            "rst_stream",
+            "goaway",
         ),
         "https_h2_push_flow_control.textproto": (
             "accept_h2_push: true",
             "CURLOPT_POSTFIELDS",
             "SETTINGS_INITIAL_WINDOW_SIZE=0",
-            "\\x04\\x08",
+            "window_update",
+            "increment: 65535",
         ),
         "https_h2_reuse_ping_upkeep.textproto": (
             "CURLOPT_FOLLOWLOCATION",
-            "\\x08\\x06",
-            "\\x00\\x00\\x00\\x03reused",
+            "stream { request_index: 1 }",
+            'opaque_data: "h2-reuse"',
+            'data: "reused"',
             "curl_easy_upkeep",
         ),
     }
@@ -69,3 +73,25 @@ def test_https_h2_does_not_replay_http1_public_corpora() -> None:
     )
 
     assert result.stdout.splitlines() == ["curl_fuzzer_proto_https_h2"]
+
+
+def test_http2_reuses_only_the_compatible_h2_public_corpus() -> None:
+    """Bootstrap h2c from frame-aware H2 inputs without mixed HTTP/1 bytes."""
+    helper = REPO_ROOT / "scripts" / "fuzz_corpus_helpers.sh"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; fuzz_public_corpus_names curl_fuzzer_proto_http2',
+            "h2-cleartext-corpus-test",
+            str(helper),
+        ],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    )
+
+    assert result.stdout.splitlines() == [
+        "curl_fuzzer_proto_http2",
+        "curl_fuzzer_proto_https_h2",
+    ]

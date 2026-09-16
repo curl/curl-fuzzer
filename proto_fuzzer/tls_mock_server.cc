@@ -389,6 +389,7 @@ class TlsMockConnection final : public MockConnection {
       std::size_t received = 0;
       const int result = SSL_read_ex(ssl_, request, sizeof(request), &received);
       if (result == 1 && received != 0) {
+        NotifyIncomingData(request, received);
         progress += received;
         continue;
       }

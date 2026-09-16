@@ -295,6 +295,43 @@ void TestHttpsH2Policy() {
          "HTTPS/H2 policy retained an option that can bypass fixed ALPN h2");
 }
 
+void TestFastHttp2Policy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTPS, 4096, 17);
+  scenario.set_host_path("mutated.invalid:8443/path?query#fragment");
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.set_crl_file("TLS-only input");
+  scenario.set_accept_h2_push(true);
+  scenario.mutable_connection()->set_initial_response("competing raw frames");
+  scenario.mutable_http2_plan()
+      ->add_actions()
+      ->mutable_headers()
+      ->set_status_code(200);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_SSL_ENABLE_ALPN);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp2);
+
+  Expect(scenario.scheme() == SCHEME_HTTP,
+         "fast HTTP/2 policy did not force plaintext HTTP");
+  Expect(scenario.host_path() == "tls.test/path?query#fragment",
+         "fast HTTP/2 policy did not isolate its socketpair authority");
+  Expect(scenario.tls_certificate_chain() ==
+                 curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC &&
+             scenario.crl_file().empty(),
+         "fast HTTP/2 policy retained TLS-only server or file state");
+  Expect(scenario.accept_h2_push() && scenario.has_http2_plan(),
+         "fast HTTP/2 policy discarded H2 origin work");
+  Expect(scenario.connection().initial_response().empty() &&
+             !scenario.connection().has_backpressure(),
+         "fast HTTP/2 policy retained competing raw or timed response work");
+  Expect(scenario.options_size() == 1 && scenario.options(0).option_id() ==
+                                             curl::fuzzer::proto::CURLOPT_POST,
+         "fast HTTP/2 policy retained an option that can bypass "
+         "prior-knowledge H2");
+}
+
 void TestTlsPoliciesRejectUnknownCertificateChain() {
   constexpr TargetProfile kTlsPolicies[] = {
       TargetProfile::kFastHttps,
@@ -486,19 +523,13 @@ void TestFastHttp3PolicyBoundsOrderedActions() {
 
 void TestNonHttp3PoliciesDiscardPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,
-      TargetProfile::kHttpsH2,
-      TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,
-      TargetProfile::kApi,
-      TargetProfile::kMulti,
-      TargetProfile::kTiming,
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kOtherPolicies) {
@@ -517,17 +548,12 @@ void TestNonHttp3PoliciesDiscardPlans() {
 
 void TestNonHttpsPoliciesDiscardTlsCertificateChains() {
   constexpr TargetProfile kNonHttpsPolicies[] = {
-      TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
-      TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,
-      TargetProfile::kApi,
-      TargetProfile::kMulti,
-      TargetProfile::kTiming,
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kNonHttpsPolicies) {
@@ -1219,12 +1245,19 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
 
 void TestProtocolPoliciesDiscardApiPlans() {
   constexpr TargetProfile kProtocolPolicies[] = {
-      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kHttpsH2,
-      TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kMulti,
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
 
@@ -1301,12 +1334,19 @@ void TestMultiPolicyRetainsAndBoundsItsPlan() {
 
 void TestOtherPoliciesDiscardMultiPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kHttpsH2,
-      TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kApi,
       TargetProfile::kTiming,
   };
   for (const TargetProfile profile : kOtherPolicies) {
@@ -1360,6 +1400,9 @@ void TestProfileRunModes() {
   Expect(RunModeFor(TargetProfile::kHttpsH2) ==
              ScenarioRunMode::kTlsHttp2Coverage,
          "HTTPS/H2 profile does not authorize its fixed-ALPN origin peer");
+  Expect(
+      RunModeFor(TargetProfile::kFastHttp2) == ScenarioRunMode::kHttp2Coverage,
+      "fast HTTP/2 profile does not authorize its prior-knowledge origin peer");
   Expect(RunModeFor(TargetProfile::kFastHttp3) ==
              ScenarioRunMode::kHttp3Coverage,
          "fast HTTP/3 profile does not authorize the QUIC peer");
@@ -1411,7 +1454,7 @@ void TestCompatibilityProfileIsNoOp() {
          "compatibility profile changed an accumulated-corpus input");
 }
 
-void TestNonHttpsH2PoliciesDiscardAcceptedPushMode() {
+void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
@@ -1438,8 +1481,154 @@ void TestNonHttpsH2PoliciesDiscardAcceptedPushMode() {
     ApplyTargetPolicy(&scenario, profile);
 
     Expect(!scenario.accept_h2_push(),
-           "a non-HTTPS/H2 policy retained accepted-push work");
+           "a non-H2-origin policy retained accepted-push work");
   }
+}
+
+void TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget() {
+  constexpr std::uint32_t kBoundarySizes[] = {
+      16 * 1024 - 1,
+      16 * 1024,
+      16 * 1024 + 1,
+      // Quoted printable expands an '=' pattern by three, putting these
+      // values around the same 64 KiB encoded-output boundary.
+      21845 - 1,
+      21845,
+      21845 + 1,
+      32 * 1024 - 1,
+      32 * 1024,
+      32 * 1024 + 1,
+      64 * 1024 - 1,
+      64 * 1024,
+      64 * 1024 + 1,
+  };
+  for (const std::uint32_t size : kBoundarySizes) {
+    Scenario scenario;
+    auto *generated =
+        scenario.mutable_mime_post()->add_parts()->mutable_generated_data();
+    generated->set_pattern("=");
+    generated->set_repeat_count(size);
+
+    ApplyTargetPolicy(&scenario, TargetProfile::kDeepHttp);
+
+    Expect(scenario.mime_post().parts(0).generated_data().repeat_count() ==
+               size,
+           "generated MIME policy folded an observable buffer boundary");
+  }
+
+  Scenario shared;
+  auto *first =
+      shared.mutable_mime_post()->add_parts()->mutable_generated_data();
+  first->set_pattern(std::string(
+      proto_fuzzer::scenario_limits::kMaxGeneratedMimePatternBytes + 23, 'a'));
+  first->set_repeat_count(std::numeric_limits<std::uint32_t>::max());
+  auto *parent = shared.mutable_mime_post()->add_parts();
+  auto *second =
+      parent->mutable_subparts()->add_parts()->mutable_generated_data();
+  second->set_pattern("b");
+  second->set_repeat_count(std::numeric_limits<std::uint32_t>::max());
+  auto *third =
+      parent->mutable_subparts()->add_parts()->mutable_generated_data();
+  third->set_pattern("c");
+  third->set_repeat_count(std::numeric_limits<std::uint32_t>::max());
+
+  ApplyTargetPolicy(&shared, TargetProfile::kDeepHttp);
+
+  const auto &bounded_first = shared.mime_post().parts(0).generated_data();
+  const auto &bounded_second =
+      shared.mime_post().parts(1).subparts().parts(0).generated_data();
+  const auto &bounded_third =
+      shared.mime_post().parts(1).subparts().parts(1).generated_data();
+  Expect(bounded_first.pattern().size() ==
+             proto_fuzzer::scenario_limits::kMaxGeneratedMimePatternBytes,
+         "generated MIME policy retained an oversized pattern");
+  const std::size_t total =
+      bounded_first.pattern().size() * bounded_first.repeat_count() +
+      bounded_second.pattern().size() * bounded_second.repeat_count() +
+      bounded_third.pattern().size() * bounded_third.repeat_count();
+  Expect(total <= proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes,
+         "generated MIME policy exceeded its shared materialization budget");
+  Expect(
+      total == proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes,
+      "generated MIME policy discarded a usable byte inside its shared budget");
+  Expect(
+      bounded_third.repeat_count() == 0,
+      "generated MIME policy retained work after exhausting its shared budget");
+
+  Scenario empty_pattern;
+  auto *empty =
+      empty_pattern.mutable_mime_post()->add_parts()->mutable_generated_data();
+  empty->set_repeat_count(std::numeric_limits<std::uint32_t>::max());
+  ApplyTargetPolicy(&empty_pattern, TargetProfile::kDeepHttp);
+  Expect(empty_pattern.mime_post().parts(0).generated_data().repeat_count() ==
+             0,
+         "empty generated MIME pattern retained an ineffective repeat count");
+}
+
+void TestHttpsH2PolicyBoundsStructuredPlan() {
+  Scenario scenario;
+  scenario.mutable_connection()->set_initial_response("raw");
+  scenario.mutable_connection()->add_on_readable("raw chunk");
+  auto *plan = scenario.mutable_http2_plan();
+  auto *enable_push = plan->mutable_initial_settings()->add_entries();
+  enable_push->set_identifier(1);
+  enable_push->set_value(8);
+  auto *initial_window = plan->mutable_initial_settings()->add_entries();
+  initial_window->set_identifier(3);
+  initial_window->set_value(std::numeric_limits<std::uint32_t>::max());
+  auto *frame_size = plan->mutable_initial_settings()->add_entries();
+  frame_size->set_identifier(4);
+  frame_size->set_value(0);
+
+  auto *headers = plan->add_actions()->mutable_headers();
+  headers->set_status_code(std::numeric_limits<std::uint32_t>::max());
+  headers->mutable_stream()->set_request_index(99);
+  auto *field = headers->add_fields();
+  field->set_name("X Bad\r\n");
+  field->set_value("value\0control", 13);
+  plan->add_actions()->set_yield_turns(1000);
+  for (std::size_t index = plan->actions_size();
+       index < proto_fuzzer::scenario_limits::kMaxHttp2Actions + 8; ++index) {
+    plan->add_actions()->mutable_ping()->set_opaque_data("0123456789abcdef");
+  }
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kHttpsH2);
+
+  Expect(scenario.connection().initial_response().empty() &&
+             scenario.connection().on_readable().empty(),
+         "structured H2 policy retained competing raw response bytes");
+  Expect(static_cast<std::size_t>(scenario.http2_plan().actions_size()) ==
+             proto_fuzzer::scenario_limits::kMaxHttp2Actions,
+         "structured H2 policy retained an oversized action suffix");
+  Expect(scenario.http2_plan().initial_settings().entries(0).identifier() ==
+                 2 &&
+             scenario.http2_plan().initial_settings().entries(0).value() <= 1,
+         "structured H2 policy retained an invalid ENABLE_PUSH setting");
+  Expect(scenario.http2_plan().initial_settings().entries(1).identifier() ==
+                 4 &&
+             scenario.http2_plan().initial_settings().entries(1).value() <=
+                 0x7fffffffU,
+         "structured H2 policy retained an invalid initial window");
+  Expect(
+      scenario.http2_plan().initial_settings().entries(2).identifier() == 5 &&
+          scenario.http2_plan().initial_settings().entries(2).value() >= 16384U,
+      "structured H2 policy retained an invalid maximum frame size");
+  Expect(scenario.http2_plan().actions(0).headers().stream().request_index() <
+                 16 &&
+             scenario.http2_plan().actions(0).headers().status_code() >= 100 &&
+             scenario.http2_plan().actions(0).headers().status_code() <= 599 &&
+             scenario.http2_plan().actions(0).headers().fields(0).name() ==
+                 "x-bad--",
+         "structured H2 policy did not canonicalize a response header");
+  Expect(scenario.http2_plan().actions(1).yield_turns() ==
+             proto_fuzzer::scenario_limits::kMaxHttp2YieldTurns,
+         "structured H2 policy retained an excessive yield count");
+
+  Scenario other;
+  other.mutable_http2_plan()->add_actions()->mutable_headers();
+  ApplyTargetPolicy(&other, TargetProfile::kFastHttp);
+  Expect(!other.has_http2_plan(),
+         "non-H2 profile retained a structured H2 plan");
 }
 
 } // namespace
@@ -1451,6 +1640,7 @@ int main() {
   TestDeepHttpAltSvcCanonicalAuthority();
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
+  TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestFastHttp3PolicyMaterializesUsefulPlan();
   TestFastHttp3PolicyBoundsOrderedActions();
@@ -1481,6 +1671,8 @@ int main() {
   TestApiEasyDrivesDropMultiOnlyWork();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
-  TestNonHttpsH2PoliciesDiscardAcceptedPushMode();
+  TestNonH2OriginPoliciesDiscardAcceptedPushMode();
+  TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget();
+  TestHttpsH2PolicyBoundsStructuredPlan();
   return 0;
 }

@@ -1546,7 +1546,7 @@ class Http3MockServerImpl {
 Http3MockServer::Http3MockServer() : Http3MockServer(curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC) {}
 
 Http3MockServer::Http3MockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : impl_(new Http3MockServerImpl(certificate_chain)) {}
+    : MockServerBase(MultiDrivePolicy::kSocketAction), impl_(new Http3MockServerImpl(certificate_chain)) {}
 
 Http3MockServer::~Http3MockServer() = default;
 

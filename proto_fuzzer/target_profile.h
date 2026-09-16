@@ -26,6 +26,8 @@ enum class TargetProfile {
   kFastHttps,
   /// Exercise raw HTTP/2 origin frames after a verified TLS/ALPN handshake.
   kHttpsH2,
+  /// Exercise HTTP/2 origin frames over plaintext prior knowledge.
+  kFastHttp2,
   /// Exercise HTTP/3 over a valid in-process QUIC/TLS connection.
   kFastHttp3,
   /// Exercise an HTTP/1.1 origin through an HTTPS/HTTP2 CONNECT proxy.
@@ -67,6 +69,8 @@ enum class ScenarioRunMode {
   kTlsCoverage,
   /// Drive an HTTPS origin through fixed ALPN h2 with push/upkeep probes.
   kTlsHttp2Coverage,
+  /// Drive a plaintext HTTP/2 prior-knowledge origin with the H2 peer.
+  kHttp2Coverage,
   /// Drive ordered plaintext HTTP/3 actions through the QUIC peer.
   kHttp3Coverage,
   /// Drive raw HTTP/2 proxy frames around one CONNECT tunnel.
@@ -109,6 +113,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kHttpsH2:
       return ScenarioRunMode::kTlsHttp2Coverage;
+
+    case TargetProfile::kFastHttp2:
+      return ScenarioRunMode::kHttp2Coverage;
 
     case TargetProfile::kFastHttp3:
       return ScenarioRunMode::kHttp3Coverage;

@@ -39,6 +39,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_ws",
     "curl_fuzzer_proto_http",
     "curl_fuzzer_proto_http_deep",
+    "curl_fuzzer_proto_http2",
     "curl_fuzzer_proto_https",
     "curl_fuzzer_proto_https_h2",
     "curl_fuzzer_proto_https_gnutls",
@@ -57,6 +58,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_timing",
 )
 COMPATIBLE_CORPUS_TARGETS = {
+    "curl_fuzzer_proto_http2": ("curl_fuzzer_proto_https_h2",),
     "curl_fuzzer_proto_https_gnutls": ("curl_fuzzer_proto_https",),
     "curl_fuzzer_proto_https_mbedtls": ("curl_fuzzer_proto_https",),
     "curl_fuzzer_proto_http3": ("curl_fuzzer_proto_https",),

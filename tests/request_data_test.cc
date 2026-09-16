@@ -649,6 +649,42 @@ void TestUploadCallbackInstallationIsDemandDriven() {
   curl_easy_cleanup(easy);
 }
 
+void TestGeneratedMimeDataUsesSharedRuntimeBudget() {
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for generated MIME data");
+
+  curl::fuzzer::proto::Scenario scenario;
+  auto *first =
+      scenario.mutable_mime_post()->add_parts()->mutable_generated_data();
+  first->set_pattern(std::string(
+      proto_fuzzer::scenario_limits::kMaxGeneratedMimePatternBytes + 44, 'a'));
+  first->set_repeat_count(1);
+
+  auto *nested_parent = scenario.mutable_mime_post()->add_parts();
+  auto *second =
+      nested_parent->mutable_subparts()->add_parts()->mutable_generated_data();
+  second->set_pattern("=");
+  second->set_repeat_count(std::numeric_limits<std::uint32_t>::max());
+
+  auto *third =
+      nested_parent->mutable_subparts()->add_parts()->mutable_generated_data();
+  third->set_pattern("unobservable");
+  third->set_repeat_count(std::numeric_limits<std::uint32_t>::max());
+
+  {
+    // Construct directly, without target-policy postprocessing, to verify the
+    // runtime independently caps pattern length, multiplication, and the
+    // shared materialization budget used by top-level and nested parts.
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    Expect(request_data.stats().generated_mime_bytes ==
+               proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes,
+           "generated MIME data exceeded or failed to consume its shared "
+           "runtime budget");
+  }
+
+  curl_easy_cleanup(easy);
+}
+
 } // namespace
 
 int main() {
@@ -658,6 +694,7 @@ int main() {
   TestEmptyAndNullInputsRemainCheap();
   TestResolveEntriesAreExplicitBoundedPointerState();
   TestUploadCallbackInstallationIsDemandDriven();
+  TestGeneratedMimeDataUsesSharedRuntimeBudget();
   TestFallbackUploadRemainsDeterministic();
   TestTelnetWithoutUploadUsesImmediateEof();
   TestPauseTerminalIsTelnetOnly();

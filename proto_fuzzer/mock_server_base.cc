@@ -50,14 +50,15 @@ int MockServerBaseSockOptTrampoline(void* clientp, curl_socket_t curlfd, curlsoc
   return disposition == SocketSetupDisposition::kAlreadyConnected ? CURL_SOCKOPT_ALREADY_CONNECTED : CURL_SOCKOPT_OK;
 }
 
-/// Default-construct an empty base instance with no connection.
-MockServerBase::MockServerBase()
+/// Construct an empty base instance with a fixed multi-drive policy.
+MockServerBase::MockServerBase(MultiDrivePolicy drive_policy)
     : connection_(nullptr),
       pending_recv_buf_bytes_(0),
       pending_drain_limit_(0),
       multi_socket_driver_(nullptr),
       additional_handle_cleanup_count_(0),
-      resume_response_(false) {}
+      resume_response_(false),
+      drive_policy_(drive_policy) {}
 
 /// Out-of-line destructor so MockConnection can stay forward-declared in the
 /// base header (its complete type is only needed where unique_ptr is
@@ -92,8 +93,13 @@ void MockServerBase::ConfigureRequestData(ScenarioRequestData* /*request_data*/)
 /// its completion message, and clean up. Harness setup failures return a
 /// stable sentinel; fuzzer callers may ignore it while unit tests can assert
 /// the protocol result without adding another callback or global.
-CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_multi_socket,
-                                       bool wake_multi, bool resume_response) {
+CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  const curl::fuzzer::proto::ApiPlan* api_plan =
+      drive_policy_ == MultiDrivePolicy::kFromApiPlan && scenario.has_api_plan() ? &scenario.api_plan() : nullptr;
+  const bool use_multi_socket =
+      drive_policy_ == MultiDrivePolicy::kSocketAction ||
+      (api_plan != nullptr && api_plan->drive_mode() == curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
+
   // Cache backpressure knobs so HandleOpenSocket can apply them the moment
   // connection_ exists. Both default to 0, which matches the legacy "drain
   // greedily, kernel-default buffers" behaviour exactly.
@@ -101,7 +107,7 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
   pending_recv_buf_bytes_ = static_cast<int>(bp.recv_buf_bytes());
   pending_drain_limit_ = static_cast<std::size_t>(bp.drain_limit());
   additional_handle_cleanup_count_ = 0;
-  resume_response_ = resume_response;
+  resume_response_ = api_plan != nullptr && api_plan->pause_response_once();
 
   CurlMultiPtr multi(curl_multi_init());
   if (multi == nullptr) {
@@ -119,7 +125,7 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
     multi_socket_driver_ = &socket_driver;
   }
   if (curl_multi_add_handle(multi.get(), easy) == CURLM_OK) {
-    if (wake_multi) {
+    if (api_plan != nullptr && api_plan->wake_multi()) {
       if (multi_socket_driver_ != nullptr) {
         multi_socket_driver_->ProbeControlApis();
       } else {
@@ -162,11 +168,20 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
 
     curl_multi_remove_handle(multi.get(), easy);
   }
-  multi.reset();
+  // Socket-action callbacks borrow the stack driver above, so that path must
+  // clean its multi before this function returns. Perform-based protocol mocks
+  // may retain the detached multi when their fixed lifecycle requires it.
+  if (use_multi_socket) {
+    multi.reset();
+  } else {
+    HandleDetachedMulti(std::move(multi));
+  }
   multi_socket_driver_ = nullptr;
   resume_response_ = false;
   return transfer_result;
 }
+
+void MockServerBase::HandleDetachedMulti(CurlMultiPtr /*multi*/) {}
 
 /// Preserve a safe fallback for protocol mocks that require an outer driver
 /// to make progress. The API policy currently forces HTTP, whose override can

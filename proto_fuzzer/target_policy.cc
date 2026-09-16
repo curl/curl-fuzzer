@@ -231,9 +231,32 @@ void BoundMimePartMetadata(Part* part) {
   BoundHeaderValues(part->mutable_headers(), scenario_limits::kMaxMimeHeadersPerPart);
 }
 
-void BoundMimeLeaf(curl::fuzzer::proto::MimeDataPart* part) {
+void BoundGeneratedMimeData(curl::fuzzer::proto::GeneratedBytes* generated, std::size_t* remaining_bytes) {
+  if (generated->pattern().size() > scenario_limits::kMaxGeneratedMimePatternBytes) {
+    generated->mutable_pattern()->resize(scenario_limits::kMaxGeneratedMimePatternBytes);
+  }
+
+  const std::size_t pattern_size = generated->pattern().size();
+  if (pattern_size == 0 || *remaining_bytes == 0) {
+    generated->clear_repeat_count();
+    return;
+  }
+
+  // Keep every exact in-range size, including 16/32/64 KiB and their +/-1
+  // neighborhoods. Counts beyond the shared budget all have identical runtime
+  // behavior, so fold them onto the largest observable repetition count.
+  const std::size_t max_repeat_count = *remaining_bytes / pattern_size;
+  const std::size_t repeat_count =
+      std::min<std::size_t>(static_cast<std::size_t>(generated->repeat_count()), max_repeat_count);
+  generated->set_repeat_count(static_cast<std::uint32_t>(repeat_count));
+  *remaining_bytes -= repeat_count * pattern_size;
+}
+
+void BoundMimeLeaf(curl::fuzzer::proto::MimeDataPart* part, std::size_t* remaining_generated_bytes) {
   BoundMimePartMetadata(part);
-  if (part->data().size() > scenario_limits::kMaxMimeDataBytes) {
+  if (part->content_case() == curl::fuzzer::proto::MimeDataPart::kGeneratedData) {
+    BoundGeneratedMimeData(part->mutable_generated_data(), remaining_generated_bytes);
+  } else if (part->data().size() > scenario_limits::kMaxMimeDataBytes) {
     part->mutable_data()->resize(scenario_limits::kMaxMimeDataBytes);
   }
 }
@@ -244,6 +267,7 @@ void BoundMimeLeaf(curl::fuzzer::proto::MimeDataPart* part) {
 void BoundMimeShape(curl::fuzzer::proto::MimePost* post) {
   TrimRepeated(post->mutable_parts(), scenario_limits::kMaxTopLevelMimeParts);
   std::size_t remaining = scenario_limits::kMaxTotalMimeParts;
+  std::size_t remaining_generated_bytes = scenario_limits::kMaxGeneratedMimeDataBytes;
   std::size_t retained_top_parts = 0;
 
   while (retained_top_parts < static_cast<std::size_t>(post->parts_size()) && remaining != 0) {
@@ -258,6 +282,10 @@ void BoundMimeShape(curl::fuzzer::proto::MimePost* post) {
       }
       continue;
     }
+    if (part->content_case() == curl::fuzzer::proto::MimePart::kGeneratedData) {
+      BoundGeneratedMimeData(part->mutable_generated_data(), &remaining_generated_bytes);
+      continue;
+    }
     if (part->content_case() != curl::fuzzer::proto::MimePart::kSubparts) {
       continue;
     }
@@ -265,7 +293,7 @@ void BoundMimeShape(curl::fuzzer::proto::MimePost* post) {
     auto* children = part->mutable_subparts()->mutable_parts();
     TrimRepeated(children, std::min(scenario_limits::kMaxNestedMimeParts, remaining));
     for (auto& child : *children) {
-      BoundMimeLeaf(&child);
+      BoundMimeLeaf(&child, &remaining_generated_bytes);
       --remaining;
     }
   }
@@ -457,6 +485,156 @@ void BoundHttp3RawData(std::string* data, std::size_t* remaining_raw_bytes) {
     data->resize(limit);
   }
   *remaining_raw_bytes -= data->size();
+}
+
+void BoundHttp2StreamRef(curl::fuzzer::proto::Http2StreamRef* stream) {
+  switch (stream->target_case()) {
+    case curl::fuzzer::proto::Http2StreamRef::kRequestIndex:
+      stream->set_request_index(stream->request_index() % 16U);
+      break;
+    case curl::fuzzer::proto::Http2StreamRef::kPushIndex:
+      stream->set_push_index(stream->push_index() % 16U);
+      break;
+    case curl::fuzzer::proto::Http2StreamRef::kExplicitId:
+      stream->set_explicit_id(stream->explicit_id() & 0x7fffffffU);
+      break;
+    case curl::fuzzer::proto::Http2StreamRef::kConnection:
+    case curl::fuzzer::proto::Http2StreamRef::kLatestRequest:
+    case curl::fuzzer::proto::Http2StreamRef::TARGET_NOT_SET:
+    default:
+      break;
+  }
+}
+
+void BoundHttp2Settings(curl::fuzzer::proto::Http2Settings* settings) {
+  TrimRepeated(settings->mutable_entries(), scenario_limits::kMaxHttp2Settings);
+  for (auto& entry : *settings->mutable_entries()) {
+    entry.set_identifier(1U + entry.identifier() % 6U);
+    switch (entry.identifier()) {
+      case 2U:  // SETTINGS_ENABLE_PUSH
+        entry.set_value(entry.value() & 1U);
+        break;
+      case 4U:  // SETTINGS_INITIAL_WINDOW_SIZE
+        entry.set_value(entry.value() & 0x7fffffffU);
+        break;
+      case 5U:  // SETTINGS_MAX_FRAME_SIZE
+        entry.set_value(16384U + entry.value() % (0x00ffffffU - 16384U + 1U));
+        break;
+      case 1U:  // SETTINGS_HEADER_TABLE_SIZE
+      case 3U:  // SETTINGS_MAX_CONCURRENT_STREAMS
+      case 6U:  // SETTINGS_MAX_HEADER_LIST_SIZE
+      default:
+        break;
+    }
+  }
+}
+
+void BoundHttp2RawData(std::string* data, std::size_t* remaining_raw_bytes) {
+  const std::size_t limit = std::min(scenario_limits::kMaxHttp2RawFrameBytes, *remaining_raw_bytes);
+  if (data->size() > limit) {
+    data->resize(limit);
+  }
+  *remaining_raw_bytes -= data->size();
+}
+
+/// Bound the structured HTTP/2 sequence to the exact prefix interpreted by
+/// H2PlanDriver. The raw escapes retain malformed frame behavior while every
+/// ordinary header action remains HPACK and HTTP-field valid.
+void BoundHttp2PlanShape(curl::fuzzer::proto::Http2Plan* plan) {
+  TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxHttp2Actions);
+  BoundHttp2Settings(plan->mutable_initial_settings());
+  plan->mutable_initial_settings()->set_ack(false);
+  if (plan->actions().empty()) {
+    auto* response = plan->add_actions()->mutable_headers();
+    response->set_status_code(200);
+    response->set_end_stream(true);
+  }
+
+  std::size_t remaining_header_bytes = scenario_limits::kMaxHttp2HeaderBytes;
+  std::size_t remaining_data_bytes = scenario_limits::kMaxHttp2DataBytes;
+  std::size_t remaining_raw_bytes = scenario_limits::kMaxHttp2RawBytes;
+  for (auto& action : *plan->mutable_actions()) {
+    switch (action.action_case()) {
+      case curl::fuzzer::proto::Http2Action::kSettings:
+        BoundHttp2Settings(action.mutable_settings());
+        break;
+      case curl::fuzzer::proto::Http2Action::kHeaders: {
+        auto* headers = action.mutable_headers();
+        BoundHttp2StreamRef(headers->mutable_stream());
+        if (!headers->trailers()) {
+          if (headers->status_code() == 0U) {
+            headers->set_status_code(200U);
+          } else if (headers->status_code() < 100U || headers->status_code() > 599U) {
+            headers->set_status_code(100U + headers->status_code() % 500U);
+          }
+        }
+        BoundHttp3Headers(headers->mutable_fields(), scenario_limits::kMaxHttp2Headers, &remaining_header_bytes);
+        break;
+      }
+      case curl::fuzzer::proto::Http2Action::kData: {
+        auto* data = action.mutable_data();
+        BoundHttp2StreamRef(data->mutable_stream());
+        if (data->data().size() > remaining_data_bytes) {
+          data->mutable_data()->resize(remaining_data_bytes);
+        }
+        remaining_data_bytes -= data->data().size();
+        break;
+      }
+      case curl::fuzzer::proto::Http2Action::kWindowUpdate: {
+        auto* update = action.mutable_window_update();
+        BoundHttp2StreamRef(update->mutable_stream());
+        update->set_increment(std::max(1U, update->increment() & 0x7fffffffU));
+        break;
+      }
+      case curl::fuzzer::proto::Http2Action::kRstStream:
+        BoundHttp2StreamRef(action.mutable_rst_stream()->mutable_stream());
+        break;
+      case curl::fuzzer::proto::Http2Action::kPing:
+        if (action.ping().opaque_data().size() > 8U) {
+          action.mutable_ping()->mutable_opaque_data()->resize(8U);
+        }
+        break;
+      case curl::fuzzer::proto::Http2Action::kGoaway:
+        BoundHttp2StreamRef(action.mutable_goaway()->mutable_last_stream());
+        BoundHttp2RawData(action.mutable_goaway()->mutable_debug_data(), &remaining_raw_bytes);
+        break;
+      case curl::fuzzer::proto::Http2Action::kPushPromise:
+        BoundHttp2StreamRef(action.mutable_push_promise()->mutable_parent_stream());
+        BoundHttp2StreamRef(action.mutable_push_promise()->mutable_promised_stream());
+        BoundHttp3Headers(action.mutable_push_promise()->mutable_request_headers(), scenario_limits::kMaxHttp2Headers,
+                          &remaining_header_bytes);
+        break;
+      case curl::fuzzer::proto::Http2Action::kWait: {
+        auto* wait = action.mutable_wait();
+        BoundHttp2StreamRef(wait->mutable_stream());
+        if (wait->event() < curl::fuzzer::proto::HTTP2_CLIENT_EVENT_SETTINGS ||
+            wait->event() > curl::fuzzer::proto::HTTP2_CLIENT_EVENT_END_STREAM) {
+          wait->set_event(curl::fuzzer::proto::HTTP2_CLIENT_EVENT_SETTINGS);
+        }
+        wait->set_count(std::max(1U, std::min(wait->count(), 16U)));
+        break;
+      }
+      case curl::fuzzer::proto::Http2Action::kYieldTurns:
+        action.set_yield_turns(std::min<std::uint32_t>(action.yield_turns(), scenario_limits::kMaxHttp2YieldTurns));
+        break;
+      case curl::fuzzer::proto::Http2Action::kWireFrame:
+        action.mutable_wire_frame()->set_type(action.wire_frame().type() & 0xffU);
+        action.mutable_wire_frame()->set_flags(action.wire_frame().flags() & 0xffU);
+        action.mutable_wire_frame()->set_stream_id(action.wire_frame().stream_id() & 0x7fffffffU);
+        action.mutable_wire_frame()->set_declared_length(action.wire_frame().declared_length() & 0x00ffffffU);
+        BoundHttp2RawData(action.mutable_wire_frame()->mutable_payload(), &remaining_raw_bytes);
+        break;
+      case curl::fuzzer::proto::Http2Action::kRawBytes:
+        BoundHttp2RawData(action.mutable_raw_bytes(), &remaining_raw_bytes);
+        break;
+      case curl::fuzzer::proto::Http2Action::ACTION_NOT_SET: {
+        auto* response = action.mutable_headers();
+        response->set_status_code(200);
+        response->set_end_stream(true);
+        break;
+      }
+    }
+  }
 }
 
 /// Canonicalize one ordered H3 script to the exact bounded prefix that the
@@ -1129,9 +1307,9 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   }
 
   // Accepted server push adds a harness-owned easy handle and therefore
-  // belongs only in the fixed-ALPN H2 origin lane. Compatibility remains a
-  // no-op above so accumulated mixed corpus entries keep their wire meaning.
-  if (profile != TargetProfile::kHttpsH2) {
+  // belongs only in the fixed H2 origin lanes. Compatibility remains a no-op
+  // above so accumulated mixed corpus entries keep their wire meaning.
+  if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2) {
     scenario->clear_accept_h2_push();
   }
 
@@ -1147,6 +1325,10 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
   // but every other fixed lane must discard work its peer cannot consume.
   if (profile != TargetProfile::kFastHttp3) {
     scenario->clear_http3_plan();
+  }
+
+  if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2) {
+    scenario->clear_http2_plan();
   }
 
   if (profile != TargetProfile::kSocks4) {
@@ -1224,16 +1406,26 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
-  if (profile == TargetProfile::kHttpsH2) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  if (profile == TargetProfile::kHttpsH2 || profile == TargetProfile::kFastHttp2) {
+    scenario->set_scheme(profile == TargetProfile::kHttpsH2 ? curl::fuzzer::proto::SCHEME_HTTPS
+                                                            : curl::fuzzer::proto::SCHEME_HTTP);
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveIgnoredH2ProxyShape(scenario);
     RetainH2ProxyOriginOptions(scenario);
     BoundScenarioShape(scenario);
+    if (scenario->has_http2_plan()) {
+      auto* connection = scenario->mutable_connection();
+      connection->clear_initial_response();
+      connection->clear_on_readable();
+      connection->clear_server_frames();
+      BoundHttp2PlanShape(scenario->mutable_http2_plan());
+    }
     CanonicalizeTlsAuthority(scenario);
-    CanonicalizeTlsCertificateChain(scenario);
+    if (profile == TargetProfile::kHttpsH2) {
+      CanonicalizeTlsCertificateChain(scenario);
+    }
     return;
   }
 
@@ -1320,6 +1512,10 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     case TargetProfile::kHttpsH2:
       // The protocol-specific early path fixes ALPN and prunes incompatible
       // response shapes while retaining the raw frame script.
+      return;
+    case TargetProfile::kFastHttp2:
+      // The protocol-specific early path fixes prior-knowledge H2 and prunes
+      // incompatible response shapes while retaining its frame script.
       return;
     case TargetProfile::kFastHttp3:
       // The protocol-specific early path owns the QUIC response plan.
@@ -1408,6 +1604,10 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
 
     case TargetProfile::kHttpsH2:
       // Handled by the raw HTTP/2 protocol-specific early path above.
+      return;
+
+    case TargetProfile::kFastHttp2:
+      // Handled by the plaintext HTTP/2 protocol-specific early path above.
       return;
 
     case TargetProfile::kFastHttp3:

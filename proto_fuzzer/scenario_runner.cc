@@ -21,6 +21,7 @@
 #include "proto_fuzzer/bounded_anonymous_input_file.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/ftp_mock_server.h"
+#include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/multi_transfer_runner.h"
@@ -226,6 +227,10 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 #endif
   }
 
+  if (mode == ScenarioRunMode::kHttp2Coverage) {
+    return std::make_unique<H2CleartextMockServer>();
+  }
+
   if (mode == ScenarioRunMode::kTlsHttp2Coverage) {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
     return std::make_unique<H2OriginMockServer>(scenario.tls_certificate_chain());
@@ -242,6 +247,9 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
+      if (mode == ScenarioRunMode::kApiLifecycle) {
+        return std::make_unique<MockServer>(MultiDrivePolicy::kFromApiPlan);
+      }
       return std::make_unique<MockServer>();
     case curl::fuzzer::proto::SCHEME_HTTPS:
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
@@ -412,10 +420,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY) {
       (void)mock->DriveConnectOnlyScenario(easy.get(), scenario);
     } else {
-      mock->DriveScenario(
-          easy.get(), scenario,
-          mode == ScenarioRunMode::kHttp3Coverage || drive_mode == curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET,
-          api_plan != nullptr && api_plan->wake_multi(), api_plan != nullptr && api_plan->pause_response_once());
+      mock->DriveScenario(easy.get(), scenario);
     }
     if (api_lifecycle != nullptr) {
       const bool retains_internal_multi = drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM ||

@@ -150,11 +150,39 @@ void ApplyPartData(curl_mimepart* part, const std::string& data) {
   (void)curl_mime_data(part, bytes, size);
 }
 
+/// Materialize one compact repeated source without allowing the protobuf's
+/// uint32 count or a collection of MIME parts to amplify into unbounded work.
+/// Division establishes the maximum count before multiplication, so this is
+/// safe even when size_t is narrower than uint32_t.
+void ApplyGeneratedPartData(curl_mimepart* part, const curl::fuzzer::proto::GeneratedBytes& source,
+                            std::size_t* remaining_generated_bytes, RequestBuildStats* stats) {
+  const std::size_t pattern_size = std::min(source.pattern().size(), scenario_limits::kMaxGeneratedMimePatternBytes);
+  if (pattern_size == 0 || *remaining_generated_bytes == 0) {
+    (void)curl_mime_data(part, "", 0);
+    return;
+  }
+
+  const std::size_t max_repeat_count = *remaining_generated_bytes / pattern_size;
+  const std::size_t repeat_count =
+      std::min<std::size_t>(static_cast<std::size_t>(source.repeat_count()), max_repeat_count);
+  const std::size_t materialized_size = repeat_count * pattern_size;
+
+  std::string materialized(materialized_size, '\0');
+  for (std::size_t offset = 0; offset < materialized_size; offset += pattern_size) {
+    std::copy_n(source.pattern().data(), pattern_size, materialized.data() + offset);
+  }
+  const char* bytes = materialized.empty() ? "" : materialized.data();
+  if (curl_mime_data(part, bytes, materialized.size()) == CURLE_OK) {
+    stats->generated_mime_bytes += materialized.size();
+  }
+  *remaining_generated_bytes -= materialized.size();
+}
+
 /// Populate the fixed-depth child body and debit the shared total-part budget.
 /// Returning an empty MIME object when the child list is empty is intentional:
 /// curl's empty multipart serialization is useful coverage and remains cheap.
 void PopulateSubparts(curl_mime* mime, const curl::fuzzer::proto::MimeSubparts& source, std::size_t* remaining_parts,
-                      RequestBuildStats* stats) {
+                      std::size_t* remaining_generated_bytes, RequestBuildStats* stats) {
   const std::size_t count = std::min<std::size_t>(scenario_limits::kMaxNestedMimeParts, source.parts_size());
   for (std::size_t i = 0; i < count && *remaining_parts != 0; ++i) {
     curl_mimepart* part = curl_mime_addpart(mime);
@@ -165,7 +193,13 @@ void PopulateSubparts(curl_mime* mime, const curl::fuzzer::proto::MimeSubparts& 
     ++stats->mime_parts;
     const auto& proto_part = source.parts(static_cast<int>(i));
     ApplyPartMetadata(part, proto_part, stats);
-    ApplyPartData(part, proto_part.data());
+    if (proto_part.content_case() == curl::fuzzer::proto::MimeDataPart::kGeneratedData) {
+      ApplyGeneratedPartData(part, proto_part.generated_data(), remaining_generated_bytes, stats);
+    } else {
+      // Preserve the historical leaf behavior: an absent source is applied as
+      // empty data just like an explicitly empty field 2.
+      ApplyPartData(part, proto_part.data());
+    }
   }
 }
 
@@ -179,6 +213,7 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
   }
 
   std::size_t remaining_parts = scenario_limits::kMaxTotalMimeParts;
+  std::size_t remaining_generated_bytes = scenario_limits::kMaxGeneratedMimeDataBytes;
   const std::size_t count = std::min<std::size_t>(scenario_limits::kMaxTopLevelMimeParts, source.parts_size());
   for (std::size_t i = 0; i < count && remaining_parts != 0; ++i) {
     curl_mimepart* part = curl_mime_addpart(mime);
@@ -194,12 +229,15 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
       case curl::fuzzer::proto::MimePart::kData:
         ApplyPartData(part, proto_part.data());
         break;
+      case curl::fuzzer::proto::MimePart::kGeneratedData:
+        ApplyGeneratedPartData(part, proto_part.generated_data(), &remaining_generated_bytes, stats);
+        break;
       case curl::fuzzer::proto::MimePart::kSubparts: {
         curl_mime* subparts = curl_mime_init(easy);
         if (subparts == nullptr) {
           break;
         }
-        PopulateSubparts(subparts, proto_part.subparts(), &remaining_parts, stats);
+        PopulateSubparts(subparts, proto_part.subparts(), &remaining_parts, &remaining_generated_bytes, stats);
         if (curl_mime_subparts(part, subparts) != CURLE_OK) {
           curl_mime_free(subparts);
         }
