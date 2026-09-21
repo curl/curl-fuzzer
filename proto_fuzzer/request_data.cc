@@ -154,12 +154,11 @@ void ApplyPartData(curl_mimepart* part, const std::string& data) {
 /// uint32 count or a collection of MIME parts to amplify into unbounded work.
 /// Division establishes the maximum count before multiplication, so this is
 /// safe even when size_t is narrower than uint32_t.
-void ApplyGeneratedPartData(curl_mimepart* part, const curl::fuzzer::proto::GeneratedBytes& source,
-                            std::size_t* remaining_generated_bytes, RequestBuildStats* stats) {
+std::string MaterializeGeneratedPartData(const curl::fuzzer::proto::GeneratedBytes& source,
+                                         std::size_t* remaining_generated_bytes) {
   const std::size_t pattern_size = std::min(source.pattern().size(), scenario_limits::kMaxGeneratedMimePatternBytes);
   if (pattern_size == 0 || *remaining_generated_bytes == 0) {
-    (void)curl_mime_data(part, "", 0);
-    return;
+    return {};
   }
 
   const std::size_t max_repeat_count = *remaining_generated_bytes / pattern_size;
@@ -171,11 +170,32 @@ void ApplyGeneratedPartData(curl_mimepart* part, const curl::fuzzer::proto::Gene
   for (std::size_t offset = 0; offset < materialized_size; offset += pattern_size) {
     std::copy_n(source.pattern().data(), pattern_size, materialized.data() + offset);
   }
+  *remaining_generated_bytes -= materialized.size();
+  return materialized;
+}
+
+void ApplyGeneratedPartData(curl_mimepart* part, const curl::fuzzer::proto::GeneratedBytes& source,
+                            std::size_t* remaining_generated_bytes, RequestBuildStats* stats) {
+  const std::string materialized = MaterializeGeneratedPartData(source, remaining_generated_bytes);
   const char* bytes = materialized.empty() ? "" : materialized.data();
   if (curl_mime_data(part, bytes, materialized.size()) == CURLE_OK) {
     stats->generated_mime_bytes += materialized.size();
   }
-  *remaining_generated_bytes -= materialized.size();
+}
+
+void ApplyGeneratedPartFile(curl_mimepart* part, const curl::fuzzer::proto::GeneratedBytes& source,
+                            std::size_t* remaining_generated_bytes,
+                            std::vector<std::unique_ptr<BoundedAnonymousInputFile>>* files, RequestBuildStats* stats) {
+  const std::string materialized = MaterializeGeneratedPartData(source, remaining_generated_bytes);
+  auto file = std::make_unique<BoundedAnonymousInputFile>(scenario_limits::kMaxGeneratedMimeDataBytes);
+  const auto* bytes = reinterpret_cast<const std::uint8_t*>(materialized.empty() ? nullptr : materialized.data());
+  if (file->Write(bytes, materialized.size()) && curl_mime_filedata(part, file->path()) == CURLE_OK) {
+    stats->generated_mime_bytes += materialized.size();
+    stats->mime_file_bytes += materialized.size();
+    files->push_back(std::move(file));
+  } else {
+    (void)curl_mime_data(part, "", 0);
+  }
 }
 
 /// Populate the fixed-depth child body and debit the shared total-part budget.
@@ -206,7 +226,8 @@ void PopulateSubparts(curl_mime* mime, const curl::fuzzer::proto::MimeSubparts& 
 /// Construct the top MIME tree. curl_mime_subparts transfers ownership only
 /// on success, so failed attachments are freed immediately while successful
 /// ones are left for the top-level root to release recursively.
-curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source, RequestBuildStats* stats) {
+curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source,
+                         std::vector<std::unique_ptr<BoundedAnonymousInputFile>>* files, RequestBuildStats* stats) {
   curl_mime* mime = curl_mime_init(easy);
   if (mime == nullptr) {
     return nullptr;
@@ -231,6 +252,9 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
         break;
       case curl::fuzzer::proto::MimePart::kGeneratedData:
         ApplyGeneratedPartData(part, proto_part.generated_data(), &remaining_generated_bytes, stats);
+        break;
+      case curl::fuzzer::proto::MimePart::kFileData:
+        ApplyGeneratedPartFile(part, proto_part.file_data(), &remaining_generated_bytes, files, stats);
         break;
       case curl::fuzzer::proto::MimePart::kSubparts: {
         curl_mime* subparts = curl_mime_init(easy);
@@ -432,6 +456,8 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
       request_headers_(nullptr),
       resolve_entries_(nullptr),
       telnet_options_(nullptr),
+      ftp_prequote_(nullptr),
+      ftp_postquote_(nullptr),
       mime_post_(nullptr),
       upload_state_(scenario),
       upload_callbacks_installed_(false),
@@ -466,14 +492,26 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     (void)curl_easy_setopt(easy_, CURLOPT_SEEKDATA, &upload_state_);
   }
 
-  // HTTP headers/MIME and TELNET options are mutually exclusive because only
-  // the selected protocol can observe them. Avoid allocating protocol-inert
-  // lists and trees in compatibility inputs that bypass target policy.
+  // HTTP headers/MIME, TELNET options, and FTP quote commands are mutually
+  // exclusive because only the selected protocol can observe them. Avoid
+  // allocating protocol-inert lists and trees in compatibility inputs that
+  // bypass target policy.
   if (scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET) {
     telnet_options_ = BuildStringList(scenario.telnet_options(), scenario_limits::kMaxTelnetOptions,
                                       scenario_limits::kMaxTelnetOptionBytes, &stats_.telnet_options);
     if (telnet_options_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, telnet_options_);
+    }
+  } else if (scenario.scheme() == curl::fuzzer::proto::SCHEME_FTP) {
+    ftp_prequote_ = BuildStringList(scenario.ftp_prequote(), scenario_limits::kMaxFtpQuoteCommands,
+                                    scenario_limits::kMaxFtpQuoteCommandBytes, &stats_.ftp_prequote_commands);
+    if (ftp_prequote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_PREQUOTE, ftp_prequote_);
+    }
+    ftp_postquote_ = BuildStringList(scenario.ftp_postquote(), scenario_limits::kMaxFtpQuoteCommands,
+                                     scenario_limits::kMaxFtpQuoteCommandBytes, &stats_.ftp_postquote_commands);
+    if (ftp_postquote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_POSTQUOTE, ftp_postquote_);
     }
   } else {
     request_headers_ = BuildStringList(scenario.request_headers(), scenario_limits::kMaxRequestHeaders,
@@ -483,7 +521,7 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     }
 
     if (scenario.has_mime_post()) {
-      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &stats_);
+      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &mime_files_, &stats_);
       if (mime_post_ != nullptr) {
         (void)curl_easy_setopt(easy_, CURLOPT_MIMEPOST, mime_post_);
       }
@@ -518,8 +556,16 @@ ScenarioRequestData::~ScenarioRequestData() {
     if (telnet_options_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, nullptr);
     }
+    if (ftp_prequote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_PREQUOTE, nullptr);
+    }
+    if (ftp_postquote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_POSTQUOTE, nullptr);
+    }
   }
   curl_mime_free(mime_post_);
+  curl_slist_free_all(ftp_postquote_);
+  curl_slist_free_all(ftp_prequote_);
   curl_slist_free_all(telnet_options_);
   curl_slist_free_all(resolve_entries_);
   curl_slist_free_all(request_headers_);

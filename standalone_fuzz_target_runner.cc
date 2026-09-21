@@ -34,6 +34,9 @@
 
 #include "testinput.h"
 
+extern "C" int LLVMFuzzerInitialize(int *argc, char ***argv)
+    __attribute__((weak));
+
 /**
  * Per-input timeout (seconds). When LLVMFuzzerTestOneInput hangs (busy
  * loop, blocking I/O, etc.) we'd otherwise hang the whole corpus replay
@@ -228,6 +231,13 @@ static void process_directory(const char *dir_path)
 int main(int argc, char **argv)
 {
   namespace fs = std::filesystem;
+
+  if(LLVMFuzzerInitialize) {
+    char **fuzzer_argv = argv;
+    if(LLVMFuzzerInitialize(&argc, &fuzzer_argv) != 0)
+      return 1;
+    argv = fuzzer_argv;
+  }
 
   install_timeout_handler();
 

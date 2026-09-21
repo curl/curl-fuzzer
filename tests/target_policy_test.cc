@@ -400,6 +400,26 @@ void TestFastHttp3PolicyMaterializesUsefulPlan() {
          "fast HTTP/3 default action is not a finished 200 response");
 }
 
+void TestFastHttp3ProxyPolicyRetainsStreamScript() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.mutable_connection()->set_initial_response("proxy response");
+  scenario.add_subsequent_connections()->set_initial_response("ignored");
+  auto *plan = scenario.mutable_http3_plan();
+  plan->set_use_h1_connect_udp_proxy(true);
+  plan->add_actions()->mutable_structured_response();
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp3);
+
+  Expect(scenario.scheme() == SCHEME_HTTPS && scenario.has_connection(),
+         "HTTP/3 proxy policy discarded its stream response");
+  Expect(scenario.connection().initial_response() == "proxy response" &&
+             scenario.subsequent_connections_size() == 0,
+         "HTTP/3 proxy policy did not bound its one proxy connection");
+  Expect(scenario.http3_plan().use_h1_connect_udp_proxy() &&
+             scenario.http3_plan().actions_size() == 0,
+         "HTTP/3 proxy policy retained direct-peer actions");
+}
+
 void TestFastHttp3PolicyBoundsOrderedActions() {
   Scenario scenario;
   auto *plan = scenario.mutable_http3_plan();
@@ -715,6 +735,14 @@ void TestFastFtpPolicy() {
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_upload()->set_data("upload sentinel");
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxFtpQuoteCommands + 2;
+       ++index) {
+    scenario.add_ftp_prequote(std::string(
+        proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes + 3, 'p'));
+    scenario.add_ftp_postquote(std::string(
+        proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes + 3, 'q'));
+  }
   scenario.mutable_connection()->add_on_readable("control reply");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   for (std::size_t index = 0;
@@ -737,6 +765,9 @@ void TestFastFtpPolicy() {
   auto *ftp_port = scenario.add_options();
   ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
   ftp_port->set_string_value("untrusted.invalid");
+  auto *default_ftp_port = scenario.add_options();
+  default_ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  default_ftp_port->set_string_value(":");
   auto *use_eprt = scenario.add_options();
   use_eprt->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT);
   use_eprt->set_uint_value(7);
@@ -752,6 +783,16 @@ void TestFastFtpPolicy() {
          "fast FTP policy retained another protocol's shape");
   Expect(scenario.has_upload() && scenario.upload().data() == "upload sentinel",
          "fast FTP policy removed callback-backed upload data");
+  Expect(static_cast<std::size_t>(scenario.ftp_prequote_size()) ==
+             proto_fuzzer::scenario_limits::kMaxFtpQuoteCommands &&
+             static_cast<std::size_t>(scenario.ftp_postquote_size()) ==
+                 proto_fuzzer::scenario_limits::kMaxFtpQuoteCommands,
+         "fast FTP policy exceeded a quote command budget");
+  Expect(scenario.ftp_prequote(0).size() ==
+                 proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes &&
+             scenario.ftp_postquote(0).size() ==
+                 proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes,
+         "fast FTP policy retained a quote command suffix");
   Expect(scenario.connection().on_readable(0) == "control reply" &&
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
@@ -763,14 +804,16 @@ void TestFastFtpPolicy() {
   Expect(!scenario.subsequent_connections(0).has_backpressure() &&
              scenario.subsequent_connections(0).server_frames_size() == 0,
          "fast FTP policy retained ignored data-channel controls");
-  Expect(scenario.options_size() == 5,
+  Expect(scenario.options_size() == 6,
          "fast FTP policy retained a non-FTP option");
   Expect(scenario.options(0).uint_value() < 3 &&
              scenario.options(1).uint_value() < 4,
          "fast FTP policy left small enums outside curl's valid domains");
   Expect(scenario.options(2).string_value() == "127.0.0.1",
          "fast FTP policy retained a resolving active-mode address");
-  Expect(scenario.options(3).bool_value(),
+  Expect(scenario.options(3).string_value() == ":",
+         "fast FTP policy discarded the safe default-host sentinel");
+  Expect(scenario.options(4).bool_value(),
          "fast FTP policy did not canonicalize the EPRT selector");
 }
 
@@ -785,6 +828,8 @@ void TestFastTftpPolicy() {
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.add_ftp_prequote("ignored");
+  scenario.add_ftp_postquote("ignored");
   scenario.mutable_upload()->set_data("upload sentinel");
 
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
@@ -803,7 +848,8 @@ void TestFastTftpPolicy() {
   Expect(scenario.subsequent_connections_size() == 0 &&
              scenario.request_headers_size() == 0 &&
              !scenario.has_mime_post() && scenario.telnet_options_size() == 0 &&
-             !scenario.has_api_plan(),
+             scenario.ftp_prequote_size() == 0 &&
+             scenario.ftp_postquote_size() == 0 && !scenario.has_api_plan(),
          "fast TFTP policy retained stream or another protocol's shape");
   Expect(scenario.has_upload() && scenario.upload().data() == "upload sentinel",
          "fast TFTP policy removed WRQ upload data");
@@ -1213,7 +1259,8 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors + 3;
        ++index) {
-    plan->add_reentrant_probe_selectors(static_cast<std::uint32_t>(index + 300));
+    plan->add_reentrant_probe_selectors(
+        static_cast<std::uint32_t>(index + 300));
   }
   ApplyTargetPolicy(&scenario, TargetProfile::kApi);
 
@@ -1526,6 +1573,17 @@ void TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget() {
            "generated MIME policy folded an observable buffer boundary");
   }
 
+  Scenario file_boundary;
+  auto *file_data =
+      file_boundary.mutable_mime_post()->add_parts()->mutable_file_data();
+  file_data->set_pattern("F");
+  file_data->set_repeat_count(
+      proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes + 1);
+  ApplyTargetPolicy(&file_boundary, TargetProfile::kDeepHttp);
+  Expect(file_boundary.mime_post().parts(0).file_data().repeat_count() ==
+             proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes,
+         "generated MIME file exceeded the shared byte budget");
+
   Scenario shared;
   auto *first =
       shared.mutable_mime_post()->add_parts()->mutable_generated_data();
@@ -1653,6 +1711,7 @@ int main() {
   TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestFastHttp3PolicyMaterializesUsefulPlan();
+  TestFastHttp3ProxyPolicyRetainsStreamScript();
   TestFastHttp3PolicyBoundsOrderedActions();
   TestNonHttp3PoliciesDiscardPlans();
   TestNonHttpsPoliciesDiscardTlsCertificateChains();

@@ -48,6 +48,12 @@ inline constexpr std::size_t kMaxTelnetOptions = 8;
 /// Preserve curl's explicit over-1000-byte TTYPE/XDISPLOC rejection paths
 /// without giving arbitrary option strings the general metadata budget.
 inline constexpr std::size_t kMaxTelnetOptionBytes = 1024;
+/// A few correlated FTP commands cover quote iteration and failure handling
+/// without letting a repeated field multiply blocking control-channel work.
+inline constexpr std::size_t kMaxFtpQuoteCommands = 4;
+/// FTP commands use NUL-terminated slist entries. Preserve useful command
+/// arguments while discarding oversized suffixes curl cannot distinguish.
+inline constexpr std::size_t kMaxFtpQuoteCommandBytes = 4096;
 /// TELNET consumes the peer synchronously, so only this bounded prefix can be
 /// preloaded before curl enters its protocol loop.
 inline constexpr std::size_t kMaxTelnetResponseBytes = 8 * 1024;

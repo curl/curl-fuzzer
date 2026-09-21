@@ -748,6 +748,7 @@ endif()
 # UNITTESTS entrypoints. Obtain the ExternalProject's real source and generated
 # config directories instead of duplicating private C layouts in C++.
 ExternalProject_Get_Property(curl_external SOURCE_DIR BINARY_DIR)
+set(CURL_SOURCE_INCLUDE_DIR ${SOURCE_DIR}/include)
 set(CURL_PRIVATE_INCLUDE_DIRS ${SOURCE_DIR}/lib ${BINARY_DIR}/lib)
 unset(SOURCE_DIR)
 unset(BINARY_DIR)
@@ -1096,7 +1097,7 @@ add_dependencies(fuzz_doh ${FUZZ_DEPS})
 add_executable(fuzz_netrc
     fuzz_netrc.cc
     proto_fuzzer/bounded_anonymous_input_file.cc)
-target_compile_options(fuzz_netrc PRIVATE ${COMMON_FLAGS})
+target_compile_options(fuzz_netrc PRIVATE ${COMMON_FLAGS} -UNDEBUG)
 target_compile_definitions(fuzz_netrc PRIVATE
     BUILDING_LIBCURL
     DEBUGBUILD
@@ -1401,6 +1402,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     if(BUILD_HTTP3_VARIANT)
         add_library(curl_fuzzer_proto_http3_runner OBJECT
             proto_fuzzer/bounded_anonymous_input_file.cc
+            proto_fuzzer/connect_udp_proxy_mock_server.cc
             proto_fuzzer/scenario_runner.cc
             proto_fuzzer/http3_mock_server.cc)
         target_compile_features(curl_fuzzer_proto_http3_runner PRIVATE
@@ -1533,8 +1535,35 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_tftp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
+    target_sources(curl_fuzzer_proto_api PRIVATE
+        proto_fuzzer/api_startup_probe.c)
+    # Compile the diagnostic probe from curl's canonical public header so its
+    # inline-helper coverage merges with curl's source-tree coverage row.
+    target_include_directories(curl_fuzzer_proto_api BEFORE PRIVATE
+        ${CURL_SOURCE_INCLUDE_DIR})
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
+    target_sources(curl_fuzzer_proto_timing PRIVATE
+        proto_fuzzer/internal_utility_probe.c
+        proto_fuzzer/timing_platform_probe.c)
+    target_compile_definitions(curl_fuzzer_proto_timing PRIVATE
+        BUILDING_LIBCURL DEBUGBUILD HAVE_CONFIG_H)
+    target_compile_options(curl_fuzzer_proto_timing PRIVATE -UNDEBUG)
+    target_include_directories(curl_fuzzer_proto_timing PRIVATE
+        ${CURL_PRIVATE_INCLUDE_DIRS}
+        ${NGHTTP2_INSTALL_DIR}/include)
+
+    if(BUILD_HTTP3_VARIANT)
+        target_sources(curl_fuzzer_proto_http3 PRIVATE
+            proto_fuzzer/capsule_boundary_probe.c
+            proto_fuzzer/capsule_callback_probe.cc)
+        target_compile_definitions(curl_fuzzer_proto_http3 PRIVATE
+            BUILDING_LIBCURL DEBUGBUILD HAVE_CONFIG_H)
+        target_compile_options(curl_fuzzer_proto_http3 PRIVATE -UNDEBUG)
+        target_include_directories(curl_fuzzer_proto_http3 PRIVATE
+            ${CURL_PRIVATE_INCLUDE_DIRS}
+            ${NGHTTP2_INSTALL_DIR}/include)
+    endif()
 
     # Compile textproto seed scenarios into binary corpus entries. These are
     # derived artefacts — the textprotos in scenarios/ are the source of truth,
@@ -1816,6 +1845,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # socket timing into a resource-lifetime unit test.
         add_executable(request_data_test
             tests/request_data_test.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/request_data.cc
             ${GEN_PB_CC}
@@ -1917,6 +1947,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(MOCK_SERVER_TEST_SOURCES
             tests/mock_server_test.cc
             proto_fuzzer/api_lifecycle.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
@@ -2041,6 +2072,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # only the plaintext socketpair peer.
         add_executable(multi_transfer_runner_test
             tests/multi_transfer_runner_test.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
@@ -2083,6 +2115,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             add_executable(${_name}
                 ${_test_source}
                 ${_peer_source}
+                proto_fuzzer/bounded_anonymous_input_file.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
@@ -2127,6 +2160,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         if(BUILD_HTTP3_VARIANT)
             add_executable(http3_mock_server_test
                 tests/http3_mock_server_test.cc
+                proto_fuzzer/bounded_anonymous_input_file.cc
                 proto_fuzzer/http3_mock_server.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc

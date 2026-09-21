@@ -1,0 +1,12 @@
+# A port-only FTPPORT value makes curl derive the active listener address from
+# the control socket. The mock's AF_UNIX endpoint keeps this branch local and
+# deterministic: address conversion fails before curl opens a TCP listener.
+scheme: SCHEME_FTP
+host_path: "ftp.test/default-host.bin"
+options { option_id: CURLOPT_FTPPORT string_value: ":" }
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+}

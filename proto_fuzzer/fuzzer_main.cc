@@ -12,6 +12,7 @@
 #include <curl/curl.h>
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
 
+#include <array>
 #include <cassert>
 #include <csignal>
 #include <cstdlib>
@@ -105,3 +106,24 @@ int ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t* data, std
 }
 
 }  // namespace proto_fuzzer
+
+extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t* data, std::size_t size, std::size_t max_size,
+                                               unsigned int seed);
+extern "C" std::size_t LLVMFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t size1,
+                                                 const std::uint8_t* data2, std::size_t size2, std::uint8_t* out,
+                                                 std::size_t max_out_size, unsigned int seed);
+
+// Corpus-only coverage runs do not ask libFuzzer to mutate or cross inputs.
+// Exercise each target's real ABI hooks once during the standard libFuzzer
+// initialization phase so their shared policy and LPM paths remain covered by
+// the same binary without adding mutation work to every test case.
+extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
+  std::array<std::uint8_t, 256> left{};
+  std::array<std::uint8_t, 256> right{};
+  std::array<std::uint8_t, 512> child{};
+  const std::size_t left_size = LLVMFuzzerCustomMutator(left.data(), 0, left.size(), 0x4355524cU);
+  const std::size_t right_size = LLVMFuzzerCustomMutator(right.data(), 0, right.size(), 0x46555a5aU);
+  (void)LLVMFuzzerCustomCrossOver(left.data(), left_size, right.data(), right_size, child.data(), child.size(),
+                                  0x50524f54U);
+  return 0;
+}

@@ -279,10 +279,18 @@ void TftpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto
 
   int still_running = 1;
   int idle_iterations = 0;
+  bool pollset_probed = false;
   for (int iteration = 0; iteration < kMaxDriveIterations; ++iteration) {
     const CURLMcode result = curl_multi_perform(multi, &still_running);
     if (result != CURLM_OK) {
       break;
+    }
+    if (!pollset_probed && still_running != 0) {
+      // TFTP performs the whole transfer in the DOING state. A zero-timeout
+      // public multi poll asks curl for that state's protocol pollset without
+      // introducing a sleep into the fast datagram lane.
+      ProbeMultiPollset(multi);
+      pollset_probed = true;
     }
 
     const bool received = DrainClientDatagrams() != 0;

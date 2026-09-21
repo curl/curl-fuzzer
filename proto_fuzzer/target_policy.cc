@@ -286,6 +286,10 @@ void BoundMimeShape(curl::fuzzer::proto::MimePost* post) {
       BoundGeneratedMimeData(part->mutable_generated_data(), &remaining_generated_bytes);
       continue;
     }
+    if (part->content_case() == curl::fuzzer::proto::MimePart::kFileData) {
+      BoundGeneratedMimeData(part->mutable_file_data(), &remaining_generated_bytes);
+      continue;
+    }
     if (part->content_case() != curl::fuzzer::proto::MimePart::kSubparts) {
       continue;
     }
@@ -642,6 +646,10 @@ void BoundHttp2PlanShape(curl::fuzzer::proto::Http2Plan* plan) {
 /// QUIC peer can execute. Transport setup remains peer-owned; only plaintext
 /// HTTP/3 operations are mutation-controlled here.
 void BoundHttp3PlanShape(curl::fuzzer::proto::Http3Plan* plan) {
+  if (plan->use_h1_connect_udp_proxy()) {
+    plan->clear_actions();
+    return;
+  }
   TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxHttp3Actions);
   if (plan->actions().empty()) {
     auto* response = plan->add_actions()->mutable_structured_response();
@@ -740,6 +748,10 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   BoundHeaderValues(scenario->mutable_request_headers(), scenario_limits::kMaxRequestHeaders);
   BoundStringValues(scenario->mutable_telnet_options(), scenario_limits::kMaxTelnetOptions,
                     scenario_limits::kMaxTelnetOptionBytes);
+  BoundStringValues(scenario->mutable_ftp_prequote(), scenario_limits::kMaxFtpQuoteCommands,
+                    scenario_limits::kMaxFtpQuoteCommandBytes);
+  BoundStringValues(scenario->mutable_ftp_postquote(), scenario_limits::kMaxFtpQuoteCommands,
+                    scenario_limits::kMaxFtpQuoteCommandBytes);
   if (scenario->has_mime_post()) {
     BoundMimeShape(scenario->mutable_mime_post());
   }
@@ -1029,8 +1041,12 @@ void CanonicalizeFtpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
         break;
       case curl::fuzzer::proto::CURLOPT_FTPPORT:
         // Never let a mutated active-mode address resolve or bind outside the
-        // process. Empty remains reachable only by omitting the option.
-        option.set_string_value("127.0.0.1");
+        // process. The port-only sentinel retains curl's default-host branch;
+        // with the in-process AF_UNIX control socket it fails locally before
+        // opening a listener. Empty remains reachable only by omission.
+        if (option.value_case() != curl::fuzzer::proto::SetOption::kStringValue || option.string_value() != ":") {
+          option.set_string_value("127.0.0.1");
+        }
         break;
       case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
         option.set_bool_value(IntegralMutationValue(option) != 0U);
@@ -1170,7 +1186,9 @@ void RemoveMultiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->c
 /// script. Request headers, MIME, upload state, and HTTP options remain useful
 /// because curl serializes those onto its client-initiated request stream.
 void RemoveIgnoredHttp3Shape(curl::fuzzer::proto::Scenario* scenario) {
-  scenario->clear_connection();
+  if (!scenario->http3_plan().use_h1_connect_udp_proxy()) {
+    scenario->clear_connection();
+  }
   scenario->clear_subsequent_connections();
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
@@ -1307,6 +1325,14 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     return;
   }
 
+  // Quote slists are useful only to the FTP state machine. Clear them before
+  // protocol-specific early returns so no other fixed target pays to bound or
+  // allocate pointer state it cannot observe.
+  if (profile != TargetProfile::kFastFtp) {
+    scenario->clear_ftp_prequote();
+    scenario->clear_ftp_postquote();
+  }
+
   // Accepted server push adds a harness-owned easy handle and therefore
   // belongs only in the fixed H2 origin lanes. Compatibility remains a no-op
   // above so accumulated mixed corpus entries keep their wire meaning.
@@ -1362,9 +1388,12 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     RemoveIgnoredHttp3Shape(scenario);
     RetainHttp3RequestOptions(scenario);
     BoundScenarioShape(scenario);
-    // BoundScenarioShape materializes an empty primary Connection while
-    // sharing request-side limits. Do not retain that protocol-inert message.
-    scenario->clear_connection();
+    // The ordinary QUIC peer consumes Http3Plan and has no use for a stream
+    // response. CONNECT-UDP proxy mode instead feeds the retained Connection
+    // bytes to curl's HTTP/1.1 proxy state machine and capsule filter.
+    if (!scenario->http3_plan().use_h1_connect_udp_proxy()) {
+      scenario->clear_connection();
+    }
     BoundHttp3PlanShape(scenario->mutable_http3_plan());
     CanonicalizeTlsAuthority(scenario);
     CanonicalizeTlsCertificateChain(scenario);

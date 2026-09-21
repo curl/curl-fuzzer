@@ -6,6 +6,9 @@
 
 #include "proto_fuzzer/fuzzer_main.h"
 
+extern "C" void curl_fuzzer_probe_timing_platform(void);
+extern "C" void curl_fuzzer_probe_internal_utilities(void);
+
 namespace {
 
 // Bind this source's visible target identity once so mutation, crossover, and
@@ -37,5 +40,11 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
+  static const bool platform_helpers_probed = [] {
+    curl_fuzzer_probe_timing_platform();
+    curl_fuzzer_probe_internal_utilities();
+    return true;
+  }();
+  (void)platform_helpers_probed;
   return proto_fuzzer::ProtoFuzzerTestOneInput(kProfile, data, size);
 }

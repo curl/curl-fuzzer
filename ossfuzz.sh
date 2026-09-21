@@ -27,9 +27,10 @@ set -eu
 export BUILD_ROOT=$PWD
 SCRIPTDIR=${BUILD_ROOT}/scripts
 
-# Keep Fuzz Introspector focused on the libcurl and harness code that these
-# binaries can actually reach. The setting must be exported before compiling:
-# Introspector's compiler wrappers consume it while producing their metadata.
+# Apply exclusions to Fuzz Introspector's compiler/LTO analysis. Its separate
+# source scan runs before this script and does not consume this configuration.
+# scripts/run_introspector_report.py applies the same rules to local source
+# reports. The compiler wrappers need the setting before compilation starts.
 export FUZZ_INTROSPECTOR_CONFIG=${BUILD_ROOT}/fuzz_introspector_exclusion.config
 
 # The normal build uses the aggregate `fuzz` target. CI can request one CMake

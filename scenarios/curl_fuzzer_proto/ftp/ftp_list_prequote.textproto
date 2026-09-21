@@ -1,0 +1,17 @@
+# A directory download with a prequote traverses the distinct LIST_PREQUOTE
+# state between TYPE and LIST. Each command has a paired control response.
+scheme: SCHEME_FTP
+host_path: "ftp.test/"
+ftp_prequote: "SITE UMASK 022"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password required\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\" is current directory\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 ascii type selected\r\n"
+  on_readable: "200 prequote accepted\r\n"
+  on_readable: "150 opening listing\r\n"
+  on_readable: "226 listing complete\r\n"
+}
+subsequent_connections { initial_response: "entry.txt\r\n" }

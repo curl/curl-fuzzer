@@ -103,6 +103,20 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "500 EPRT unsupported",
             "200 PORT accepted",
         ),
+        "ftp_active_default_host.textproto": (
+            'CURLOPT_FTPPORT string_value: ":"',
+            'host_path: "ftp.test/default-host.bin"',
+        ),
+        "ftp_list_prequote.textproto": (
+            'ftp_prequote: "SITE UMASK 022"',
+            "200 prequote accepted",
+            "150 opening listing",
+        ),
+        "ftp_postquote.textproto": (
+            'ftp_postquote: "NOOP"',
+            "226 transfer complete\\r\\n200 postquote accepted",
+            'initial_response: "body"',
+        ),
     }
     ftp_root = SCENARIO_ROOT / "ftp"
     for name, tokens in expected_tokens.items():

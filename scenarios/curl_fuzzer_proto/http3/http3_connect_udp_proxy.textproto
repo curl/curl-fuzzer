@@ -1,0 +1,10 @@
+# Exercise the production HTTP/1.1 CONNECT-UDP upgrade and capsule connection
+# filter while curl drives an ordinary HTTP/3 easy transfer. The capsule holds
+# one deliberately invalid inner QUIC byte, which is enough to execute receive
+# framing before the origin handshake terminates.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/capsule"
+connection {
+  initial_response: "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: connect-udp\r\nCapsule-Protocol: ?1\r\n\r\n\000\002\000\377"
+}
+http3_plan { use_h1_connect_udp_proxy: true }
