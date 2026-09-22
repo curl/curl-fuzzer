@@ -145,6 +145,10 @@ enum SocksProxyMode {
 // QPACK input after the peer has completed a valid QUIC/TLS handshake.
 message Http3Plan {
   repeated Http3Action actions = 1;
+  // Route the HTTP/3 origin through the bounded HTTP/1.1 CONNECT-UDP mock.
+  // This drives curl's production capsule connection filter while retaining
+  // the same easy-handle request surface as ordinary HTTP/3 scenarios.
+  bool use_h1_connect_udp_proxy = 2;
 }
 
 // One operation performed by the in-process HTTP/3 peer. The oneof prevents a

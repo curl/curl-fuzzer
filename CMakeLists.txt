@@ -1401,6 +1401,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     if(BUILD_HTTP3_VARIANT)
         add_library(curl_fuzzer_proto_http3_runner OBJECT
             proto_fuzzer/bounded_anonymous_input_file.cc
+            proto_fuzzer/connect_udp_proxy_mock_server.cc
             proto_fuzzer/scenario_runner.cc
             proto_fuzzer/http3_mock_server.cc)
         target_compile_features(curl_fuzzer_proto_http3_runner PRIVATE

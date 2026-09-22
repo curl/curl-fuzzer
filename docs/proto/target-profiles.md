@@ -13,7 +13,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, and bounded CRL-input coverage. |
 | `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a GnuTLS or mbedTLS curl client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
 | `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, plus push and upkeep probes. |
-| `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake. |
+| `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS/HTTP/2 CONNECT proxy; mutations control bounded raw proxy frames and origin request settings. |
 | `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4 or SOCKS4A proxy. |
 | `curl_fuzzer_proto_resolver` | Localhost resolution and bounded `CURLOPT_RESOLVE` host-cache operations while harness callbacks retain transport control. |
@@ -58,9 +58,9 @@ input at 32 KiB.
 
 Fast lanes clear backpressure because a single mutated value would otherwise
 move an ordinary case into a timed loop. The timing lane does the inverse and
-forces bounded pressure. HTTP/3 discards the stream `Connection` entirely,
-while FTP, TFTP, TELNET, and Gopher prune fields that their specialized peers
-cannot observe.
+forces bounded pressure. Direct HTTP/3 discards the stream `Connection`;
+CONNECT-UDP mode retains it and clears direct HTTP/3 actions. FTP, TFTP,
+TELNET, and Gopher prune fields that their specialized peers cannot observe.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
 inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would

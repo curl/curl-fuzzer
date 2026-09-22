@@ -72,8 +72,11 @@ Other peers intentionally give those fields narrower meanings:
   chunk are separate datagrams.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed TLS/ALPN setup.
-- HTTP/3 uses ordered `http3_plan` actions after a valid QUIC/TLS handshake;
-  the ordinary connection script is discarded.
+- Direct HTTP/3 uses ordered `http3_plan` actions after a valid QUIC/TLS
+  handshake and discards the ordinary connection script. Setting
+  `http3_plan.use_h1_connect_udp_proxy` instead uses `connection` for a local
+  HTTP/1.1 CONNECT-UDP upgrade and capsule bytes; direct HTTP/3 actions are
+  cleared.
 
 Use a seed already assigned to the intended target as the closest example.
 A valid protobuf message can still be irrelevant to a lane if that lane's

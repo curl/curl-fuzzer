@@ -642,6 +642,10 @@ void BoundHttp2PlanShape(curl::fuzzer::proto::Http2Plan* plan) {
 /// QUIC peer can execute. Transport setup remains peer-owned; only plaintext
 /// HTTP/3 operations are mutation-controlled here.
 void BoundHttp3PlanShape(curl::fuzzer::proto::Http3Plan* plan) {
+  if (plan->use_h1_connect_udp_proxy()) {
+    plan->clear_actions();
+    return;
+  }
   TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxHttp3Actions);
   if (plan->actions().empty()) {
     auto* response = plan->add_actions()->mutable_structured_response();
@@ -1170,7 +1174,9 @@ void RemoveMultiOnlyShape(curl::fuzzer::proto::Scenario* scenario) { scenario->c
 /// script. Request headers, MIME, upload state, and HTTP options remain useful
 /// because curl serializes those onto its client-initiated request stream.
 void RemoveIgnoredHttp3Shape(curl::fuzzer::proto::Scenario* scenario) {
-  scenario->clear_connection();
+  if (!scenario->http3_plan().use_h1_connect_udp_proxy()) {
+    scenario->clear_connection();
+  }
   scenario->clear_subsequent_connections();
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
@@ -1362,9 +1368,12 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
     RemoveIgnoredHttp3Shape(scenario);
     RetainHttp3RequestOptions(scenario);
     BoundScenarioShape(scenario);
-    // BoundScenarioShape materializes an empty primary Connection while
-    // sharing request-side limits. Do not retain that protocol-inert message.
-    scenario->clear_connection();
+    // The ordinary QUIC peer consumes Http3Plan and has no use for a stream
+    // response. CONNECT-UDP proxy mode instead feeds the retained Connection
+    // bytes to curl's HTTP/1.1 proxy state machine and capsule filter.
+    if (!scenario->http3_plan().use_h1_connect_udp_proxy()) {
+      scenario->clear_connection();
+    }
     BoundHttp3PlanShape(scenario->mutable_http3_plan());
     CanonicalizeTlsAuthority(scenario);
     CanonicalizeTlsCertificateChain(scenario);

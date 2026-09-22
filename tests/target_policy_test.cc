@@ -400,6 +400,26 @@ void TestFastHttp3PolicyMaterializesUsefulPlan() {
          "fast HTTP/3 default action is not a finished 200 response");
 }
 
+void TestFastHttp3ProxyPolicyRetainsStreamScript() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.mutable_connection()->set_initial_response("proxy response");
+  scenario.add_subsequent_connections()->set_initial_response("ignored");
+  auto *plan = scenario.mutable_http3_plan();
+  plan->set_use_h1_connect_udp_proxy(true);
+  plan->add_actions()->mutable_structured_response();
+
+  ApplyTargetPolicy(&scenario, TargetProfile::kFastHttp3);
+
+  Expect(scenario.scheme() == SCHEME_HTTPS && scenario.has_connection(),
+         "HTTP/3 proxy policy discarded its stream response");
+  Expect(scenario.connection().initial_response() == "proxy response" &&
+             scenario.subsequent_connections_size() == 0,
+         "HTTP/3 proxy policy did not bound its one proxy connection");
+  Expect(scenario.http3_plan().use_h1_connect_udp_proxy() &&
+             scenario.http3_plan().actions_size() == 0,
+         "HTTP/3 proxy policy retained direct-peer actions");
+}
+
 void TestFastHttp3PolicyBoundsOrderedActions() {
   Scenario scenario;
   auto *plan = scenario.mutable_http3_plan();
@@ -1653,6 +1673,7 @@ int main() {
   TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestFastHttp3PolicyMaterializesUsefulPlan();
+  TestFastHttp3ProxyPolicyRetainsStreamScript();
   TestFastHttp3PolicyBoundsOrderedActions();
   TestNonHttp3PoliciesDiscardPlans();
   TestNonHttpsPoliciesDiscardTlsCertificateChains();

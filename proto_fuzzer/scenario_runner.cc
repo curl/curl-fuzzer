@@ -39,6 +39,7 @@
 #include "proto_fuzzer/tls_mock_server.h"
 #endif
 #if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
+#include "proto_fuzzer/connect_udp_proxy_mock_server.h"
 #include "proto_fuzzer/http3_mock_server.h"
 #endif
 
@@ -210,6 +211,9 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
                                                           ScenarioRunMode mode) {
   if (mode == ScenarioRunMode::kHttp3Coverage) {
 #if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
+    if (scenario.http3_plan().use_h1_connect_udp_proxy()) {
+      return std::make_unique<ConnectUdpProxyMockServer>();
+    }
     return std::make_unique<Http3MockServer>(scenario.tls_certificate_chain());
 #else
     return nullptr;
