@@ -47,9 +47,10 @@ class ApiLifecycle {
 
   /// Run correctly typed CURLINFO and response-header probes selected by the
   /// plan. Call only after the transfer entrypoint has returned.
-  /// @param probe_upkeep True only after curl_easy_perform, whose internal
-  ///        multi remains attached and can service curl_easy_upkeep safely.
-  void ProbeTransferResults(bool probe_upkeep);
+  /// @param retains_internal_multi True only after an easy-interface drive,
+  ///        whose internal multi remains attached and can service connection-
+  ///        backed queries and curl_easy_upkeep safely.
+  void ProbeTransferResults(bool retains_internal_multi);
 
   /// Duplicate, reset, and destroy a scratch easy handle while every pointer-
   /// valued option copied from the source still has a live owner.

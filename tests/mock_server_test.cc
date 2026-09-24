@@ -945,6 +945,9 @@ void TestApiLifecycleCompletesSocketActionTransfer() {
     proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
     server.ConfigureRequestData(&request_data);
     server.DriveScenario(easy, scenario);
+    // The selector set includes CURLINFO_ACTIVESOCKET. The socket-action
+    // driver has already removed the easy and destroyed its external multi,
+    // so post-transfer probing must skip that connection-backed result.
     lifecycle->ProbeTransferResults(false);
     lifecycle->ProbeEasyDuplication();
   }

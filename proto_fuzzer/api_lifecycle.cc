@@ -619,7 +619,7 @@ void ApiLifecycle::ProbeUrlAndEscaping(std::string_view url) {
 /// only effect would be charging an iteration for the same immutable result.
 /// Header traversal remains unconditional in the API lane because it exposes
 /// a separate public API and is independently capped.
-void ApiLifecycle::ProbeTransferResults(bool probe_upkeep) {
+void ApiLifecycle::ProbeTransferResults(bool retains_internal_multi) {
   std::array<bool, kInfoDescriptorCount> seen{};
   const std::size_t selector_count = std::min<std::size_t>(scenario_limits::kMaxApiInfoSelectors,
                                                            static_cast<std::size_t>(plan_.easy_info_selectors_size()));
@@ -627,7 +627,14 @@ void ApiLifecycle::ProbeTransferResults(bool probe_upkeep) {
     const std::uint32_t selector = plan_.easy_info_selectors(static_cast<int>(index));
     const std::size_t descriptor_index = selector % kInfoDescriptorCount;
     if (!seen[descriptor_index]) {
-      ProbeInfoDescriptor(easy_, kInfoDescriptors[descriptor_index]);
+      const InfoDescriptor& descriptor = kInfoDescriptors[descriptor_index];
+      // The external-multi paths remove the easy handle before returning from
+      // their drive. CURLINFO_ACTIVESOCKET is connection-backed, and curl
+      // debug builds reject that query once the external multi is detached.
+      // Easy-interface drives retain their internal multi.
+      if (retains_internal_multi || descriptor.result_type != InfoResultType::kSocket) {
+        ProbeInfoDescriptor(easy_, descriptor);
+      }
       seen[descriptor_index] = true;
     }
   }
@@ -645,7 +652,7 @@ void ApiLifecycle::ProbeTransferResults(bool probe_upkeep) {
   // curl_easy_perform retains an internal multi that upkeep expects. The
   // external multi paths destroy theirs before result probing, and current
   // debug builds deliberately reject upkeep on that detached handle state.
-  if (probe_upkeep) {
+  if (retains_internal_multi) {
     (void)curl_easy_upkeep(easy_);
   }
 
