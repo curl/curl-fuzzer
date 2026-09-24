@@ -1817,6 +1817,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # socket timing into a resource-lifetime unit test.
         add_executable(request_data_test
             tests/request_data_test.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/request_data.cc
             ${GEN_PB_CC}
@@ -1918,6 +1919,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(MOCK_SERVER_TEST_SOURCES
             tests/mock_server_test.cc
             proto_fuzzer/api_lifecycle.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
@@ -2042,6 +2044,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # only the plaintext socketpair peer.
         add_executable(multi_transfer_runner_test
             tests/multi_transfer_runner_test.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
@@ -2084,6 +2087,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             add_executable(${_name}
                 ${_test_source}
                 ${_peer_source}
+                proto_fuzzer/bounded_anonymous_input_file.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
@@ -2128,6 +2132,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         if(BUILD_HTTP3_VARIANT)
             add_executable(http3_mock_server_test
                 tests/http3_mock_server_test.cc
+                proto_fuzzer/bounded_anonymous_input_file.cc
                 proto_fuzzer/http3_mock_server.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc

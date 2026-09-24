@@ -388,7 +388,6 @@ void AddStringOption(Scenario *scenario,
 /// Retain request bytes that the production mock normally discards while
 /// making room for curl's next write. This test-only transport still uses the
 /// same socketpair and drive loop as the fuzzer.
-#ifdef CURL_FUZZER_HAS_HTTPSIG
 class RequestCapturingConnection final : public proto_fuzzer::MockConnection {
 public:
   explicit RequestCapturingConnection(std::string *request)
@@ -421,6 +420,7 @@ private:
   std::string request_;
 };
 
+#ifdef CURL_FUZZER_HAS_HTTPSIG
 /// Drive one signing algorithm through the same generated SetOption manifest,
 /// request-header owner, and in-process HTTP peer used by deep fuzz inputs.
 std::string CaptureHttpsigRequest(std::uint64_t algorithm,
@@ -518,6 +518,69 @@ void TestHttpsigAlgorithmsEmitSignatureHeaders() {
   }
 }
 #endif
+
+void TestFileBackedMimePreservesFilenameAcrossRedirect() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("upload.test/mime/source");
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION, 1);
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_MAXREDIRS, 2);
+  scenario.add_request_headers("Expect:");
+
+  auto *part = scenario.mutable_mime_post()->add_parts();
+  part->set_name("file");
+  part->set_filename("boundary.bin");
+  part->set_content_type("application/octet-stream");
+  part->mutable_file_data()->set_pattern("MIME-FILE-BODY");
+  part->mutable_file_data()->set_repeat_count(1);
+
+  scenario.mutable_connection()->add_on_readable(
+      "HTTP/1.1 307 Temporary Redirect\r\n"
+      "Location: http://upload.test/mime/destination\r\n"
+      "Connection: close\r\nContent-Length: 0\r\n\r\n");
+  scenario.add_subsequent_connections()->add_on_readable(
+      "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "file-backed MIME test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://upload.test/mime/source");
+  (void)proto_fuzzer::ApplyScenarioOptions(easy, scenario);
+
+  RequestCapturingServer server;
+  server.Install(easy);
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    Expect(server.DriveScenario(easy, scenario) == CURLE_OK,
+           "file-backed MIME redirect did not complete");
+  }
+
+  const std::string &request = server.request();
+  const std::string disposition =
+      "Content-Disposition: form-data; name=\"file\"; "
+      "filename=\"boundary.bin\"";
+  const std::size_t first_filename = request.find(disposition);
+  Expect(first_filename != std::string::npos,
+         "MIME upload did not retain its explicit remote filename");
+  const std::size_t second_filename =
+      request.find(disposition, first_filename + 1);
+  Expect(second_filename != std::string::npos,
+         "MIME redirect did not preserve the explicit remote filename");
+  Expect(request.find("/proc/self/fd/") == std::string::npos,
+         "anonymous MIME path leaked into the multipart request");
+  const std::size_t first_body = request.find("MIME-FILE-BODY", first_filename);
+  const std::size_t second_body =
+      request.find("MIME-FILE-BODY", second_filename);
+  Expect(first_body != std::string::npos && first_body < second_filename &&
+             second_body != std::string::npos,
+         "MIME file body was not replayed after the redirect");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
 
 /// Construct the common complete-response shape used by TLS behavior tests.
 Scenario MakeTlsScenario(const std::string &path, const std::string &body) {
@@ -1324,6 +1387,7 @@ int main() {
   TestClosedPeerIsAnOrdinaryWriteFailure();
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
+  TestFileBackedMimePreservesFilenameAcrossRedirect();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();

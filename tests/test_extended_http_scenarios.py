@@ -104,6 +104,13 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
             'CURLOPT_CUSTOMREQUEST string_value: "PURGE"',
             "307 Temporary Redirect",
         ),
+        "http_mime_file_redirect_backpressure.textproto": (
+            "file_data {",
+            'filename: "boundary.bin"',
+            "307 Temporary Redirect",
+            "backpressure {",
+            "subsequent_connections {",
+        ),
         "http_decoding_controls_conflicting_length.textproto": (
             "CURLOPT_TRANSFER_ENCODING",
             "CURLOPT_HTTP_TRANSFER_DECODING",
