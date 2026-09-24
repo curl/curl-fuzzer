@@ -16,9 +16,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string_view>
+#include <vector>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/bounded_anonymous_input_file.h"
 #include "proto_fuzzer/scenario_limits.h"
 
 namespace proto_fuzzer {
@@ -119,6 +122,8 @@ struct RequestBuildStats {
   std::size_t mime_headers = 0;
   /// Materialized bytes supplied by compact generated MIME sources.
   std::size_t generated_mime_bytes = 0;
+  /// Materialized bytes exposed through curl_mime_filedata.
+  std::size_t mime_file_bytes = 0;
 };
 
 /// Builds HTTP headers or TELNET options, MIME state, and upload callbacks
@@ -179,6 +184,9 @@ class ScenarioRequestData {
   curl_slist* request_headers_;
   curl_slist* resolve_entries_;
   curl_slist* telnet_options_;
+  // Keep anonymous files alive until after curl_mime_free has released every
+  // filename-backed part that can still refer to them.
+  std::vector<std::unique_ptr<BoundedAnonymousInputFile>> mime_files_;
   curl_mime* mime_post_;
   UploadScriptState upload_state_;
   bool upload_callbacks_installed_;
