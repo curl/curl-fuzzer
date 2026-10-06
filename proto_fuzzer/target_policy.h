@@ -16,15 +16,7 @@
 
 namespace proto_fuzzer {
 
-/// Restore the invariants for one target after LPM mutates a Scenario.
-/// Besides dispatch and timing controls, fixed lanes trim repeated-field and
-/// metadata suffixes that the runtime cannot consume. WebSocket lanes also
-/// remove follow-on sockets and MIME bodies their single-upgrade driver cannot
-/// use; all remaining observable bytes, options, frames, and probes stay
-/// fuzz-controlled.
-/// @param scenario Scenario to canonicalize in place.
-/// @param profile Target lane whose invariants must be restored.
-void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile);
+void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile);
 
 }  // namespace proto_fuzzer
 

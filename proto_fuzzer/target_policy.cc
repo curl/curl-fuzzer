@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <string>
 
+#include "proto_fuzzer/option_model.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/telnet_scenario.h"
 
@@ -42,9 +43,8 @@ void TrimRepeated(RepeatedField* field, std::size_t limit) {
   }
 }
 
-/// Bound strings passed to NUL-terminated metadata APIs. The runtime applies
-/// the same prefix, so deleting the invisible suffix increases useful
-/// mutation density without removing any behavior curl could observe.
+/// Bound fixed-target metadata. Compatibility inputs preserve their original
+/// option strings; consumers of bounded request metadata cap their own views.
 void TrimMetadata(std::string* value) {
   if (value->size() > scenario_limits::kMaxMetadataBytes) {
     value->resize(scenario_limits::kMaxMetadataBytes);
@@ -510,16 +510,22 @@ void BoundHttp2StreamRef(curl::fuzzer::proto::Http2StreamRef* stream) {
 void BoundHttp2Settings(curl::fuzzer::proto::Http2Settings* settings) {
   TrimRepeated(settings->mutable_entries(), scenario_limits::kMaxHttp2Settings);
   for (auto& entry : *settings->mutable_entries()) {
-    entry.set_identifier(1U + entry.identifier() % 6U);
+    // SETTINGS identifiers occupy 16 bits. Preserve unknown extensions,
+    // which receivers ignore when they do not understand them.
+    entry.set_identifier(entry.identifier() & 0xffffU);
     switch (entry.identifier()) {
       case 2U:  // SETTINGS_ENABLE_PUSH
+      case 8U:  // SETTINGS_ENABLE_CONNECT_PROTOCOL
+      case 9U:  // SETTINGS_NO_RFC7540_PRIORITIES
         entry.set_value(entry.value() & 1U);
         break;
       case 4U:  // SETTINGS_INITIAL_WINDOW_SIZE
         entry.set_value(entry.value() & 0x7fffffffU);
         break;
       case 5U:  // SETTINGS_MAX_FRAME_SIZE
-        entry.set_value(16384U + entry.value() % (0x00ffffffU - 16384U + 1U));
+        if (entry.value() < 16384U || entry.value() > 0x00ffffffU) {
+          entry.set_value(16384U + entry.value() % (0x00ffffffU - 16384U + 1U));
+        }
         break;
       case 1U:  // SETTINGS_HEADER_TABLE_SIZE
       case 3U:  // SETTINGS_MAX_CONCURRENT_STREAMS
@@ -735,11 +741,6 @@ void BoundHttp3PlanShape(curl::fuzzer::proto::Http3Plan* plan) {
 /// historical no-postprocessor semantics for existing OSS-Fuzz reproducers.
 void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   TrimRepeated(scenario->mutable_options(), scenario_limits::kMaxOptions);
-  for (auto& option : *scenario->mutable_options()) {
-    if (option.value_case() == curl::fuzzer::proto::SetOption::kStringValue) {
-      TrimMetadata(option.mutable_string_value());
-    }
-  }
 
   BoundHeaderValues(scenario->mutable_request_headers(), scenario_limits::kMaxRequestHeaders);
   BoundStringValues(scenario->mutable_telnet_options(), scenario_limits::kMaxTelnetOptions,
@@ -1293,14 +1294,12 @@ void CanonicalizeOptionalBackpressure(curl::fuzzer::proto::Connection* connectio
   backpressure->set_drain_limit(CanonicalizeNonZero(backpressure->drain_limit(), 1, kMaxDrainBytesPerIteration));
 }
 
-}  // namespace
-
 /// Canonicalize the fields that determine which server and drive-loop policy
 /// execute. Fast targets discard backpressure because one mutated non-zero
 /// scalar otherwise opts an ordinary input into hundreds of timed waits. The
 /// timing target does the inverse: it guarantees a non-default buffer setting
 /// so its CPU allocation remains focused on the intentionally slower paths.
-void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile) {
+void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile) {
   if (scenario == nullptr) {
     return;
   }
@@ -1678,6 +1677,36 @@ void ApplyTargetPolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile pr
         CanonicalizeOptionalBackpressure(&connection);
       }
       return;
+    }
+  }
+}
+
+}  // namespace
+
+/// Complete normalization for a loaded or mutated fixed-target Scenario.
+/// Besides dispatch and timing controls, fixed lanes trim repeated-field and
+/// metadata suffixes that the runtime cannot consume. WebSocket lanes also
+/// remove follow-on sockets and MIME bodies their single-upgrade driver cannot
+/// use; all remaining observable bytes, options, frames, and probes stay
+/// fuzz-controlled. Option oneofs are canonicalized before final string bounds,
+/// so repeated normalization preserves the same serialized message. The
+/// compatibility profile leaves the entire input unchanged.
+/// @param scenario Scenario to canonicalize in place.
+/// @param profile Target lane whose invariants must be restored.
+void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile) {
+  // Compatibility has no LPM postprocessor. Preserve the complete wire input,
+  // including mismatched option oneofs and newly added, otherwise inert fields.
+  if (scenario == nullptr || profile == TargetProfile::kCompatibility) {
+    return;
+  }
+
+  ApplyLanePolicy(scenario, profile);
+  CanonicalizeOptionValueCases(scenario);
+  // Canonicalization can materialize string values or prepend pin syntax.
+  // Charge the final representation so normalization remains a fixed point.
+  for (auto& option : *scenario->mutable_options()) {
+    if (option.value_case() == curl::fuzzer::proto::SetOption::kStringValue) {
+      TrimMetadata(option.mutable_string_value());
     }
   }
 }

@@ -13,7 +13,7 @@ RECURSIVE              = NO
 FILE_PATTERNS          = *.h *.cc
 
 # Preprocessing off: the doxygen preprocessor walks #include directives and
-# warns if it can't find the target. option_apply.cc pulls in a generated
+# warns if it can't find the target. option_model.cc pulls in a generated
 # .inc that only exists post-build, so preprocessing would fire "not found"
 # warnings during configure-only lint runs (e.g. CI). Doc extraction doesn't
 # need macro expansion — we're linting presence of doc comments, not types.

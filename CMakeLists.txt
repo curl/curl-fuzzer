@@ -1330,6 +1330,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/h2_cleartext_mock_server.cc
         proto_fuzzer/h2_plan.cc
         proto_fuzzer/option_apply.cc
+        proto_fuzzer/option_model.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/socks4_mock_server.cc
         proto_fuzzer/mock_server.cc
@@ -1789,12 +1790,16 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_executable(target_policy_test
             tests/target_policy_test.cc
             proto_fuzzer/target_policy.cc
+            proto_fuzzer/option_model.cc
             proto_fuzzer/telnet_scenario.cc
             ${GEN_PB_CC}
         )
         target_compile_features(target_policy_test PRIVATE cxx_std_17)
         target_compile_options(target_policy_test PRIVATE ${COMMON_FLAGS})
+        target_compile_definitions(target_policy_test PRIVATE
+            PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         target_include_directories(target_policy_test PRIVATE
+            ${CURL_INSTALL_DIR}/include
             ${CMAKE_BINARY_DIR}
             ${CMAKE_SOURCE_DIR}
             ${LPM_PB_INCLUDE}
@@ -1806,6 +1811,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         )
         target_link_options(target_policy_test PRIVATE ${COVERAGE_LINK_FLAGS})
         add_dependencies(target_policy_test
+            curl_fuzzer_proto_generated
             libprotobuf_mutator_external
             lpm_link_rsp
         )
@@ -1820,6 +1826,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         add_executable(request_data_test
             tests/request_data_test.cc
             proto_fuzzer/option_apply.cc
+            proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
             ${GEN_PB_CC}
         )
@@ -1884,6 +1891,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
             proto_fuzzer/option_apply.cc
+            proto_fuzzer/option_model.cc
             proto_fuzzer/ws_frame.cc
             ${GEN_PB_CC}
         )
@@ -1926,6 +1934,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/multi_socket_driver.cc
             proto_fuzzer/multi_transfer_runner.cc
             proto_fuzzer/option_apply.cc
+            proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
@@ -2000,6 +2009,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
                 proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
                 proto_fuzzer/ws_frame.cc
                 ${GEN_PB_CC}
             )
@@ -2049,6 +2059,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/multi_socket_driver.cc
             proto_fuzzer/multi_transfer_runner.cc
             proto_fuzzer/option_apply.cc
+            proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
             proto_fuzzer/ws_frame.cc
             ${GEN_PB_CC}
@@ -2090,6 +2101,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
                 proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
                 proto_fuzzer/request_data.cc
                 proto_fuzzer/ws_frame.cc
                 ${GEN_PB_CC}
@@ -2135,6 +2147,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
                 proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
                 proto_fuzzer/request_data.cc
                 proto_fuzzer/ws_frame.cc
                 ${GEN_PB_CC})
