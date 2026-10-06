@@ -15,10 +15,8 @@
 #include <cstddef>
 #include <memory>
 
-#include "proto_fuzzer/h2_plan.h"
+#include "proto_fuzzer/h2_runtime.h"
 #include "proto_fuzzer/tls_mock_server.h"
-
-struct curl_pushheaders;
 
 namespace proto_fuzzer {
 
@@ -82,18 +80,7 @@ class H2OriginMockServer final : public TlsMockServer {
   void HandleDetachedMulti(CurlMultiPtr multi) override;
 
  private:
-  static int PushCallback(CURL* parent, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
-                          void* userdata);
-  static std::size_t PushedWriteCallback(char* contents, std::size_t size, std::size_t nmemb, void* userdata);
-
-  std::size_t push_callback_count_;
-  std::size_t push_header_count_;
-  bool saw_push_path_;
-  bool accept_h2_push_;
-  std::size_t accepted_push_count_;
-  std::size_t pushed_body_bytes_;
-  CURLcode upkeep_result_;
-  H2PlanDriver plan_driver_;
+  H2Runtime runtime_;
   CurlMultiPtr retained_multi_;
 };
 

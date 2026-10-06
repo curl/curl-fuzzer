@@ -1329,6 +1329,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/ftp_mock_server.cc
         proto_fuzzer/h2_cleartext_mock_server.cc
         proto_fuzzer/h2_plan.cc
+        proto_fuzzer/h2_runtime.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/option_model.cc
         proto_fuzzer/request_data.cc
@@ -1888,6 +1889,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             tests/h2_cleartext_mock_server_test.cc
             proto_fuzzer/h2_cleartext_mock_server.cc
             proto_fuzzer/h2_plan.cc
+            proto_fuzzer/h2_runtime.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
@@ -1931,6 +1933,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/h2_plan.cc
+            proto_fuzzer/h2_runtime.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
@@ -2006,6 +2009,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             add_executable(h2_origin_mock_server_test
                 tests/h2_origin_mock_server_test.cc
                 proto_fuzzer/h2_plan.cc
+                proto_fuzzer/h2_runtime.cc
                 proto_fuzzer/h2_origin_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/mock_server.cc
