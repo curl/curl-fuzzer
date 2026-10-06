@@ -317,7 +317,8 @@ endif()
 #
 # renovate: datasource=github-tags depName=libidn/libidn2
 set(LIBIDN2_VERSION 2.3.8)
-set(LIBIDN2_URL https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
+set(LIBIDN2_URL https://mirrors.kernel.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
+                https://ftpmirror.gnu.org/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz
                 https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz)
 set(LIBIDN2_BUILD_NAME libidn2-${LIBIDN2_VERSION})
 set(LIBIDN2_INSTALL_DIR ${CMAKE_BINARY_DIR}/${LIBIDN2_BUILD_NAME}-install)
@@ -354,7 +355,8 @@ endif()
 
 # Install GDB if GDBMODE is set
 set(GDB_VERSION 13.2)
-set(GDB_URL https://ftpmirror.gnu.org/gdb/gdb-${GDB_VERSION}.tar.gz
+set(GDB_URL https://mirrors.kernel.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz
+            https://ftpmirror.gnu.org/gdb/gdb-${GDB_VERSION}.tar.gz
             https://ftp.gnu.org/gnu/gdb/gdb-${GDB_VERSION}.tar.gz)
 set(GDB_BUILD_NAME gdb-${GDB_VERSION})
 set(GDB_INSTALL_DIR ${CMAKE_BINARY_DIR}/${GDB_BUILD_NAME}-install)
