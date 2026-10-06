@@ -22,6 +22,7 @@
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/telnet_mock_server.h"
+#include "proto_fuzzer/transfer_session.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 #include "proto_fuzzer/ws_frame.h"
 
@@ -874,6 +875,73 @@ void TestH2ProxyCarriesAnHttpOriginResponse() {
 }
 #endif
 
+void TestTransferSessionRejectsUnsafeReconfiguration() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.add_request_headers("X-Session: retained");
+  proto_fuzzer::TransferSession transfer;
+  Expect(transfer.PrepareInputFiles(
+             scenario, proto_fuzzer::ScenarioRunMode::kDeepHttpCoverage),
+         "session rejected parser preparation before initialization");
+  Expect(transfer.Initialize(), "session could not allocate easy");
+  transfer.ApplyBaseline(scenario.scheme());
+  Expect(transfer.ResetConfiguration(),
+         "session rejected reset before installing callback owners");
+  transfer.ApplyBaseline(scenario.scheme());
+  Expect(!transfer.PrepareInputFiles(
+             scenario, proto_fuzzer::ScenarioRunMode::kDeepHttpCoverage),
+         "session allowed replacement of potentially retained file paths");
+  auto *request_data = transfer.InstallRequestData(scenario);
+  Expect(request_data != nullptr && request_data->stats().request_headers == 1,
+         "session did not retain request headers");
+  Expect(transfer.InstallRequestData(scenario) == nullptr,
+         "session allowed replacement of a published request owner");
+  Expect(!transfer.ResetConfiguration(),
+         "session allowed reset with retained callback owners");
+  transfer.Close();
+  Expect(transfer.easy() == nullptr, "closed session still owns an easy");
+  transfer.Close();
+}
+
+void TestTransferSessionCleansIncompleteSharedTransfers() {
+  for (const auto drive_mode : {curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM,
+                                curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET}) {
+    Scenario scenario;
+    scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    scenario.mutable_connection()->set_initial_response(
+        "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n");
+    auto *plan = scenario.mutable_api_plan();
+    plan->set_drive_mode(drive_mode);
+    plan->set_attach_share(true);
+    for (std::uint32_t selector = 0; selector < 9; ++selector) {
+      plan->add_share_data_selectors(selector);
+    }
+    TestMockServer server(proto_fuzzer::MultiDrivePolicy::kFromApiPlan);
+    server.SetKeepConnectionsOpen(true);
+    {
+      proto_fuzzer::TransferSession transfer;
+      Expect(transfer.Initialize(), "incomplete session could not allocate easy");
+      transfer.ApplyBaseline(scenario.scheme());
+      (void)curl_easy_setopt(transfer.easy(), CURLOPT_URL,
+                            "http://session.test/incomplete");
+      server.Install(transfer.easy());
+      auto *lifecycle = transfer.InstallApiLifecycle(
+          *plan, "http://session.test/incomplete");
+      Expect(lifecycle != nullptr, "session did not install API/share state");
+      server.SetMultiObserver([lifecycle](CURLM *multi) {
+        lifecycle->SetActiveMulti(multi);
+      });
+      server.ConfigureRequestData(transfer.InstallRequestData(scenario));
+      Expect(server.DriveScenario(transfer.easy(), scenario) == CURLE_FAILED_INIT,
+             "incomplete session unexpectedly produced a completion message");
+      Expect(server.opened_connection_count() == 1,
+             "incomplete session did not open its local peer");
+      // Destruction must detach request state, clean easy, then release share
+      // callback state even though the bounded driver stopped mid-transfer.
+    }
+  }
+}
+
 void TestApiLifecycleCompletesSocketActionTransfer() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
@@ -1375,6 +1443,8 @@ int main() {
 #endif
   TestH2ProxyCarriesAnHttpOriginResponse();
 #endif
+  TestTransferSessionRejectsUnsafeReconfiguration();
+  TestTransferSessionCleansIncompleteSharedTransfers();
   TestApiLifecycleCompletesSocketActionTransfer();
   TestEasyPerformPreloadsIncrementalResponse();
   TestEasyEventsPreloadsIncrementalResponse();

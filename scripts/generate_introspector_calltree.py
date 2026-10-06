@@ -21,6 +21,7 @@ SOURCE_PATHS = (
     "fuzzer_entrypoints/curl_fuzzer_proto_multi.cc",
     "proto_fuzzer/fuzzer_main.cc",
     "proto_fuzzer/scenario_runner.cc",
+    "proto_fuzzer/transfer_session.cc",
     "proto_fuzzer/multi_transfer_runner.cc",
 )
 

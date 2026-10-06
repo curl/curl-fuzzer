@@ -1337,6 +1337,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/mock_server_base.cc
         proto_fuzzer/multi_socket_driver.cc
         proto_fuzzer/multi_transfer_runner.cc
+        proto_fuzzer/transfer_session.cc
         proto_fuzzer/target_policy.cc
         proto_fuzzer/telnet_mock_server.cc
         proto_fuzzer/telnet_scenario.cc
@@ -1927,12 +1928,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # would otherwise look like ordinary curl transfer failures.
         set(MOCK_SERVER_TEST_SOURCES
             tests/mock_server_test.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
             proto_fuzzer/multi_transfer_runner.cc
+            proto_fuzzer/transfer_session.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
@@ -2054,10 +2057,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # only the plaintext socketpair peer.
         add_executable(multi_transfer_runner_test
             tests/multi_transfer_runner_test.cc
+            proto_fuzzer/api_lifecycle.cc
+            proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
             proto_fuzzer/multi_socket_driver.cc
             proto_fuzzer/multi_transfer_runner.cc
+            proto_fuzzer/transfer_session.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
