@@ -17,7 +17,6 @@
 #include <cstdlib>
 
 #include "curl_fuzzer.pb.h"
-#include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/scenario_runner.h"
 #include "proto_fuzzer/target_policy.h"
 
@@ -44,8 +43,7 @@ void EnsureTargetPostProcessor(proto_fuzzer::TargetProfile profile) {
   static const proto_fuzzer::TargetProfile registered_profile = profile;
   static const protobuf_mutator::libfuzzer::PostProcessorRegistration<curl::fuzzer::proto::Scenario>
       policy_registration([](curl::fuzzer::proto::Scenario* scenario, unsigned int /*seed*/) {
-        proto_fuzzer::ApplyTargetPolicy(scenario, registered_profile);
-        proto_fuzzer::CanonicalizeOptionValueCases(scenario);
+        proto_fuzzer::NormalizeScenarioForTarget(scenario, registered_profile);
       });
 
   // A second profile in one process would cause LPM's global registry to

@@ -21,29 +21,6 @@
 
 namespace proto_fuzzer {
 
-/// How a SetOption oneof should be decoded before calling curl_easy_setopt.
-enum class OptionValueKind {
-  kString,  ///< string_value → const char* option.
-  kUint,    ///< uint_value → long or curl_off_t option.
-  kBool     ///< bool_value → 0/1 long option.
-};
-
-/// One row in the build-time-generated option manifest: binds a proto enum
-/// value to the matching curl_easy_setopt option id and value kind.
-struct OptionDescriptor {
-  /// Proto enum identifier for this option.
-  curl::fuzzer::proto::CurlOptionId id;
-  /// How the oneof value should be decoded.
-  OptionValueKind kind;
-  /// Human-readable option name (e.g. "CURLOPT_URL") for diagnostics.
-  const char* name;
-  /// The native CURLoption to pass to curl_easy_setopt.
-  CURLoption curlopt;
-};
-
-// Pulls in kOptionManifest[] and its generated switch-based lookup.
-#include "curl_fuzzer_option_manifest.inc"
-
 namespace {
 
 constexpr char kEventDrivenProtocolsAllowed[] = "http,https,ws,wss";
@@ -57,21 +34,6 @@ constexpr char kAltSvcHttpEnvVar[] = "CURL_ALTSVC_HTTP";
 constexpr char kHstsHttpEnvVar[] = "CURL_HSTS_HTTP";
 constexpr long kConnectTimeoutMs = 200;
 constexpr long kTimeoutMs = 200;
-
-/// Test the same prefix curl uses to choose between an in-memory digest and a
-/// filename. Do not reject malformed base64 here: those values are useful TLS
-/// parser inputs and remain filesystem-safe as long as this prefix is intact.
-bool UsesInMemoryPublicKeyPin(const std::string& value) { return value.rfind("sha256//", 0) == 0; }
-
-/// Keep mutated pin values on curl's digest-comparison branch while retaining
-/// every mutation byte. Existing expressions, including correlated corpus
-/// seeds, must remain byte-for-byte stable.
-void ConstrainPinnedPublicKeyValue(std::string* value) {
-  if (value == nullptr || UsesInMemoryPublicKeyPin(*value)) {
-    return;
-  }
-  value->insert(0, "sha256//");
-}
 
 /// Baseline write callback for both CURLOPT_WRITEFUNCTION and
 /// CURLOPT_HEADERFUNCTION. Consumes every byte so transfers don't stall on
@@ -109,83 +71,7 @@ void EnableTraceIds() {
   (void)enabled;
 }
 
-/// Decode protobuf's two integral oneof members according to the semantic
-/// kind in the generated option descriptor. The schema cannot couple an
-/// option id to one particular oneof member, so both retained corpus entries
-/// and ordinary mutations can represent a flag as uint_value or a numeric
-/// mode as bool_value. Preserving magnitude for numeric options and reducing
-/// flags to truthiness keeps either representation useful without embedding
-/// option-specific history in the runtime. String or unset members map to the
-/// same zero default protobuf's inactive scalar accessors historically gave.
-std::uint64_t DecodeIntegralValue(const OptionDescriptor& descriptor, const curl::fuzzer::proto::SetOption& option) {
-  if (descriptor.kind == OptionValueKind::kString) {
-    return 0;
-  }
-  switch (option.value_case()) {
-    case curl::fuzzer::proto::SetOption::kBoolValue:
-      return option.bool_value() ? 1U : 0U;
-    case curl::fuzzer::proto::SetOption::kUintValue:
-      if (descriptor.kind == OptionValueKind::kBool) {
-        return option.uint_value() != 0 ? 1U : 0U;
-      }
-      return option.uint_value();
-    case curl::fuzzer::proto::SetOption::kStringValue:
-    case curl::fuzzer::proto::SetOption::VALUE_NOT_SET:
-      return 0;
-  }
-  return 0;
-}
-
 }  // namespace
-
-/// Decode a recognized integral option using its generated semantic kind.
-/// Unknown and string-valued options have no integral interpretation and
-/// therefore return zero.
-std::uint64_t DecodeIntegralOptionValue(const curl::fuzzer::proto::SetOption& option) {
-  const OptionDescriptor* descriptor = LookupOptionDescriptor(option.option_id());
-  if (descriptor == nullptr || descriptor->kind == OptionValueKind::kString) {
-    return 0;
-  }
-  return DecodeIntegralValue(*descriptor, option);
-}
-
-/// Make every supported option's expected oneof member explicit. Boolean and
-/// integer representations retain their scalar meaning when crossing between
-/// those families; string or unset mismatches become the destination family's
-/// zero value. This focuses later mutations on a value ApplySetOption consumes
-/// without requiring option-specific compatibility rules.
-void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario) {
-  if (scenario == nullptr) {
-    return;
-  }
-  for (auto& option : *scenario->mutable_options()) {
-    const OptionDescriptor* desc = LookupOptionDescriptor(option.option_id());
-    if (desc == nullptr) {
-      continue;
-    }
-
-    switch (desc->kind) {
-      case OptionValueKind::kString:
-        if (option.value_case() != curl::fuzzer::proto::SetOption::kStringValue) {
-          option.set_string_value("");
-        }
-        if (desc->curlopt == CURLOPT_PINNEDPUBLICKEY) {
-          ConstrainPinnedPublicKeyValue(option.mutable_string_value());
-        }
-        break;
-      case OptionValueKind::kUint:
-        if (option.value_case() != curl::fuzzer::proto::SetOption::kUintValue) {
-          option.set_uint_value(DecodeIntegralValue(*desc, option));
-        }
-        break;
-      case OptionValueKind::kBool:
-        if (option.value_case() != curl::fuzzer::proto::SetOption::kBoolValue) {
-          option.set_bool_value(DecodeIntegralValue(*desc, option) != 0);
-        }
-        break;
-    }
-  }
-}
 
 /// Apply the fixed baseline options the harness always wants: output sinks,
 /// protocol restrictions, DNS overrides, timeouts. Call before applying any
@@ -312,6 +198,7 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
   if (desc == nullptr) {
     return CURLE_UNKNOWN_OPTION;
   }
+  const CURLoption curlopt = static_cast<CURLoption>(desc->curlopt);
 
   switch (desc->kind) {
     case OptionValueKind::kString: {
@@ -336,27 +223,27 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
       if (desc->curlopt == CURLOPT_PINNEDPUBLICKEY && !UsesInMemoryPublicKeyPin(value)) {
         std::string constrained = value;
         ConstrainPinnedPublicKeyValue(&constrained);
-        return curl_easy_setopt(easy, desc->curlopt, constrained.c_str());
+        return curl_easy_setopt(easy, curlopt, constrained.c_str());
       }
 
-      return curl_easy_setopt(easy, desc->curlopt, value.c_str());
+      return curl_easy_setopt(easy, curlopt, value.c_str());
     }
 
     // Decode the uint_value and pass it as either a long or a curl_off_t depending on the option.
     case OptionValueKind::kUint: {
-      const std::uint64_t raw = DecodeIntegralValue(*desc, option);
+      const std::uint64_t raw = DecodeIntegralOptionValue(*desc, option);
       // CURLOPTTYPE_OFF_T options start at 30000. Everything below takes a
       // long; everything at/above takes a curl_off_t.
       if (static_cast<int>(desc->curlopt) >= 30000) {
-        return curl_easy_setopt(easy, desc->curlopt, static_cast<curl_off_t>(raw));
+        return curl_easy_setopt(easy, curlopt, static_cast<curl_off_t>(raw));
       }
-      return curl_easy_setopt(easy, desc->curlopt, static_cast<long>(raw));
+      return curl_easy_setopt(easy, curlopt, static_cast<long>(raw));
     }
 
     // Decode the bool_value and pass it as a long flag (0 or 1).
     case OptionValueKind::kBool: {
-      const long flag = static_cast<long>(DecodeIntegralValue(*desc, option));
-      return curl_easy_setopt(easy, desc->curlopt, flag);
+      const long flag = static_cast<long>(DecodeIntegralOptionValue(*desc, option));
+      return curl_easy_setopt(easy, curlopt, flag);
     }
   }
   return CURLE_UNKNOWN_OPTION;

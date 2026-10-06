@@ -17,26 +17,9 @@
 #include <cstdint>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/option_model.h"
 
 namespace proto_fuzzer {
-
-/// Decode a recognized boolean or integer option according to the generated
-/// descriptor. Integer options preserve uint values and map bools to 0/1;
-/// boolean options normalize either representation to 0/1. Unknown, string,
-/// unset, or otherwise non-integral values return zero.
-/// @param option Structured option whose descriptor and value will be read.
-/// @return Descriptor-aware integral value suitable for runtime decisions.
-std::uint64_t DecodeIntegralOptionValue(const curl::fuzzer::proto::SetOption& option);
-
-/// Restore each recognized SetOption's oneof to the value family its native
-/// CURLOPT expects. Boolean and integer arms are converted without losing
-/// their scalar meaning; incompatible arms become that family's default.
-/// Making the consumed member explicit lets later LPM mutations edit useful
-/// bytes instead of repeatedly changing fields ApplySetOption cannot observe.
-/// Unrecognized option ids are retained so mutation can still turn them into
-/// supported ids.
-/// @param scenario Structured input to canonicalize in place.
-void CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario* scenario);
 
 /// Apply deterministic routing, timeout, output, and persistence defaults.
 /// Returns a caller-owned CONNECT_TO list that must outlive the easy handle.
