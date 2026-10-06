@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: curl
  */
 
+#include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
@@ -16,9 +17,31 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace {
+
+using Scenario = curl::fuzzer::proto::Scenario;
+using ApiPlan = curl::fuzzer::proto::ApiPlan;
+using UploadScriptState = proto_fuzzer::UploadScriptState;
+using ScenarioRequestData = proto_fuzzer::ScenarioRequestData;
+using ApiLifecycle = proto_fuzzer::ApiLifecycle;
+
+// Borrowing APIs accept stable const lvalues, but must reject both kinds of
+// temporary and every supported constructor arity before any callback runs.
+static_assert(std::is_constructible_v<UploadScriptState, const Scenario&>);
+static_assert(!std::is_constructible_v<UploadScriptState, Scenario&&> &&
+              !std::is_constructible_v<UploadScriptState, const Scenario&&>);
+static_assert(std::is_constructible_v<ScenarioRequestData, CURL*, const Scenario&> &&
+              std::is_constructible_v<ScenarioRequestData, CURL*, const Scenario&, bool>);
+static_assert(!std::is_constructible_v<ScenarioRequestData, CURL*, Scenario&&> &&
+              !std::is_constructible_v<ScenarioRequestData, CURL*, const Scenario&&> &&
+              !std::is_constructible_v<ScenarioRequestData, CURL*, Scenario&&, bool> &&
+              !std::is_constructible_v<ScenarioRequestData, CURL*, const Scenario&&, bool>);
+static_assert(std::is_constructible_v<ApiLifecycle, CURL*, const ApiPlan&, std::string_view>);
+static_assert(!std::is_constructible_v<ApiLifecycle, CURL*, ApiPlan&&, std::string_view> &&
+              !std::is_constructible_v<ApiLifecycle, CURL*, const ApiPlan&&, std::string_view>);
 
 void Fail(const char *message) {
   std::cerr << message << '\n';
@@ -84,9 +107,9 @@ void TestConstructionBudgetsAndOwnership() {
            "per-part MIME header budget changed");
   }
 
-  // Destruction above detaches both pointer options before freeing them. Easy
-  // cleanup under ASan/UBSan therefore also regression-tests the ownership
-  // order without requiring a network transfer in this focused unit test.
+  // The nested MIME tree includes transferred child lists and bodies, so its
+  // destruction exercises their recursive ownership under the sanitizers.
+  // Handle-reuse tests separately verify that request pointers were detached.
   curl_easy_cleanup(easy);
 }
 
@@ -197,8 +220,8 @@ void TestTelnetOptionConstructionBudgetsAndOwnership() {
         proto_fuzzer::scenario_limits::kMaxTelnetOptionBytes + 17, 't'));
   }
   {
-    // libcurl has no CURLINFO getter for CURLOPT_TELNETOPTIONS, so sanitizers
-    // enforce the ownership contract while the cap is checked via stats.
+    // libcurl has no CURLINFO getter for CURLOPT_TELNETOPTIONS. Check the cap
+    // here; cleanup alone does not consume this caller-owned list.
     proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
     Expect(request_data.stats().telnet_options ==
                proto_fuzzer::scenario_limits::kMaxTelnetOptions,
@@ -214,8 +237,6 @@ void TestTelnetOptionConstructionBudgetsAndOwnership() {
            "non-TELNET scenario built a protocol-inert retained slist");
   }
 
-  // Destruction must detach CURLOPT_TELNETOPTIONS before freeing the slist;
-  // easy cleanup under ASan catches a dangling pointer regression.
   curl_easy_cleanup(easy);
 }
 
@@ -507,9 +528,8 @@ void TestSetOptionBorrowsBinaryPostFields() {
   Expect(proto_fuzzer::ApplySetOption(easy, unknown) == CURLE_UNKNOWN_OPTION,
          "unknown option unexpectedly resolved through the generated switch");
 
-  // The easy handle is deliberately destroyed while the protobuf owner still
-  // exists. Under ASan this protects the borrowing contract and, unlike the
-  // old vector-backed API, needs no parallel lifetime container.
+  // Keep the protobuf owner alive through easy cleanup, as required by the
+  // borrowing contract for CURLOPT_POSTFIELDS.
   curl_easy_cleanup(easy);
 }
 
@@ -605,8 +625,6 @@ void TestResolveEntriesAreExplicitBoundedPointerState() {
            "resolver runtime did not install its final loopback mapping");
   }
 
-  // ASan validates that destruction detached CURLOPT_RESOLVE before freeing
-  // both the fuzzed list and the final harness-owned loopback mapping.
   curl_easy_cleanup(easy);
 }
 

@@ -45,12 +45,21 @@ struct CurlSlistDeleter {
   void operator()(curl_slist* list) const noexcept { curl_slist_free_all(list); }
 };
 
+/// @brief Destroy a caller-owned MIME tree, including transferred children.
+struct CurlMimeDeleter {
+  /// Release a complete MIME tree through libcurl's matching cleanup API.
+  /// @param mime MIME root owned by the invoking smart pointer.
+  void operator()(curl_mime* mime) const noexcept { curl_mime_free(mime); }
+};
+
 /// Unique ownership of a CURL easy handle.
 using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
 /// Unique ownership of a CURL multi handle.
 using CurlMultiPtr = std::unique_ptr<CURLM, CurlMultiDeleter>;
 /// Unique ownership of a caller-owned curl_slist.
 using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
+/// Unique ownership of a caller-owned curl_mime tree.
+using CurlMimePtr = std::unique_ptr<curl_mime, CurlMimeDeleter>;
 
 }  // namespace proto_fuzzer
 
