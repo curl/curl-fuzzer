@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/scenario_limits.h"
 
 namespace proto_fuzzer {
@@ -45,6 +46,7 @@ class UploadScriptState {
 
   /// A temporary Scenario cannot satisfy the borrowed payload's lifetime.
   UploadScriptState(curl::fuzzer::proto::Scenario&& scenario) = delete;
+  UploadScriptState(const curl::fuzzer::proto::Scenario&& scenario) = delete;
 
   /// Copy the next bounded chunk and advance the cursor. Public so focused
   /// tests can validate callback semantics without relying on HTTP timing.
@@ -139,7 +141,10 @@ class ScenarioRequestData {
   ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool apply_resolve_entries = false);
 
   /// A temporary Scenario cannot outlive the upload view retained for curl.
-  ScenarioRequestData(CURL* easy, curl::fuzzer::proto::Scenario&& scenario) = delete;
+  ScenarioRequestData(CURL* easy, curl::fuzzer::proto::Scenario&& scenario,
+                      bool apply_resolve_entries = false) = delete;
+  ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario&& scenario,
+                      bool apply_resolve_entries = false) = delete;
 
   /// Detach pointer options/callbacks and release request allocations.
   ~ScenarioRequestData();
@@ -176,10 +181,10 @@ class ScenarioRequestData {
 
  private:
   CURL* easy_;
-  curl_slist* request_headers_;
-  curl_slist* resolve_entries_;
-  curl_slist* telnet_options_;
-  curl_mime* mime_post_;
+  CurlSlistPtr request_headers_;
+  CurlSlistPtr resolve_entries_;
+  CurlSlistPtr telnet_options_;
+  CurlMimePtr mime_post_;
   UploadScriptState upload_state_;
   bool upload_callbacks_installed_;
   bool resolve_entries_ready_;

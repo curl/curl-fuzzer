@@ -36,10 +36,16 @@ class ApiLifecycle {
   /// Configure the plan's share handle and cover public error-string tables.
   /// @param easy Live easy handle used by explicit probes; clean it before
   ///        destroying this lifecycle so its share reference is gone first.
-  /// @param plan Bounded API plan retained by the API target policy.
+  /// @param plan Bounded API plan retained by the API target policy; it must
+  ///        remain alive and unmodified for this lifecycle's complete lifetime.
   /// @param url Bounded scenario URL used by URL and escaping probes during
   ///        construction; it is not retained.
   ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan, std::string_view url);
+
+  /// A temporary plan cannot satisfy the retained reference's lifetime.
+  ApiLifecycle(CURL* easy, curl::fuzzer::proto::ApiPlan&& plan, std::string_view url) = delete;
+  ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan&& plan, std::string_view url) = delete;
+
   ~ApiLifecycle();
 
   ApiLifecycle(const ApiLifecycle&) = delete;

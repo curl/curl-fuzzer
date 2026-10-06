@@ -65,6 +65,71 @@ public:
   using proto_fuzzer::MockServer::MockServer;
 };
 
+/// Capture ordinary request bytes to verify retained options across reuse.
+class RequestCapturingConnection final : public proto_fuzzer::MockConnection {
+public:
+  explicit RequestCapturingConnection(std::string *request)
+      : request_(request) {}
+
+  std::size_t DrainIncoming() override {
+    const std::size_t previous_size = request_->size();
+    ReadAvailable(request_);
+    return request_->size() - previous_size;
+  }
+
+private:
+  std::string *request_;
+};
+
+/// Substitute the request-retaining connection without changing MockServer's
+/// response scripting or multi-perform behavior.
+class RequestCapturingServer final : public proto_fuzzer::MockServer {
+public:
+  ~RequestCapturingServer() override { ResetConnections(); }
+
+  const std::string &request() const { return request_; }
+
+protected:
+  std::unique_ptr<proto_fuzzer::MockConnection> CreateConnection() override {
+    return std::make_unique<RequestCapturingConnection>(&request_);
+  }
+
+private:
+  std::string request_;
+};
+
+void TestRequestHeadersDetachBeforeHandleReuse() {
+  Scenario original;
+  original.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  original.add_request_headers("X-Previous-Request: stale");
+
+  proto_fuzzer::CurlSlistPtr connect_to;
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr, "handle-reuse test could not allocate easy");
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://reuse.test/fresh");
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy.get(), original);
+    Expect(request_data.stats().request_headers == 1,
+           "handle-reuse test did not install its original header");
+  }
+
+  Scenario fresh;
+  fresh.mutable_connection()->add_on_readable(
+      "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
+  RequestCapturingServer server;
+  server.Install(easy.get());
+  Expect(server.DriveScenario(easy.get(), fresh) == CURLE_OK,
+         "reused easy did not complete its fresh request");
+  Expect(server.request().find("GET /fresh ") != std::string::npos,
+         "handle-reuse test did not capture the fresh request");
+  Expect(server.request().find("X-Previous-Request:") == std::string::npos,
+         "destroyed request-data owner left its headers on the easy handle");
+  // OPENSOCKET userdata also borrows the peer, so clean easy while it is live.
+  easy.reset();
+}
+
 void TestStreamSocketDispositionIsExplicit() {
   TestMockServer server;
   Expect(
@@ -389,38 +454,6 @@ void AddStringOption(Scenario *scenario,
 /// making room for curl's next write. This test-only transport still uses the
 /// same socketpair and drive loop as the fuzzer.
 #ifdef CURL_FUZZER_HAS_HTTPSIG
-class RequestCapturingConnection final : public proto_fuzzer::MockConnection {
-public:
-  explicit RequestCapturingConnection(std::string *request)
-      : request_(request) {}
-
-  std::size_t DrainIncoming() override {
-    const std::size_t previous_size = request_->size();
-    ReadAvailable(request_);
-    return request_->size() - previous_size;
-  }
-
-private:
-  std::string *request_;
-};
-
-/// Substitute the request-retaining connection without changing MockServer's
-/// response scripting or multi-perform behavior.
-class RequestCapturingServer final : public proto_fuzzer::MockServer {
-public:
-  ~RequestCapturingServer() override { ResetConnections(); }
-
-  const std::string &request() const { return request_; }
-
-protected:
-  std::unique_ptr<proto_fuzzer::MockConnection> CreateConnection() override {
-    return std::make_unique<RequestCapturingConnection>(&request_);
-  }
-
-private:
-  std::string request_;
-};
-
 /// Drive one signing algorithm through the same generated SetOption manifest,
 /// request-header owner, and in-process HTTP peer used by deep fuzz inputs.
 std::string CaptureHttpsigRequest(std::uint64_t algorithm,
@@ -1317,6 +1350,7 @@ void TestTelnetMaximumAmplificationCannotBlock() {
 
 int main() {
   TestStreamSocketDispositionIsExplicit();
+  TestRequestHeadersDetachBeforeHandleReuse();
   TestFollowOnScriptsAndOldConnectionLifetime();
   TestConnectionBudgetIncludesPrimarySocket();
   TestRawChunksPrecedeFramesWithinSharedBudget();

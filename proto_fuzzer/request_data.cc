@@ -87,18 +87,21 @@ const char* MimeEncoderName(curl::fuzzer::proto::MimeEncoder encoder) {
 /// after a successful append and stop rather than burning the rest of the
 /// iteration on allocations that are already failing.
 template <typename RepeatedBytes>
-curl_slist* BuildStringList(const RepeatedBytes& values, std::size_t count_limit, std::size_t value_limit,
-                            std::size_t* applied) {
-  curl_slist* list = nullptr;
+CurlSlistPtr BuildStringList(const RepeatedBytes& values, std::size_t count_limit, std::size_t value_limit,
+                             std::size_t* applied) {
+  CurlSlistPtr list;
   std::string truncated;
   const std::size_t count = std::min<std::size_t>(count_limit, values.size());
   for (std::size_t i = 0; i < count; ++i) {
     const std::string& value = values.Get(static_cast<int>(i));
-    curl_slist* appended = curl_slist_append(list, BoundedCString(value, value_limit, &truncated));
+    curl_slist* appended = curl_slist_append(list.get(), BoundedCString(value, value_limit, &truncated));
     if (appended == nullptr) {
       break;
     }
-    list = appended;
+    // append retains the existing nodes and may return the same head. Release
+    // before resetting so adopting the successful result cannot free them.
+    (void)list.release();
+    list.reset(appended);
     ++*applied;
   }
   return list;
@@ -126,17 +129,16 @@ void ApplyPartMetadata(curl_mimepart* part, const ProtoPart& source, RequestBuil
   }
 
   std::size_t header_count = 0;
-  curl_slist* headers = BuildStringList(source.headers(), scenario_limits::kMaxMimeHeadersPerPart,
-                                        scenario_limits::kMaxMetadataBytes, &header_count);
+  CurlSlistPtr headers = BuildStringList(source.headers(), scenario_limits::kMaxMimeHeadersPerPart,
+                                         scenario_limits::kMaxMetadataBytes, &header_count);
   if (headers != nullptr) {
     // take_ownership=1 is crucial: unlike the strings above, MIME retains the
     // list pointer. Once attached, the root curl_mime_free call recursively
     // releases it, including lists on nested parts.
-    const CURLcode result = curl_mime_headers(part, headers, 1);
+    const CURLcode result = curl_mime_headers(part, headers.get(), 1);
     if (result == CURLE_OK) {
+      (void)headers.release();
       stats->mime_headers += header_count;
-    } else {
-      curl_slist_free_all(headers);
     }
   }
 }
@@ -206,8 +208,8 @@ void PopulateSubparts(curl_mime* mime, const curl::fuzzer::proto::MimeSubparts& 
 /// Construct the top MIME tree. curl_mime_subparts transfers ownership only
 /// on success, so failed attachments are freed immediately while successful
 /// ones are left for the top-level root to release recursively.
-curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source, RequestBuildStats* stats) {
-  curl_mime* mime = curl_mime_init(easy);
+CurlMimePtr BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source, RequestBuildStats* stats) {
+  CurlMimePtr mime(curl_mime_init(easy));
   if (mime == nullptr) {
     return nullptr;
   }
@@ -216,7 +218,7 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
   std::size_t remaining_generated_bytes = scenario_limits::kMaxGeneratedMimeDataBytes;
   const std::size_t count = std::min<std::size_t>(scenario_limits::kMaxTopLevelMimeParts, source.parts_size());
   for (std::size_t i = 0; i < count && remaining_parts != 0; ++i) {
-    curl_mimepart* part = curl_mime_addpart(mime);
+    curl_mimepart* part = curl_mime_addpart(mime.get());
     if (part == nullptr) {
       break;
     }
@@ -233,13 +235,13 @@ curl_mime* BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source
         ApplyGeneratedPartData(part, proto_part.generated_data(), &remaining_generated_bytes, stats);
         break;
       case curl::fuzzer::proto::MimePart::kSubparts: {
-        curl_mime* subparts = curl_mime_init(easy);
+        CurlMimePtr subparts(curl_mime_init(easy));
         if (subparts == nullptr) {
           break;
         }
-        PopulateSubparts(subparts, proto_part.subparts(), &remaining_parts, &remaining_generated_bytes, stats);
-        if (curl_mime_subparts(part, subparts) != CURLE_OK) {
-          curl_mime_free(subparts);
+        PopulateSubparts(subparts.get(), proto_part.subparts(), &remaining_parts, &remaining_generated_bytes, stats);
+        if (curl_mime_subparts(part, subparts.get()) == CURLE_OK) {
+          (void)subparts.release();
         }
         break;
       }
@@ -440,17 +442,40 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     return;
   }
 
+  // Complete all allocating work before installing retained pointers. If a
+  // C++ allocation throws, scoped owners unwind without leaving the easy
+  // handle pointing into a partially constructed request-data object.
+  bool resolve_entries_built = false;
   if (apply_resolve_entries) {
     resolve_entries_ = BuildStringList(scenario.resolve_entries(), scenario_limits::kMaxResolveEntries,
                                        scenario_limits::kMaxResolveEntryBytes, &stats_.resolve_entries);
     // This mapping is deliberately last: preceding wildcard or removal
     // mutations may exercise host-cache parsing, but cannot redirect the
     // canonical resolver-lane origin away from the in-process mock.
-    curl_slist* appended = curl_slist_append(resolve_entries_, "resolve.test:80:127.0.0.1");
+    curl_slist* appended = curl_slist_append(resolve_entries_.get(), "resolve.test:80:127.0.0.1");
     if (appended != nullptr) {
-      resolve_entries_ = appended;
-      resolve_entries_ready_ = curl_easy_setopt(easy_, CURLOPT_RESOLVE, resolve_entries_) == CURLE_OK;
+      (void)resolve_entries_.release();
+      resolve_entries_.reset(appended);
+      resolve_entries_built = true;
     }
+  }
+
+  // HTTP headers/MIME and TELNET options are mutually exclusive because only
+  // the selected protocol can observe them. Avoid allocating protocol-inert
+  // lists and trees in compatibility inputs that bypass target policy.
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET) {
+    telnet_options_ = BuildStringList(scenario.telnet_options(), scenario_limits::kMaxTelnetOptions,
+                                      scenario_limits::kMaxTelnetOptionBytes, &stats_.telnet_options);
+  } else {
+    request_headers_ = BuildStringList(scenario.request_headers(), scenario_limits::kMaxRequestHeaders,
+                                       scenario_limits::kMaxMetadataBytes, &stats_.request_headers);
+    if (scenario.has_mime_post()) {
+      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &stats_);
+    }
+  }
+
+  if (resolve_entries_built) {
+    resolve_entries_ready_ = curl_easy_setopt(easy_, CURLOPT_RESOLVE, resolve_entries_.get()) == CURLE_OK;
   }
 
   if (NeedsUploadCallbacks(scenario)) {
@@ -466,28 +491,14 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     (void)curl_easy_setopt(easy_, CURLOPT_SEEKDATA, &upload_state_);
   }
 
-  // HTTP headers/MIME and TELNET options are mutually exclusive because only
-  // the selected protocol can observe them. Avoid allocating protocol-inert
-  // lists and trees in compatibility inputs that bypass target policy.
-  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_TELNET) {
-    telnet_options_ = BuildStringList(scenario.telnet_options(), scenario_limits::kMaxTelnetOptions,
-                                      scenario_limits::kMaxTelnetOptionBytes, &stats_.telnet_options);
-    if (telnet_options_ != nullptr) {
-      (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, telnet_options_);
-    }
-  } else {
-    request_headers_ = BuildStringList(scenario.request_headers(), scenario_limits::kMaxRequestHeaders,
-                                       scenario_limits::kMaxMetadataBytes, &stats_.request_headers);
-    if (request_headers_ != nullptr) {
-      (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, request_headers_);
-    }
-
-    if (scenario.has_mime_post()) {
-      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &stats_);
-      if (mime_post_ != nullptr) {
-        (void)curl_easy_setopt(easy_, CURLOPT_MIMEPOST, mime_post_);
-      }
-    }
+  if (telnet_options_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, telnet_options_.get());
+  }
+  if (request_headers_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, request_headers_.get());
+  }
+  if (mime_post_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_MIMEPOST, mime_post_.get());
   }
 }
 
@@ -519,10 +530,6 @@ ScenarioRequestData::~ScenarioRequestData() {
       (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, nullptr);
     }
   }
-  curl_mime_free(mime_post_);
-  curl_slist_free_all(telnet_options_);
-  curl_slist_free_all(resolve_entries_);
-  curl_slist_free_all(request_headers_);
 }
 
 /// Expose cap-aware counts without exposing or transferring the owned curl
