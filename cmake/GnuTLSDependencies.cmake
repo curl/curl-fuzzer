@@ -55,6 +55,7 @@ if(NOT EXISTS ${GNUTLS_GMP_INSTALL_STAMP} OR
    NOT EXISTS ${GNUTLS_GMP_STATIC_LIB})
     ExternalProject_Add(gnutls_gmp_external
         URL
+            https://mirrors.kernel.org/gnu/gmp/gmp-${GNUTLS_GMP_VERSION}.tar.xz
             https://ftp.gnu.org/gnu/gmp/gmp-${GNUTLS_GMP_VERSION}.tar.xz
             https://ftpmirror.gnu.org/gmp/gmp-${GNUTLS_GMP_VERSION}.tar.xz
         PREFIX
@@ -123,6 +124,7 @@ if(NOT EXISTS ${GNUTLS_NETTLE_INSTALL_STAMP} OR
    NOT EXISTS ${GNUTLS_HOGWEED_STATIC_LIB})
     ExternalProject_Add(gnutls_nettle_external
         URL
+            https://mirrors.kernel.org/gnu/nettle/nettle-${GNUTLS_NETTLE_VERSION}.tar.gz
             https://ftp.gnu.org/gnu/nettle/nettle-${GNUTLS_NETTLE_VERSION}.tar.gz
             https://ftpmirror.gnu.org/nettle/nettle-${GNUTLS_NETTLE_VERSION}.tar.gz
         PREFIX
