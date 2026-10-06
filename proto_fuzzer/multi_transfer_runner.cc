@@ -25,18 +25,15 @@
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
+#include "proto_fuzzer/transfer_session.h"
 
 namespace proto_fuzzer {
 
 namespace {
 
-/// One easy handle and every caller-owned pointer installed on it. Declaration
-/// order makes reverse destruction detach request data, clean the easy, then
-/// release CONNECT_TO storage if an early return bypasses explicit teardown.
+/// Track shared-multi membership separately from each transfer's resources.
 struct TransferState {
-  CurlSlistPtr connect_to;
-  CurlEasyPtr easy;
-  std::unique_ptr<ScenarioRequestData> request_data;
+  TransferSession session;
   bool attached = false;
 };
 
@@ -75,7 +72,7 @@ bool DrainCompletionMessages(CURLM* multi, std::array<TransferState, scenario_li
     }
     for (std::size_t index = 0; index < transfer_count; ++index) {
       TransferState& transfer = (*transfers)[index];
-      if (transfer.easy.get() == message->easy_handle) {
+      if (transfer.session.easy() == message->easy_handle) {
         ++stats->completion_messages;
         break;
       }
@@ -94,7 +91,7 @@ bool ApplyAction(const curl::fuzzer::proto::MultiAction& action, CURLM* multi,
     return false;
   }
   TransferState& transfer = (*transfers)[static_cast<std::size_t>(action.transfer_selector()) % transfer_count];
-  CURL* easy = transfer.easy.get();
+  CURL* easy = transfer.session.easy();
   if (easy == nullptr) {
     return false;
   }
@@ -224,18 +221,15 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
   const std::string url = "http://" + scenario.host_path();
   for (std::size_t index = 0; index < transfer_count; ++index) {
     TransferState& transfer = transfers[index];
-    transfer.easy.reset(curl_easy_init());
-    if (!transfer.easy) {
+    if (!transfer.session.Initialize()) {
       continue;
     }
-    transfer.connect_to.reset(
-        ApplyBaselineOptions(transfer.easy.get(), curl::fuzzer::proto::SCHEME_HTTP, scenario.trace_ids()));
-    (void)curl_easy_setopt(transfer.easy.get(), CURLOPT_URL, url.c_str());
-    mock.Install(transfer.easy.get());
-    (void)ApplyScenarioOptions(transfer.easy.get(), scenario);
-    transfer.request_data = std::make_unique<ScenarioRequestData>(transfer.easy.get(), scenario);
-    mock.ConfigureRequestData(transfer.request_data.get());
-    if (curl_multi_add_handle(multi.get(), transfer.easy.get()) == CURLM_OK) {
+    transfer.session.ApplyBaseline(curl::fuzzer::proto::SCHEME_HTTP, scenario.trace_ids());
+    (void)curl_easy_setopt(transfer.session.easy(), CURLOPT_URL, url.c_str());
+    mock.Install(transfer.session.easy());
+    (void)ApplyScenarioOptions(transfer.session.easy(), scenario);
+    mock.ConfigureRequestData(transfer.session.InstallRequestData(scenario));
+    if (curl_multi_add_handle(multi.get(), transfer.session.easy()) == CURLM_OK) {
       transfer.attached = true;
       ++stats.added_handles;
     }
@@ -309,12 +303,12 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
   stats.opened_connections = mock.opened_connection_count();
   for (std::size_t index = 0; index < transfer_count; ++index) {
     TransferState& transfer = transfers[index];
-    if (!transfer.easy) {
+    if (transfer.session.easy() == nullptr) {
       continue;
     }
-    (void)curl_easy_pause(transfer.easy.get(), CURLPAUSE_CONT);
+    (void)curl_easy_pause(transfer.session.easy(), CURLPAUSE_CONT);
     if (transfer.attached) {
-      (void)curl_multi_remove_handle(multi.get(), transfer.easy.get());
+      (void)curl_multi_remove_handle(multi.get(), transfer.session.easy());
       transfer.attached = false;
     }
   }
@@ -323,9 +317,7 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
   // live, then detach request-data pointers before cleaning each easy handle.
   multi.reset();
   for (std::size_t index = 0; index < transfer_count; ++index) {
-    transfers[index].request_data.reset();
-    transfers[index].easy.reset();
-    transfers[index].connect_to.reset();
+    transfers[index].session.Close();
   }
   return stats;
 }
