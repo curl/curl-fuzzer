@@ -15,10 +15,8 @@
 #include <cstddef>
 #include <memory>
 
-#include "proto_fuzzer/h2_plan.h"
+#include "proto_fuzzer/h2_runtime.h"
 #include "proto_fuzzer/mock_server.h"
-
-struct curl_pushheaders;
 
 namespace proto_fuzzer {
 
@@ -38,17 +36,25 @@ class H2CleartextMockServer final : public MockServer {
   /// @return number of syntactically valid pushes offered to the callback.
   std::size_t push_callback_count() const;
 
+  std::size_t push_header_count() const;
+
+  bool saw_push_path() const;
+
   /// @return number of pushed transfers accepted by the bounded callback.
   std::size_t accepted_push_count() const;
 
   /// @return number of accepted pushed handles explicitly cleaned up.
   std::size_t cleaned_push_count() const;
 
+  std::size_t pushed_body_bytes() const;
+
   /// @return result of the bounded post-transfer curl_easy_upkeep call.
   CURLcode upkeep_result() const;
 
   /// @return number of client request streams observed by a structured plan.
   std::size_t observed_request_count() const;
+
+  std::size_t observed_client_settings_count() const;
 
  protected:
   /// Attach the reusable H2 client-frame tracker to the plaintext connection.
@@ -66,16 +72,7 @@ class H2CleartextMockServer final : public MockServer {
   void HandleDetachedMulti(CurlMultiPtr multi) override;
 
  private:
-  static int PushCallback(CURL* parent, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
-                          void* userdata);
-  static std::size_t PushedWriteCallback(char* contents, std::size_t size, std::size_t nmemb, void* userdata);
-
-  std::size_t push_callback_count_;
-  bool accept_h2_push_;
-  std::size_t accepted_push_count_;
-  std::size_t pushed_body_bytes_;
-  CURLcode upkeep_result_;
-  H2PlanDriver plan_driver_;
+  H2Runtime runtime_;
   CurlMultiPtr retained_multi_;
 };
 
