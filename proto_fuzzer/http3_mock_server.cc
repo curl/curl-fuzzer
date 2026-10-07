@@ -1543,13 +1543,19 @@ class Http3MockServerImpl {
   bool close_sent_ = false;
 };
 
+/// Construct a peer with the default checked-in EC certificate.
 Http3MockServer::Http3MockServer() : Http3MockServer(curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC) {}
 
+/// Construct a peer with a bounded, parseable certificate-chain profile.
+/// @param certificate_chain Certificate material presented during QUIC TLS.
 Http3MockServer::Http3MockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
     : MockServerBase(MultiDrivePolicy::kSocketAction), impl_(new Http3MockServerImpl(certificate_chain)) {}
 
 Http3MockServer::~Http3MockServer() = default;
 
+/// Install UDP socket callbacks, the local trust anchor, and HTTP/3-only
+/// negotiation on an easy handle.
+/// @param easy Easy handle that will connect to the in-process QUIC peer.
 void Http3MockServer::Install(CURL* easy) {
   // Curl trusts the checked-in server certificate directly and must use HTTP/3
   // rather than silently falling back to an HTTP/1 or HTTP/2 code path.
@@ -1562,25 +1568,44 @@ void Http3MockServer::Install(CURL* easy) {
   (void)curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_3ONLY);
 }
 
+/// @return true after the server has completed a QUIC TLS handshake.
 bool Http3MockServer::handshake_complete() const { return impl_ != nullptr && impl_->handshake_complete(); }
 
+/// @return true after nghttp3 has decoded a complete request field section.
 bool Http3MockServer::request_headers_received() const { return impl_ != nullptr && impl_->request_headers_received(); }
 
+/// @return number of ordered Http3Action entries accepted by the peer.
 std::size_t Http3MockServer::executed_action_count() const {
   return impl_ == nullptr ? 0 : impl_->executed_action_count();
 }
 
+/// @return kernel-selected UDP port in host byte order, or zero before use.
 std::uint16_t Http3MockServer::server_port() const { return impl_ == nullptr ? 0 : impl_->server_port(); }
 
+/// Create curl's real UDP descriptor and rewrite its destination to the
+/// private loopback QUIC listener.
+/// @param purpose Socket purpose supplied by curl's open-socket callback.
+/// @param address Mutable destination description supplied by curl.
+/// @return client UDP descriptor, or CURL_SOCKET_BAD on setup failure.
 curl_socket_t Http3MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
   return impl_ == nullptr ? CURL_SOCKET_BAD : impl_->OpenSocket(purpose, address);
 }
 
+/// HTTP/3 returns an unconnected UDP descriptor, so curl must perform its
+/// normal socket setup before using the rewritten loopback destination.
+/// @param curlfd Descriptor returned by HandleOpenSocket.
+/// @param purpose Role curl assigned to the descriptor.
+/// @return Whether curl must perform its normal socket setup.
 SocketSetupDisposition Http3MockServer::GetSocketSetupDisposition(curl_socket_t /*curlfd*/,
                                                                   curlsocktype /*purpose*/) const {
   return SocketSetupDisposition::kNeedsSetup;
 }
 
+/// Alternate nonblocking curl and QUIC server turns under fixed operation
+/// and idle budgets.
+/// @param multi Multi handle containing the scenario's easy handle.
+/// @param easy Easy handle being driven; all work is reached through multi.
+/// @param scenario Scenario whose Http3Plan supplies ordered plaintext work.
 void Http3MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   (void)easy;
   if (impl_ == nullptr) {

@@ -1,6 +1,5 @@
 # Existing function descriptions on out-of-line header declarations.
 # Keep this exact: move descriptions to definitions and remove their entries.
-proto_fuzzer/connect_udp_proxy_mock_server.h:proto_fuzzer::ConnectUdpProxyMockServer::Install(CURL *easy) override
 proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ApplyScriptBackpressure(MockConnection *connection, const curl::fuzzer::proto::Connection &script)
 proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::CapturePrefix(std::string_view source, std::size_t limit, std::string *destination)
 proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::CloseActiveDescriptors()
@@ -33,21 +32,6 @@ proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::control_transcript()
 proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::opened_data_connection_count() const
 proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::uploaded_data() const
 proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::~FtpMockServer() override
-proto_fuzzer/h2_proxy_mock_server.h:proto_fuzzer::H2ProxyMockServer::Install(CURL *easy) override
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr *address) override
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::Http3MockServer()
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::Http3MockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::Install(CURL *easy) override
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::executed_action_count() const
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::handshake_complete() const
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::request_headers_received() const
-proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::server_port() const
-proto_fuzzer/socks4_mock_server.h:proto_fuzzer::Socks4MockServer::Install(CURL *easy) override
-proto_fuzzer/socks4_mock_server.h:proto_fuzzer::Socks4MockServer::Socks4MockServer(curl::fuzzer::proto::SocksProxyMode mode)
-proto_fuzzer/telnet_mock_server.h:proto_fuzzer::TelnetMockServer::ConfigureRequestData(ScenarioRequestData *request_data) override
-proto_fuzzer/telnet_mock_server.h:proto_fuzzer::TelnetMockServer::DrainBeforeUploadRead(void *userdata)
 proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::ConfigureSocket(int fd)
 proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::DrainClientDatagrams()
 proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::DrainSocket(int fd, TftpSocketRole role)
@@ -63,23 +47,3 @@ proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::SendNextDatagram()
 proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::received_datagrams() const
 proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::request_port() const
 proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::transfer_port() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::CreateConnection() override
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::Install(CURL *easy) override
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ObserveActiveTransfer(CURL *easy) override
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain=curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC)
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::completed_handshake_count() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ech_inner_name() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ech_outer_name() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ech_status() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::exported_session_count() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::imported_session_count() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::negotiated_alpn() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::negotiated_tls_version() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::reused_session_count() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::saw_live_tls_session() const
-proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::write_retry_count() const
-proto_fuzzer/websocket_mock_server.h:proto_fuzzer::ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario &scenario)
-proto_fuzzer/websocket_mock_server.h:proto_fuzzer::WebSocketMockServer::DeliverNextChunk()
-proto_fuzzer/websocket_mock_server.h:proto_fuzzer::WebSocketMockServer::Install(CURL *easy) override
-proto_fuzzer/websocket_mock_server.h:proto_fuzzer::WebSocketMockServer::ws_probe_fired() const

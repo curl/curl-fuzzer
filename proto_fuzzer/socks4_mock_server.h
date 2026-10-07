@@ -20,16 +20,12 @@ namespace proto_fuzzer {
 /// MockServer's socketpair, so neither proxy nor origin can reach the network.
 class Socks4MockServer final : public MockServer {
  public:
-  /// Select local (SOCKS4) or proxy-side (SOCKS4A) name resolution.
-  /// @param mode Proxy protocol and hostname-resolution mode to install.
   explicit Socks4MockServer(curl::fuzzer::proto::SocksProxyMode mode);
   ~Socks4MockServer() override = default;
 
   Socks4MockServer(const Socks4MockServer&) = delete;
   Socks4MockServer& operator=(const Socks4MockServer&) = delete;
 
-  /// Install common socket callbacks and the fixed SOCKS proxy policy.
-  /// @param easy Easy handle to configure.
   void Install(CURL* easy) override;
 
  private:
