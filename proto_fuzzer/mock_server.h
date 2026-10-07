@@ -38,46 +38,19 @@ class MockConnection {
   curl_socket_t take_client_fd();
   int server_fd() const;
 
-  /// Return the capacity curl's endpoint reports for queued client writes.
-  /// Protocol mocks use this before transferring fd ownership when their
-  /// synchronous send path cannot rely on the outer driver to make room.
-  /// @return SO_SNDBUF in bytes, or zero when it cannot be queried.
   std::size_t client_send_buffer_size() const;
 
-  /// Ensure curl's endpoint reports at least `minimum` bytes of send buffer,
-  /// requesting a larger SO_SNDBUF when the platform default is smaller.
-  /// @param minimum Smallest acceptable reported capacity in bytes.
-  /// @return true when the queried postcondition holds.
   bool EnsureClientSendBufferSize(std::size_t minimum);
 
   virtual bool WriteAll(const unsigned char* data, std::size_t size);
-  /// Advance incoming transport work according to the configured per-call
-  /// limit. Plaintext connections report bytes consumed; layered transports
-  /// may also report handshake state changes so the bounded outer loop does
-  /// not mistake useful protocol progress for an idle connection.
-  /// @return amount of transport progress made during this call.
   virtual std::size_t DrainIncoming();
-  /// Register a non-owning sink for bytes consumed from curl. TLS transports
-  /// notify it after decryption, while plaintext transports report socket
-  /// bytes directly. The observer must outlive this connection.
-  /// @param observer Observer to notify, or nullptr to disable observation.
   void SetIncomingDataObserver(IncomingDataObserver* observer);
   void ReadAvailable(std::string* out);
   virtual void ShutdownWrite();
 
-  /// Apply deterministic backpressure knobs. Set SO_RCVBUF on the server
-  /// side (if recv_buf_bytes > 0) to cap how much curl can write before it
-  /// short-writes / EAGAINs, and cap DrainIncoming()'s per-call byte budget
-  /// (0 = unlimited). Must be called before any traffic for the recv_buf
-  /// setting to matter.
-  /// @param recv_buf_bytes SO_RCVBUF size in bytes, or 0 to leave default.
-  /// @param drain_limit    Max bytes drained per DrainIncoming call, 0 for unlimited.
   void ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit);
 
  protected:
-  /// Forward one application-data fragment to the optional observer.
-  /// @param data First byte of the fragment.
-  /// @param size Number of bytes available at `data`.
   void NotifyIncomingData(const unsigned char* data, std::size_t size);
 
  private:
@@ -94,62 +67,29 @@ class MockConnection {
 ///        graph. WebSocketMockServer keeps its separate single-socket model.
 class MockServer : public MockServerBase {
  public:
-  /// @param drive_policy Multi interface loop selected for this server.
   explicit MockServer(MultiDrivePolicy drive_policy = MultiDrivePolicy::kPerform);
   ~MockServer() override;
 
-  /// Borrow the primary and bounded follow-on HTTP scripts from `scenario`.
-  /// The caller must keep the scenario alive and unmodified until the current
-  /// synchronous drive has finished. RunScenario already provides exactly
-  /// that lifetime, so retaining pointers avoids copying response bytes before
-  /// curl has even requested the corresponding socket or chunk.
   void SetScripts(const curl::fuzzer::proto::Scenario& scenario);
 
-  /// Keep completed response sockets writable instead of half-closing them.
-  /// The multi-transfer lane uses this to let a queued easy handle reuse an
-  /// HTTP/1.1 connection; ordinary protocol drives retain close-on-completion.
-  /// @param keep_open Whether the peer should suppress its response-side FIN.
   void SetKeepConnectionsOpen(bool keep_open);
 
-  /// Preload the bounded HTTP response, half-close the peer, and invoke
-  /// curl_easy_perform. This avoids a helper thread while guaranteeing that
-  /// curl never waits for the outer chunk-delivery loop.
   void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false) override;
 
-  /// Exercise direct send/receive APIs after a bounded CONNECT_ONLY setup.
   ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
-  /// Deliver one queued response chunk.
-  /// @return true when a chunk was consumed from the script.
   bool DeliverNextChunk();
   bool has_more_chunks() const;
 
-  /// Service one deterministic application event-loop turn by draining all
-  /// request bytes currently available and releasing at most one response
-  /// chunk. Exposed for the shared-multi driver, which owns the outer loop.
-  /// @return true when any request or response byte advanced.
   bool ServiceConnections();
 
-  /// Report how many peer sockets curl opened during the current script run.
-  /// @return Number of response scripts assigned to live or retired sockets.
   std::size_t opened_connection_count() const;
 
  protected:
-  /// Construct the transport used for one HTTP exchange. HTTPS overrides this
-  /// factory with a TLS record layer while retaining the same bounded response
-  /// scripting and redirect lifetimes as plaintext HTTP.
-  /// @return a new connection, whose ok() result is checked before use.
   virtual std::unique_ptr<MockConnection> CreateConnection();
 
-  /// Release every current and retired connection before resetting transport-
-  /// specific state. Derived servers call this from their destructors when
-  /// connection objects borrow state owned by the derived class.
   void ResetConnections();
 
-  /// Observe curl while its connection filters are still attached. The
-  /// default HTTP peer has no transport-specific state to inspect; layered
-  /// transports override this instead of querying stale state after the
-  /// multi handle has been dismantled.
   virtual void ObserveActiveTransfer(CURL* easy);
 
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
@@ -172,16 +112,8 @@ class MockServer : public MockServerBase {
     std::size_t chunk_count() const { return raw_chunk_count + frame_chunk_count; }
   };
 
-  /// Drain client request bytes from both the current socket and sockets curl
-  /// has moved past. Keeping old peers responsive prevents a late write/close
-  /// on a redirect source connection from stalling the new exchange.
-  /// @return total bytes drained during this call.
   std::size_t DrainIncomingConnections();
 
-  /// Drive the HTTP exchange through curl_multi_socket_action using the
-  /// callback state owned by MockServerBase::DriveScenario.
-  /// @param multi Multi handle containing `easy`.
-  /// @return after curl finishes or a deterministic idle/operation cap wins.
   void RunSocketActionLoop(CURLM* multi, CURL* easy);
 
   std::array<ConnectionScript, scenario_limits::kMaxConnections> scripts_;

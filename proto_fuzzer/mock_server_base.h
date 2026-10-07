@@ -71,48 +71,14 @@ class MockServerBase {
   MockServerBase(const MockServerBase&) = delete;
   MockServerBase& operator=(const MockServerBase&) = delete;
 
-  /// Install the common OPENSOCKETFUNCTION / OPENSOCKETDATA / SOCKOPTFUNCTION
-  /// callbacks on 'easy'. The trampolines route back into this instance via
-  /// HandleOpenSocket. Subclasses may override to layer additional, protocol-
-  /// specific setopts (e.g. a WRITEFUNCTION that pokes protocol-specific APIs
-  /// from inside a curl callback).
-  /// @param easy The curl easy handle to configure.
   virtual void Install(CURL* easy);
 
-  /// Bind protocol-specific work to the request-data callbacks after their
-  /// per-scenario state has been constructed. Ordinary HTTP and WebSocket
-  /// mocks drain from their outer perform loops, so they do not need work at
-  /// the upload-callback boundary. Most mocks need no hook; TELNET uses this
-  /// boundary to drain client replies while curl owns the thread.
-  /// @param request_data Callback state that outlives the subsequent drive.
   virtual void ConfigureRequestData(ScenarioRequestData* request_data);
 
-  /// Run 'scenario' to completion on 'easy'. Allocates a curl_multi handle,
-  /// attaches 'easy', delegates the protocol-specific drive to RunLoop, and
-  /// drains the completion queue before cleanup. Reading the result here is
-  /// important because removing the only easy handle would otherwise make
-  /// every protocol runner skip the public multi-result path. All protocol-
-  /// specific behaviour still lives inside the subclass.
-  /// @param easy     curl easy handle already Install()ed on this mock.
-  /// @param scenario the Scenario proto to drive.
-  /// @return the completed transfer's CURLcode, or CURLE_FAILED_INIT when the
-  /// bounded drive could not produce a completion message.
   CURLcode DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
-  /// Run through the public easy entrypoint when a protocol mock can preload
-  /// all peer work before curl takes control. The base falls back to the
-  /// ordinary multi drive; HTTP overrides this with a true easy perform.
-  /// @param easy curl easy handle already Install()ed on this mock.
-  /// @param scenario Scenario whose response the mock must prepare.
-  /// @param use_events Select curl's debug event-based easy entrypoint when
-  ///        the concrete mock supports it.
   virtual void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false);
 
-  /// Establish a CONNECT_ONLY transport, then perform bounded direct I/O.
-  /// HTTP overrides this; other protocol mocks retain a safe fallback.
-  /// @param easy curl easy handle already Install()ed on this mock.
-  /// @param scenario Scenario supplying response and direct-I/O bytes.
-  /// @return Results and byte counts from connect, send, and receive probes.
   virtual ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
   /// Callback type used to publish the driving multi handle to observers.
@@ -125,20 +91,11 @@ class MockServerBase {
   /// @param observer Callback receiving the live multi handle.
   void SetMultiObserver(MultiObserver observer) { multi_observer_ = std::move(observer); }
 
-  /// @return the active MockConnection, or nullptr if none has been opened.
   MockConnection* connection();
 
  protected:
-  /// Construct a mock with its target-authorized multi execution policy.
-  /// @param drive_policy Whether to perform, use socket actions, or honor the
-  ///        containing Scenario's ApiPlan.
   explicit MockServerBase(MultiDrivePolicy drive_policy = MultiDrivePolicy::kPerform);
 
-  /// Dispose of or retain the multi after its easy handle has been removed.
-  /// The default destroys it before DriveScenario returns. A protocol mock
-  /// may retain it as member state when its fixed lifecycle requires easy
-  /// cleanup to happen first.
-  /// @param multi Detached multi handle and its live connection cache.
   virtual void HandleDetachedMulti(CurlMultiPtr multi);
 
   /// Subclass hook invoked by the OPENSOCKET trampoline. The subclass owns the
@@ -152,12 +109,6 @@ class MockServerBase {
   /// @return the client-side fd to hand to libcurl, or CURL_SOCKET_BAD.
   virtual curl_socket_t HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) = 0;
 
-  /// Describe the socket returned by HandleOpenSocket without issuing native
-  /// descriptor queries. Stream peers return connected socketpairs; accepted
-  /// sockets and datagram peers require curl's ordinary setup.
-  /// @param curlfd Descriptor returned by HandleOpenSocket.
-  /// @param purpose Role curl assigned to the descriptor.
-  /// @return Whether curl must perform its normal socket setup.
   virtual SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const;
 
   /// Subclass hook invoked from DriveScenario. Runs the protocol-specific
@@ -167,40 +118,14 @@ class MockServerBase {
   /// @param scenario the Scenario proto to drive.
   virtual void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) = 0;
 
-  /// Wait on curl's fdset with a short timeout. Drive loops call this only for
-  /// scenarios that explicitly request backpressure/timing behaviour; ordinary
-  /// scenarios run without wall-clock sleeps.
-  /// @param multi The multi handle whose fdset to poll.
-  /// @param rc    Out parameter: set to the CURLMcode on error.
-  /// @return select()'s result, or -1 on curl_multi_fdset failure.
   static int WaitOnMultiFdset(CURLM* multi, CURLMcode* rc);
 
-  /// Ask curl to construct and inspect its current connection-filter pollset
-  /// without waiting. A perform-only harness can complete local socketpair
-  /// transfers while systematically skipping the public multi-poll path that
-  /// event-driven applications use. Timing scenarios make one zero-timeout
-  /// probe, retaining that coverage without taxing the fixed fast lanes.
-  /// @param multi The active multi handle after at least one perform call.
   static void ProbeMultiPollset(CURLM* multi);
 
-  /// Return the callback state installed for the current socket-action drive.
-  /// HTTP's RunLoop uses this instead of reading the proto directly so only
-  /// the dedicated API binary can opt into lifecycle work; compatibility
-  /// inputs containing the newly-added field retain their old behavior.
-  /// @return active driver, or nullptr for the ordinary perform path.
   MultiSocketDriver* multi_socket_driver();
 
-  /// @return extra easy handles removed and cleaned after the latest drive.
-  /// Server push is currently the only path that can add one behind the
-  /// caller's back; exposing the count to subclasses keeps ownership in this
-  /// multi-owning base while allowing focused lifecycle assertions.
   std::size_t additional_handle_cleanup_count() const;
 
-  /// Resume receive-side callback output at one bounded drive boundary when
-  /// the dedicated API plan requested it. Calling CONT before the callback
-  /// pauses is harmless; repeating it ensures a later response chunk cannot
-  /// leave the transfer suspended until timeout.
-  /// @param easy Active easy handle whose receive callbacks may be paused.
   void ResumeResponseIfRequested(CURL* easy);
 
   /// Hard operation budget for one scenario. This bounds cases that continue
@@ -218,13 +143,8 @@ class MockServerBase {
   /// ensuring ordinary mutations never inherit their cost.
   static constexpr int kMaxTimedIdleIterations = 256;
 
-  /// @return true when the scenario explicitly opted into socket backpressure.
   static bool UsesTimedDrive(const curl::fuzzer::proto::Scenario& scenario);
 
-  /// Apply the pending BackpressureConfig (set by DriveScenario from the
-  /// Scenario proto) to the newly-created connection_. Subclasses call this
-  /// at the end of HandleOpenSocket, right before returning the client fd,
-  /// so the SO_RCVBUF setting takes effect before any traffic flows.
   void ApplyPendingBackpressure();
 
   /// The per-scenario MockConnection, lazily created by HandleOpenSocket().
