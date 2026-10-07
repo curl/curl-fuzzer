@@ -1,0 +1,95 @@
+# Copyright (C) Max Dymond, <cmeister2@gmail.com>, et al.
+# SPDX-License-Identifier: curl
+
+name: Install APT packages
+description: Install packages using verified cached downloads and fresh Ubuntu indexes.
+
+inputs:
+  packages:
+    description: Whitespace-separated APT package names.
+    required: true
+  tools:
+    description: Skip APT if these commands are already available (build checks versions).
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Check preinstalled tools
+      id: preinstalled
+      shell: bash
+      env:
+        APT_TOOLS: ${{ inputs.tools }}
+      run: |
+        read -r -a tools <<< "${APT_TOOLS//$'\n'/ }"
+        available=true
+        if [ "${#tools[@]}" -eq 0 ]; then
+          available=false
+        fi
+        for tool in "${tools[@]}"; do
+          if ! command -v "$tool" >/dev/null; then
+            available=false
+          fi
+        done
+        if [ "$available" = true ]; then
+          for tool in "${tools[@]}"; do
+            "$tool" --version
+          done
+        fi
+        echo "skip=$available" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve APT downloads
+      if: steps.preinstalled.outputs.skip != 'true'
+      id: plan
+      shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.packages }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        read -r -a packages <<< "${APT_PACKAGES//$'\n'/ }"
+        test "${#packages[@]}" -gt 0
+        sudo find /etc/apt/sources.list.d -type f -not -name 'ubuntu.sources' -delete -print
+        sudo apt-get -o Dpkg::Use-Pty=0 -o APT::Update::Error-Mode=any update
+        plan_dir=$(mktemp -d "$RUNNER_TEMP/curl-fuzzer-apt-plan.XXXXXX")
+        mkdir -p "$plan_dir/archives" "$RUNNER_TEMP/curl-fuzzer-apt-archives"
+        sudo apt-get -o Dpkg::Use-Pty=0 -o Acquire::ForceHash=SHA256 \
+          -o Dir::Cache::archives="$plan_dir/archives" \
+          --print-uris --download-only -y --no-install-recommends --no-remove \
+          install "${packages[@]}" > "$plan_dir/uris.txt"
+        python3 "$ACTION_PATH/../../../scripts/apt_cache.py" plan \
+          "$plan_dir/uris.txt" "$plan_dir/manifest.json" >> "$GITHUB_OUTPUT"
+        echo "manifest=$plan_dir/manifest.json" >> "$GITHUB_OUTPUT"
+        os_hash=$(sha256sum /etc/os-release | cut -d ' ' -f 1)
+        echo "os=$os_hash" >> "$GITHUB_OUTPUT"
+
+    - name: Restore APT archives
+      if: steps.plan.outputs.has-downloads == 'true'
+      id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/curl-fuzzer-apt-archives/*.deb
+        key: apt-debs-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.plan.outputs.os }}-${{ steps.plan.outputs.key }}
+        restore-keys: |
+          apt-debs-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.plan.outputs.os }}-
+
+    - name: Verify archives and install packages
+      if: steps.preinstalled.outputs.skip != 'true'
+      shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.packages }}
+        APT_MANIFEST: ${{ steps.plan.outputs.manifest }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        python3 "$ACTION_PATH/../../../scripts/apt_cache.py" verify \
+          "$APT_MANIFEST" "$RUNNER_TEMP/curl-fuzzer-apt-archives"
+        read -r -a packages <<< "${APT_PACKAGES//$'\n'/ }"
+        sudo apt-get -o Dpkg::Use-Pty=0 -o APT::Keep-Downloaded-Packages=true \
+          -o Dir::Cache::archives="$RUNNER_TEMP/curl-fuzzer-apt-archives" \
+          install -y --no-install-recommends --no-remove "${packages[@]}"
+
+    - name: Save APT archives
+      if: steps.plan.outputs.has-downloads == 'true' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/curl-fuzzer-apt-archives/*.deb
+        key: ${{ steps.cache.outputs.cache-primary-key }}
