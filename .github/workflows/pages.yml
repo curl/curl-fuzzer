@@ -24,7 +24,7 @@ env:
 jobs:
   build:
     name: 'Build pages'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,7 +72,7 @@ jobs:
   deploy:
     name: 'Deploy pages'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       pages: write     # To deploy to Pages
       id-token: write  # To verify the deployment originates from an appropriate source

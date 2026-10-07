@@ -54,7 +54,7 @@ jobs:
   CallGraph:
     name: 'Proto call graph'
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Check out curl-fuzzer
@@ -103,7 +103,7 @@ jobs:
   FullCallGraph:
     name: 'Full proto call graph'
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
       - name: Check out curl-fuzzer
