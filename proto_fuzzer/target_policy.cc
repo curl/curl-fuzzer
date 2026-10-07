@@ -286,6 +286,10 @@ void BoundMimeShape(curl::fuzzer::proto::MimePost* post) {
       BoundGeneratedMimeData(part->mutable_generated_data(), &remaining_generated_bytes);
       continue;
     }
+    if (part->content_case() == curl::fuzzer::proto::MimePart::kFileData) {
+      BoundGeneratedMimeData(part->mutable_file_data(), &remaining_generated_bytes);
+      continue;
+    }
     if (part->content_case() != curl::fuzzer::proto::MimePart::kSubparts) {
       continue;
     }

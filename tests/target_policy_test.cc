@@ -1546,6 +1546,17 @@ void TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget() {
            "generated MIME policy folded an observable buffer boundary");
   }
 
+  Scenario file_boundary;
+  auto *file_data =
+      file_boundary.mutable_mime_post()->add_parts()->mutable_file_data();
+  file_data->set_pattern("F");
+  file_data->set_repeat_count(
+      proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes + 1);
+  ApplyTargetPolicy(&file_boundary, TargetProfile::kDeepHttp);
+  Expect(file_boundary.mime_post().parts(0).file_data().repeat_count() ==
+             proto_fuzzer::scenario_limits::kMaxGeneratedMimeDataBytes,
+         "generated MIME file exceeded the shared byte budget");
+
   Scenario shared;
   auto *first =
       shared.mutable_mime_post()->add_parts()->mutable_generated_data();
