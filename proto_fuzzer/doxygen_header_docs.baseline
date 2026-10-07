@@ -1,0 +1,209 @@
+# Existing function descriptions on out-of-line header declarations.
+# Keep this exact: move descriptions to definitions and remove their entries.
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ApiLifecycle(CURL *easy, const curl::fuzzer::proto::ApiPlan &plan, std::string_view url)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::CleanupShare()
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ConfigureShare()
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ProbeEasyDuplication()
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ProbeTransferResults(bool probe_upkeep)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ProbeUrlAndEscaping(std::string_view url)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ResponseWrite(char *contents, std::size_t size, std::size_t nmemb, void *user_data)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::RunReentrantProbes()
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::SetActiveMulti(CURLM *multi)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ShareLock(CURL *easy, curl_lock_data data, curl_lock_access access, void *user_data)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::ShareUnlock(CURL *easy, curl_lock_data data, void *user_data)
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::reentrant_probes_run() const
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::reentrant_recursive_rejections() const
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::response_bytes_received() const
+proto_fuzzer/api_lifecycle.h:proto_fuzzer::ApiLifecycle::response_pause_returned() const
+proto_fuzzer/bounded_anonymous_input_file.h:proto_fuzzer::BoundedAnonymousInputFile::BoundedAnonymousInputFile(std::size_t max_bytes)
+proto_fuzzer/bounded_anonymous_input_file.h:proto_fuzzer::BoundedAnonymousInputFile::EnsureOpen()
+proto_fuzzer/bounded_anonymous_input_file.h:proto_fuzzer::BoundedAnonymousInputFile::Write(const std::uint8_t *data, std::size_t size)
+proto_fuzzer/bounded_anonymous_input_file.h:proto_fuzzer::BoundedAnonymousInputFile::path() const
+proto_fuzzer/bounded_anonymous_input_file.h:proto_fuzzer::BoundedAnonymousInputFile::~BoundedAnonymousInputFile()
+proto_fuzzer/connect_udp_proxy_mock_server.h:proto_fuzzer::ConnectUdpProxyMockServer::Install(CURL *easy) override
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ApplyScriptBackpressure(MockConnection *connection, const curl::fuzzer::proto::Connection &script)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::CapturePrefix(std::string_view source, std::size_t limit, std::string *destination)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::CloseActiveDescriptors()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::CommandVerb(std::string_view command)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ConnectActiveDataChannel()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::DirectionForVerb(std::string_view verb)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::FinishConnections(bool completed)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::FirstReplyCode(std::string_view response)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::FtpMockServer()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::HandleControlCommand(std::string_view command)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::HandleOpenSocket(curlsocktype purpose=CURLSOCKTYPE_IPCXN, struct curl_sockaddr *address=nullptr) override
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::IsConfiguredCustomDownload(std::string_view verb) const
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::NextControlReply()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::OpenActiveListener(struct curl_sockaddr *address)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::PreloadDownload(DataChannel *channel)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::QueueTransferCompletion()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ReadActiveBytes(int fd, std::string *output)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ServiceControlConnection()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::ServiceUploadConnections()
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::StartNextTransfer(TransferDirection direction)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::TailNeedsOnlyNewline(std::string_view response)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::UsesActiveMode() const
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::VerbEquals(std::string_view verb, std::string_view expected_uppercase)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::WriteActiveBytes(int fd, const unsigned char *data, std::size_t size)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::WriteControlBytes(std::string_view bytes)
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::control_transcript() const
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::opened_data_connection_count() const
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::uploaded_data() const
+proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::~FtpMockServer() override
+proto_fuzzer/fuzzer_main.h:proto_fuzzer::ProtoFuzzerCustomCrossOver(TargetProfile profile, const std::uint8_t *data1, std::size_t size1, const std::uint8_t *data2, std::size_t size2, std::uint8_t *out, std::size_t max_out_size, unsigned int seed)
+proto_fuzzer/fuzzer_main.h:proto_fuzzer::ProtoFuzzerCustomMutator(TargetProfile profile, std::uint8_t *data, std::size_t size, std::size_t max_size, unsigned int seed)
+proto_fuzzer/fuzzer_main.h:proto_fuzzer::ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t *data, std::size_t size)
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::CreateConnection() override
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::HandleDetachedMulti(CurlMultiPtr multi) override
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::Install(CURL *easy) override
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::accepted_push_count() const
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::cleaned_push_count() const
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::observed_request_count() const
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::push_callback_count() const
+proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::upkeep_result() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::CreateConnection() override
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain=curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC)
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::HandleDetachedMulti(CurlMultiPtr multi) override
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::Install(CURL *easy) override
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::accepted_push_count() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::cleaned_push_count() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::observed_client_settings_count() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::observed_request_count() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::push_callback_count() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::push_header_count() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::pushed_body_bytes() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::saw_push_path() const
+proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::upkeep_result() const
+proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::NextChunk(std::string *output)
+proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::ObserveIncomingData(const unsigned char *data, std::size_t size) override
+proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::Reset(const curl::fuzzer::proto::Http2Plan &plan, std::string scheme="https", std::string authority="tls.test")
+proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::has_pending_work() const
+proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::observed_client_settings_count() const
+proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::observed_request_count() const
+proto_fuzzer/h2_proxy_mock_server.h:proto_fuzzer::H2ProxyMockServer::Install(CURL *easy) override
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr *address) override
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::Http3MockServer()
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::Http3MockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::Install(CURL *easy) override
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::executed_action_count() const
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::handshake_complete() const
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::request_headers_received() const
+proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::server_port() const
+proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::DrainIncoming()
+proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::EnsureClientSendBufferSize(std::size_t minimum)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::NotifyIncomingData(const unsigned char *data, std::size_t size)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::SetIncomingDataObserver(IncomingDataObserver *observer)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::client_send_buffer_size() const
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::CreateConnection()
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DeliverNextChunk()
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DrainIncomingConnections()
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DriveConnectOnlyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DriveEasyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario, bool use_events=false) override
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::MockServer(MultiDrivePolicy drive_policy=MultiDrivePolicy::kPerform)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::ObserveActiveTransfer(CURL *easy)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::ResetConnections()
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::RunSocketActionLoop(CURLM *multi, CURL *easy)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::ServiceConnections()
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::SetKeepConnectionsOpen(bool keep_open)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::SetScripts(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::opened_connection_count() const
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ApplyPendingBackpressure()
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ConfigureRequestData(ScenarioRequestData *request_data)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::DriveConnectOnlyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::DriveEasyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario, bool use_events=false)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::DriveScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::HandleDetachedMulti(CurlMultiPtr multi)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::Install(CURL *easy)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::MockServerBase(MultiDrivePolicy drive_policy=MultiDrivePolicy::kPerform)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ProbeMultiPollset(CURLM *multi)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ResumeResponseIfRequested(CURL *easy)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::UsesTimedDrive(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::WaitOnMultiFdset(CURLM *multi, CURLMcode *rc)
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::additional_handle_cleanup_count() const
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::connection()
+proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::multi_socket_driver()
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::DriveReady(int *running_handles)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::FindFreeWatch()
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::FindWatch(curl_socket_t socket)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::Install(CURLM *multi)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::ProbeControlApis()
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::SocketCallback(CURL *easy, curl_socket_t socket, int what, void *user_data, void *socket_data)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::Start(int *running_handles)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::TimerCallback(CURLM *multi, long timeout_ms, void *user_data)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::UpdateSocket(curl_socket_t socket, int what, void *socket_data)
+proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::UpdateTimer(long timeout_ms)
+proto_fuzzer/multi_transfer_runner.h:proto_fuzzer::RunMultiTransferScenario(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/option_apply.h:proto_fuzzer::ApplyBaselineOptions(CURL *easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids=false)
+proto_fuzzer/option_apply.h:proto_fuzzer::ApplyScenarioOptions(CURL *easy, const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/option_apply.h:proto_fuzzer::ApplySetOption(CURL *easy, const curl::fuzzer::proto::SetOption &option)
+proto_fuzzer/option_apply.h:proto_fuzzer::CanonicalizeOptionValueCases(curl::fuzzer::proto::Scenario *scenario)
+proto_fuzzer/option_apply.h:proto_fuzzer::DecodeIntegralOptionValue(const curl::fuzzer::proto::SetOption &option)
+proto_fuzzer/option_apply.h:proto_fuzzer::RuntimeOptionCount(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::ScenarioRequestData(CURL *easy, const curl::fuzzer::proto::Scenario &scenario, bool apply_resolve_entries=false)
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::SetBeforeUploadReadCallback(UploadScriptState::BeforeReadCallback callback, void *userdata)
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::resolve_entries_ready() const
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::stats() const
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::upload_callbacks_installed() const
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::upload_state() const
+proto_fuzzer/request_data.h:proto_fuzzer::ScenarioRequestData::~ScenarioRequestData()
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::Read(char *buffer, std::size_t capacity)
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::ReadCallback(char *buffer, std::size_t size, std::size_t nitems, void *userdata)
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::Seek(curl_off_t requested_offset, int origin)
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::SeekCallback(void *userdata, curl_off_t offset, int origin)
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::SetBeforeReadCallback(BeforeReadCallback callback, void *userdata)
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::UploadScriptState(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::data_size() const
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::offset() const
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::read_step_count() const
+proto_fuzzer/request_data.h:proto_fuzzer::UploadScriptState::scripted() const
+proto_fuzzer/scenario_runner.h:proto_fuzzer::RunScenario(const curl::fuzzer::proto::Scenario &scenario, ScenarioRunMode mode)
+proto_fuzzer/socks4_mock_server.h:proto_fuzzer::Socks4MockServer::Install(CURL *easy) override
+proto_fuzzer/socks4_mock_server.h:proto_fuzzer::Socks4MockServer::Socks4MockServer(curl::fuzzer::proto::SocksProxyMode mode)
+proto_fuzzer/target_policy.h:proto_fuzzer::ApplyTargetPolicy(curl::fuzzer::proto::Scenario *scenario, TargetProfile profile)
+proto_fuzzer/telnet_mock_server.h:proto_fuzzer::TelnetMockServer::ConfigureRequestData(ScenarioRequestData *request_data) override
+proto_fuzzer/telnet_mock_server.h:proto_fuzzer::TelnetMockServer::DrainBeforeUploadRead(void *userdata)
+proto_fuzzer/telnet_scenario.h:proto_fuzzer::BoundTelnetResponse(curl::fuzzer::proto::Connection *connection)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::ConfigureSocket(int fd)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::DrainClientDatagrams()
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::DrainSocket(int fd, TftpSocketRole role)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr *address) override
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::OpenLoopbackSocket(struct sockaddr_in *bound_address)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::PrepareScript(const curl::fuzzer::proto::Connection &connection)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::RememberClientAddress(const struct sockaddr_in &address, socklen_t length)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::ResetPeer()
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::RewriteDestination(struct curl_sockaddr *address, const struct sockaddr_in &destination)
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::SendNextDatagram()
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::received_datagrams() const
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::request_port() const
+proto_fuzzer/tftp_mock_server.h:proto_fuzzer::TftpMockServer::transfer_port() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::CreateConnection() override
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::Install(CURL *easy) override
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ObserveActiveTransfer(CURL *easy) override
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain=curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC)
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::completed_handshake_count() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ech_inner_name() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ech_outer_name() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::ech_status() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::exported_session_count() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::imported_session_count() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::negotiated_alpn() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::negotiated_tls_version() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::reused_session_count() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::saw_live_tls_session() const
+proto_fuzzer/tls_mock_server.h:proto_fuzzer::TlsMockServer::write_retry_count() const
+proto_fuzzer/websocket_mock_server.h:proto_fuzzer::ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario &scenario)
+proto_fuzzer/websocket_mock_server.h:proto_fuzzer::WebSocketMockServer::DeliverNextChunk()
+proto_fuzzer/websocket_mock_server.h:proto_fuzzer::WebSocketMockServer::Install(CURL *easy) override
+proto_fuzzer/websocket_mock_server.h:proto_fuzzer::WebSocketMockServer::ws_probe_fired() const
