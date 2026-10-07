@@ -2174,9 +2174,21 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         set(DOXYGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/proto_fuzzer_doxygen)
         set(DOXYFILE_OUT ${CMAKE_BINARY_DIR}/proto_fuzzer_Doxyfile)
         set(DOXYGEN_WARN_LOG ${CMAKE_BINARY_DIR}/proto_fuzzer_doxygen_warnings.log)
+        set(DOXYGEN_LOCATION_OUTPUT_DIR
+            ${CMAKE_BINARY_DIR}/proto_fuzzer_doxygen_locations)
+        set(DOXYFILE_LOCATION_OUT
+            ${CMAKE_BINARY_DIR}/proto_fuzzer_Doxyfile.locations)
+        set(DOXYGEN_HEADER_DOC_BASELINE
+            ${PROTO_FUZZER_SRC_DIR}/doxygen_header_docs.baseline)
+        set(DOXYGEN_LOCATION_CHECK
+            ${CMAKE_SOURCE_DIR}/scripts/check_doxygen_doc_locations.py)
         configure_file(
             ${PROTO_FUZZER_SRC_DIR}/Doxyfile.in
             ${DOXYFILE_OUT}
+            @ONLY)
+        configure_file(
+            ${PROTO_FUZZER_SRC_DIR}/Doxyfile.locations.in
+            ${DOXYFILE_LOCATION_OUT}
             @ONLY)
         # Doxygen's own exit code is unreliable for some warning categories
         # in 1.9.1; instead, inspect the warn-log ourselves and fail if it is
@@ -2188,7 +2200,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             COMMAND ${CMAKE_COMMAND}
                     -DWARN_LOG=${DOXYGEN_WARN_LOG}
                     -P ${CMAKE_SOURCE_DIR}/scripts/doxygen_check_log.cmake
-            COMMENT "Running Doxygen doc-coverage check on proto_fuzzer/"
+            COMMAND ${CMAKE_COMMAND} -E remove_directory
+                    ${DOXYGEN_LOCATION_OUTPUT_DIR}
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    ${DOXYGEN_LOCATION_OUTPUT_DIR}
+            COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_LOCATION_OUT}
+            COMMAND ${Python3_EXECUTABLE} ${DOXYGEN_LOCATION_CHECK}
+                    --xml-dir ${DOXYGEN_LOCATION_OUTPUT_DIR}/xml
+                    --baseline ${DOXYGEN_HEADER_DOC_BASELINE}
+            COMMENT "Running Doxygen coverage and doc-location checks on proto_fuzzer/"
             VERBATIM
         )
     endif()

@@ -1,0 +1,29 @@
+# Secondary Doxygen pass for documentation-location linting. The ordinary
+# Doxyfile keeps its warning-sensitive coverage behavior; this pass extracts
+# declaration/definition locations for the companion Python checker.
+
+@INCLUDE               = @DOXYFILE_OUT@
+
+OUTPUT_DIRECTORY       = @DOXYGEN_LOCATION_OUTPUT_DIR@
+FILE_PATTERNS          = *.h
+
+# Include every function so the placement policy also covers documented
+# private and static declarations. Header-defined functions remain allowed;
+# the checker exempts functions whose bodies live beside their declarations.
+EXTRACT_ALL             = YES
+EXTRACT_PRIVATE         = YES
+EXTRACT_STATIC          = YES
+EXTRACT_ANON_NSPACES    = YES
+EXTRACT_LOCAL_CLASSES   = YES
+INHERIT_DOCS            = NO
+
+# This pass enforces location only. The ordinary pass owns documentation
+# completeness and correctness warnings.
+WARNINGS                = NO
+WARN_IF_UNDOCUMENTED    = NO
+WARN_IF_DOC_ERROR       = NO
+WARN_NO_PARAMDOC        = NO
+
+GENERATE_HTML           = NO
+GENERATE_XML            = YES
+XML_PROGRAMLISTING      = NO
