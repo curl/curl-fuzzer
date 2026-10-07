@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -177,31 +179,14 @@ def test_pure_defaulted_and_deleted_declarations_are_accepted(
     assert module.find_header_documented_functions(xml_dir) == set()
 
 
-def test_exact_baseline_matches_and_update_writes_canonical_order(
-    tmp_path: Path,
-) -> None:
+def test_accepts_xml_with_no_header_function_descriptions(tmp_path: Path) -> None:
     module = _load_module()
-    xml_dir = _write_xml(
-        tmp_path,
-        [_member("example::Run", description="Run one example.")],
-    )
-    baseline = tmp_path / "baseline.txt"
-    expected = "proto_fuzzer/example.h:example::Run()"
-    baseline.write_text(f"# reviewed debt\n{expected}\n", encoding="utf-8")
-    arguments = [
-        "--xml-dir",
-        str(xml_dir),
-        "--baseline",
-        str(baseline),
-    ]
+    xml_dir = _write_xml(tmp_path, [_member("example::Run")])
 
-    assert module.main(arguments) == 0
-    baseline.write_text("obsolete\n", encoding="utf-8")
-    assert module.main([*arguments, "--update-baseline"]) == 0
-    assert baseline.read_text(encoding="utf-8") == f"{expected}\n"
+    assert module.main(["--xml-dir", str(xml_dir)]) == 0
 
 
-def test_reports_both_unexpected_and_stale_entries(
+def test_reports_header_documentation_and_how_to_fix_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     module = _load_module()
@@ -209,24 +194,13 @@ def test_reports_both_unexpected_and_stale_entries(
         tmp_path,
         [_member("example::Run", description="Run one example.")],
     )
-    baseline = tmp_path / "baseline.txt"
-    baseline.write_text("proto_fuzzer/old.h:example::Old()\n", encoding="utf-8")
-
-    result = module.main(
-        [
-            "--xml-dir",
-            str(xml_dir),
-            "--baseline",
-            str(baseline),
-        ]
-    )
+    result = module.main(["--xml-dir", str(xml_dir)])
 
     assert result == 1
     error = capsys.readouterr().err
-    assert "Unexpected function documentation attached to header declarations" in error
-    assert "+ proto_fuzzer/example.h:example::Run()" in error
-    assert "Stale baseline entries no longer found" in error
-    assert "- proto_fuzzer/old.h:example::Old()" in error
+    assert "Function documentation attached to out-of-line header declarations" in error
+    assert "proto_fuzzer/example.h:example::Run()" in error
+    assert "Move function descriptions to their out-of-line definitions" in error
 
 
 def test_rejects_colliding_function_keys(tmp_path: Path) -> None:
@@ -249,19 +223,116 @@ def test_rejects_colliding_function_keys(tmp_path: Path) -> None:
 
     with pytest.raises(
         module.DocumentationLocationError,
-        match="multiple Doxygen functions have the same baseline key",
+        match="multiple Doxygen functions have the same function key",
     ):
         module.find_header_documented_functions(xml_dir)
 
 
-def test_rejects_duplicate_baseline_entries(tmp_path: Path) -> None:
+@pytest.mark.parametrize("contents", [None, "invalid XML"])
+def test_reports_invalid_xml_input(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], contents: str | None
+) -> None:
     module = _load_module()
-    baseline = tmp_path / "baseline.txt"
-    entry = "proto_fuzzer/example.h:example::Run()"
-    baseline.write_text(f"{entry}\n{entry}\n", encoding="utf-8")
+    xml_dir = tmp_path / "xml"
+    if contents is not None:
+        xml_dir.mkdir()
+        (xml_dir / "example.xml").write_text(contents, encoding="utf-8")
 
-    with pytest.raises(
-        module.DocumentationLocationError,
-        match="contains duplicate entries",
+    assert module.main(["--xml-dir", str(xml_dir)]) == 2
+    assert "Could not check Doxygen documentation locations" in capsys.readouterr().err
+
+
+def test_real_doxygen_preserves_docs_after_moving_them_to_definition(
+    tmp_path: Path,
+) -> None:
+    doxygen = shutil.which("doxygen")
+    if doxygen is None:
+        pytest.skip("Doxygen is not installed")
+
+    module = _load_module()
+    source_dir = tmp_path / "proto_fuzzer"
+    source_dir.mkdir()
+    header = source_dir / "example.h"
+    implementation = source_dir / "example.cc"
+    description = """/// Run one example.
+/// @param value The input value.
+/// @return The input unchanged.
+"""
+    header.write_text(
+        "/// @file\n\nnamespace proto_fuzzer {\n"
+        + description
+        + "int Run(int value);\n}\n",
+        encoding="utf-8",
+    )
+    implementation.write_text(
+        '/// @file\n\n#include "example.h"\nnamespace proto_fuzzer {\n'
+        + "int Run(int value) { return value; }\n}\n",
+        encoding="utf-8",
+    )
+
+    coverage_config = tmp_path / "Doxyfile"
+    location_config = tmp_path / "Doxyfile.locations"
+    warning_log = tmp_path / "warnings.log"
+    substitutions = {
+        "PROTO_FUZZER_SRC_DIR": str(source_dir),
+        "DOXYGEN_OUTPUT_DIR": str(tmp_path / "coverage"),
+        "DOXYGEN_WARN_LOG": str(warning_log),
+        "DOXYFILE_OUT": str(coverage_config),
+        "DOXYGEN_LOCATION_OUTPUT_DIR": str(tmp_path / "locations"),
+    }
+    for template, destination in (
+        ("Doxyfile.in", coverage_config),
+        ("Doxyfile.locations.in", location_config),
     ):
-        module.read_baseline(baseline)
+        configuration = (REPO_ROOT / "proto_fuzzer" / template).read_text(
+            encoding="utf-8"
+        )
+        for name, value in substitutions.items():
+            configuration = configuration.replace(f"@{name}@", f'"{value}"')
+        destination.write_text(configuration, encoding="utf-8")
+
+    subprocess.run([doxygen, str(location_config)], check=True, capture_output=True)
+    xml_dir = tmp_path / "locations" / "xml"
+    assert module.find_header_documented_functions(xml_dir) == {
+        "proto_fuzzer/example.h:proto_fuzzer::Run(int value)"
+    }
+
+    header.write_text(
+        "/// @file\n\nnamespace proto_fuzzer {\nint Run(int value);\n}\n",
+        encoding="utf-8",
+    )
+    implementation.write_text(
+        '/// @file\n\n#include "example.h"\nnamespace proto_fuzzer {\n'
+        + description
+        + "int Run(int value) { return value; }\n}\n",
+        encoding="utf-8",
+    )
+    shutil.rmtree(xml_dir.parent)
+    subprocess.run([doxygen, str(location_config)], check=True, capture_output=True)
+    assert module.main(["--xml-dir", str(xml_dir)]) == 0
+
+    # Coverage must still discover the description and its parameter/return docs.
+    with coverage_config.open("a", encoding="utf-8") as config:
+        config.write("\nGENERATE_XML = YES\n")
+    subprocess.run([doxygen, str(coverage_config)], check=True, capture_output=True)
+    assert warning_log.read_text(encoding="utf-8") == ""
+    coverage_xml = tmp_path / "coverage" / "xml"
+    members = [
+        member
+        for xml_path in coverage_xml.glob("*.xml")
+        for member in module.ElementTree.parse(xml_path).findall(
+            './/memberdef[@kind="function"]'
+        )
+        if member.findtext("name") == "Run"
+    ]
+    assert members
+    for member in members:
+        assert "Run one example." in module._element_text(
+            member.find("briefdescription")
+        )
+        assert "The input value." in module._element_text(
+            member.find("detaileddescription")
+        )
+        assert "The input unchanged." in module._element_text(
+            member.find("detaileddescription")
+        )

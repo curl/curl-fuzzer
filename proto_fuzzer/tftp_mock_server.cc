@@ -41,26 +41,39 @@ TftpMockServer::TftpMockServer()
 /// separately-owned client descriptor from its multi handle.
 TftpMockServer::~TftpMockServer() { ResetPeer(); }
 
-/// Return observations rather than parsing them in the peer. Tests can assert
-/// exact RRQ/WRQ/DATA/ACK bytes while production fuzz iterations pay only the
-/// bounded copies already required to expose those observations.
+/// Return bounded observations from the most recent run rather than parsing
+/// them in the peer. Tests can assert exact RRQ/WRQ/DATA/ACK bytes while production
+/// fuzz iterations pay only the bounded copies needed for those observations.
+/// @return Borrowed observations that remain valid until the next drive or
+///         destruction of this server.
 const std::vector<TftpReceivedDatagram>& TftpMockServer::received_datagrams() const { return received_datagrams_; }
 
-/// Return the kernel-selected request port in host byte order.
+/// Expose the kernel-selected request endpoint for transfer-ID assertions,
+/// not for routing.
+/// @return request UDP port in host byte order, or zero before socket setup.
 std::uint16_t TftpMockServer::request_port() const { return request_port_; }
 
-/// Return the kernel-selected transfer port in host byte order.
+/// Expose the kernel-selected response endpoint for transfer-ID assertions,
+/// not for routing.
+/// @return transfer UDP port in host byte order, or zero before socket setup.
 std::uint16_t TftpMockServer::transfer_port() const { return transfer_port_; }
 
+/// TFTP returns an unconnected IPv4 datagram descriptor, so curl must still
+/// bind/configure it before the first sendto.
+/// @param curlfd Descriptor returned by HandleOpenSocket.
+/// @param purpose Role curl assigned to the descriptor.
+/// @return Whether curl must perform its normal socket setup.
 SocketSetupDisposition TftpMockServer::GetSocketSetupDisposition(curl_socket_t /*curlfd*/,
                                                                  curlsocktype /*purpose*/) const {
   return SocketSetupDisposition::kNeedsSetup;
 }
 
-/// Borrow only the response prefix the runtime can emit. The nonempty check on
+/// Build the borrowed response-pointer table before curl can open a socket,
+/// using only the prefix the runtime can emit. The nonempty check on
 /// initial_response preserves proto3's absent/empty equivalence; repeated bytes
 /// retain presence, so an empty on_readable entry remains a real zero-length
 /// UDP datagram useful for curl's short-packet retry path.
+/// @param connection Primary connection whose packet boundaries are retained.
 void TftpMockServer::PrepareScript(const curl::fuzzer::proto::Connection& connection) {
   response_datagrams_.fill(nullptr);
   response_datagram_count_ = 0;
@@ -76,9 +89,10 @@ void TftpMockServer::PrepareScript(const curl::fuzzer::proto::Connection& connec
   }
 }
 
-/// Tear down only state owned by this mock. Curl takes ownership of the client
-/// descriptor as soon as HandleOpenSocket succeeds, so retaining or closing a
-/// duplicate here would create cross-owner lifetime bugs during multi cleanup.
+/// Close only server-owned sockets and clear address/routing state. Curl takes
+/// ownership of the client descriptor as soon as HandleOpenSocket succeeds, so
+/// retaining or closing a duplicate here would create lifetime bugs during multi
+/// cleanup.
 void TftpMockServer::ResetPeer() {
   if (request_fd_ >= 0) {
     (void)::close(request_fd_);
@@ -99,6 +113,8 @@ void TftpMockServer::ResetPeer() {
 /// Establish both descriptor properties ourselves. Curl normally requests
 /// SOCK_CLOEXEC/SOCK_NONBLOCK from socket(), but an application callback is
 /// allowed to ignore those type flags and therefore must return a safe fd.
+/// @param fd Descriptor to configure.
+/// @return true only when both descriptor invariants were established.
 bool TftpMockServer::ConfigureSocket(int fd) {
   if (fd < 0) {
     return false;
@@ -111,9 +127,12 @@ bool TftpMockServer::ConfigureSocket(int fd) {
   return status_flags >= 0 && ::fcntl(fd, F_SETFL, status_flags | O_NONBLOCK) == 0;
 }
 
-/// Use ephemeral loopback ports so parallel fuzz workers cannot collide and no
-/// privilege is required for TFTP's conventional port 69. getsockname, rather
-/// than assumptions about bind(), is the authority on the chosen destination.
+/// Bind one IPv4 UDP endpoint to an ephemeral loopback port so parallel fuzz
+/// workers cannot collide and no privilege is required for TFTP's conventional
+/// port 69. getsockname, rather than assumptions about bind(), determines the
+/// chosen destination.
+/// @param bound_address Receives the exact address selected by the kernel.
+/// @return owned descriptor, or -1 after closing any failed descriptor.
 int TftpMockServer::OpenLoopbackSocket(struct sockaddr_in* bound_address) {
   if (bound_address == nullptr) {
     return -1;
@@ -149,6 +168,10 @@ int TftpMockServer::OpenLoopbackSocket(struct sockaddr_in* bound_address) {
 /// destination. Replacing the metadata as well as sockaddr is essential: curl
 /// copies these values into its connection filter and TFTP later retrieves that
 /// copy for sendto(), independently of the returned descriptor's properties.
+/// Rewriting every field prevents a mutated URL from selecting a real endpoint.
+/// @param address Mutable callback address to rewrite.
+/// @param destination Bound request endpoint to install.
+/// @return true when the public address storage can represent IPv4 safely.
 bool TftpMockServer::RewriteDestination(struct curl_sockaddr* address, const struct sockaddr_in& destination) {
   if (address == nullptr || sizeof(destination) > sizeof(address->addr)) {
     return false;
@@ -166,6 +189,10 @@ bool TftpMockServer::RewriteDestination(struct curl_sockaddr* address, const str
 /// first response deliberately comes from a port different from the rewritten
 /// request destination, matching real TFTP and making curl's address-pinning
 /// transition observable through where its next ACK/DATA arrives.
+/// Curl owns the client descriptor after a successful return.
+/// @param purpose Socket purpose supplied by curl's open-socket callback.
+/// @param address Mutable destination storage supplied by curl.
+/// @return client UDP descriptor, or CURL_SOCKET_BAD on setup failure.
 curl_socket_t TftpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
   if (purpose != CURLSOCKTYPE_IPCXN || address == nullptr || socket_opened_) {
     return CURL_SOCKET_BAD;
@@ -198,6 +225,8 @@ curl_socket_t TftpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl
 /// Pin the first IPv4 client endpoint. Later packets are still captured, but
 /// they cannot redirect scripted responses; otherwise a mutation could make the
 /// harness accept source changes that curl's own TFTP implementation rejects.
+/// @param address Source address returned by recvfrom.
+/// @param length Number of valid bytes in address.
 void TftpMockServer::RememberClientAddress(const struct sockaddr_in& address, socklen_t length) {
   if (has_client_address_ || length != sizeof(address) || address.sin_family != AF_INET) {
     return;
@@ -210,6 +239,9 @@ void TftpMockServer::RememberClientAddress(const struct sockaddr_in& address, so
 /// Drain until EAGAIN so curl never experiences harness-created UDP receive
 /// backpressure. A 65,536-byte buffer covers the maximum IPv4 UDP payload, and
 /// recvfrom preserves even zero-length datagrams as one state-machine event.
+/// @param fd Nonblocking server descriptor to read.
+/// @param role Which endpoint the descriptor represents.
+/// @return number of datagrams consumed, including zero-length datagrams.
 std::size_t TftpMockServer::DrainSocket(int fd, TftpSocketRole role) {
   if (fd < 0) {
     return 0;
@@ -243,17 +275,20 @@ std::size_t TftpMockServer::DrainSocket(int fd, TftpSocketRole role) {
   return count;
 }
 
-/// Drain the well-known request endpoint first because it is the only valid
-/// source of the initial client address. Once a response selects the transfer
-/// endpoint, draining both remains cheap and captures protocol mistakes without
-/// allowing either queue to survive into a later fuzz iteration.
+/// Drain the request endpoint first because it is the only valid source of the
+/// initial client address. Once a response selects the transfer endpoint,
+/// draining both captures protocol mistakes and prevents uploads or
+/// retransmissions from filling either kernel queue between curl turns.
+/// @return total number of client datagrams consumed.
 std::size_t TftpMockServer::DrainClientDatagrams() {
   return DrainSocket(request_fd_, TftpSocketRole::kRequest) + DrainSocket(transfer_fd_, TftpSocketRole::kTransfer);
 }
 
-/// Consume exactly one script boundary per curl turn. Sending from the transfer
-/// endpoint rather than the request endpoint is what makes subsequent client
-/// traffic prove curl accepted the peer's new TFTP transfer ID.
+/// Consume exactly one script boundary per curl turn. UDP sends are atomic, so
+/// an error still consumes the entry instead of retrying in a hot loop. Sending
+/// from the transfer endpoint makes subsequent client traffic prove curl accepted
+/// the peer's new TFTP transfer ID.
+/// @return true when a script entry was consumed, regardless of send result.
 bool TftpMockServer::SendNextDatagram() {
   if (!has_client_address_ || transfer_fd_ < 0 || next_response_datagram_ >= response_datagram_count_) {
     return false;
@@ -270,6 +305,9 @@ bool TftpMockServer::SendNextDatagram() {
 /// final drain so the terminal ACK remains observable. Incomplete scripts stop
 /// after a small idle prefix rather than waiting for TFTP's one-second retry
 /// clock, keeping mutation throughput independent of wall time.
+/// @param multi Multi handle containing the scenario's easy handle.
+/// @param easy Easy handle being driven; all work is reached through multi.
+/// @param scenario Scenario whose primary Connection supplies UDP packets.
 void TftpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   (void)easy;
   ResetPeer();

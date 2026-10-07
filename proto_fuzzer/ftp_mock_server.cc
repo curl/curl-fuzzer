@@ -29,9 +29,10 @@
 
 namespace proto_fuzzer {
 
-/// Begin without a borrowed protobuf or any open socketpairs. Keeping all
-/// session state in the object avoids process globals that could leak one
-/// libFuzzer iteration's protocol position into the next.
+/// Begin without a borrowed protobuf or open socketpairs. RunLoop borrows a
+/// Scenario only for the synchronous DriveScenario call in which socket callbacks
+/// can run. Keeping all session state in the object avoids process globals that
+/// could leak one libFuzzer iteration's protocol position into the next.
 FtpMockServer::FtpMockServer()
     : scenario_(nullptr),
       next_data_script_(0),
@@ -42,24 +43,32 @@ FtpMockServer::FtpMockServer()
       next_control_reply_(0),
       control_opened_(false) {}
 
-/// Loopback peers are ordinary unique_ptr-owned transports; the out-of-line
-/// destructor also permits MockConnection to remain forward-declared
-/// in the header.
+/// Release server-owned descriptors and socketpair peers after curl has returned
+/// its client fds. Loopback peers are unique_ptr-owned transports; the out-of-line
+/// destructor also permits MockConnection to remain forward-declared in the
+/// header.
 FtpMockServer::~FtpMockServer() { CloseActiveDescriptors(); }
 
-/// Return the bounded command capture accumulated by the most recent drive.
+/// Expose the bounded command capture from the most recent drive so tests can
+/// verify FTP states without coupling assertions to curl debug output. The
+/// capture is bounded independently of protocol processing.
+/// @return A prefix of complete control commands, including line endings.
 const std::string& FtpMockServer::control_transcript() const { return control_transcript_; }
 
-/// Return the bounded upload capture accumulated by the most recent drive.
+/// Expose a bounded upload prefix from the most recent drive while continuing
+/// to drain all client bytes, so test observability cannot create backpressure.
+/// @return Bytes curl sent over passive upload connections.
 const std::string& FtpMockServer::uploaded_data() const { return uploaded_data_; }
 
-/// Report how many passive peers curl actually requested, rather than how many
-/// scripts happened to be present in the protobuf.
+/// Report how many bounded data scripts curl assigned to passive or active
+/// transfer sockets, rather than how many scripts the protobuf contains. Tests
+/// can distinguish control-only failures from paths that reached data setup.
+/// @return Number of bounded data scripts assigned to a transfer socket.
 std::size_t FtpMockServer::opened_data_connection_count() const { return next_data_script_; }
 
-/// Clear descriptor and parser state before borrowing the next Scenario. A
-/// FtpMockServer can be reused serially, but no connection or response cursor
-/// is meaningful across easy-handle drives.
+/// Reset every borrowed pointer, descriptor, parser cursor, and observable
+/// capture before borrowing the next Scenario. A server can be reused serially,
+/// but no connection or response cursor is meaningful across easy-handle drives.
 void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenario) {
   CloseActiveDescriptors();
   control_connection_.reset();
@@ -83,8 +92,9 @@ void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenar
   control_opened_ = false;
 }
 
-/// Close only descriptors owned by the peer. Curl owns every listener fd
-/// returned by HandleOpenSocket; active_listener_fd_ is a private duplicate.
+/// Close only peer-owned active-mode descriptors before reuse or destruction.
+/// Curl owns every listener fd returned by HandleOpenSocket;
+/// active_listener_fd_ is a private duplicate.
 void FtpMockServer::CloseActiveDescriptors() {
   active_listener_client_fd_ = CURL_SOCKET_BAD;
   if (active_listener_fd_ >= 0) {
@@ -100,9 +110,10 @@ void FtpMockServer::CloseActiveDescriptors() {
   pending_active_channel_ = kMaxDataChannels;
 }
 
-/// Clamp a compatibility input's raw protobuf socket size before crossing the
-/// platform int boundary. Target policies normally clear FTP backpressure,
-/// but direct corpus replay must retain deterministic, well-defined behavior.
+/// Apply bounded transport knobs when creating a scripted socket. Clamp a
+/// compatibility input's raw protobuf socket size before crossing the platform
+/// int boundary. Target policies normally clear FTP backpressure, but direct
+/// corpus replay must retain deterministic, well-defined behavior.
 void FtpMockServer::ApplyScriptBackpressure(MockConnection* connection, const curl::fuzzer::proto::Connection& script) {
   if (connection == nullptr) {
     return;
@@ -133,6 +144,9 @@ bool FtpMockServer::UsesActiveMode() const {
 /// needs curl to bind and listen on the real TCP descriptor returned by
 /// OpenActiveListener. The descriptor identity is recorded when opened, so
 /// this decision never depends on a sandbox-sensitive getsockopt call.
+/// @param curlfd Descriptor returned by HandleOpenSocket.
+/// @param purpose Role curl assigned to the descriptor.
+/// @return Whether curl must perform its normal socket setup.
 SocketSetupDisposition FtpMockServer::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const {
   if (purpose == CURLSOCKTYPE_ACCEPT || curlfd == active_listener_client_fd_) {
     return SocketSetupDisposition::kNeedsSetup;
@@ -141,7 +155,8 @@ SocketSetupDisposition FtpMockServer::GetSocketSetupDisposition(curl_socket_t cu
 }
 
 /// Give curl a genuine INET socket for bind/listen while retaining a duplicate
-/// that can discover the ephemeral loopback port after those operations.
+/// that can discover the ephemeral loopback port afterwards, without parsing
+/// curl's generated PORT/EPRT command.
 curl_socket_t FtpMockServer::OpenActiveListener(struct curl_sockaddr* address) {
   if (address == nullptr || (address->family != AF_INET && address->family != AF_INET6)) {
     return CURL_SOCKET_BAD;
@@ -182,6 +197,10 @@ curl_socket_t FtpMockServer::OpenActiveListener(struct curl_sockaddr* address) {
 /// sockets, or a real listener when CURLOPT_FTPPORT selected active mode.
 /// Data is intentionally not preloaded here: curl has not yet sent the command
 /// that determines whether the stream is a listing, download, or upload.
+/// @param purpose Socket role requested by curl.
+/// @param address Mutable description of curl's intended destination.
+/// @return Client descriptor for the selected FTP channel, or
+///         CURL_SOCKET_BAD when no channel is available.
 curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) {
   if (scenario_ == nullptr || purpose != CURLSOCKTYPE_IPCXN) {
     return CURL_SOCKET_BAD;
@@ -270,9 +289,9 @@ bool FtpMockServer::ReadActiveBytes(int fd, std::string* output) {
   }
 }
 
-/// Connect to the exact listener curl bound. Since active_listener_fd_ is a
-/// duplicate of that socket, getsockname observes the assigned port without
-/// trusting or reparsing bytes from the control transcript.
+/// Connect to curl's exact listener after queuing a successful PORT/EPRT
+/// response. Since active_listener_fd_ duplicates that socket, getsockname
+/// observes the assigned port without trusting or reparsing control bytes.
 void FtpMockServer::ConnectActiveDataChannel() {
   if (active_listener_fd_ < 0 || pending_active_channel_ >= kMaxDataChannels) {
     return;
@@ -310,6 +329,9 @@ void FtpMockServer::ConnectActiveDataChannel() {
 /// Retain only a bounded prefix for assertions. Parsing and draining continue
 /// against the full transport bytes, so reaching the cap cannot change curl's
 /// behavior or manufacture socket backpressure.
+/// @param source Newly observed bytes.
+/// @param limit Maximum retained destination size.
+/// @param destination Capture buffer receiving the available prefix.
 void FtpMockServer::CapturePrefix(std::string_view source, std::size_t limit, std::string* destination) {
   if (destination == nullptr || destination->size() >= limit) {
     return;
@@ -319,8 +341,10 @@ void FtpMockServer::CapturePrefix(std::string_view source, std::size_t limit, st
 }
 
 /// Remove FTP's optional leading horizontal whitespace and return just the
-/// verb. Arguments remain untouched because only curl, not the mock harness,
-/// should interpret fuzzed paths and offsets.
+/// verb without allocating. Arguments remain untouched because only curl, not
+/// the mock harness, should interpret fuzzed paths and offsets.
+/// @param command Complete command line.
+/// @return View of its first non-whitespace token.
 std::string_view FtpMockServer::CommandVerb(std::string_view command) {
   std::size_t begin = 0;
   while (begin < command.size() && (command[begin] == ' ' || command[begin] == '\t')) {
@@ -338,6 +362,9 @@ std::string_view FtpMockServer::CommandVerb(std::string_view command) {
 /// Fold only ASCII lowercase command letters. FTP verbs are ASCII tokens, so
 /// locale-aware case conversion would add state and undefined signed-char
 /// behavior without accepting anything curl can legitimately send.
+/// @param verb Parsed command token.
+/// @param expected_uppercase Literal uppercase command name.
+/// @return true when the verbs are equal ignoring ASCII case.
 bool FtpMockServer::VerbEquals(std::string_view verb, std::string_view expected_uppercase) {
   if (verb.size() != expected_uppercase.size()) {
     return false;
@@ -358,6 +385,8 @@ bool FtpMockServer::VerbEquals(std::string_view verb, std::string_view expected_
 /// listing custom request. PRET deliberately remains control-only even though
 /// its argument can contain RETR/STOR: no data transfer has begun at that
 /// point.
+/// @param verb Parsed FTP command verb.
+/// @return transfer direction, or kNone for control-only commands.
 FtpMockServer::TransferDirection FtpMockServer::DirectionForVerb(std::string_view verb) {
   if (VerbEquals(verb, "STOR") || VerbEquals(verb, "APPE")) {
     return TransferDirection::kUpload;
@@ -368,10 +397,14 @@ FtpMockServer::TransferDirection FtpMockServer::DirectionForVerb(std::string_vie
   return TransferDirection::kNone;
 }
 
-/// Scan backwards because repeated setopt calls are legal and libcurl keeps
-/// the last value. Comparing only the verb preserves arbitrary custom
-/// arguments while still avoiding false positives on preparatory FTP commands
-/// that happen to receive a fuzzed 125/150 reply after EPSV opened a socket.
+/// Recognize the final CURLOPT_CUSTOMREQUEST value as a data command. Curl uses
+/// it in place of LIST, so mutations need not rediscover a built-in allowed verb
+/// before releasing the passive payload. Scan backwards because repeated setopt
+/// calls are legal and libcurl keeps the last value. Comparing only the verb
+/// preserves arbitrary custom arguments while avoiding false positives on
+/// preparatory commands that receive a fuzzed 125/150 reply after EPSV.
+/// @param verb Parsed command token sent by curl.
+/// @return true when verb matches the effective custom request option.
 bool FtpMockServer::IsConfiguredCustomDownload(std::string_view verb) const {
   if (scenario_ == nullptr || verb.empty()) {
     return false;
@@ -393,6 +426,8 @@ bool FtpMockServer::IsConfiguredCustomDownload(std::string_view verb) const {
 /// Scan complete lines because a legal FTP response fragment may start with
 /// one or more informational lines. curl ends a response at the first line
 /// whose first three bytes are digits and whose fourth byte is a space.
+/// @param response Raw control fragment.
+/// @return numeric status, or -1 when no terminating line is present.
 int FtpMockServer::FirstReplyCode(std::string_view response) {
   std::size_t line_start = 0;
   while (line_start < response.size()) {
@@ -418,6 +453,8 @@ int FtpMockServer::FirstReplyCode(std::string_view response) {
 /// A raw completion such as "226 done" needs only its missing newline. In
 /// that common mutation, appending a second synthetic reply would leave bytes
 /// in curl's control cache and misalign a later wildcard transfer.
+/// @param response Raw control fragment.
+/// @return true when the unterminated tail begins with "ddd ".
 bool FtpMockServer::TailNeedsOnlyNewline(std::string_view response) {
   const std::size_t last_newline = response.rfind('\n');
   const std::size_t tail = last_newline == std::string_view::npos ? 0 : last_newline + 1;
@@ -431,9 +468,11 @@ bool FtpMockServer::TailNeedsOnlyNewline(std::string_view response) {
          response[tail + 3] == ' ';
 }
 
-/// Return the next bounded primary response. Empty strings still advance the
-/// cursor: they are meaningful truncation mutations for ordinary command
-/// states and explicitly select control EOF at transfer completion.
+/// Return the next command-aligned primary response within the shared
+/// response-count budget. Empty strings still advance the cursor: they are
+/// meaningful truncation mutations for ordinary command states and explicitly
+/// select control EOF at transfer completion.
+/// @return Scenario-owned reply, or nullptr after the bounded prefix.
 const std::string* FtpMockServer::NextControlReply() {
   if (scenario_ == nullptr || next_control_reply_ >= control_reply_count_) {
     return nullptr;
@@ -444,19 +483,21 @@ const std::string* FtpMockServer::NextControlReply() {
 /// Keep failed peer writes local to the mock. Response cursors must still
 /// advance after curl closes early, otherwise a replacement socket could see
 /// a reply intended for an earlier command.
+/// @param bytes Response fragment to queue.
+/// @return true when the complete fragment was queued.
 bool FtpMockServer::WriteControlBytes(std::string_view bytes) {
   return bytes.empty() ||
          (control_connection_ != nullptr &&
           control_connection_->WriteAll(reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size()));
 }
 
-/// Queue a scenario-provided final reply and make it guaranteed non-blocking.
-/// ftp_done_control_reply() calls getftpresponse() synchronously after data
-/// EOF; if the fuzzed fragment lacks a terminating numeric line, append the
-/// smallest completion needed so curl returns to the harness immediately. An
-/// explicitly empty repeated value instead half-closes the peer: this retains
-/// deterministic liveness while making curl's missing-completion error path
-/// directly seedable.
+/// Queue a scenario-provided final reply before curl observes data EOF.
+/// ftp_done_control_reply() calls getftpresponse() synchronously inside
+/// curl_multi_perform, so the outer loop cannot provide the reply afterwards.
+/// If the fuzzed fragment lacks a terminating numeric line, append the smallest
+/// completion needed so curl returns to the harness immediately. An explicitly
+/// empty repeated value instead half-closes the peer, retaining deterministic
+/// liveness while making curl's missing-completion error path seedable.
 void FtpMockServer::QueueTransferCompletion() {
   const std::string* response = NextControlReply();
   if (response != nullptr && response->empty()) {
@@ -484,10 +525,12 @@ void FtpMockServer::QueueTransferCompletion() {
   (void)WriteControlBytes("226 mock transfer complete\r\n");
 }
 
-/// Send every runtime-visible data fragment before half-closing the peer. The
-/// serialized fuzz input is already length-bounded; sending the complete
-/// prefix lets curl drain its data state without event-loop sleeps while each
-/// protobuf fragment still affects byte content and parser behavior.
+/// Send every runtime-visible data fragment once RETR/LIST has been accepted,
+/// then half-close the peer. Delaying until the command prevents early EOF from
+/// perturbing passive setup. Sending the complete bounded prefix lets curl drain
+/// its data state without event-loop sleeps while each protobuf fragment still
+/// affects byte content and parser behavior.
+/// @param channel Data peer whose script supplies the download bytes.
 void FtpMockServer::PreloadDownload(DataChannel* channel) {
   if (channel == nullptr || channel->script == nullptr || (channel->connection == nullptr && channel->active_fd < 0)) {
     return;
@@ -521,6 +564,7 @@ void FtpMockServer::PreloadDownload(DataChannel* channel) {
 /// Pair the next transfer command with the oldest passive socket that EPSV or
 /// PASV opened but no command has used. FTP serializes data transfers, so this
 /// simple cursor is sufficient and avoids interpreting fuzzed port numbers.
+/// @param direction Whether curl will read or write the data connection.
 void FtpMockServer::StartNextTransfer(TransferDirection direction) {
   for (std::size_t index = 0; index < next_data_script_; ++index) {
     DataChannel& channel = data_channels_[index];
@@ -544,6 +588,7 @@ void FtpMockServer::StartNextTransfer(TransferDirection direction) {
 /// Advance one reply for every complete command. Accepted transfer commands
 /// additionally consume their final reply now, because waiting until data EOF
 /// would be too late to escape curl's blocking completion read.
+/// @param command One newline-terminated command from curl.
 void FtpMockServer::HandleControlCommand(std::string_view command) {
   const std::string* response = NextControlReply();
   if (response == nullptr) {
@@ -575,6 +620,7 @@ void FtpMockServer::HandleControlCommand(std::string_view command) {
 /// Read without waiting, retain partial final commands, and process all full
 /// lines already emitted by curl. The number of replies is bounded even if a
 /// malformed command stream contains many newlines.
+/// @return true when bytes or a command/reply cursor advanced.
 bool FtpMockServer::ServiceControlConnection() {
   if (control_connection_ == nullptr) {
     return false;
@@ -607,6 +653,7 @@ bool FtpMockServer::ServiceControlConnection() {
 /// Drain uploads into a temporary buffer so data beyond the observable cap is
 /// still removed from the socket. This keeps curl's progress independent of
 /// how much a unit test chooses to retain.
+/// @return true when curl produced at least one data byte.
 bool FtpMockServer::ServiceUploadConnections() {
   bool made_progress = false;
   for (std::size_t index = 0; index < next_data_script_; ++index) {
@@ -633,6 +680,7 @@ bool FtpMockServer::ServiceUploadConnections() {
 /// A completed easy remains in multi's connection cache until cleanup, where
 /// FTP sends QUIT and performs a blocking read. Preloading 221 handles that
 /// path; an unfinished drive instead gets EOF so cleanup fails fast.
+/// @param completed Whether curl reported that the transfer stopped.
 void FtpMockServer::FinishConnections(bool completed) {
   if (control_connection_ != nullptr) {
     if (completed) {
@@ -656,9 +704,12 @@ void FtpMockServer::FinishConnections(bool completed) {
 }
 
 /// Alternate curl transitions with immediate peer service until the transfer
-/// completes or deterministic idle/operation caps win. No select(), poll(),
-/// or sleep is needed: every transport is a local socketpair, and malformed
-/// scripts are terminated by half-close after the bounded loop.
+/// completes or deterministic idle/operation caps win. No select(), poll(), or
+/// sleep is needed: every transport is in-process, and malformed scripts are
+/// terminated by half-close after the bounded loop.
+/// @param multi Multi handle containing `easy`.
+/// @param easy Easy handle already installed on this mock.
+/// @param scenario Control and passive-data scripts to borrow.
 void FtpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   (void)easy;
   ResetForScenario(scenario);
