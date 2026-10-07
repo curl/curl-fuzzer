@@ -27,6 +27,9 @@ jobs:
           - memory
 
     runs-on: ubuntu-latest
+    env:
+      SANITIZER: ${{ matrix.sanitizer }}
+      BUILD_DIR: ${{ github.workspace }}/build-${{ matrix.sanitizer }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,10 +41,46 @@ jobs:
           packages: cmake clang ninja-build
           tools: cmake clang clang++ ninja
 
+      - name: Identify dependency toolchain
+        id: toolchain
+        shell: bash
+        run: |
+          {
+            cat /etc/os-release
+            clang --version
+            clang++ --version
+            cmake --version
+            ninja --version
+            dpkg-query -W -f='${binary:Package}=${Version}\n' \
+              libc6 libc6-dev 'libstdc++-*-dev' libstdc++6 | sort
+          } > "$RUNNER_TEMP/mainline-toolchain.txt"
+          toolchain_hash=$(sha256sum "$RUNNER_TEMP/mainline-toolchain.txt" | cut -d ' ' -f 1)
+          echo "hash=${toolchain_hash}" >> "$GITHUB_OUTPUT"
+
+      # Exact recipe matches only: install markers do not track every flag or
+      # transitive dependency version, so a prefix fallback could be stale.
+      - name: Restore mainline dependencies
+        id: dependency-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BUILD_DIR }}
+          key: mainline-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sanitizer }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('.github/workflows/build.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'mainline.sh', 'scripts/compile_target.sh', 'scripts/trim_cache.sh') }}
+
       - name: Compile mainline
-        env:
-          SANITIZER: '${{ matrix.sanitizer }}'  # test with different "sanitizers"
         run: ./mainline.sh
+
+      # Keep installed libraries and protoc; remove curl checkout/build state,
+      # generated files and objects so the next run still rebuilds current code.
+      - name: Trim mainline dependency cache
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        run: ./scripts/trim_cache.sh "$BUILD_DIR"
+
+      - name: Save mainline dependencies
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BUILD_DIR }}
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
 
   just_dependencies:
     name: 'Just dependencies'
