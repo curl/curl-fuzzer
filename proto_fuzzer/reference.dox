@@ -1,0 +1,29 @@
+/**
+ * @mainpage Structured fuzzer C++ reference
+ *
+ * This contributor reference describes the internal interfaces of the
+ * structured curl harness. It is generated from the checked-in type and
+ * implementation comments; function contracts live beside their definitions.
+ *
+ * @section reference_runtime Runtime interfaces
+ *
+ * - proto_fuzzer::RunScenario selects and runs the scenario's runtime policy.
+ * - proto_fuzzer::TransferSession owns the transfer resources and cleanup order.
+ * - proto_fuzzer::ScenarioRequestData retains request and callback state.
+ * - proto_fuzzer::MockServerBase provides the shared peer interface.
+ * - proto_fuzzer::H2Runtime coordinates HTTP/2 protocol work across transports.
+ *
+ * Browse the class and file lists for the other protocol peers, normalization
+ * helpers, and lifetime contracts. Source links connect each documented
+ * interface to its implementation.
+ *
+ * @section reference_guides Contributor guides
+ *
+ * - [Architecture](../../architecture.html)
+ * - [Structured harness](../../proto/overview.html)
+ * - [Extending the structured harness](../../proto/extending.html)
+ * - [Local builds and checks](../../development.html)
+ *
+ * Generated protobuf types, curl dependencies, and test fixtures are outside
+ * this reference.
+ */

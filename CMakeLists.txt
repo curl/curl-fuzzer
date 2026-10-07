@@ -2187,9 +2187,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     endif()
 
     # Documentation lint. `cmake --build build --target doxygen-check` runs
-    # Doxygen over proto_fuzzer/ with FAIL_ON_WARNINGS; any undocumented
-    # non-static function/class/member fails the build. Optional (not a hard
-    # dep of curl_fuzzer_proto) so builds in environments without
+    # Doxygen over proto_fuzzer/ and checks its warning log and doc locations.
+    # Optional (not a hard dependency of curl_fuzzer_proto), so environments without
     # doxygen installed still succeed.
     find_program(DOXYGEN_EXECUTABLE doxygen)
     if(DOXYGEN_EXECUTABLE)
@@ -2229,6 +2228,35 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             COMMAND ${Python3_EXECUTABLE} ${DOXYGEN_LOCATION_CHECK}
                     --xml-dir ${DOXYGEN_LOCATION_OUTPUT_DIR}/xml
             COMMENT "Running Doxygen coverage and doc-location checks on proto_fuzzer/"
+            VERBATIM
+        )
+
+        set(DOXYGEN_REFERENCE_OUTPUT_DIR
+            ${CMAKE_BINARY_DIR}/proto_fuzzer_reference)
+        set(DOXYGEN_REFERENCE_WARN_LOG
+            ${CMAKE_BINARY_DIR}/proto_fuzzer_reference_warnings.log)
+        set(DOXYGEN_REFERENCE_MAINPAGE
+            ${PROTO_FUZZER_SRC_DIR}/reference.dox)
+        set(DOXYFILE_REFERENCE_OUT
+            ${CMAKE_BINARY_DIR}/proto_fuzzer_Doxyfile.pages)
+        configure_file(
+            ${PROTO_FUZZER_SRC_DIR}/Doxyfile.pages.in
+            ${DOXYFILE_REFERENCE_OUT}
+            @ONLY)
+        # Generate the reference without building ExternalProject dependencies.
+        # Keep coverage and placement enforcement ahead of publishing, even if
+        # presentation settings hide undocumented entries from the HTML.
+        add_custom_target(doxygen-docs
+            COMMAND ${CMAKE_COMMAND} -E remove_directory
+                    ${DOXYGEN_REFERENCE_OUTPUT_DIR}
+            COMMAND ${CMAKE_COMMAND} -E remove -f
+                    ${DOXYGEN_REFERENCE_WARN_LOG}
+            COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_REFERENCE_OUT}
+            COMMAND ${CMAKE_COMMAND}
+                    -DWARN_LOG=${DOXYGEN_REFERENCE_WARN_LOG}
+                    -P ${CMAKE_SOURCE_DIR}/scripts/doxygen_check_log.cmake
+            DEPENDS doxygen-check
+            COMMENT "Generating the proto_fuzzer/ C++ contributor reference"
             VERBATIM
         )
     endif()
