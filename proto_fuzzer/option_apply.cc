@@ -73,13 +73,15 @@ void EnableTraceIds() {
 
 }  // namespace
 
-/// Apply the fixed baseline options the harness always wants: output sinks,
-/// protocol restrictions, DNS overrides, timeouts. Call before applying any
-/// scenario options.
+/// Apply deterministic routing, timeout, output, and persistence defaults.
+/// Call before applying scenario options. `scheme` identifies the dedicated
+/// in-process mock that will service the transfer and selects the safe direct-
+/// protocol allowlist.
 /// @param easy The curl easy handle to configure.
 /// @param scheme Protocol whose dedicated in-process mock will service it.
-/// @return the curl_slist owned by the caller (for CURLOPT_CONNECT_TO), which
-///         must be freed with curl_slist_free_all after curl_easy_cleanup.
+/// @param trace_ids Enable verbose LIB-IDS tracing for this scenario.
+/// @return Caller-owned CURLOPT_CONNECT_TO list, which must outlive the easy
+///         handle and be freed with curl_slist_free_all after curl_easy_cleanup.
 struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids) {
   EnableDebugHttpTransportMetadata();
 
@@ -183,16 +185,15 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
   return connect_to;
 }
 
-/// Apply one SetOption to the easy handle. The Scenario passed to the runner
-/// owns every SetOption for the whole transfer, so pointer-valued options can
-/// borrow string_value directly instead of allocating a duplicate backing
-/// store on every iteration. This lifetime is especially important for
-/// CURLOPT_POSTFIELDS, which curl deliberately does not copy.
-/// @param easy   The curl easy handle to configure.
-/// @param option The SetOption proto describing which option and value to set;
-///               its containing Scenario must remain stable through cleanup.
-/// @return CURLE_OK on success, an error code if the option is unsupported or
-///         the setopt call itself failed.
+/// Translate and apply one generated scalar/string SetOption to the easy handle.
+/// Pointer-valued options borrow the SetOption's protobuf-owned string storage,
+/// so its containing Scenario must remain alive and unmodified until the
+/// transfer has stopped and the easy handle has been cleaned up. Borrowing
+/// avoids a duplicate backing allocation on every iteration; the lifetime is
+/// especially important for CURLOPT_POSTFIELDS, which curl does not copy.
+/// @param easy The curl easy handle to configure.
+/// @param option The SetOption proto describing which option and value to set.
+/// @return curl's setopt result, or CURLE_UNKNOWN_OPTION for an unknown id.
 CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option) {
   const OptionDescriptor* desc = LookupOptionDescriptor(option.option_id());
   if (desc == nullptr) {
@@ -249,15 +250,24 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
   return CURLE_UNKNOWN_OPTION;
 }
 
-/// Keep compatibility inputs immutable while enforcing the same observable
-/// option prefix as postprocessed fixed lanes.
+/// Return the runtime-visible option prefix length. Fixed targets normally
+/// trim the protobuf in their postprocessor, but the compatibility target must
+/// preserve its historical message unchanged; applying the same bound here
+/// prevents that lane from doing mutation-sized setopt work while exposing the
+/// same option prefix as postprocessed fixed lanes.
+/// @param scenario Structured input whose option prefix will be consumed.
+/// @return Number of options visible to the runtime.
 std::size_t RuntimeOptionCount(const curl::fuzzer::proto::Scenario& scenario) {
   return std::min<std::size_t>(static_cast<std::size_t>(scenario.options_size()), scenario_limits::kMaxOptions);
 }
 
-/// Apply only the prefix curl can observe in every target lane. Bounding here,
-/// rather than relying solely on LPM's postprocessor, is important because
-/// standalone compatibility seeds reach RunScenario without normalization.
+/// Apply the bounded runtime-visible prefix of Scenario.options. Individual
+/// CURLcode values remain intentionally ignored, matching the fuzzer runner's
+/// historical behavior. Bounding here also covers standalone compatibility
+/// seeds that reach RunScenario without normalization.
+/// @param easy Easy handle receiving each supported option.
+/// @param scenario Structured input that owns all borrowed option strings.
+/// @return Number of option entries attempted.
 std::size_t ApplyScenarioOptions(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   const std::size_t option_count = RuntimeOptionCount(scenario);
   for (std::size_t index = 0; index < option_count; ++index) {

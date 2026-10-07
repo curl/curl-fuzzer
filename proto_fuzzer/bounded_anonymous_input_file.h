@@ -23,32 +23,18 @@ namespace proto_fuzzer {
 /// without accepting a mutation-controlled filesystem path.
 class BoundedAnonymousInputFile {
  public:
-  /// Construct a lazy owner. No file is opened until Write succeeds far enough
-  /// to need one, keeping ordinary fuzz iterations free of filesystem work.
-  /// @param max_bytes Largest input this owner will expose.
   explicit BoundedAnonymousInputFile(std::size_t max_bytes);
 
-  /// Close the anonymous file, invalidating the procfs pathname.
   ~BoundedAnonymousInputFile();
 
   BoundedAnonymousInputFile(const BoundedAnonymousInputFile&) = delete;
   BoundedAnonymousInputFile& operator=(const BoundedAnonymousInputFile&) = delete;
 
-  /// Replace the complete file contents with one bounded byte string.
-  /// A failed or oversized write invalidates path() so a previous iteration's
-  /// bytes can never be consumed accidentally.
-  /// @param data Bytes to write; may be null only when size is zero.
-  /// @param size Number of bytes to expose.
-  /// @return True when the complete input is ready for a filename API.
   bool Write(const std::uint8_t* data, std::size_t size);
 
-  /// Return the stable procfs pathname after a successful Write.
-  /// @return NUL-terminated path, or nullptr when no complete input is ready.
   const char* path() const;
 
  private:
-  /// Lazily create the anonymous file and its stable procfs pathname.
-  /// @return True when a usable file descriptor and pathname are available.
   bool EnsureOpen();
 
   std::size_t max_bytes_;  ///< Maximum content size accepted by Write.

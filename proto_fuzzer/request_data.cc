@@ -255,12 +255,14 @@ CurlMimePtr BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& sourc
 
 }  // namespace
 
-/// Borrow and cap the immutable upload shape once, before libcurl receives a
-/// userdata pointer. RunScenario keeps the protobuf alive for the complete
-/// drive, so a view removes a per-input body copy without weakening callback
-/// lifetime. For non-TELNET schemes, the absent-message fallback avoids a
-/// 16 KiB allocation by synthesizing the same `U` bytes as the old callback.
-/// TELNET deliberately starts at EOF so an absent script cannot become input.
+/// Borrow and cap a scripted upload source before libcurl receives a userdata
+/// pointer. When Scenario.upload is absent, non-TELNET schemes synthesize the
+/// historical 16 KiB `U` stream without allocating it, while TELNET reports
+/// immediate EOF so merely selecting the protocol cannot inject unsolicited
+/// terminal input. Borrowing avoids duplicating every fuzzed body before curl
+/// can read it; `scenario` must remain alive and unmodified until this state is
+/// destroyed.
+/// @param scenario Source and lifetime owner of callback bytes and outcomes.
 UploadScriptState::UploadScriptState(const curl::fuzzer::proto::Scenario& scenario)
     : data_(),
       read_step_count_(0),
@@ -306,9 +308,15 @@ UploadScriptState::UploadScriptState(const curl::fuzzer::proto::Scenario& scenar
   }
 }
 
-/// Return bytes from either the explicit payload or the allocation-free
-/// fallback. Terminal outcomes are emitted only after all data is consumed so
-/// a mutation can independently control fragmentation and completion policy.
+/// Copy the next bounded chunk and advance the cursor, using either the explicit
+/// payload or the allocation-free fallback. Terminal outcomes are emitted only
+/// after all data is consumed so a mutation can independently control
+/// fragmentation and completion policy. Public so focused tests can validate
+/// callback semantics without relying on HTTP timing.
+/// @param buffer Destination supplied by curl.
+/// @param capacity Writable bytes in `buffer`.
+/// @return Bytes copied, zero for EOF, CURL_READFUNC_ABORT, or the TELNET-
+///         only CURL_READFUNC_PAUSE outcome.
 std::size_t UploadScriptState::Read(char* buffer, std::size_t capacity) {
   // TELNET can produce negotiation replies while one curl_multi_perform call
   // owns the thread. Empty them before returning more callback bytes;
@@ -346,9 +354,14 @@ std::size_t UploadScriptState::Read(char* buffer, std::size_t capacity) {
   return count;
 }
 
-/// Model only seeks curl can meaningfully request from a bounded memory
-/// source. Explicit range checks avoid signed overflow and keep a bogus
-/// mutation from wrapping into an in-bounds cursor.
+/// Apply the configured seek outcome and, for OK, move the bounded cursor.
+/// Successful seeks restart the short-read sequence so retries replay the same
+/// callback fragmentation deterministically. Explicit range checks model only
+/// seeks curl can meaningfully request from a bounded memory source, avoiding
+/// signed overflow or a mutation wrapping into an in-bounds cursor.
+/// @param requested_offset Offset interpreted relative to `origin`.
+/// @param origin One of SEEK_SET, SEEK_CUR, or SEEK_END.
+/// @return A CURL_SEEKFUNC_* result.
 int UploadScriptState::Seek(curl_off_t requested_offset, int origin) {
   switch (seek_result_) {
     case curl::fuzzer::proto::UPLOAD_SEEK_CANTSEEK:
@@ -388,9 +401,11 @@ int UploadScriptState::Seek(curl_off_t requested_offset, int origin) {
   return CURL_SEEKFUNC_OK;
 }
 
-/// Multiplication is normally benign because curl uses size=1, but callbacks
-/// are an API boundary. Abort an impossible overflowing pair: saturating to
-/// SIZE_MAX would let Read() copy into a buffer whose real extent is unknown.
+/// libcurl trampoline that protects multiplication of its two buffer-size
+/// arguments before forwarding to Read(). Multiplication is normally benign
+/// because curl uses size=1, but callbacks are an API boundary. Abort an
+/// impossible overflowing pair: saturating to SIZE_MAX would let Read() copy
+/// into a buffer whose real extent is unknown.
 std::size_t UploadScriptState::ReadCallback(char* buffer, std::size_t size, std::size_t nitems, void* userdata) {
   if (userdata == nullptr || size == 0 || nitems == 0) {
     return 0;
@@ -402,8 +417,9 @@ std::size_t UploadScriptState::ReadCallback(char* buffer, std::size_t size, std:
   return static_cast<UploadScriptState*>(userdata)->Read(buffer, size * nitems);
 }
 
-/// Keep the C callback a one-line type bridge so all outcome/cursor behaviour
-/// remains directly unit-testable in Seek().
+/// libcurl trampoline for the userdata-first seek callback signature. Keep the
+/// C callback a type bridge so all outcome/cursor behaviour remains directly
+/// unit-testable in Seek().
 int UploadScriptState::SeekCallback(void* userdata, curl_off_t offset, int origin) {
   if (userdata == nullptr) {
     return CURL_SEEKFUNC_FAIL;
@@ -411,23 +427,35 @@ int UploadScriptState::SeekCallback(void* userdata, curl_off_t offset, int origi
   return static_cast<UploadScriptState*>(userdata)->Seek(offset, origin);
 }
 
+/// @return Number of bytes visible to the callback after caps.
 std::size_t UploadScriptState::data_size() const { return total_size_; }
 
+/// @return Number of retained per-read limits after caps.
 std::size_t UploadScriptState::read_step_count() const { return read_step_count_; }
 
+/// @return Current byte cursor, exposed for deterministic unit tests.
 std::size_t UploadScriptState::offset() const { return offset_; }
 
+/// @return Whether Scenario.upload was present instead of using fallback.
 bool UploadScriptState::scripted() const { return scripted_; }
 
+/// Install a protocol hook without exposing the mutable cursor or curl's
+/// retained callback userdata outside its owner.
 void UploadScriptState::SetBeforeReadCallback(BeforeReadCallback callback, void* userdata) {
   before_read_callback_ = callback;
   before_read_userdata_ = userdata;
 }
 
-/// Build the protocol-specific pointer-valued request features and attach them
-/// to the easy handle. Setup errors are deliberately non-fatal: malformed or
-/// partially allocated scenarios should still exercise whatever curl state
-/// was built.
+/// Construct and apply the protocol-specific pointer-valued fields in `scenario`
+/// to `easy`. Setup errors are deliberately non-fatal: malformed or partially
+/// allocated scenarios should still exercise whatever curl state was built.
+/// `easy` must remain alive until this object is destroyed, because cleanup
+/// first detaches the pointers from the handle and only then frees them.
+/// @param easy Easy handle that will perform this scenario.
+/// @param scenario Source headers/TELNET options, optional MIME body, and
+///                 upload script.
+/// @param apply_resolve_entries Whether to install the scenario's bounded
+///        resolver mappings plus the mandatory loopback mapping.
 ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario,
                                          bool apply_resolve_entries)
     : easy_(easy),
@@ -502,10 +530,11 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
   }
 }
 
-/// Detach resources while the easy handle is valid, then free them. libcurl
-/// does not copy headers, MIME roots, or callback userdata, so releasing any
-/// one before the mock drive ends would create a use-after-free; relying on
-/// easy cleanup to own header/MIME allocations would instead leak iterations.
+/// Detach pointer options/callbacks while the easy handle is valid, then release
+/// request allocations. libcurl does not copy headers, MIME roots, or callback
+/// userdata, so releasing any one before the mock drive ends would create a
+/// use-after-free; relying on easy cleanup to own header/MIME allocations would
+/// instead leak iterations.
 ScenarioRequestData::~ScenarioRequestData() {
   if (easy_ != nullptr) {
     // Clear callbacks before their userdata member is destroyed. There is no
@@ -532,16 +561,32 @@ ScenarioRequestData::~ScenarioRequestData() {
   }
 }
 
-/// Expose cap-aware counts without exposing or transferring the owned curl
-/// pointers themselves.
+/// Return resource counts after caps and allocation failures were applied,
+/// without exposing or transferring the owned curl pointers themselves.
+/// @return Immutable construction statistics.
 const RequestBuildStats& ScenarioRequestData::stats() const { return stats_; }
 
+/// Return the callback state retained for the complete drive. This is mainly
+/// useful to ownership tests; the runner itself lets libcurl mutate it.
+/// @return Immutable upload state.
 const UploadScriptState& ScenarioRequestData::upload_state() const { return upload_state_; }
 
+/// Return whether this scenario needed raw upload callbacks. Exposing the
+/// decision lets ownership tests ensure ordinary requests avoid redundant
+/// setopt/teardown work without exposing either userdata pointer.
+/// @return True when read and seek callbacks were attached to the handle.
 bool ScenarioRequestData::upload_callbacks_installed() const { return upload_callbacks_installed_; }
 
+/// Return whether resolver-only slist construction installed its mandatory
+/// final loopback mapping. Ordinary lanes always report true.
+/// @return True when the resolver mapping is ready for the transfer.
 bool ScenarioRequestData::resolve_entries_ready() const { return resolve_entries_ready_; }
 
+/// Arrange protocol-specific work immediately before every upload read.
+/// This is intentionally a narrow callback seam rather than exposing curl's
+/// retained READFUNCTION userdata or the mutable upload cursor.
+/// @param callback Function to invoke, or nullptr to clear the hook.
+/// @param userdata Borrowed pointer passed to `callback`.
 void ScenarioRequestData::SetBeforeUploadReadCallback(UploadScriptState::BeforeReadCallback callback, void* userdata) {
   upload_state_.SetBeforeReadCallback(callback, userdata);
 }

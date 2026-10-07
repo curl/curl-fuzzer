@@ -16,10 +16,6 @@
 
 namespace proto_fuzzer {
 
-// Render 'frame' into raw RFC 6455 wire bytes. No validation: invalid
-// combinations (reserved bits set, opcode > 15, oversized length_form for a
-// tiny payload) round-trip into the byte stream unchanged so the decoder sees
-// them.
 std::string SerializeWebSocketFrame(const curl::fuzzer::proto::WebSocketFrame& frame);
 
 }  // namespace proto_fuzzer
