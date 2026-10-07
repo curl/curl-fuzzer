@@ -33,13 +33,6 @@ namespace proto_fuzzer {
 /// remain explicit because they run before either teardown step.
 class ApiLifecycle {
  public:
-  /// Configure the plan's share handle and cover public error-string tables.
-  /// @param easy Live easy handle used by explicit probes; clean it before
-  ///        destroying this lifecycle so its share reference is gone first.
-  /// @param plan Bounded API plan retained by the API target policy; it must
-  ///        remain alive and unmodified for this lifecycle's complete lifetime.
-  /// @param url Bounded scenario URL used by URL and escaping probes during
-  ///        construction; it is not retained.
   ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan, std::string_view url);
 
   /// A temporary plan cannot satisfy the retained reference's lifetime.
@@ -51,33 +44,18 @@ class ApiLifecycle {
   ApiLifecycle(const ApiLifecycle&) = delete;
   ApiLifecycle& operator=(const ApiLifecycle&) = delete;
 
-  /// Run correctly typed CURLINFO and response-header probes selected by the
-  /// plan. Call only after the transfer entrypoint has returned.
-  /// @param probe_upkeep True only after curl_easy_perform, whose internal
-  ///        multi remains attached and can service curl_easy_upkeep safely.
   void ProbeTransferResults(bool probe_upkeep);
 
-  /// Duplicate, reset, and destroy a scratch easy handle while every pointer-
-  /// valued option copied from the source still has a live owner.
   void ProbeEasyDuplication();
 
-  /// @return whether the API-plan response callback returned PAUSE once.
   bool response_pause_returned() const;
 
-  /// @return response bytes accepted after the paused chunk was replayed.
   std::size_t response_bytes_received() const;
 
-  /// Hand the driving multi handle to the reentrancy probes so the multi-entry
-  /// probes can target the live object. Called before the drive loop starts;
-  /// null in easy-only drives, where multi probes are skipped.
-  /// @param multi Live multi handle driving the transfer, or null in easy-only
-  ///        drives where multi probes are skipped.
   void SetActiveMulti(CURLM* multi);
 
-  /// @return number of public API probes fired from the response callback.
   std::size_t reentrant_probes_run() const;
 
-  /// @return number of probes libcurl rejected with a recursive-API-call code.
   std::size_t reentrant_recursive_rejections() const;
 
  private:
@@ -99,30 +77,18 @@ class ApiLifecycle {
     std::size_t recursive_rejections = 0;
   };
 
-  /// Pause the first non-empty body delivery, then accept its replay.
   static std::size_t ResponseWrite(char* contents, std::size_t size, std::size_t nmemb, void* user_data);
 
-  /// Install and attach a share according to bounded typed selectors.
   void ConfigureShare();
 
-  /// Count one share lock callback without introducing synchronization into
-  /// the fuzzer's single-threaded lifecycle.
   static void ShareLock(CURL* easy, curl_lock_data data, curl_lock_access access, void* user_data);
 
-  /// Count the matching unlock callback using the same live userdata.
   static void ShareUnlock(CURL* easy, curl_lock_data data, void* user_data);
 
-  /// Destroy the share after easy cleanup has released its final reference.
-  /// Shared domains remain enabled so curl can release caches they created.
   void CleanupShare();
 
-  /// Exercise URL parsing, typed part retrieval, duplication, and escaping
-  /// against bytes already selected by the scenario.
   void ProbeUrlAndEscaping(std::string_view url);
 
-  /// Fire each selected public API call once from inside the response
-  /// callback, recording how many ran and how many libcurl rejected as
-  /// recursive. Runs on the first body delivery only.
   void RunReentrantProbes();
 
   CURL* easy_;

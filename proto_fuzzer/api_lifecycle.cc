@@ -397,8 +397,15 @@ void ProbeEasyOptionMetadataOnce() {
 
 }  // namespace
 
-/// Preserve the caller's plan by reference because RunScenario keeps the
-/// source Scenario alive and unmodified for this object's complete lifetime.
+/// Configure the plan's share handle and cover public error-string tables.
+/// The plan is borrowed because RunScenario keeps its source Scenario alive and
+/// unmodified for this object's complete lifetime.
+/// @param easy Live easy handle used by explicit probes; clean it before
+///        destroying this lifecycle so its share reference is gone first.
+/// @param plan Bounded API plan retained by the API target policy; it must
+///        remain alive and unmodified for this lifecycle's complete lifetime.
+/// @param url Bounded scenario URL used by URL and escaping probes during
+///        construction; it is not retained.
 ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan, std::string_view url)
     : easy_(easy), plan_(plan), share_(nullptr), active_multi_(nullptr) {
   ProbeKnownErrorStringsOnce();
@@ -423,9 +430,10 @@ ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan,
 /// even an incomplete connection's share reference before CleanupShare runs.
 ApiLifecycle::~ApiLifecycle() { CleanupShare(); }
 
-/// Pause only one non-empty delivery. curl replays the same bytes when the
-/// event loop calls curl_easy_pause(CURLPAUSE_CONT), at which point accepting
-/// the full count exercises its callback-output buffering path.
+/// Pause the first non-empty body delivery, then accept its replay. Curl replays
+/// the same bytes when the event loop calls curl_easy_pause(CURLPAUSE_CONT), at
+/// which point accepting the full count exercises its callback-output buffering
+/// path.
 std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, std::size_t nmemb, void* user_data) {
   auto* state = static_cast<ResponseCallbackState*>(user_data);
   if (state == nullptr || (size != 0 && nmemb > std::numeric_limits<std::size_t>::max() / size)) {
@@ -447,21 +455,31 @@ std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, st
   return bytes;
 }
 
+/// @return whether the API-plan response callback returned PAUSE once.
 bool ApiLifecycle::response_pause_returned() const { return response_callback_state_.pause_returned; }
 
+/// @return response bytes accepted after the paused chunk was replayed.
 std::size_t ApiLifecycle::response_bytes_received() const { return response_callback_state_.bytes_received; }
 
+/// Hand the driving multi handle to the reentrancy probes so the multi-entry
+/// probes can target the live object. Called before the drive loop starts;
+/// null in easy-only drives, where multi probes are skipped.
+/// @param multi Live multi handle driving the transfer, or null in easy-only
+///        drives where multi probes are skipped.
 void ApiLifecycle::SetActiveMulti(CURLM* multi) { active_multi_ = multi; }
 
+/// @return number of public API probes fired from the response callback.
 std::size_t ApiLifecycle::reentrant_probes_run() const { return response_callback_state_.probes_run; }
 
+/// @return number of probes libcurl rejected with a recursive-API-call code.
 std::size_t ApiLifecycle::reentrant_recursive_rejections() const {
   return response_callback_state_.recursive_rejections;
 }
 
-/// Fire every selected probe once, in scenario order. Multi probes are skipped
-/// when the drive exposes no multi handle. Each easy/multi rejection is counted
-/// so the tests can prove the guard branch was actually taken.
+/// Fire each selected public API call once, in scenario order, from inside the
+/// first non-empty response callback. Multi probes are skipped when the drive
+/// exposes no multi handle. Record how many probes ran and how many libcurl
+/// rejected as recursive so tests can prove the guard branch was actually taken.
 void ApiLifecycle::RunReentrantProbes() {
   const std::size_t count = std::min<std::size_t>(scenario_limits::kMaxApiReentrantSelectors,
                                                   static_cast<std::size_t>(plan_.reentrant_probe_selectors_size()));
@@ -478,23 +496,25 @@ void ApiLifecycle::RunReentrantProbes() {
   }
 }
 
-/// Count callback dispatch while leaving synchronization to applications that
-/// actually use multiple threads. The state is owned by this lifecycle and
+/// Count one share lock callback without introducing synchronization into the
+/// fuzzer's single-threaded lifecycle. The state is owned by this lifecycle and
 /// remains valid until after the final share cleanup callback.
 void ApiLifecycle::ShareLock(CURL* /*easy*/, curl_lock_data /*data*/, curl_lock_access /*access*/, void* user_data) {
   auto* state = static_cast<ShareCallbackState*>(user_data);
   ++state->locks;
 }
 
-/// Match ShareLock without recursively entering any libcurl API.
+/// Count the matching unlock callback using the same live userdata, without
+/// recursively entering any libcurl API.
 void ApiLifecycle::ShareUnlock(CURL* /*easy*/, curl_lock_data /*data*/, void* user_data) {
   auto* state = static_cast<ShareCallbackState*>(user_data);
   ++state->unlocks;
 }
 
-/// Configure cache domains before attachment, when SHARE/UNSHARE transitions
-/// are valid. Once attached, probe mutable userdata plus the cleanup API's
-/// safe CURLSHE_IN_USE refusal without destroying the referenced handle.
+/// Install and attach a share according to bounded typed selectors. Configure
+/// cache domains before attachment, when SHARE/UNSHARE transitions are valid.
+/// Once attached, probe mutable userdata plus the cleanup API's safe
+/// CURLSHE_IN_USE refusal without destroying the referenced handle.
 void ApiLifecycle::ConfigureShare() {
   share_ = curl_share_init();
   if (share_ == nullptr) {
@@ -532,11 +552,11 @@ void ApiLifecycle::ConfigureShare() {
   }
 }
 
-/// Destroy share state only after the owner has cleaned the easy. Explicitly
-/// detaching first is not equivalent: curl rejects that setopt while an
-/// incomplete transfer still has a connection, but easy cleanup always drops
-/// the reference. Keep successful domains configured because share cleanup
-/// uses those bits to identify caches populated during the transfer.
+/// Destroy the share after easy cleanup has released its final reference.
+/// Explicitly detaching first is not equivalent: curl rejects that setopt while
+/// an incomplete transfer still has a connection, but easy cleanup always drops
+/// the reference. Keep successful shared domains configured so curl can identify
+/// and release caches populated during the transfer.
 void ApiLifecycle::CleanupShare() {
   if (share_ == nullptr) {
     return;
@@ -546,10 +566,11 @@ void ApiLifecycle::CleanupShare() {
   }
 }
 
-/// Feed URL and percent-encoding APIs bytes from the same bounded scenario as
-/// the transfer. A valid fallback URL keeps getter success paths reachable
-/// even when a mutation makes the complete URL unparsable; the rejected parse
-/// still executes first, so this does not hide malformed-input branches.
+/// Exercise URL parsing, typed part retrieval, duplication, and escaping
+/// against bytes already selected by the bounded scenario. A valid fallback URL
+/// keeps getter success paths reachable even when a mutation makes the complete
+/// URL unparsable; the rejected parse still executes first, so this does not
+/// hide malformed-input branches.
 void ApiLifecycle::ProbeUrlAndEscaping(std::string_view url) {
   const std::size_t bounded_size = std::min(url.size(), scenario_limits::kMaxApiStringBytes);
   const std::string input(url.substr(0, bounded_size));
@@ -615,10 +636,14 @@ void ApiLifecycle::ProbeUrlAndEscaping(std::string_view url) {
   curl_free(decoded);
 }
 
-/// Select through the typed descriptor table, suppressing duplicates whose
-/// only effect would be charging an iteration for the same immutable result.
-/// Header traversal remains unconditional in the API lane because it exposes
-/// a separate public API and is independently capped.
+/// Run correctly typed CURLINFO and response-header probes selected by the
+/// plan. Call only after the transfer entrypoint has returned. The typed
+/// descriptor table suppresses duplicates whose only effect would be charging
+/// an iteration for the same immutable result. Header traversal remains
+/// unconditional in the API lane because it exposes a separate public API and
+/// is independently capped.
+/// @param probe_upkeep True only while curl_easy_perform's internal multi
+///        remains attached and can service curl_easy_upkeep safely.
 void ApiLifecycle::ProbeTransferResults(bool probe_upkeep) {
   std::array<bool, kInfoDescriptorCount> seen{};
   const std::size_t selector_count = std::min<std::size_t>(scenario_limits::kMaxApiInfoSelectors,
@@ -655,10 +680,11 @@ void ApiLifecycle::ProbeTransferResults(bool probe_upkeep) {
   (void)curl_easy_pause(easy_, CURLPAUSE_CONT);
 }
 
-/// The duplicate inherits borrowed slists and callback userdata but not the
-/// source share. Reset it immediately while those owners are still alive,
-/// then cleanup; performing it would reuse mock/request cursors and test a
-/// harness artifact instead of libcurl's duplication lifecycle.
+/// Duplicate, reset, and destroy a scratch easy handle while every pointer-
+/// valued option copied from the source still has a live owner. The duplicate
+/// inherits borrowed slists and callback userdata but not the source share.
+/// Reset it immediately, then cleanup; performing it would reuse mock/request
+/// cursors and test a harness artifact instead of libcurl's duplication lifecycle.
 void ApiLifecycle::ProbeEasyDuplication() {
   if (!plan_.duplicate_easy()) {
     return;

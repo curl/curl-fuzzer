@@ -16,12 +16,6 @@
 
 namespace proto_fuzzer {
 
-/// Execute one scenario under a complete target behaviour. An enum makes the
-/// supported fast, coverage, and API paths explicit and prevents callers from
-/// constructing meaningless combinations of independent switches.
-/// @param scenario Structured transfer and optional API plan.
-/// @param mode Runtime coverage and lifecycle policy for this invocation.
-/// @return zero after either a bounded run or an ignored invalid scenario.
 int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode);
 
 }  // namespace proto_fuzzer

@@ -35,32 +35,17 @@ class H2PlanDriver final : public IncomingDataObserver {
   H2PlanDriver(const H2PlanDriver&) = delete;
   H2PlanDriver& operator=(const H2PlanDriver&) = delete;
 
-  /// Reset HPACK and stream state for one connection.
-  /// @param plan Ordered H2 actions and initial peer settings to execute.
-  /// @param scheme Scheme used in generated push-request pseudo-headers.
-  /// @param authority Authority used in generated push-request pseudo-headers.
   void Reset(const curl::fuzzer::proto::Http2Plan& plan, std::string scheme = "https",
              std::string authority = "tls.test");
 
-  /// Parse client frame headers after transport decoding.
-  /// @param data Contiguous bytes received from curl.
-  /// @param size Number of bytes available at `data`.
   void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
 
-  /// Advance one scripted boundary. `output` receives zero or more complete
-  /// HTTP/2 frames. A true result also represents a consumed wait or yield;
-  /// false means the next barrier is not ready or the plan is complete.
-  /// @param output Destination for the serialized frame bytes.
-  /// @return true when a frame, wait, or yield boundary was consumed.
   bool NextChunk(std::string* output);
 
-  /// @return true while startup or a bounded action remains to be processed.
   bool has_pending_work() const;
 
-  /// @return number of distinct client request streams observed.
   std::size_t observed_request_count() const;
 
-  /// @return number of non-ACK client SETTINGS frames observed.
   std::size_t observed_client_settings_count() const;
 
  private:

@@ -209,8 +209,12 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
 }  // namespace
 
-/// Implement the bounded orchestration contract documented on the public
-/// declaration; keeping argument docs there avoids two drifting descriptions.
+/// Execute one scenario under a complete target behaviour. An enum makes the
+/// supported fast, coverage, and API paths explicit and prevents callers from
+/// constructing meaningless combinations of independent switches.
+/// @param scenario Structured transfer and optional API plan.
+/// @param mode Runtime coverage and lifecycle policy for this invocation.
+/// @return zero after either a bounded run or an ignored invalid scenario.
 int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
   if (mode == ScenarioRunMode::kMultiTransfer) {
     (void)proto_fuzzer::RunMultiTransferScenario(scenario);

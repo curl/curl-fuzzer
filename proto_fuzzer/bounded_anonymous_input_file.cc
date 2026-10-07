@@ -17,15 +17,21 @@
 
 namespace proto_fuzzer {
 
+/// Construct a lazy owner. No file is opened until Write succeeds far enough
+/// to need one, keeping ordinary fuzz iterations free of filesystem work.
+/// @param max_bytes Largest input this owner will expose.
 BoundedAnonymousInputFile::BoundedAnonymousInputFile(std::size_t max_bytes)
     : max_bytes_(max_bytes), file_(nullptr), ready_(false) {}
 
+/// Close the anonymous file, invalidating the procfs pathname.
 BoundedAnonymousInputFile::~BoundedAnonymousInputFile() {
   if (file_ != nullptr) {
     std::fclose(file_);
   }
 }
 
+/// Lazily create the anonymous file and its stable procfs pathname.
+/// @return True when a usable file descriptor and pathname are available.
 bool BoundedAnonymousInputFile::EnsureOpen() {
   if (file_ != nullptr) {
     return true;
@@ -45,6 +51,12 @@ bool BoundedAnonymousInputFile::EnsureOpen() {
   return true;
 }
 
+/// Replace the complete file contents with one bounded byte string.
+/// A failed or oversized write invalidates path() so a previous iteration's
+/// bytes can never be consumed accidentally.
+/// @param data Bytes to write; may be null only when size is zero.
+/// @param size Number of bytes to expose.
+/// @return True when the complete input is ready for a filename API.
 bool BoundedAnonymousInputFile::Write(const std::uint8_t* data, std::size_t size) {
   ready_ = false;
   if (size > max_bytes_ || (data == nullptr && size != 0) || !EnsureOpen()) {
@@ -72,6 +84,8 @@ bool BoundedAnonymousInputFile::Write(const std::uint8_t* data, std::size_t size
   return true;
 }
 
+/// Return the stable procfs pathname after a successful Write.
+/// @return NUL-terminated path, or nullptr when no complete input is ready.
 const char* BoundedAnonymousInputFile::path() const { return ready_ ? path_.c_str() : nullptr; }
 
 }  // namespace proto_fuzzer

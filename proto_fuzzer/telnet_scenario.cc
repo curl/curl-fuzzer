@@ -50,6 +50,15 @@ bool BoundTelnetFragment(std::string* fragment, std::size_t* bytes_left, std::si
 
 }  // namespace
 
+/// Retain the response prefix that TelnetMockServer can preload safely.
+///
+/// TELNET runs synchronously inside curl_multi_perform(), so the harness
+/// cannot deliver later fragments or drain an arbitrary number of replies
+/// between parser transitions. This function applies both the byte budget and
+/// the stricter IAC budget shared by the LPM postprocessor and runtime. Once a
+/// fragment is truncated, every later fragment is removed because it can no
+/// longer affect curl.
+/// @param connection Response script to normalize in place.
 void BoundTelnetResponse(curl::fuzzer::proto::Connection* connection) {
   if (connection == nullptr) {
     return;
