@@ -57,9 +57,12 @@ MultiSocketDriver::MultiSocketDriver() : multi_(nullptr), timeout_ms_(-1), timer
 /// no callback deregistration or libcurl access left for the destructor.
 MultiSocketDriver::~MultiSocketDriver() = default;
 
-/// Register all callbacks before an easy handle is added. curl may announce a
-/// timer during curl_multi_add_handle, so installing later would miss the
-/// event that starts an otherwise idle socket-action application.
+/// Install socket/timer callbacks on a caller-owned multi before adding an
+/// easy handle. curl may announce a timer during curl_multi_add_handle, so
+/// installing later would miss the event that starts an otherwise idle
+/// socket-action application.
+/// @param multi Multi handle that outlives this driver.
+/// @return true when every callback option was accepted.
 bool MultiSocketDriver::Install(CURLM* multi) {
   multi_ = multi;
   if (multi_ == nullptr) {
@@ -71,9 +74,12 @@ bool MultiSocketDriver::Install(CURLM* multi) {
          curl_multi_setopt(multi_, CURLMOPT_TIMERDATA, this) == CURLM_OK;
 }
 
-/// Kick the state machine through the documented timeout pseudo-socket. This
-/// creates the first real socket and therefore gives the callback its initial
-/// watch without introducing a wall-clock dependency.
+/// Start libcurl's socket state machine through the documented timeout
+/// pseudo-socket without waiting for a real timer. This creates the first
+/// socket and gives the callback its initial watch without a wall-clock
+/// dependency.
+/// @param running_handles Receives the number of unfinished transfers.
+/// @return Result from curl_multi_socket_action.
 CURLMcode MultiSocketDriver::Start(int* running_handles) {
   if (multi_ == nullptr) {
     return CURLM_BAD_HANDLE;
@@ -82,10 +88,15 @@ CURLMcode MultiSocketDriver::Start(int* running_handles) {
   return curl_multi_socket_action(multi_, CURL_SOCKET_TIMEOUT, 0, running_handles);
 }
 
-/// Run one bounded, non-blocking application event-loop turn. The snapshot is
-/// intentional: a socket action may synchronously remove the current watch or
-/// install another one, so the callback-owned table must not be iterated as a
-/// live container across that call.
+/// Run one bounded, non-blocking event-loop turn: poll the callback-provided
+/// watch set with a zero timeout and report readiness back to libcurl.
+/// The snapshot is intentional: a socket action may synchronously remove
+/// the current watch or install another one, so the callback-owned table
+/// must not be iterated as a live container across that call. Service a
+/// deferred zero timer after socket callbacks, never recursively from the
+/// timer callback.
+/// @param running_handles In/out unfinished-transfer count.
+/// @return Result code and whether observable driver state advanced.
 MultiSocketDriver::DriveResult MultiSocketDriver::DriveReady(int* running_handles) {
   DriveResult result;
   if (multi_ == nullptr) {
@@ -149,9 +160,10 @@ MultiSocketDriver::DriveResult MultiSocketDriver::DriveReady(int* running_handle
   return result;
 }
 
-/// Touch the control APIs from a valid live-multi state. A zero-timeout query
-/// is informational; wakeup is also non-blocking when no other thread is in a
-/// poll call, which is exactly the deterministic behavior this lane needs.
+/// Exercise the wakeup and timeout-query APIs from a valid live-multi state.
+/// A zero-timeout query is informational; wakeup is also non-blocking when
+/// no other thread is in a poll call, which is the deterministic behavior
+/// this lane needs. Neither call waits or changes the operation budget.
 void MultiSocketDriver::ProbeControlApis() {
   if (multi_ == nullptr) {
     return;
@@ -161,21 +173,24 @@ void MultiSocketDriver::ProbeControlApis() {
   (void)curl_multi_wakeup(multi_);
 }
 
-/// Route the C callback into state whose lifetime is owned by DriveScenario.
+/// Trampoline registered as CURLMOPT_SOCKETFUNCTION. Route the C callback
+/// into state whose lifetime is owned by DriveScenario.
 int MultiSocketDriver::SocketCallback(CURL* /*easy*/, curl_socket_t socket, int what, void* user_data,
                                       void* socket_data) {
   return static_cast<MultiSocketDriver*>(user_data)->UpdateSocket(socket, what, socket_data);
 }
 
-/// Defer timer processing so a zero timer cannot recursively call back into
-/// curl_multi_socket_action from inside libcurl.
+/// Trampoline registered as CURLMOPT_TIMERFUNCTION. Record work for deferred
+/// processing only: invoking curl_multi_socket_action here, including for
+/// a zero timer, would recursively re-enter libcurl's callback API.
 int MultiSocketDriver::TimerCallback(CURLM* /*multi*/, long timeout_ms, void* user_data) {
   return static_cast<MultiSocketDriver*>(user_data)->UpdateTimer(timeout_ms);
 }
 
-/// Maintain a stable association for every observed fd. `socket_data` is used
-/// only as a consistency hint: libcurl owns it and may legitimately pass null
-/// for the first notification, while our fd lookup remains authoritative.
+/// Apply one socket callback transition to the fixed watch table, maintaining
+/// a stable association for every observed fd. `socket_data` is used only as
+/// a consistency hint: libcurl owns it and may legitimately pass null for
+/// the first notification, while our fd lookup remains authoritative.
 int MultiSocketDriver::UpdateSocket(curl_socket_t socket, int what, void* socket_data) {
   Watch* watch = FindWatch(socket);
   if (what == CURL_POLL_REMOVE) {
@@ -211,9 +226,10 @@ int MultiSocketDriver::UpdateSocket(curl_socket_t socket, int what, void* socket
   return 0;
 }
 
-/// Record only meaningful timer transitions. Repeated identical callbacks do
-/// not count as progress, otherwise an unproductive transfer could consume
-/// the full operation budget instead of the much smaller idle budget.
+/// Record libcurl's latest timer request for deferred processing. Only
+/// meaningful timer transitions count as progress: repeated identical
+/// callbacks could otherwise consume the full operation budget instead
+/// of the much smaller idle budget.
 int MultiSocketDriver::UpdateTimer(long timeout_ms) {
   if (!timer_pending_ || timeout_ms_ != timeout_ms) {
     ++generation_;
@@ -223,8 +239,8 @@ int MultiSocketDriver::UpdateTimer(long timeout_ms) {
   return 0;
 }
 
-/// Locate an existing association without allocating or depending on fd
-/// magnitude (socket descriptors are not safe array indexes).
+/// Find an active watch by fd without allocating or depending on fd
+/// magnitude; socket descriptors are not safe array indexes.
 MultiSocketDriver::Watch* MultiSocketDriver::FindWatch(curl_socket_t socket) {
   for (Watch& watch : watches_) {
     if (watch.active && watch.socket == socket) {
@@ -234,8 +250,9 @@ MultiSocketDriver::Watch* MultiSocketDriver::FindWatch(curl_socket_t socket) {
   return nullptr;
 }
 
-/// Return the first inactive stable slot. Exhaustion is harmless: curl keeps
-/// owning the socket and the deterministic idle budget ends the fuzz case.
+/// Find the first inactive stable slot for a newly observed fd. Exhaustion
+/// is harmless: curl keeps owning the socket and the deterministic idle
+/// budget ends the fuzz case.
 MultiSocketDriver::Watch* MultiSocketDriver::FindFreeWatch() {
   for (Watch& watch : watches_) {
     if (!watch.active) {

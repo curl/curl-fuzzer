@@ -43,25 +43,12 @@ class MultiSocketDriver {
   MultiSocketDriver(const MultiSocketDriver&) = delete;
   MultiSocketDriver& operator=(const MultiSocketDriver&) = delete;
 
-  /// Install socket/timer callbacks on a caller-owned multi handle.
-  /// @param multi Multi handle that outlives this driver.
-  /// @return true when every callback option was accepted.
   bool Install(CURLM* multi);
 
-  /// Start libcurl's socket state machine without waiting for a real timer.
-  /// @param running_handles Receives the number of unfinished transfers.
-  /// @return Result from curl_multi_socket_action.
   CURLMcode Start(int* running_handles);
 
-  /// Poll the current callback-provided watch set with a zero timeout and
-  /// report its readiness back to libcurl. A deferred zero timer is serviced
-  /// after socket callbacks, never recursively from the timer callback.
-  /// @param running_handles In/out unfinished-transfer count.
-  /// @return Result code and whether observable driver state advanced.
   DriveResult DriveReady(int* running_handles);
 
-  /// Exercise the wakeup and timeout-query APIs while the multi is live.
-  /// Neither call waits or changes the deterministic operation budget.
   void ProbeControlApis();
 
  private:
@@ -72,23 +59,16 @@ class MultiSocketDriver {
     bool active = false;
   };
 
-  /// Trampoline registered as CURLMOPT_SOCKETFUNCTION.
   static int SocketCallback(CURL* easy, curl_socket_t socket, int what, void* user_data, void* socket_data);
 
-  /// Trampoline registered as CURLMOPT_TIMERFUNCTION. It records work only;
-  /// invoking libcurl here would recursively re-enter the callback API.
   static int TimerCallback(CURLM* multi, long timeout_ms, void* user_data);
 
-  /// Apply one socket callback transition to the fixed watch table.
   int UpdateSocket(curl_socket_t socket, int what, void* socket_data);
 
-  /// Record libcurl's latest timer request for deferred processing.
   int UpdateTimer(long timeout_ms);
 
-  /// Find an active watch by fd.
   Watch* FindWatch(curl_socket_t socket);
 
-  /// Find storage for a newly observed fd.
   Watch* FindFreeWatch();
 
   /// Number of stable watch slots. The HTTP mock permits four connections;

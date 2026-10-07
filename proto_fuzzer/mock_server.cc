@@ -97,9 +97,12 @@ bool MockConnection::ok() const { return server_fd_ >= 0; }
 /// @return the server-side fd (still owned by this MockConnection).
 int MockConnection::server_fd() const { return server_fd_; }
 
-/// Query the client endpoint while this object still owns it. A zero result is
-/// deliberately ambiguous between an invalid fd and a platform query failure:
-/// callers need only distinguish a verified capacity from every unsafe case.
+/// Query the capacity curl's endpoint reports for queued client writes while
+/// this object still owns that endpoint. Synchronous protocol mocks use this
+/// before transferring fd ownership because they cannot rely on the outer
+/// driver to make room. A zero result covers both an invalid fd and a platform
+/// query failure; callers need a verified capacity before proceeding.
+/// @return SO_SNDBUF in bytes, or zero when it cannot be queried.
 std::size_t MockConnection::client_send_buffer_size() const {
   if (client_fd_ < 0) {
     return 0;
@@ -112,9 +115,12 @@ std::size_t MockConnection::client_send_buffer_size() const {
   return static_cast<std::size_t>(size);
 }
 
-/// Establish and verify the capacity required by a synchronous protocol
-/// driver. Linux may transform socket-buffer requests, so the post-set query
-/// is the contract rather than assuming setsockopt accepted the exact value.
+/// Ensure curl's endpoint reports at least `minimum` bytes of send buffer,
+/// requesting a larger SO_SNDBUF when the platform default is smaller. Linux
+/// may transform socket-buffer requests, so the post-set query establishes the
+/// contract rather than assuming setsockopt accepted the exact value.
+/// @param minimum Smallest acceptable reported capacity in bytes.
+/// @return true when the queried postcondition holds.
 bool MockConnection::EnsureClientSendBufferSize(std::size_t minimum) {
   if (client_send_buffer_size() >= minimum) {
     return true;
@@ -161,10 +167,14 @@ bool MockConnection::WriteAll(const unsigned char* data, std::size_t size) {
   return true;
 }
 
-/// Drain bytes curl has written. When a backpressure drain limit has been
-/// applied (see ApplyBackpressure), stops after drain_limit_ bytes so the
-/// kernel recv buffer stays near-full and curl keeps seeing short writes.
-/// Otherwise drains until read() returns 0/EAGAIN, matching legacy behaviour.
+/// Advance incoming transport work according to the configured per-call
+/// limit. This plaintext implementation reports bytes consumed; layered
+/// transports may also report handshake state changes so the bounded outer
+/// loop does not mistake useful protocol progress for an idle connection.
+/// When a backpressure drain limit has been applied (see ApplyBackpressure),
+/// stop after drain_limit_ bytes so the kernel recv buffer stays near-full
+/// and curl keeps seeing short writes. Otherwise drain until read() returns
+/// 0/EAGAIN, matching legacy behaviour.
 /// @return number of bytes consumed during this call.
 std::size_t MockConnection::DrainIncoming() {
   if (server_fd_ < 0) {
@@ -190,21 +200,29 @@ std::size_t MockConnection::DrainIncoming() {
   return drained;
 }
 
+/// Register a non-owning sink for bytes consumed from curl. TLS transports
+/// notify it after decryption, while plaintext transports report socket
+/// bytes directly. The observer must outlive this connection.
+/// @param observer Observer to notify, or nullptr to disable observation.
 void MockConnection::SetIncomingDataObserver(IncomingDataObserver* observer) { incoming_data_observer_ = observer; }
 
+/// Forward one application-data fragment to the optional observer.
+/// @param data First byte of the fragment.
+/// @param size Number of bytes available at `data`.
 void MockConnection::NotifyIncomingData(const unsigned char* data, std::size_t size) {
   if (incoming_data_observer_ != nullptr) {
     incoming_data_observer_->ObserveIncomingData(data, size);
   }
 }
 
-/// Tighten both halves of the socketpair buffer and/or cap DrainIncoming's
-/// per-call byte budget. SO_RCVBUF on the server fd caps how much curl can
-/// push into the pipe; SO_SNDBUF on the client fd (which curl will soon own
-/// but hasn't yet, so we can still tune it) caps how much curl's send() can
-/// buffer before short-writing. Linux socketpairs effectively use max(SNDBUF,
-/// RCVBUF*2) as pipe capacity, so we need both to see short writes reliably.
-/// See header docs.
+/// Apply deterministic backpressure knobs before traffic begins. A positive
+/// recv_buf_bytes sets SO_RCVBUF on the server fd and SO_SNDBUF on the client
+/// fd, which this object still owns, to make curl short-write or see EAGAIN.
+/// Linux socketpairs effectively use max(SNDBUF, RCVBUF*2) as pipe capacity,
+/// so both settings are needed to produce short writes reliably. Cap each
+/// DrainIncoming call at drain_limit bytes; zero leaves the drain unlimited.
+/// @param recv_buf_bytes SO_RCVBUF size in bytes, or 0 to leave default.
+/// @param drain_limit    Max bytes drained per DrainIncoming call, 0 for unlimited.
 void MockConnection::ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit) {
   if (recv_buf_bytes > 0) {
     if (server_fd_ >= 0) {
@@ -251,6 +269,7 @@ void MockConnection::ShutdownWrite() {
 /// Construct an idle MockServer with no scripted responses or open peers.
 /// DriveScenario() configures it from a Scenario before curl can open a socket;
 /// the fixed policy decides whether that scenario's ApiPlan controls the loop.
+/// @param drive_policy Multi interface loop selected for this server.
 MockServer::MockServer(MultiDrivePolicy drive_policy)
     : MockServerBase(drive_policy),
       script_count_(0),
@@ -267,8 +286,10 @@ MockServer::~MockServer() = default;
 /// Connection always occupies slot zero for backwards compatibility; only
 /// three subsequent pointers are retained so protobuf mutations cannot
 /// allocate socketpairs or prolong redirects in proportion to repeated-field
-/// size. The Scenario passed by RunScenario outlives this synchronous drive,
-/// which makes borrowing safe while avoiding response-byte copies.
+/// size. The caller must keep the Scenario alive and unmodified until the
+/// synchronous drive finishes. RunScenario provides that lifetime, making
+/// borrowing safe while avoiding copies of response bytes before curl
+/// requests the corresponding socket or chunk.
 /// @param scenario Source of the primary and bounded follow-on scripts.
 void MockServer::SetScripts(const curl::fuzzer::proto::Scenario& scenario) {
   ResetConnections();
@@ -292,7 +313,10 @@ void MockServer::SetScripts(const curl::fuzzer::proto::Scenario& scenario) {
   }
 }
 
-/// Configure whether a completed response leaves its socket reusable.
+/// Keep completed response sockets writable instead of half-closing them.
+/// The multi-transfer lane uses this to let a queued easy handle reuse an
+/// HTTP/1.1 connection; ordinary protocol drives retain close-on-completion.
+/// @param keep_open Whether the peer should suppress its response-side FIN.
 void MockServer::SetKeepConnectionsOpen(bool keep_open) { keep_connections_open_ = keep_open; }
 
 /// @return true if at least one on_readable chunk has not yet been sent.
@@ -300,20 +324,25 @@ bool MockServer::has_more_chunks() const {
   return active_script_ != nullptr && active_script_->next_chunk < active_script_->chunk_count();
 }
 
-/// Keep plaintext transport construction behind a virtual boundary so the
-/// HTTPS lane can add TLS without copying the HTTP script state machine.
+/// Construct the transport used for one HTTP exchange. HTTPS overrides this
+/// factory with a TLS record layer while retaining the same bounded response
+/// scripts and redirect lifetimes, without copying the HTTP state machine.
+/// @return a new connection, whose ok() result is checked before use.
 std::unique_ptr<MockConnection> MockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
 
-/// Release all socketpairs while the dynamic transport type is still alive.
-/// This is separate from SetScripts because a derived destructor may need to
-/// enforce a stricter order than C++'s derived-member-before-base teardown.
+/// Release all current and retired socketpairs before resetting transport-
+/// specific state. Derived destructors call this while their borrowed state
+/// is still alive. This is separate from SetScripts because a derived class
+/// may need a stricter order than C++'s derived-member-before-base teardown.
 void MockServer::ResetConnections() {
   active_script_ = nullptr;
   connection_.reset();
   previous_connections_.clear();
 }
 
-/// Plain HTTP has no connection-filter result that must be observed live.
+/// Observe curl while its connection filters are still attached. Plain HTTP
+/// has no transport-specific state to inspect; layered transports override
+/// this instead of querying stale state after the multi has been dismantled.
 /// @param easy Active easy handle, unused by the plaintext transport.
 void MockServer::ObserveActiveTransfer(CURL* /*easy*/) {}
 
@@ -380,12 +409,14 @@ curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_soc
 }
 
 /// Preload all bounded response bytes from inside OPENSOCKETFUNCTION, where
-/// the mock still owns both socketpair ends. The total serialized fuzz input
-/// is capped by libFuzzer's max_len. If a non-blocking preload fills the local
-/// socket, curl observes only the successfully queued prefix and the timeouts
-/// below bound the incomplete response. Unlike every other drive loop, this one
-/// has no iteration budget of its own, so it reasserts those timeouts after
-/// scenario setopts and clears the one option that can disable them.
+/// the mock still owns both socketpair ends, and half-close the peer when the
+/// preload finishes. This avoids a helper thread and prevents
+/// curl from waiting for the outer chunk-delivery loop. The total serialized
+/// fuzz input is capped by libFuzzer's max_len. If a non-blocking preload fills
+/// the local socket, curl observes only the successfully queued prefix and
+/// the timeouts below bound the incomplete response. This drive has no
+/// iteration budget of its own, so it reasserts those timeouts after scenario
+/// setopts and clears the option that can disable them.
 /// @param easy Configured easy handle whose open-socket callback targets this
 ///        mock.
 /// @param scenario Bounded response script to preload before performing.
@@ -496,6 +527,7 @@ bool MockServer::DeliverNextChunk() {
 /// but curl can finish sending a request body or close one after it has begun
 /// resolving/opening the redirect target. Servicing both sides makes that
 /// overlap deterministic without conflating their response scripts.
+/// @return total bytes drained during this call.
 std::size_t MockServer::DrainIncomingConnections() {
   std::size_t drained = 0;
   for (const auto& previous : previous_connections_) {
@@ -507,10 +539,14 @@ std::size_t MockServer::DrainIncomingConnections() {
   return drained;
 }
 
-/// Keep peer servicing identical across the perform and socket-action APIs.
-/// Draining first creates request-side space before a response can provoke
-/// another write, and releasing only one chunk preserves the scenario's
-/// mutation-controlled parser boundaries.
+/// Service one deterministic application event-loop turn by draining all
+/// available request bytes and releasing at most one response chunk. The
+/// shared-multi driver owns the outer loop and calls this directly; ordinary
+/// perform and socket-action drives use the same peer servicing. Draining
+/// first creates request-side space before a response can provoke another
+/// write, and releasing only one chunk preserves the scenario's mutation-
+/// controlled parser boundaries.
+/// @return true when any request or response byte advanced.
 bool MockServer::ServiceConnections() {
   bool made_progress = DrainIncomingConnections() != 0;
   if (has_more_chunks()) {
@@ -519,12 +555,18 @@ bool MockServer::ServiceConnections() {
   return made_progress;
 }
 
+/// Report how many peer sockets curl opened during the current script run.
+/// @return Number of response scripts assigned to live or retired sockets.
 std::size_t MockServer::opened_connection_count() const { return next_script_; }
 
-/// Run a zero-wait application event loop around curl_multi_socket_action.
-/// Positive timers are deliberately not slept: the API lane clears timing
-/// controls and exists to cover event-driven dispatch, while the dedicated
-/// timing lane remains responsible for clock-dependent behavior.
+/// Run a zero-wait application event loop around curl_multi_socket_action
+/// using callback state owned by MockServerBase::DriveScenario. Positive
+/// timers are deliberately not slept: the API lane clears timing controls
+/// and covers event-driven dispatch, while the timing lane remains
+/// responsible for clock-dependent behavior. Return after curl finishes or
+/// a deterministic idle/operation cap wins.
+/// @param multi Multi handle containing `easy`.
+/// @param easy The easy handle attached to the mock.
 void MockServer::RunSocketActionLoop(CURLM* multi, CURL* easy) {
   MultiSocketDriver* driver = multi_socket_driver();
   if (driver == nullptr) {

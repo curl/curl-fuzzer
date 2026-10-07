@@ -51,6 +51,8 @@ int MockServerBaseSockOptTrampoline(void* clientp, curl_socket_t curlfd, curlsoc
 }
 
 /// Construct an empty base instance with a fixed multi-drive policy.
+/// @param drive_policy Whether to perform, use socket actions, or honor the
+///        containing Scenario's ApiPlan.
 MockServerBase::MockServerBase(MultiDrivePolicy drive_policy)
     : connection_(nullptr),
       pending_recv_buf_bytes_(0),
@@ -68,8 +70,12 @@ MockServerBase::~MockServerBase() = default;
 /// @return the owned MockConnection, or nullptr if one has not been opened.
 MockConnection* MockServerBase::connection() { return connection_.get(); }
 
-/// Install the common socket-callback trio. All subclasses share the same
-/// trampoline; dispatch to the subclass happens through HandleOpenSocket().
+/// Install the common OPENSOCKETFUNCTION / OPENSOCKETDATA / SOCKOPTFUNCTION
+/// callbacks on 'easy'. All subclasses share the trampolines, which route
+/// back into this instance through HandleOpenSocket. Subclasses may override
+/// to layer additional protocol-specific setopts, such as a WRITEFUNCTION
+/// that exercises protocol APIs from inside a curl callback.
+/// @param easy The curl easy handle to configure.
 void MockServerBase::Install(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_OPENSOCKETFUNCTION, &MockServerBaseOpenSocketTrampoline);
   curl_easy_setopt(easy, CURLOPT_OPENSOCKETDATA, this);
@@ -77,6 +83,12 @@ void MockServerBase::Install(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_SOCKOPTDATA, this);
 }
 
+/// Describe the socket returned by HandleOpenSocket without issuing native
+/// descriptor queries. Stream peers return connected socketpairs; accepted
+/// sockets and datagram peers require curl's ordinary setup.
+/// @param curlfd Descriptor returned by HandleOpenSocket.
+/// @param purpose Role curl assigned to the descriptor.
+/// @return Whether curl must perform its normal socket setup.
 SocketSetupDisposition MockServerBase::GetSocketSetupDisposition(curl_socket_t /*curlfd*/, curlsocktype purpose) const {
   // curl itself accepted CURLSOCKTYPE_ACCEPT descriptors, so they must follow
   // its normal post-accept option path. Every IPCXN socket returned by the
@@ -85,14 +97,26 @@ SocketSetupDisposition MockServerBase::GetSocketSetupDisposition(curl_socket_t /
                                         : SocketSetupDisposition::kAlreadyConnected;
 }
 
-/// Ordinary event-driven mocks need no upload-callback hook; their RunLoop
-/// regains control after each perform and drains client traffic there.
+/// Bind protocol-specific work to the request-data callbacks after their
+/// per-scenario state has been constructed. Ordinary HTTP and WebSocket
+/// mocks regain control in their outer perform loops and drain client
+/// traffic there. Most mocks therefore need no hook; TELNET uses this
+/// upload-callback boundary to drain client replies while curl owns the
+/// thread.
+/// @param request_data Callback state that outlives the subsequent drive.
 void MockServerBase::ConfigureRequestData(ScenarioRequestData* /*request_data*/) {}
 
-/// Allocate a multi, attach 'easy', delegate to the subclass RunLoop, consume
-/// its completion message, and clean up. Harness setup failures return a
-/// stable sentinel; fuzzer callers may ignore it while unit tests can assert
-/// the protocol result without adding another callback or global.
+/// Run 'scenario' to completion on 'easy': allocate a multi, attach 'easy',
+/// delegate protocol-specific work to RunLoop, consume its completion
+/// message, and clean up. Read the result before removing the only easy
+/// handle so every protocol runner exercises the public multi-result path.
+/// Harness setup failures return a stable sentinel; fuzzer callers may
+/// ignore it while unit tests can assert the protocol result without adding
+/// another callback or global.
+/// @param easy     curl easy handle already Install()ed on this mock.
+/// @param scenario the Scenario proto to drive.
+/// @return the completed transfer's CURLcode, or CURLE_FAILED_INIT when the
+/// bounded drive could not produce a completion message.
 CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   const curl::fuzzer::proto::ApiPlan* api_plan =
       drive_policy_ == MultiDrivePolicy::kFromApiPlan && scenario.has_api_plan() ? &scenario.api_plan() : nullptr;
@@ -184,15 +208,31 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
   return transfer_result;
 }
 
+/// Dispose of or retain the multi after its easy handle has been removed.
+/// The default destroys it before DriveScenario returns. A protocol mock
+/// may retain it as member state when its fixed lifecycle requires easy
+/// cleanup to happen first.
+/// @param multi Detached multi handle and its live connection cache.
 void MockServerBase::HandleDetachedMulti(CurlMultiPtr /*multi*/) {}
 
-/// Preserve a safe fallback for protocol mocks that require an outer driver
-/// to make progress. The API policy currently forces HTTP, whose override can
-/// preload its bounded response and call curl_easy_perform without a thread.
+/// Run through the public easy entrypoint when a protocol mock can preload
+/// all peer work before curl takes control. The base preserves the ordinary
+/// multi-drive fallback for protocols that require an outer driver to make
+/// progress. The API policy currently forces HTTP, whose override preloads
+/// its bounded response and calls curl_easy_perform without a thread.
+/// @param easy curl easy handle already Install()ed on this mock.
+/// @param scenario Scenario whose response the mock must prepare.
+/// @param use_events Select curl's debug event-based easy entrypoint when
+///        the concrete mock supports it.
 void MockServerBase::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool /*use_events*/) {
   DriveScenario(easy, scenario);
 }
 
+/// Establish a CONNECT_ONLY transport, then perform bounded direct I/O.
+/// HTTP overrides this; other protocol mocks retain a safe fallback.
+/// @param easy curl easy handle already Install()ed on this mock.
+/// @param scenario Scenario supplying response and direct-I/O bytes.
+/// @return Results and byte counts from connect, send, and receive probes.
 ConnectOnlyRunStats MockServerBase::DriveConnectOnlyScenario(CURL* easy,
                                                              const curl::fuzzer::proto::Scenario& scenario) {
   ConnectOnlyRunStats stats;
@@ -200,21 +240,36 @@ ConnectOnlyRunStats MockServerBase::DriveConnectOnlyScenario(CURL* easy,
   return stats;
 }
 
-/// Expose only the current callback state to protocol drive loops. Ownership
-/// remains in DriveScenario so no subclass can accidentally shorten it.
+/// Expose the callback state installed for the current socket-action drive.
+/// HTTP's RunLoop uses this instead of reading the proto directly, so only
+/// the dedicated API binary can opt into lifecycle work and compatibility
+/// inputs containing the new field retain their old behavior. Ownership
+/// remains in DriveScenario so no subclass can shorten the driver's lifetime.
+/// @return active driver, or nullptr for the ordinary perform path.
 MultiSocketDriver* MockServerBase::multi_socket_driver() { return multi_socket_driver_; }
 
+/// @return extra easy handles removed and cleaned after the latest drive.
+/// Server push is currently the only path that can add one behind the
+/// caller's back; exposing the count to subclasses keeps ownership in this
+/// multi-owning base while allowing focused lifecycle assertions.
 std::size_t MockServerBase::additional_handle_cleanup_count() const { return additional_handle_cleanup_count_; }
 
+/// Resume receive-side callback output at one bounded drive boundary when
+/// the dedicated API plan requested it. Calling CONT before the callback
+/// pauses is harmless; repeating it ensures a later response chunk cannot
+/// leave the transfer suspended until timeout.
+/// @param easy Active easy handle whose receive callbacks may be paused.
 void MockServerBase::ResumeResponseIfRequested(CURL* easy) {
   if (resume_response_) {
     (void)curl_easy_pause(easy, CURLPAUSE_CONT);
   }
 }
 
-/// Hand the cached backpressure config to the connection. Safe to call when
-/// connection_ is null (no-op) or when both knobs are 0 (ApplyBackpressure
-/// itself is a no-op in that case).
+/// Apply the BackpressureConfig cached by DriveScenario to the new
+/// connection_. Subclasses call this at the end of HandleOpenSocket, before
+/// returning the client fd, so SO_RCVBUF takes effect before traffic flows.
+/// Safe to call when connection_ is null or both knobs are zero: those cases
+/// are no-ops.
 void MockServerBase::ApplyPendingBackpressure() {
   if (connection_) {
     connection_->ApplyBackpressure(pending_recv_buf_bytes_, pending_drain_limit_);
@@ -231,8 +286,12 @@ bool MockServerBase::UsesTimedDrive(const curl::fuzzer::proto::Scenario& scenari
   return bp.recv_buf_bytes() != 0 || bp.drain_limit() != 0;
 }
 
-/// Wait on curl's fdset with a short timeout. Returns select()'s result; on
-/// error sets *rc to the corresponding CURLMcode.
+/// Wait on curl's fdset with a short timeout. Drive loops call this only for
+/// scenarios that explicitly request backpressure/timing behaviour; ordinary
+/// scenarios run without wall-clock sleeps.
+/// @param multi The multi handle whose fdset to poll.
+/// @param rc    Out parameter: set to the CURLMcode on error.
+/// @return select()'s result, or -1 on curl_multi_fdset failure.
 int MockServerBase::WaitOnMultiFdset(CURLM* multi, CURLMcode* rc) {
   fd_set readfds;
   fd_set writefds;
@@ -254,9 +313,13 @@ int MockServerBase::WaitOnMultiFdset(CURLM* multi, CURLMcode* rc) {
   return ::select(maxfd + 1, &readfds, &writefds, &excfds, &timeout);
 }
 
-/// Exercise curl_multi_poll's pollset/filter traversal once without sleeping.
-/// The result is deliberately ignored: this is an API/state probe, while the
-/// protocol-specific perform loop remains the authority on transfer progress.
+/// Ask curl to construct and inspect its connection-filter pollset without
+/// waiting. A perform-only harness can complete local socketpair transfers
+/// while skipping the public multi-poll path used by event-driven
+/// applications. Timing scenarios make one zero-timeout probe to retain
+/// that coverage without taxing the fixed fast lanes. The result is ignored:
+/// the protocol-specific perform loop determines transfer progress.
+/// @param multi The active multi handle after at least one perform call.
 void MockServerBase::ProbeMultiPollset(CURLM* multi) {
   int numfds = 0;
   (void)curl_multi_poll(multi, nullptr, 0, 0, &numfds);

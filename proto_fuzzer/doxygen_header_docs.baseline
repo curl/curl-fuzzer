@@ -44,51 +44,6 @@ proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::executed_action_
 proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::handshake_complete() const
 proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::request_headers_received() const
 proto_fuzzer/http3_mock_server.h:proto_fuzzer::Http3MockServer::server_port() const
-proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::DrainIncoming()
-proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::EnsureClientSendBufferSize(std::size_t minimum)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::NotifyIncomingData(const unsigned char *data, std::size_t size)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::SetIncomingDataObserver(IncomingDataObserver *observer)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockConnection::client_send_buffer_size() const
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::CreateConnection()
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DeliverNextChunk()
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DrainIncomingConnections()
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DriveConnectOnlyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::DriveEasyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario, bool use_events=false) override
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::MockServer(MultiDrivePolicy drive_policy=MultiDrivePolicy::kPerform)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::ObserveActiveTransfer(CURL *easy)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::ResetConnections()
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::RunSocketActionLoop(CURLM *multi, CURL *easy)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::ServiceConnections()
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::SetKeepConnectionsOpen(bool keep_open)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::SetScripts(const curl::fuzzer::proto::Scenario &scenario)
-proto_fuzzer/mock_server.h:proto_fuzzer::MockServer::opened_connection_count() const
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ApplyPendingBackpressure()
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ConfigureRequestData(ScenarioRequestData *request_data)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::DriveConnectOnlyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::DriveEasyScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario, bool use_events=false)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::DriveScenario(CURL *easy, const curl::fuzzer::proto::Scenario &scenario)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::HandleDetachedMulti(CurlMultiPtr multi)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::Install(CURL *easy)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::MockServerBase(MultiDrivePolicy drive_policy=MultiDrivePolicy::kPerform)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ProbeMultiPollset(CURLM *multi)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::ResumeResponseIfRequested(CURL *easy)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::UsesTimedDrive(const curl::fuzzer::proto::Scenario &scenario)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::WaitOnMultiFdset(CURLM *multi, CURLMcode *rc)
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::additional_handle_cleanup_count() const
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::connection()
-proto_fuzzer/mock_server_base.h:proto_fuzzer::MockServerBase::multi_socket_driver()
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::DriveReady(int *running_handles)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::FindFreeWatch()
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::FindWatch(curl_socket_t socket)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::Install(CURLM *multi)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::ProbeControlApis()
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::SocketCallback(CURL *easy, curl_socket_t socket, int what, void *user_data, void *socket_data)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::Start(int *running_handles)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::TimerCallback(CURLM *multi, long timeout_ms, void *user_data)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::UpdateSocket(curl_socket_t socket, int what, void *socket_data)
-proto_fuzzer/multi_socket_driver.h:proto_fuzzer::MultiSocketDriver::UpdateTimer(long timeout_ms)
 proto_fuzzer/socks4_mock_server.h:proto_fuzzer::Socks4MockServer::Install(CURL *easy) override
 proto_fuzzer/socks4_mock_server.h:proto_fuzzer::Socks4MockServer::Socks4MockServer(curl::fuzzer::proto::SocksProxyMode mode)
 proto_fuzzer/telnet_mock_server.h:proto_fuzzer::TelnetMockServer::ConfigureRequestData(ScenarioRequestData *request_data) override
