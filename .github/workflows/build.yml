@@ -104,6 +104,9 @@ jobs:
           tools: cmake clang clang++ ninja
 
       - name: Compile deps target
+        env:
+          # GMP 6.3.0's configure probes do not support GCC 15's C23 default.
+          CFLAGS: -std=gnu17
         run: ./scripts/compile_target.sh deps
 
   PythonTests:
