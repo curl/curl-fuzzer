@@ -99,6 +99,12 @@ every coverage feature.
 
 ## Verify a change
 
+Keep function descriptions, parameter contracts, and return documentation beside
+their definitions in `.cc` files. Do not repeat them on header declarations.
+Class, type, and field documentation stays in headers, as does documentation for
+functions defined there and pure virtual contracts. Run the placement and
+coverage checks with `cmake --build build --target doxygen-check`.
+
 Run the focused Python tests for schema generation and target wiring, then
 build the affected binary and the C++ unit-test aggregate:
 

@@ -2201,8 +2201,6 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             ${CMAKE_BINARY_DIR}/proto_fuzzer_doxygen_locations)
         set(DOXYFILE_LOCATION_OUT
             ${CMAKE_BINARY_DIR}/proto_fuzzer_Doxyfile.locations)
-        set(DOXYGEN_HEADER_DOC_BASELINE
-            ${PROTO_FUZZER_SRC_DIR}/doxygen_header_docs.baseline)
         set(DOXYGEN_LOCATION_CHECK
             ${CMAKE_SOURCE_DIR}/scripts/check_doxygen_doc_locations.py)
         configure_file(
@@ -2230,7 +2228,6 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_LOCATION_OUT}
             COMMAND ${Python3_EXECUTABLE} ${DOXYGEN_LOCATION_CHECK}
                     --xml-dir ${DOXYGEN_LOCATION_OUTPUT_DIR}/xml
-                    --baseline ${DOXYGEN_HEADER_DOC_BASELINE}
             COMMENT "Running Doxygen coverage and doc-location checks on proto_fuzzer/"
             VERBATIM
         )

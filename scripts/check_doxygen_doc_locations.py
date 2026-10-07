@@ -5,9 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections import Counter
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
@@ -21,20 +19,7 @@ DESCRIPTION_ELEMENTS = (
 
 
 class DocumentationLocationError(RuntimeError):
-    """Raised when Doxygen data or its checked-in baseline is invalid."""
-
-
-@dataclass(frozen=True)
-class BaselineDifference:
-    """The two ways the observed documentation can differ from its baseline."""
-
-    unexpected: frozenset[str]
-    stale: frozenset[str]
-
-    @property
-    def matches(self) -> bool:
-        """Return whether the observed and expected sets are identical."""
-        return not self.unexpected and not self.stale
+    """Raised when Doxygen data is invalid."""
 
 
 def normalize_argsstring(argsstring: str) -> str:
@@ -143,103 +128,37 @@ def find_header_documented_functions(xml_dir: Path) -> set[str]:
             previous_id = documented.get(key)
             if previous_id is not None and previous_id != member_id:
                 raise DocumentationLocationError(
-                    f"multiple Doxygen functions have the same baseline key: {key}"
+                    f"multiple Doxygen functions have the same function key: {key}"
                 )
             documented[key] = member_id
 
     return set(documented)
 
 
-def read_baseline(path: Path) -> set[str]:
-    """Read a newline-delimited set, permitting comments and blank lines."""
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError) as error:
-        raise DocumentationLocationError(
-            f"could not read baseline {path}: {error}"
-        ) from error
-    entries = [
-        line.strip()
-        for line in lines
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    duplicates = sorted(entry for entry, count in Counter(entries).items() if count > 1)
-    if duplicates:
-        raise DocumentationLocationError(
-            f"baseline {path} contains duplicate entries: " + ", ".join(duplicates)
-        )
-    return set(entries)
-
-
-def write_baseline(path: Path, entries: Iterable[str]) -> None:
-    """Write the canonical sorted representation of a documentation set."""
-    ordered = sorted(set(entries))
-    contents = "".join(f"{entry}\n" for entry in ordered)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(contents, encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        raise DocumentationLocationError(
-            f"could not write baseline {path}: {error}"
-        ) from error
-
-
-def compare_baseline(
-    observed: Iterable[str], expected: Iterable[str]
-) -> BaselineDifference:
-    """Compare both sides exactly, including entries that became stale."""
-    observed_set = frozenset(observed)
-    expected_set = frozenset(expected)
-    return BaselineDifference(
-        unexpected=observed_set - expected_set,
-        stale=expected_set - observed_set,
-    )
-
-
 def parse_arguments(arguments: Sequence[str]) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--xml-dir", required=True, type=Path)
-    parser.add_argument("--baseline", required=True, type=Path)
-    parser.add_argument(
-        "--update-baseline",
-        action="store_true",
-        help="replace the baseline with the currently observed set",
-    )
     return parser.parse_args(arguments)
 
 
-def _print_difference(difference: BaselineDifference) -> None:
-    print("Doxygen documentation-location baseline mismatch.", file=sys.stderr)
-    if difference.unexpected:
-        print(
-            "Unexpected function documentation attached to header declarations:",
-            file=sys.stderr,
-        )
-        for entry in sorted(difference.unexpected):
-            print(f"  + {entry}", file=sys.stderr)
-    if difference.stale:
-        print("Stale baseline entries no longer found:", file=sys.stderr)
-        for entry in sorted(difference.stale):
-            print(f"  - {entry}", file=sys.stderr)
+def _print_violations(observed: set[str]) -> None:
+    print(
+        "Function documentation attached to out-of-line header declarations:",
+        file=sys.stderr,
+    )
+    for entry in sorted(observed):
+        print(f"  {entry}", file=sys.stderr)
     print(
         "Move function descriptions to their out-of-line definitions.", file=sys.stderr
     )
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
-    """Check Doxygen's function documentation locations against the baseline."""
+    """Reject documentation on out-of-line header declarations."""
     parsed = parse_arguments(sys.argv[1:] if arguments is None else arguments)
     try:
         observed = find_header_documented_functions(parsed.xml_dir)
-        if parsed.update_baseline:
-            write_baseline(parsed.baseline, observed)
-            print(
-                f"Updated {parsed.baseline} with {len(observed)} "
-                "header-documented function(s)."
-            )
-            return 0
-        difference = compare_baseline(observed, read_baseline(parsed.baseline))
     except DocumentationLocationError as error:
         print(
             f"Could not check Doxygen documentation locations: {error}",
@@ -247,9 +166,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    if difference.matches:
+    if not observed:
         return 0
-    _print_difference(difference)
+    _print_violations(observed)
     return 1
 
 
