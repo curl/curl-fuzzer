@@ -27,7 +27,7 @@ env:
 jobs:
   BuildFuzzers:
     name: 'Build fuzzers'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       matrix: ${{ steps.create-shards.outputs.matrix }}
     env:
@@ -70,7 +70,8 @@ jobs:
 
       - name: Trim build cache
         if: steps.build-cache.outputs.cache-hit != 'true'
-        run: sudo .curl-fuzzer/scripts/trim_cache.sh "${CACHE_PATH}/build"
+        # Set TMPDIR after sudo; the loader removes it before sudo starts.
+        run: sudo env TMPDIR="$RUNNER_TEMP" .curl-fuzzer/scripts/trim_cache.sh "${CACHE_PATH}/build"
 
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true'
@@ -178,7 +179,7 @@ jobs:
   RunFuzzers:
     name: 'Run fuzzers'
     needs: [BuildFuzzers]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -220,7 +221,7 @@ jobs:
     # leg succeeded.
     needs: [RunFuzzers]
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Check RunFuzzers result
         env:

@@ -26,11 +26,15 @@ jobs:
           - address
           - memory
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       SANITIZER: ${{ matrix.sanitizer }}
       BUILD_DIR: ${{ github.workspace }}/build-${{ matrix.sanitizer }}
     steps:
+      # Ubuntu 26.04 mounts /tmp as tmpfs; keep build and cache staging on disk.
+      - name: Use disk-backed temporary files
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -84,8 +88,11 @@ jobs:
 
   just_dependencies:
     name: 'Just dependencies'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
+      - name: Use disk-backed temporary files
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -97,11 +104,14 @@ jobs:
           tools: cmake clang clang++ ninja
 
       - name: Compile deps target
+        env:
+          # GMP 6.3.0's configure probes do not support GCC 15's C23 default.
+          CFLAGS: -std=gnu17
         run: ./scripts/compile_target.sh deps
 
   PythonTests:
     name: 'Python tests'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

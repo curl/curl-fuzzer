@@ -20,7 +20,7 @@ permissions: {}
 jobs:
   acr:
     name: 'Build ${{ matrix.sanitizer }}/${{ matrix.engine }}'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: ${{ github.ref == 'refs/heads/master' && 'acrmaster' || 'acrpr' }}
     permissions:
       contents: read
@@ -31,6 +31,10 @@ jobs:
         sanitizer: [address, undefined]
         engine: [libfuzzer, honggfuzz]
     steps:
+      # Repro image staging and cache trimming can copy large build outputs.
+      - name: Use disk-backed temporary files
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -90,7 +94,8 @@ jobs:
 
       - name: Trim build cache
         if: steps.build-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master'
-        run: sudo scripts/trim_cache.sh build
+        # Set TMPDIR after sudo; the loader removes it before sudo starts.
+        run: sudo env TMPDIR="$RUNNER_TEMP" scripts/trim_cache.sh build
 
       - name: Save build cache
         if: steps.build-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master'

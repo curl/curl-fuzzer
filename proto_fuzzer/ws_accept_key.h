@@ -26,7 +26,7 @@ namespace detail {
 /// @param data Pointer to the input bytes to hash.
 /// @param len  Number of input bytes.
 /// @return 20-byte SHA-1 digest.
-inline std::array<uint8_t, 20> Sha1(const uint8_t *data, std::size_t len) {
+inline std::array<uint8_t, 20> Sha1(const uint8_t* data, std::size_t len) {
   // Initial hash values.
   uint32_t h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
 
@@ -37,7 +37,7 @@ inline std::array<uint8_t, 20> Sha1(const uint8_t *data, std::size_t len) {
   // Use a small stack buffer for typical WebSocket key sizes (< 128 bytes).
   // Fall back to heap for anything larger.
   uint8_t stack_buf[128];
-  uint8_t *msg;
+  uint8_t* msg;
   bool heap = padded_len > sizeof(stack_buf);
   if (heap) {
     msg = new uint8_t[padded_len]();
@@ -116,7 +116,7 @@ inline std::array<uint8_t, 20> Sha1(const uint8_t *data, std::size_t len) {
 /// @param data Pointer to the input bytes to encode.
 /// @param len  Number of input bytes.
 /// @return Base64-encoded string.
-inline std::string Base64Encode(const uint8_t *data, std::size_t len) {
+inline std::string Base64Encode(const uint8_t* data, std::size_t len) {
   static const char kTable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   std::string out;
   out.reserve(4 * ((len + 2) / 3));
@@ -137,10 +137,10 @@ inline std::string Base64Encode(const uint8_t *data, std::size_t len) {
 /// Compute the RFC 6455 Sec-WebSocket-Accept value for a given client key.
 /// @param key The client-supplied Sec-WebSocket-Key header value.
 /// @return The base64-encoded Sec-WebSocket-Accept string.
-inline std::string ComputeWebSocketAcceptKey(const std::string &key) {
+inline std::string ComputeWebSocketAcceptKey(const std::string& key) {
   static const char kGuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
   std::string combined = key + kGuid;
-  auto digest = detail::Sha1(reinterpret_cast<const uint8_t *>(combined.data()), combined.size());
+  auto digest = detail::Sha1(reinterpret_cast<const uint8_t*>(combined.data()), combined.size());
   return detail::Base64Encode(digest.data(), digest.size());
 }
 

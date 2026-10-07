@@ -21,7 +21,7 @@ jobs:
     needs: [ci]
     # Failures open the alert; successes close an existing alert.
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       issues: write  # Needed to create, assign, update, and close alert issues

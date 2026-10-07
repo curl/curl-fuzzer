@@ -127,6 +127,10 @@ if(NOT EXISTS ${HTTP3_NGTCP2_INSTALL_STAMP} OR
             -DOPENSSL_SSL_LIBRARY=${HTTP3_OPENSSL_SSL_STATIC_LIB}
             -DOPENSSL_CRYPTO_LIBRARY=${HTTP3_OPENSSL_CRYPTO_STATIC_LIB}
             -DOPENSSL_USE_STATIC_LIBS=ON
+            # FindOpenSSL otherwise adds private dependencies from the host's
+            # openssl.pc, even when the static archives are supplied explicitly.
+            # An empty executable preserves FindPkgConfig's fallback commands.
+            -DPKG_CONFIG_EXECUTABLE:FILEPATH=
             -DENABLE_LIB_ONLY=ON
             -DENABLE_STATIC_LIB=ON
             -DENABLE_SHARED_LIB=OFF
@@ -194,12 +198,13 @@ set(HTTP3_CACHE_INSTALL_DIRS
     ${HTTP3_NGTCP2_INSTALL_DIR}
 )
 
-# Arguments consumed by the dedicated curl HTTP/3 variant. Direct paths keep
-# detection hermetic even though the minimal OpenSSL install intentionally
-# removes pkg-config metadata.
+# Arguments consumed by the dedicated curl HTTP/3 variant. Supply dependency
+# paths explicitly and keep pkg-config disabled, as for ngtcp2 above, because
+# the minimal OpenSSL install intentionally removes pkg-config metadata.
 set(HTTP3_CURL_CMAKE_ARGS
     -DUSE_NGTCP2=ON
     -DUSE_QUICHE=OFF
+    -DPKG_CONFIG_EXECUTABLE:FILEPATH=
     -DOPENSSL_ROOT_DIR=${HTTP3_OPENSSL_INSTALL_DIR}
     -DOPENSSL_USE_STATIC_LIBS=ON
     -DOPENSSL_INCLUDE_DIR=${HTTP3_OPENSSL_INCLUDE_DIR}
