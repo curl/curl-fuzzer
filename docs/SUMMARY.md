@@ -12,6 +12,7 @@
   - [Scenarios and corpora](proto/scenarios.md)
   - [Target profiles](proto/target-profiles.md)
   - [Extending the structured harness](proto/extending.md)
+  - [C++ reference](proto/cpp-reference.md)
 - [Python tools](tooling.md)
 - [Coverage](coverage.md)
 - [Reproducing findings](reproducing.md)

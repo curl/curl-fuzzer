@@ -106,4 +106,5 @@ libFuzzer mutation engine.
 
 Continue with [Writing and inspecting scenarios](scenarios.md), then consult
 [Target profiles](target-profiles.md) before choosing a corpus or adding a
-field.
+field. The [C++ reference](cpp-reference.md) documents the implementation's
+classes, functions, and ownership contracts.

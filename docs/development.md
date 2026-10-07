@@ -32,7 +32,8 @@ cargo install mdbook --version "=${MDBOOK_VERSION}" --locked
 cargo install mdbook-mermaid --version "=${MDBOOK_MERMAID_VERSION}" --locked
 ```
 
-With Node.js 18 or newer, install the locked JavaScript dependencies used by
+Install CMake and Doxygen for the [C++ reference](proto/cpp-reference.md), and
+with Node.js 18 or newer, install the locked JavaScript dependencies used by
 the browser decoder:
 
 ```shell
@@ -45,26 +46,33 @@ repository root:
 ```shell
 mdbook-mermaid install .
 mdbook build
+cmake -B build .
+cmake --build build --target doxygen-docs
+mkdir -p _site/api
+cp -R build/proto_fuzzer_reference/html _site/api/proto_fuzzer
 uv run generate_decoder_html --output _site/corpus-decoder/index.html
 ```
 
 The Mermaid assets are generated and ignored by Git. Delete them before
 rerunning the installer after an `mdbook-mermaid` upgrade because the installer
 does not overwrite existing assets. For live editing, run
-`mdbook serve --open`. The browser decoder is generated separately and is
-therefore not refreshed by the mdBook development server.
+`mdbook serve --open`. The browser decoder and C++ reference are generated
+separately and are therefore not refreshed by the mdBook development server.
+Run their generation commands again after rebuilding the book. The
+`doxygen-docs` target checks the source documentation before rendering HTML;
+it does not compile curl or the fuzzers.
 
-Run its optional browser tests for both legacy TLV and protobuf `Scenario`
-inputs with:
+Run the optional browser tests for the guides, C++ reference, and decoder with:
 
 ```shell
 uv sync --extra browser-tests
 uv run playwright install chromium
-uv run pytest tests/browser/test_corpus_decoder.py
+uv run pytest tests/browser
 ```
 
-The documentation CI builds the book and decoder together. The Pages workflow
-publishes `_site/` from `master` for <https://fuzz.curl.se/>. `book.toml`
+The documentation CI builds the book, decoder, and C++ reference together. The
+Pages workflow publishes `_site/` from `master` for <https://fuzz.curl.se/>, with
+the reference at `/api/proto_fuzzer/`. `book.toml`
 records the intended hostname, but the custom domain and HTTPS enforcement must
 also be configured in the repository's Pages settings.
 

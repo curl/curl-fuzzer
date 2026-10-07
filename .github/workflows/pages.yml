@@ -41,6 +41,9 @@ jobs:
 
       - name: Install documentation tools
         run: |
+          sudo find /etc/apt/sources.list.d -type f -not -name 'ubuntu.sources' -delete -print
+          sudo apt-get -o Dpkg::Use-Pty=0 update
+          sudo apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends cmake doxygen
           cargo install mdbook --version "=${MDBOOK_VERSION}" --locked
           cargo install mdbook-mermaid \
             --version "=${MDBOOK_MERMAID_VERSION}" --locked
@@ -58,8 +61,13 @@ jobs:
           test -s mermaid.min.js
           test -s mermaid-init.js
           mdbook build
+          cmake -B build .
+          cmake --build build --target doxygen-docs
+          mkdir -p _site/api
+          cp -R build/proto_fuzzer_reference/html _site/api/proto_fuzzer
           python -m curl_fuzzer_tools.generate_decoder_html --output _site/corpus-decoder/index.html
           test -s _site/index.html
+          test -s _site/api/proto_fuzzer/index.html
           test -s _site/corpus-decoder/index.html
           grep --fixed-strings --quiet '<pre class="mermaid">' _site/proto/overview.html
           grep --fixed-strings --line-regexp --quiet -- "${DOCS_SITE}" _site/CNAME

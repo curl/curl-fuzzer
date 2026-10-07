@@ -1,0 +1,24 @@
+# Published C++ contributor reference. Keep extraction shared with the coverage
+# pass so the generated descriptions come from the same header types and .cc
+# definitions checked by doxygen-check. The published file list omits fixtures.
+
+@INCLUDE               = "@DOXYFILE_OUT@"
+
+PROJECT_NAME           = "curl-fuzzer C++ reference"
+OUTPUT_DIRECTORY       = "@DOXYGEN_REFERENCE_OUTPUT_DIR@"
+WARN_LOGFILE           = "@DOXYGEN_REFERENCE_WARN_LOG@"
+INPUT                 += "@DOXYGEN_REFERENCE_MAINPAGE@"
+FILE_PATTERNS         += *.dox
+EXCLUDE_PATTERNS       += */tls_test_credentials.h *_test.cc
+
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_FROM_PATH        = "@CMAKE_SOURCE_DIR@/"
+
+# Defaulted/deleted declarations without descriptions need no reference entry.
+# Private, static, and anonymous helpers remain outside the shared API scope.
+HIDE_UNDOC_MEMBERS      = YES
+HIDE_UNDOC_CLASSES      = YES
