@@ -13,6 +13,8 @@
 
 namespace proto_fuzzer {
 
+/// Construct an HTTP/2 TLS peer with the selected certificate chain.
+/// @param certificate_chain Fixed certificate-chain profile to present.
 H2OriginMockServer::H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
     : TlsMockServer(TlsApplicationProtocol::kHttp2, certificate_chain) {}
 
@@ -27,18 +29,25 @@ H2OriginMockServer::~H2OriginMockServer() {
 /// options after this hook is safe because the fixed H2 policy removes
 /// HTTP_VERSION and does not expose UPKEEP_INTERVAL_MS in the structured
 /// option manifest.
+/// @param easy Easy handle to configure.
 void H2OriginMockServer::Install(CURL* easy) {
   TlsMockServer::Install(easy);
   (void)curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
   (void)curl_easy_setopt(easy, CURLOPT_UPKEEP_INTERVAL_MS, 0L);
 }
 
+/// Attach the reusable H2 client-frame tracker after TLS decryption.
+/// @return Newly allocated TLS connection with the tracker attached.
 std::unique_ptr<MockConnection> H2OriginMockServer::CreateConnection() {
   std::unique_ptr<MockConnection> connection = TlsMockServer::CreateConnection();
   runtime_.AttachConnection(connection.get());
   return connection;
 }
 
+/// Run the raw HTTP/2 response driver and probe server push and upkeep APIs.
+/// @param multi Multi handle containing `easy`.
+/// @param easy Easy handle attached to this mock.
+/// @param scenario Source of bounded HTTP/2 response bytes.
 void H2OriginMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   runtime_.PrepareMulti(multi, scenario.accept_h2_push());
   if (!scenario.has_http2_plan()) {
@@ -54,26 +63,16 @@ void H2OriginMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::p
   runtime_.FinishTransfer(easy, connection());
 }
 
+/// Keep the connection cache alive until this mock is destroyed, after the
+/// caller has cleaned the detached easy handle.
+/// @param multi Detached multi handle and its live connection cache.
 void H2OriginMockServer::HandleDetachedMulti(CurlMultiPtr multi) { retained_multi_ = std::move(multi); }
 
-std::size_t H2OriginMockServer::push_callback_count() const { return runtime_.push_callback_count(); }
+/// Expose shared protocol observations without allowing carrier state changes.
+/// @return Runtime owned by this TLS carrier.
+const H2Runtime& H2OriginMockServer::runtime() const { return runtime_; }
 
-std::size_t H2OriginMockServer::push_header_count() const { return runtime_.push_header_count(); }
-
-bool H2OriginMockServer::saw_push_path() const { return runtime_.saw_push_path(); }
-
-std::size_t H2OriginMockServer::accepted_push_count() const { return runtime_.accepted_push_count(); }
-
+/// @return Number of accepted pushed handles explicitly cleaned up.
 std::size_t H2OriginMockServer::cleaned_push_count() const { return additional_handle_cleanup_count(); }
-
-std::size_t H2OriginMockServer::pushed_body_bytes() const { return runtime_.pushed_body_bytes(); }
-
-CURLcode H2OriginMockServer::upkeep_result() const { return runtime_.upkeep_result(); }
-
-std::size_t H2OriginMockServer::observed_request_count() const { return runtime_.observed_request_count(); }
-
-std::size_t H2OriginMockServer::observed_client_settings_count() const {
-  return runtime_.observed_client_settings_count();
-}
 
 }  // namespace proto_fuzzer

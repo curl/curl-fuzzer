@@ -78,16 +78,17 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
                           &result.new_connection_count);
   result.negotiated_alpn = server.negotiated_alpn();
   result.handshake_count = server.completed_handshake_count();
-  result.push_callback_count = server.push_callback_count();
-  result.push_header_count = server.push_header_count();
-  result.saw_push_path = server.saw_push_path();
-  result.accepted_push_count = server.accepted_push_count();
+  const proto_fuzzer::H2Runtime &runtime = server.runtime();
+  result.push_callback_count = runtime.push_callback_count();
+  result.push_header_count = runtime.push_header_count();
+  result.saw_push_path = runtime.saw_push_path();
+  result.accepted_push_count = runtime.accepted_push_count();
   result.cleaned_push_count = server.cleaned_push_count();
-  result.pushed_body_bytes = server.pushed_body_bytes();
-  result.observed_request_count = server.observed_request_count();
+  result.pushed_body_bytes = runtime.pushed_body_bytes();
+  result.observed_request_count = runtime.observed_request_count();
   result.observed_client_settings_count =
-      server.observed_client_settings_count();
-  result.upkeep_result = server.upkeep_result();
+      runtime.observed_client_settings_count();
+  result.upkeep_result = runtime.upkeep_result();
 
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);

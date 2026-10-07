@@ -28,6 +28,9 @@ constexpr std::size_t kMaxAcceptedPushes = 1;
 
 }  // namespace
 
+/// Construct detached protocol state without observing a connection.
+H2Runtime::H2Runtime() = default;
+
 /// Install the bounded push policy before curl emits its initial SETTINGS.
 /// The runtime must outlive the multi and any accepted pushed handles.
 /// @param multi Caller-owned multi handle receiving the push callbacks.
@@ -110,6 +113,30 @@ void H2Runtime::FinishTransfer(CURL* easy, MockConnection* connection) {
     (void)connection->DrainIncoming();
   }
 }
+
+/// @return Number of syntactically valid pushes offered to this runtime.
+std::size_t H2Runtime::push_callback_count() const { return push_callback_count_; }
+
+/// @return Number of PUSH_PROMISE headers advertised to the push callback.
+std::size_t H2Runtime::push_header_count() const { return push_header_count_; }
+
+/// @return True when the latest push callback found the promised :path.
+bool H2Runtime::saw_push_path() const { return saw_push_path_; }
+
+/// @return Number of pushed transfers accepted in the most recent drive.
+std::size_t H2Runtime::accepted_push_count() const { return accepted_push_count_; }
+
+/// @return Body bytes consumed from accepted pushes in the latest drive.
+std::size_t H2Runtime::pushed_body_bytes() const { return pushed_body_bytes_; }
+
+/// @return Result of the most recent upkeep probe, or CURLE_FAILED_INIT.
+CURLcode H2Runtime::upkeep_result() const { return upkeep_result_; }
+
+/// @return Number of request streams observed since the latest plan reset.
+std::size_t H2Runtime::observed_request_count() const { return plan_driver_.observed_request_count(); }
+
+/// @return Non-ACK client SETTINGS frames observed since the latest plan reset.
+std::size_t H2Runtime::observed_client_settings_count() const { return plan_driver_.observed_client_settings_count(); }
 
 int H2Runtime::PushCallback(CURL* /*parent*/, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
                             void* userdata) {

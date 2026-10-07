@@ -29,46 +29,16 @@ class H2CleartextMockServer final : public MockServer {
   H2CleartextMockServer();
   ~H2CleartextMockServer() override;
 
-  /// Install the socketpair peer and force HTTP/2 prior-knowledge mode.
-  /// @param easy Easy handle to configure.
   void Install(CURL* easy) override;
 
-  /// @return number of syntactically valid pushes offered to the callback.
-  std::size_t push_callback_count() const;
-
-  std::size_t push_header_count() const;
-
-  bool saw_push_path() const;
-
-  /// @return number of pushed transfers accepted by the bounded callback.
-  std::size_t accepted_push_count() const;
-
-  /// @return number of accepted pushed handles explicitly cleaned up.
+  const H2Runtime& runtime() const;
   std::size_t cleaned_push_count() const;
 
-  std::size_t pushed_body_bytes() const;
-
-  /// @return result of the bounded post-transfer curl_easy_upkeep call.
-  CURLcode upkeep_result() const;
-
-  /// @return number of client request streams observed by a structured plan.
-  std::size_t observed_request_count() const;
-
-  std::size_t observed_client_settings_count() const;
-
  protected:
-  /// Attach the reusable H2 client-frame tracker to the plaintext connection.
-  /// @return newly allocated plaintext connection with the tracker attached.
   std::unique_ptr<MockConnection> CreateConnection() override;
 
-  /// Drive raw or structured H2 peer work and probe server push and upkeep.
-  /// @param multi Multi handle containing `easy`.
-  /// @param easy Easy handle attached to this mock.
-  /// @param scenario Source of bounded HTTP/2 response work.
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
-  /// Retain the detached connection cache until after caller-owned easy cleanup.
-  /// @param multi Detached multi handle and its live connection cache.
   void HandleDetachedMulti(CurlMultiPtr multi) override;
 
  private:
