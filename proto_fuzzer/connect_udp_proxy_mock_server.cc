@@ -15,6 +15,10 @@
 
 namespace proto_fuzzer {
 
+/// Install the socket transport and force an HTTP/3 origin through a fixed
+/// plaintext HTTP/1.1 proxy. The response script supplies the 101 upgrade
+/// and any capsule bytes that follow it.
+/// @param easy Easy handle that will connect through this proxy.
 void ConnectUdpProxyMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
 

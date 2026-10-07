@@ -13,8 +13,12 @@
 
 namespace proto_fuzzer {
 
+/// Select local (SOCKS4) or proxy-side (SOCKS4A) name resolution.
+/// @param mode Proxy protocol and hostname-resolution mode to install.
 Socks4MockServer::Socks4MockServer(curl::fuzzer::proto::SocksProxyMode mode) : mode_(mode) {}
 
+/// Install common socket callbacks and the fixed SOCKS proxy policy.
+/// @param easy Easy handle to configure.
 void Socks4MockServer::Install(CURL* easy) {
   MockServer::Install(easy);
 

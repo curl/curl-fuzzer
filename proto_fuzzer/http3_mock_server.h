@@ -33,11 +33,8 @@ class Http3MockServerImpl;
 /// curl only after a valid transport handshake.
 class Http3MockServer final : public MockServerBase {
  public:
-  /// Construct a peer with the default checked-in EC certificate.
   Http3MockServer();
 
-  /// Construct a peer with a bounded, parseable certificate-chain profile.
-  /// @param certificate_chain Certificate material presented during QUIC TLS.
   explicit Http3MockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain);
 
   ~Http3MockServer() override;
@@ -45,43 +42,21 @@ class Http3MockServer final : public MockServerBase {
   Http3MockServer(const Http3MockServer&) = delete;
   Http3MockServer& operator=(const Http3MockServer&) = delete;
 
-  /// Install UDP socket callbacks, the local trust anchor, and HTTP/3-only
-  /// negotiation on an easy handle.
-  /// @param easy Easy handle that will connect to the in-process QUIC peer.
   void Install(CURL* easy) override;
 
-  /// @return true after the server has completed a QUIC TLS handshake.
   bool handshake_complete() const;
 
-  /// @return true after nghttp3 has decoded a complete request field section.
   bool request_headers_received() const;
 
-  /// @return number of ordered Http3Action entries accepted by the peer.
   std::size_t executed_action_count() const;
 
-  /// @return kernel-selected UDP port in host byte order, or zero before use.
   std::uint16_t server_port() const;
 
  protected:
-  /// Create curl's real UDP descriptor and rewrite its destination to the
-  /// private loopback QUIC listener.
-  /// @param purpose Socket purpose supplied by curl's open-socket callback.
-  /// @param address Mutable destination description supplied by curl.
-  /// @return client UDP descriptor, or CURL_SOCKET_BAD on setup failure.
   curl_socket_t HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* address) override;
 
-  /// HTTP/3 returns an unconnected UDP descriptor, so curl must perform its
-  /// normal socket setup before using the rewritten loopback destination.
-  /// @param curlfd Descriptor returned by HandleOpenSocket.
-  /// @param purpose Role curl assigned to the descriptor.
-  /// @return Whether curl must perform its normal socket setup.
   SocketSetupDisposition GetSocketSetupDisposition(curl_socket_t curlfd, curlsocktype purpose) const override;
 
-  /// Alternate nonblocking curl and QUIC server turns under fixed operation
-  /// and idle budgets.
-  /// @param multi Multi handle containing the scenario's easy handle.
-  /// @param easy Easy handle being driven; all work is reached through multi.
-  /// @param scenario Scenario whose Http3Plan supplies ordered plaintext work.
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:

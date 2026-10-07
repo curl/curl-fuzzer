@@ -77,12 +77,18 @@ TelnetMockServer::TelnetMockServer() : scenario_(nullptr), socket_opened_(false)
 /// The base owns and closes the server half after curl releases its client fd.
 TelnetMockServer::~TelnetMockServer() = default;
 
+/// Attach the synchronous peer drain to TELNET's upload callback. curl's
+/// TELNET driver does not yield to RunLoop between network parsing and
+/// callback writes, so this is the only cheap point at which the harness can
+/// keep the outbound socket empty.
+/// @param request_data Callback state retained through the transfer.
 void TelnetMockServer::ConfigureRequestData(ScenarioRequestData* request_data) {
   if (request_data != nullptr) {
     request_data->SetBeforeUploadReadCallback(&DrainBeforeUploadRead, this);
   }
 }
 
+/// C-compatible UploadScriptState hook forwarding to DrainIncoming().
 void TelnetMockServer::DrainBeforeUploadRead(void* userdata) {
   auto* server = static_cast<TelnetMockServer*>(userdata);
   if (server != nullptr && server->connection_) {

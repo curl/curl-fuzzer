@@ -168,6 +168,8 @@ void DrainWsRecv(CURL* easy) {
 /// mutations cannot make curl and its mock disagree about manual delivery.
 /// Restricting the scan to RuntimeOptionCount also prevents a compatibility-
 /// only suffix from changing mock delivery after curl stops observing options.
+/// @param scenario Structured input whose retained option prefix is inspected.
+/// @return True when the final accepted CONNECT_ONLY value is 2.
 bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario) {
   bool manual_delivery = false;
   const std::size_t option_count = RuntimeOptionCount(scenario);
@@ -192,10 +194,12 @@ WebSocketMockServer::WebSocketMockServer()
 /// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
 WebSocketMockServer::~WebSocketMockServer() = default;
 
-/// Install the common socket callbacks via the base, then overwrite
-/// WRITEFUNCTION / HEADERFUNCTION with a ws-aware variant and wire
-/// WRITEDATA to this server instance so the callback can consult per-
-/// scenario state (easy handle, one-shot probe flag).
+/// Install the shared socket trampolines via the base, then layer a
+/// WebSocket-aware WRITEFUNCTION / HEADERFUNCTION on top. These call curl_ws_meta
+/// inside the callback to reach its Curl_is_in_callback-guarded branch. WRITEDATA
+/// points to this server so the callback can consult the easy handle and the
+/// one-shot probe flag.
+/// @param easy The curl easy handle to configure.
 void WebSocketMockServer::Install(CURL* easy) {
   MockServerBase::Install(easy);
   easy_handle_ = easy;
@@ -205,6 +209,10 @@ void WebSocketMockServer::Install(CURL* easy) {
   curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &WebSocketWriteCallback);
 }
 
+/// Return the one-shot probe gate. The write callback calls curl_ws_send once
+/// per scenario to reach ws_send_raw_blocking; firing it per callback would wedge
+/// each frame under backpressure. Public so the free-function callback can read
+/// and flip it; reset by Install().
 /// @return true once the one-shot WS probe has fired for this scenario.
 bool WebSocketMockServer::ws_probe_fired() const { return ws_probe_fired_; }
 

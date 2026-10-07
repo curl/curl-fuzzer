@@ -27,10 +27,6 @@ class H2ProxyMockServer final : public TlsMockServer {
   H2ProxyMockServer(const H2ProxyMockServer&) = delete;
   H2ProxyMockServer& operator=(const H2ProxyMockServer&) = delete;
 
-  /// Install the socket transport and force one verified HTTPS2 proxy tunnel.
-  /// The origin remains plaintext HTTP inside CONNECT so the same peer can
-  /// service both protocol layers without a nested TLS state machine.
-  /// @param easy Easy handle that will connect through this proxy.
   void Install(CURL* easy) override;
 };
 

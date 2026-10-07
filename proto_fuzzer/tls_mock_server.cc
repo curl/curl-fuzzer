@@ -102,6 +102,9 @@ int SelectAlpn(SSL* /*ssl*/, const unsigned char** selected, unsigned char* sele
 /// one fuzz input from affecting the next.
 class TlsServerContext {
  public:
+  // Doxygen's no-preprocessing pass would see both conditional body openings.
+  // Skip this implementation-only constructor to preserve the enclosing scope.
+  /// @cond
   TlsServerContext(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
       : context_(nullptr),
         protocol_(protocol),
@@ -129,6 +132,7 @@ class TlsServerContext {
     (void)SSL_CTX_set_session_id_context(context_, session_id_context, sizeof(session_id_context) - 1);
     SSL_CTX_set_alpn_select_cb(context_, &SelectAlpn, &protocol_);
   }
+  /// @endcond
 
   ~TlsServerContext() {
     OpenSslErrorQueueGuard error_guard;
@@ -498,11 +502,15 @@ class TlsMockConnection final : public MockConnection {
 /// Build one reusable in-process server context per fuzz iteration.
 TlsMockServer::TlsMockServer() : TlsMockServer(curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC) {}
 
-/// Select one bounded certificate chain while retaining HTTP/1.1 ALPN.
+/// Select one bounded certificate-chain profile for an HTTP/1.1 TLS peer.
+/// @param certificate_chain Peer certificate chain presented to curl.
 TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
     : TlsMockServer(TlsApplicationProtocol::kHttp11, certificate_chain) {}
 
-/// Construct the shared TLS transport with one fixed ALPN outcome.
+/// Construct the shared TLS transport for a protocol-specific derived peer
+/// with one fixed ALPN outcome.
+/// @param protocol Fixed application protocol the server must negotiate.
+/// @param certificate_chain Peer certificate chain presented to curl.
 TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
                              curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
     : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)),
@@ -516,9 +524,11 @@ TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
 /// explicit keeps future transport state from acquiring a hidden dependency.
 TlsMockServer::~TlsMockServer() { ResetConnections(); }
 
-/// Add verification to the common socket callbacks. Curl copies the blob
-/// descriptor during setopt and borrows the inline certificate bytes, whose
-/// program lifetime safely exceeds every easy handle.
+/// Install common socket callbacks and a stable local trust anchor. Curl copies
+/// the blob descriptor during setopt and borrows the inline certificate bytes,
+/// whose program lifetime safely exceeds every easy handle. Scenario options run
+/// afterwards and can still disable verification or select failing TLS settings.
+/// @param easy Easy handle that will connect to this TLS peer.
 void TlsMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
   struct curl_blob trust_anchor = {const_cast<char*>(tls_test_credentials::kCertificatePem),
@@ -528,52 +538,58 @@ void TlsMockServer::Install(CURL* easy) {
   (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
 }
 
-/// Report whether the drive reached curl's live TLS backend-query path.
+/// @return true once curl exposed a live TLS backend session during drive.
 bool TlsMockServer::saw_live_tls_session() const { return saw_live_tls_session_; }
 
-/// Report the number of callback-owned session representations copied.
+/// @return number of session representations copied by the export callback
+/// out of curl's cache.
 std::size_t TlsMockServer::exported_session_count() const { return exported_session_count_; }
 
-/// Report the number of copied representations accepted by curl's import path.
+/// @return number of copied session representations successfully imported
+/// into curl's cache again.
 std::size_t TlsMockServer::imported_session_count() const { return imported_session_count_; }
 
-/// Report the protocol selected by the latest successful server handshake.
+/// @return protocol version selected by the most recent completed handshake,
+/// or zero when no connection completed TLS negotiation.
 int TlsMockServer::negotiated_tls_version() const {
   return context_ == nullptr ? 0 : context_->negotiated_tls_version();
 }
 
-/// Report how many bounded connections finished their TLS handshake.
+/// @return number of connections that completed TLS negotiation.
 std::size_t TlsMockServer::completed_handshake_count() const {
   return context_ == nullptr ? 0 : context_->completed_handshake_count();
 }
 
-/// Report how many later connections resumed state from this scenario.
+/// @return number of completed connections that resumed an earlier session.
 std::size_t TlsMockServer::reused_session_count() const {
   return context_ == nullptr ? 0 : context_->reused_session_count();
 }
 
-/// Report how often response delivery reached OpenSSL's exact-retry path.
+/// @return number of application writes OpenSSL required an exact retry for.
 std::size_t TlsMockServer::write_retry_count() const { return context_ == nullptr ? 0 : context_->write_retry_count(); }
 
-/// Return the latest negotiated application protocol without exposing SSL.
+/// @return ALPN protocol selected by the most recent completed handshake.
 std::string TlsMockServer::negotiated_alpn() const {
   return context_ == nullptr ? std::string() : context_->negotiated_alpn();
 }
 
-/// Return OpenSSL's latest ECH result without exposing its SSL object.
+/// @return OpenSSL's ECH status for the most recent completed handshake.
+/// Builds without ECH return a negative sentinel.
 int TlsMockServer::ech_status() const { return context_ == nullptr ? -1 : context_->ech_status(); }
 
-/// Return the SNI that OpenSSL recovered from the encrypted ClientHello.
+/// @return encrypted inner SNI recovered by the ECH-capable server.
 std::string TlsMockServer::ech_inner_name() const {
   return context_ == nullptr ? std::string() : context_->ech_inner_name();
 }
 
-/// Return the public SNI that remained in the outer ClientHello.
+/// @return public outer SNI visible before ECH decryption.
 std::string TlsMockServer::ech_outer_name() const {
   return context_ == nullptr ? std::string() : context_->ech_outer_name();
 }
 
-/// Create the polymorphic record-layer connection consumed by MockServer.
+/// Wrap one socketpair server endpoint in an OpenSSL acceptor consumed by
+/// MockServer.
+/// @return a failed connection when context setup was unavailable.
 std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() {
   return std::make_unique<TlsMockConnection>(context_.get());
 }

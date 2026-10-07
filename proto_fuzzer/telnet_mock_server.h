@@ -32,11 +32,6 @@ class TelnetMockServer final : public MockServerBase {
   TelnetMockServer();
   ~TelnetMockServer() override;
 
-  /// Attach the synchronous peer drain to TELNET's upload callback. curl's
-  /// TELNET driver does not yield to RunLoop between network parsing and
-  /// callback writes, so this is the only cheap point at which the harness can
-  /// keep the outbound socket empty.
-  /// @param request_data Callback state retained through the transfer.
   void ConfigureRequestData(ScenarioRequestData* request_data) override;
 
  protected:
@@ -45,7 +40,6 @@ class TelnetMockServer final : public MockServerBase {
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:
-  /// C-compatible UploadScriptState hook forwarding to DrainIncoming().
   static void DrainBeforeUploadRead(void* userdata);
 
   const curl::fuzzer::proto::Scenario* scenario_;

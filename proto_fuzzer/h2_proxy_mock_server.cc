@@ -19,9 +19,12 @@ namespace proto_fuzzer {
 /// install cf-h2-proxy rather than its HTTP/1 CONNECT implementation.
 H2ProxyMockServer::H2ProxyMockServer() : TlsMockServer(TlsApplicationProtocol::kHttp2) {}
 
-/// Fix only routing and outer TLS properties. Response frames, origin method,
-/// headers, and body remain scenario-controlled so mutations continue beyond
-/// proxy setup instead of selecting arbitrary external proxy endpoints.
+/// Install the socket transport and force one verified HTTPS2 proxy tunnel.
+/// The origin remains plaintext HTTP inside CONNECT so this peer can service
+/// both layers without a nested TLS state machine. Only routing and outer TLS
+/// properties are fixed: response frames, origin method, headers, and body remain
+/// scenario-controlled so mutations continue beyond proxy setup.
+/// @param easy Easy handle that will connect through this proxy.
 void H2ProxyMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
 

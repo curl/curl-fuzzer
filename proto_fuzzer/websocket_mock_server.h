@@ -23,12 +23,6 @@
 
 namespace proto_fuzzer {
 
-/// Determine whether the bounded, runtime-visible option prefix leaves curl in
-/// WebSocket connect-only mode. Later accepted CONNECT_ONLY entries override
-/// earlier ones, matching curl_easy_setopt rather than treating any historical
-/// value of 2 as permanently enabling manual delivery.
-/// @param scenario Structured input whose retained option prefix is inspected.
-/// @return True when the final accepted CONNECT_ONLY value is 2.
 bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario);
 
 /// @class proto_fuzzer::WebSocketMockServer
@@ -42,11 +36,6 @@ class WebSocketMockServer : public MockServerBase {
   WebSocketMockServer();
   ~WebSocketMockServer() override;
 
-  /// Install the shared socket trampolines via the base class, then layer a
-  /// WebSocket-aware WRITEFUNCTION / HEADERFUNCTION on top: these call
-  /// curl_ws_meta from inside the callback, which is the only way to reach
-  /// its Curl_is_in_callback-guarded branch from the fuzzer.
-  /// @param easy The curl easy handle to configure.
   void Install(CURL* easy) override;
 
   void SetFrames(std::vector<std::string> frames);
@@ -57,8 +46,6 @@ class WebSocketMockServer : public MockServerBase {
   bool TryAdvanceHandshake();
   bool handshake_sent() const;
 
-  /// Deliver one queued frame chunk.
-  /// @return true when a chunk was consumed from the script.
   bool DeliverNextChunk();
   bool has_more_chunks() const;
 
@@ -73,10 +60,6 @@ class WebSocketMockServer : public MockServerBase {
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  public:
-  /// One-shot probe-fire gate. The write callback calls curl_ws_send once per
-  /// scenario to reach ws_send_raw_blocking; firing it per-callback would wedge
-  /// each frame under backpressure. Public so the free-function callback can
-  /// read/flip it; reset by Install().
   bool ws_probe_fired() const;
   void MarkWsProbeFired();
   CURL* easy_handle() const;
