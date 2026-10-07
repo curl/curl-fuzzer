@@ -22,18 +22,26 @@ H2CleartextMockServer::~H2CleartextMockServer() {
   ResetConnections();
 }
 
+/// Install the socketpair peer and force HTTP/2 prior-knowledge mode.
+/// @param easy Easy handle to configure.
 void H2CleartextMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
   (void)curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE);
   (void)curl_easy_setopt(easy, CURLOPT_UPKEEP_INTERVAL_MS, 0L);
 }
 
+/// Attach the reusable H2 client-frame tracker to the plaintext connection.
+/// @return Newly allocated plaintext connection with the tracker attached.
 std::unique_ptr<MockConnection> H2CleartextMockServer::CreateConnection() {
   std::unique_ptr<MockConnection> connection = MockServer::CreateConnection();
   runtime_.AttachConnection(connection.get());
   return connection;
 }
 
+/// Drive raw or structured H2 peer work and probe server push and upkeep.
+/// @param multi Multi handle containing `easy`.
+/// @param easy Easy handle attached to this mock.
+/// @param scenario Source of bounded HTTP/2 response work.
 void H2CleartextMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   runtime_.PrepareMulti(multi, scenario.accept_h2_push());
   if (!scenario.has_http2_plan()) {
@@ -53,30 +61,15 @@ void H2CleartextMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer
   runtime_.FinishTransfer(easy, connection());
 }
 
+/// Retain the detached connection cache until after caller-owned easy cleanup.
+/// @param multi Detached multi handle and its live connection cache.
 void H2CleartextMockServer::HandleDetachedMulti(CurlMultiPtr multi) { retained_multi_ = std::move(multi); }
 
-std::size_t H2CleartextMockServer::push_callback_count() const { return runtime_.push_callback_count(); }
+/// Expose shared protocol observations without allowing carrier state changes.
+/// @return Runtime owned by this plaintext carrier.
+const H2Runtime& H2CleartextMockServer::runtime() const { return runtime_; }
 
-/// @return number of PUSH_PROMISE headers advertised to the callback.
-std::size_t H2CleartextMockServer::push_header_count() const { return runtime_.push_header_count(); }
-
-/// @return true when the callback found the promised :path header.
-bool H2CleartextMockServer::saw_push_path() const { return runtime_.saw_push_path(); }
-
-std::size_t H2CleartextMockServer::accepted_push_count() const { return runtime_.accepted_push_count(); }
-
+/// @return Number of accepted pushed handles explicitly cleaned up.
 std::size_t H2CleartextMockServer::cleaned_push_count() const { return additional_handle_cleanup_count(); }
-
-/// @return response-body bytes delivered by accepted pushed transfers.
-std::size_t H2CleartextMockServer::pushed_body_bytes() const { return runtime_.pushed_body_bytes(); }
-
-CURLcode H2CleartextMockServer::upkeep_result() const { return runtime_.upkeep_result(); }
-
-std::size_t H2CleartextMockServer::observed_request_count() const { return runtime_.observed_request_count(); }
-
-/// @return number of non-ACK client SETTINGS frames observed.
-std::size_t H2CleartextMockServer::observed_client_settings_count() const {
-  return runtime_.observed_client_settings_count();
-}
 
 }  // namespace proto_fuzzer

@@ -67,16 +67,17 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
     (void)curl_easy_getinfo(easy, CURLINFO_HTTP_VERSION, &result.http_version);
     (void)curl_easy_getinfo(easy, CURLINFO_NUM_CONNECTS,
                             &result.new_connection_count);
-    result.observed_request_count = server.observed_request_count();
+    const proto_fuzzer::H2Runtime &runtime = server.runtime();
+    result.observed_request_count = runtime.observed_request_count();
     result.observed_client_settings_count =
-        server.observed_client_settings_count();
-    result.push_callback_count = server.push_callback_count();
-    result.push_header_count = server.push_header_count();
-    result.saw_push_path = server.saw_push_path();
-    result.accepted_push_count = server.accepted_push_count();
+        runtime.observed_client_settings_count();
+    result.push_callback_count = runtime.push_callback_count();
+    result.push_header_count = runtime.push_header_count();
+    result.saw_push_path = runtime.saw_push_path();
+    result.accepted_push_count = runtime.accepted_push_count();
     result.cleaned_push_count = server.cleaned_push_count();
-    result.pushed_body_bytes = server.pushed_body_bytes();
-    result.upkeep_result = server.upkeep_result();
+    result.pushed_body_bytes = runtime.pushed_body_bytes();
+    result.upkeep_result = runtime.upkeep_result();
 
     // The server intentionally retains its detached multi and connection
     // cache. Clean the caller-owned easy first, matching RunScenario.

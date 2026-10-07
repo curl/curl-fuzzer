@@ -56,29 +56,6 @@ proto_fuzzer/ftp_mock_server.h:proto_fuzzer::FtpMockServer::~FtpMockServer() ove
 proto_fuzzer/fuzzer_main.h:proto_fuzzer::ProtoFuzzerCustomCrossOver(TargetProfile profile, const std::uint8_t *data1, std::size_t size1, const std::uint8_t *data2, std::size_t size2, std::uint8_t *out, std::size_t max_out_size, unsigned int seed)
 proto_fuzzer/fuzzer_main.h:proto_fuzzer::ProtoFuzzerCustomMutator(TargetProfile profile, std::uint8_t *data, std::size_t size, std::size_t max_size, unsigned int seed)
 proto_fuzzer/fuzzer_main.h:proto_fuzzer::ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t *data, std::size_t size)
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::CreateConnection() override
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::HandleDetachedMulti(CurlMultiPtr multi) override
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::Install(CURL *easy) override
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::accepted_push_count() const
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::cleaned_push_count() const
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::observed_request_count() const
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::push_callback_count() const
-proto_fuzzer/h2_cleartext_mock_server.h:proto_fuzzer::H2CleartextMockServer::upkeep_result() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::CreateConnection() override
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain=curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC)
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::HandleDetachedMulti(CurlMultiPtr multi) override
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::Install(CURL *easy) override
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::RunLoop(CURLM *multi, CURL *easy, const curl::fuzzer::proto::Scenario &scenario) override
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::accepted_push_count() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::cleaned_push_count() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::observed_client_settings_count() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::observed_request_count() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::push_callback_count() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::push_header_count() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::pushed_body_bytes() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::saw_push_path() const
-proto_fuzzer/h2_origin_mock_server.h:proto_fuzzer::H2OriginMockServer::upkeep_result() const
 proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::NextChunk(std::string *output)
 proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::ObserveIncomingData(const unsigned char *data, std::size_t size) override
 proto_fuzzer/h2_plan.h:proto_fuzzer::H2PlanDriver::Reset(const curl::fuzzer::proto::Http2Plan &plan, std::string scheme="https", std::string authority="tls.test")
