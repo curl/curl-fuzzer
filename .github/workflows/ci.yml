@@ -96,7 +96,7 @@ jobs:
           cp .curl-fuzzer/src/curl_fuzzer_tools/prepare_fuzzer.py fuzz-shards/
 
       - name: Upload fuzzer shard 00
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-00
           path: |
@@ -106,7 +106,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 01
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-01
           path: |
@@ -116,7 +116,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 02
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-02
           path: |
@@ -126,7 +126,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 03
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-03
           path: |
@@ -136,7 +136,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 04
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-04
           path: |
@@ -146,7 +146,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 05
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-05
           path: |
@@ -156,7 +156,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 06
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-06
           path: |
@@ -166,7 +166,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fuzzer shard 07
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-shard-07
           path: |
@@ -184,7 +184,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.BuildFuzzers.outputs.matrix) }}
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         timeout-minutes: 5
         with:
           name: fuzz-shard-${{ matrix.shard }}
@@ -207,7 +207,7 @@ jobs:
           fuzz-seconds: 120
           dry-run: false
       - name: Upload Crash
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ failure() }}
         with:
           name: artifacts-${{ matrix.fuzzer }}
