@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import zipfile
 from collections.abc import Iterable
+from contextlib import suppress
 from pathlib import Path
 from typing import IO
 
@@ -124,6 +125,47 @@ class CorpusSnapshotBuilder:
             "sources": self.sources,
         }
 
+    def write_zip(self, destination: Path) -> None:
+        """Archive the content-addressed snapshot in a stable, reusable form."""
+        if destination.exists():
+            raise CorpusError(f"corpus archive already exists: {destination}")
+
+        pending: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=destination.parent,
+                prefix=f".{destination.name}.",
+                delete=False,
+            ) as temporary:
+                pending = Path(temporary.name)
+            with zipfile.ZipFile(
+                pending,
+                mode="w",
+                compression=zipfile.ZIP_STORED,
+                allowZip64=True,
+            ) as archive:
+                for digest in sorted(self.hashes):
+                    member = zipfile.ZipInfo(
+                        digest,
+                        date_time=(1980, 1, 1, 0, 0, 0),
+                    )
+                    member.compress_type = zipfile.ZIP_STORED
+                    member.create_system = 3
+                    member.external_attr = 0o100644 << 16
+                    with (
+                        (self.destination / digest).open("rb") as source,
+                        archive.open(member, mode="w", force_zip64=True) as archived,
+                    ):
+                        shutil.copyfileobj(source, archived)
+            os.replace(pending, destination)
+            pending = None
+        except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as error:
+            raise CorpusError(f"could not archive corpus snapshot: {error}") from error
+        finally:
+            if pending is not None:
+                with suppress(OSError):
+                    pending.unlink()
+
 
 def parse_corpus_mappings(values: Iterable[str]) -> dict[str, list[Path]]:
     """Parse repeatable ``TARGET=PATH`` corpus overrides."""
@@ -141,7 +183,7 @@ def parse_corpus_mappings(values: Iterable[str]) -> dict[str, list[Path]]:
 def resolve_corpus_sources(
     target: str,
     binary_dir: Path,
-    corpus_root: Path,
+    corpus_root: Path | None,
     public_corpus_root: Path | None,
     overrides: dict[str, list[Path]],
 ) -> list[Path]:
@@ -150,15 +192,19 @@ def resolve_corpus_sources(
         return overrides[target]
 
     sources: list[Path] = []
+    searched: list[Path] = []
     compatible_targets = (target, *COMPATIBLE_CORPUS_TARGETS.get(target, ()))
     for compatible_target in compatible_targets:
-        checked_in = corpus_root / compatible_target
-        if checked_in.is_dir() and any(
-            path.is_file() for path in checked_in.rglob("*")
-        ):
-            sources.append(checked_in)
+        if corpus_root is not None:
+            checked_in = corpus_root / compatible_target
+            searched.append(checked_in)
+            if checked_in.is_dir() and any(
+                path.is_file() for path in checked_in.rglob("*")
+            ):
+                sources.append(checked_in)
 
         seed_archive = binary_dir / f"{compatible_target}_seed_corpus.zip"
+        searched.append(seed_archive)
         if seed_archive.is_file():
             sources.append(seed_archive)
 
@@ -168,11 +214,11 @@ def resolve_corpus_sources(
             public_targets.append("curl_fuzzer_proto")
         for public_target in public_targets:
             public = public_corpus_root / public_target
+            searched.append(public)
             if public.is_dir() and any(path.is_file() for path in public.rglob("*")):
                 sources.append(public)
 
     if not sources:
-        raise CorpusError(
-            f"no corpus found for {target}; checked {checked_in} and {seed_archive}"
-        )
+        locations = ", ".join(str(path) for path in searched)
+        raise CorpusError(f"no corpus found for {target}; checked {locations}")
     return sources

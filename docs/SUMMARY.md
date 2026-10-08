@@ -17,4 +17,5 @@
 - [Coverage](coverage.md)
 - [Reproducing findings](reproducing.md)
 - [Benchmarking](benchmarking.md)
+- [Profiling](profiling.md)
 - [Development](development.md)

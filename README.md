@@ -7,7 +7,8 @@ repository supplies the harnesses used by curl's
 [Documentation](https://fuzz.curl.se/) ·
 [Corpus decoder](https://fuzz.curl.se/corpus-decoder/) ·
 [Reproducing findings](REPRODUCING.md) ·
-[Benchmarking](BENCHMARKING.md)
+[Benchmarking](BENCHMARKING.md) ·
+[Profiling](PROFILING.md)
 
 ## Fuzzer families
 
@@ -138,7 +139,8 @@ Contributor documentation for the legacy and structured harnesses is in the
 [documentation site](https://fuzz.curl.se/). See
 [REPRODUCING.md](REPRODUCING.md) for crash investigation and
 [BENCHMARKING.md](BENCHMARKING.md) for controlled performance and source
-coverage comparisons.
+coverage comparisons, and [PROFILING.md](PROFILING.md) for CPU hotspot
+analysis.
 
 ## License
 
