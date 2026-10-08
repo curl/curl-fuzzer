@@ -1594,6 +1594,25 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(DEEP_HTTP_SCENARIO_TEXTPROTOS
         ${HTTP_COVERAGE_SCENARIO_TEXTPROTOS}
         ${HTTP_DEEP_SCENARIO_TEXTPROTOS})
+    set(RAW_HTTP2_SCENARIO_TEXTPROTOS
+        ${SCENARIO_SRC_DIR}/http/http2_control_frames.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_invalid_preface.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_prior_knowledge.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_truncated_headers_frame.textproto)
+    list(LENGTH RAW_HTTP2_SCENARIO_TEXTPROTOS RAW_HTTP2_SCENARIO_COUNT)
+    if(NOT RAW_HTTP2_SCENARIO_COUNT EQUAL 4)
+        message(FATAL_ERROR
+            "The raw HTTP/2 corpus must contain exactly 4 seed declarations")
+    endif()
+    foreach(raw_http2_textproto ${RAW_HTTP2_SCENARIO_TEXTPROTOS})
+        if(NOT EXISTS "${raw_http2_textproto}")
+            message(FATAL_ERROR
+                "Raw HTTP/2 corpus seed does not exist: ${raw_http2_textproto}")
+        endif()
+    endforeach()
+    set(HTTP2_SCENARIO_TEXTPROTOS
+        ${HTTPS_H2_SCENARIO_TEXTPROTOS}
+        ${RAW_HTTP2_SCENARIO_TEXTPROTOS})
 
     # Keep the fast seed population deliberately small and explicit. LPM's
     # seed choice materially affects executions per second even when the lane
@@ -1603,10 +1622,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/basic_get.textproto
         ${SCENARIO_SRC_DIR}/http/chunked_response.textproto
         ${SCENARIO_SRC_DIR}/http/http09_allowed.textproto
-        ${SCENARIO_SRC_DIR}/http/http2_control_frames.textproto
-        ${SCENARIO_SRC_DIR}/http/http2_invalid_preface.textproto
-        ${SCENARIO_SRC_DIR}/http/http2_prior_knowledge.textproto
-        ${SCENARIO_SRC_DIR}/http/http2_truncated_headers_frame.textproto
+        ${RAW_HTTP2_SCENARIO_TEXTPROTOS}
         ${SCENARIO_SRC_DIR}/http/http_brotli_decode.textproto
         ${SCENARIO_SRC_DIR}/http/http_chunk_extensions_trailers.textproto
         ${SCENARIO_SRC_DIR}/http/http_conflicting_framing.textproto
@@ -1713,7 +1729,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http_deep_corpus
         curl_fuzzer_proto_http_deep ${DEEP_HTTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http2_corpus
-        curl_fuzzer_proto_http2 ${HTTPS_H2_SCENARIO_TEXTPROTOS})
+        curl_fuzzer_proto_http2 ${HTTP2_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_corpus
         curl_fuzzer_proto_https
         ${HTTP_COVERAGE_SCENARIO_TEXTPROTOS}
