@@ -57,6 +57,12 @@ void EnsureTargetPostProcessor(proto_fuzzer::TargetProfile profile) {
 // static ctors run once.
 struct CurlGlobalBootstrap {
   CurlGlobalBootstrap() {
+    // Use curl's debug-only entropy hook so MIME boundaries and other
+    // libcurl-generated values are reproducible without asking the TLS
+    // backend for fresh randomness on every fuzz iteration. Let callers
+    // override the seed when reproducing a specific run.
+    (void)setenv("CURL_ENTROPY", "12345678", 0);
+
     // Open curl's TLS keylog at backend init. Curl_tls_keylog_open() runs once
     // inside curl_global_init, so setting this after bootstrap would be too
     // late. Keep the output in /dev/null and let a reproducer override it.
