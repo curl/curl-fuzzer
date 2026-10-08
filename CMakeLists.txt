@@ -1980,6 +1980,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/option_apply.cc
             proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
+            proto_fuzzer/target_policy.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
             ${PROTO_FUZZER_TLS_SOURCES}
@@ -1993,6 +1994,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             add_executable(${_name} ${MOCK_SERVER_TEST_SOURCES})
             target_compile_features(${_name} PRIVATE cxx_std_17)
             target_compile_options(${_name} PRIVATE ${COMMON_FLAGS})
+            target_compile_definitions(${_name} PRIVATE
+                PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
             target_include_directories(${_name} PRIVATE
                 ${CMAKE_BINARY_DIR}
                 ${CMAKE_SOURCE_DIR}
