@@ -110,19 +110,21 @@ tab. Select a structured target and a 30, 60, or 120 second duration. The job
 builds that target with OSS-Fuzz's AddressSanitizer/libFuzzer configuration,
 downloads the public corpus, and records a user-space `cpu-clock` profile.
 
-The uploaded `profile-...` artifact contains the report, raw `perf.data`, log,
-metadata, exact `corpus.zip`, build-toolchain manifest, and any testcase emitted
-by the fuzzer. It also includes `oss-fuzz-build.tar` with the exact binary,
-options, seed archive, and `llvm-symbolizer` needed to inspect the raw profile
-after the hosted runner has gone away.
+The uploaded `profile-...` artifact contains the report, raw `perf.data`, folded
+stacks in `perf-folded.txt`, an interactive `flamegraph.svg`, the log, metadata,
+exact `corpus.zip`, build-toolchain manifest, and any testcase emitted by the
+fuzzer. It also includes `oss-fuzz-build.tar` with the exact binary, options,
+seed archive, and `llvm-symbolizer` needed to inspect the raw profile after the
+hosted runner has gone away.
 
 ## Interpreting results
 
-Start with the highest-overhead symbols, then use the recorded call stacks in
-`perf.data` to distinguish work owned by the harness from libcurl, TLS, parsing,
-compression, protobuf mutation, and sanitizer checks. A hot function can be
-called frequently because it is valuable coverage, so treat the profile as a
-place to investigate rather than a reason to remove behavior.
+Start with the widest stacks in `flamegraph.svg` and the highest-overhead symbols
+in the flat report. The flame graph shows inclusive call paths, making it easier
+to distinguish work owned by the harness from libcurl, TLS, parsing, compression,
+protobuf mutation, and sanitizer checks. A hot function can be called frequently
+because it is valuable coverage, so treat the profile as a place to investigate
+rather than a reason to remove behavior.
 
 Sampling overhead makes the run unsuitable as a throughput benchmark. Compare
 the candidate against an unchanged baseline with the same corpus and repeated

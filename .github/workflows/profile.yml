@@ -31,6 +31,7 @@ permissions: {}
 
 env:
   DO_NOT_TRACK: '1'
+  FLAMEGRAPH_REV: 41fee1f99f9276008b7cd112fca19dc3ea84ac32
   OSS_FUZZ_REV: 868bfcbd1db0c8eb4dc6029598c90705d6c88e74
   OSS_FUZZ_BASE_IMAGE: gcr.io/oss-fuzz-base/base-builder:ubuntu-24-04
   OSS_FUZZ_DIR: ${{ github.workspace }}/oss-fuzz
@@ -216,12 +217,49 @@ jobs:
             --provenance "oss_fuzz_builder_revision=$PROFILE_BUILDER_REVISION" \
             --provenance "curl_revision=$PROFILE_CURL_REVISION" \
             --provenance "curl_fuzzer_revision=$GITHUB_SHA" \
+            --provenance "flamegraph_revision=$FLAMEGRAPH_REV" \
             --provenance "github_repository=$GITHUB_REPOSITORY" \
             --provenance "github_ref=$GITHUB_REF" \
             --provenance "github_run_id=$GITHUB_RUN_ID" \
             --provenance "github_run_attempt=$GITHUB_RUN_ATTEMPT" \
             --provenance "github_runner_image_os=${ImageOS:-unknown}" \
             --provenance "github_runner_image_version=${ImageVersion:-unknown}"
+
+      - name: Check out FlameGraph
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: brendangregg/FlameGraph
+          ref: ${{ env.FLAMEGRAPH_REV }}
+          path: flamegraph-tools
+          persist-credentials: false
+
+      - name: Render flame graph
+        env:
+          LC_ALL: C
+          PERF_CONFIG: /dev/null
+          PERF_PAGER: cat
+        run: |
+          perf script \
+            --no-inline \
+            --fields comm,pid,tid,time,event,ip,sym,dso \
+            --input "$PROFILE_OUTPUT/perf.data" \
+            > "$RUNNER_TEMP/perf-script.txt"
+          test -s "$RUNNER_TEMP/perf-script.txt"
+
+          perl "$GITHUB_WORKSPACE/flamegraph-tools/stackcollapse-perf.pl" \
+            "$RUNNER_TEMP/perf-script.txt" \
+            > "$PROFILE_OUTPUT/perf-folded.txt"
+          grep -Eq ' [1-9][0-9]*$' "$PROFILE_OUTPUT/perf-folded.txt"
+
+          perl "$GITHUB_WORKSPACE/flamegraph-tools/flamegraph.pl" \
+            --hash \
+            --width 1800 \
+            --title "CPU flame graph: $PROFILE_TARGET" \
+            --subtitle "$PROFILE_SECONDS seconds, cpu-clock:u at 99 Hz" \
+            --countname samples \
+            "$PROFILE_OUTPUT/perf-folded.txt" \
+            > "$PROFILE_OUTPUT/flamegraph.svg"
+          grep -q '<svg ' "$PROFILE_OUTPUT/flamegraph.svg"
 
       # A tar preserves executable bits and keeps the exact ELF available for
       # `perf buildid-cache -a` when the artifact is inspected elsewhere.
