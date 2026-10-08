@@ -9,6 +9,8 @@
 
 #include "proto_fuzzer/target_policy.h"
 
+#include <curl/curl.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <string>
@@ -1021,6 +1023,25 @@ std::uint64_t IntegralMutationValue(const curl::fuzzer::proto::SetOption& option
   return 0;
 }
 
+/// Keep prior-knowledge HTTP/2 and HTTP/3 out of the throughput-oriented HTTP
+/// lane. HTTP/1 modes and cleartext HTTP/2 upgrade remain here because h2c's
+/// HTTP/1 request and 101 transition are distinct from the dedicated target's
+/// prior-knowledge transport.
+void CanonicalizeFastHttpVersion(curl::fuzzer::proto::Scenario* scenario) {
+  for (auto& option : *scenario->mutable_options()) {
+    if (option.option_id() != curl::fuzzer::proto::CURLOPT_HTTP_VERSION) {
+      continue;
+    }
+    const std::uint64_t version = IntegralMutationValue(option);
+    // 2TLS remains HTTP/1.1 because this target fixes the scheme to HTTP.
+    if (version <= CURL_HTTP_VERSION_2TLS) {
+      option.set_uint_value(version);
+    } else {
+      option.set_uint_value(CURL_HTTP_VERSION_NONE);
+    }
+  }
+}
+
 /// Fold small FTP enums onto curl's documented domains so random uint64 values
 /// do not overwhelmingly stop at setopt validation before issuing a command.
 void CanonicalizeFtpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
@@ -1399,6 +1420,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
     RetainCheapHttpOptions(scenario);
+    CanonicalizeFastHttpVersion(scenario);
     BoundScenarioShape(scenario);
     return;
   }

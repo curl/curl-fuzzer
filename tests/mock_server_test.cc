@@ -403,6 +403,62 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
   curl_slist_free_all(connect_to);
 }
 
+void TestH2cUpgradeTransitionsToHttp2() {
+  constexpr char kServerSettings[] =
+      "\x00\x00\x00\x04\x00\x00\x00\x00\x00";
+  constexpr char kResponseHeaders[] =
+      "\x00\x00\x01\x01\x05\x00\x00\x00\x01\x88";
+  static_assert(sizeof(kServerSettings) - 1 == 9);
+  static_assert(sizeof(kResponseHeaders) - 1 == 10);
+
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("h2c.test/upgrade");
+  auto *version = scenario.add_options();
+  version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  version->set_uint_value(CURL_HTTP_VERSION_2_0);
+  scenario.mutable_connection()->set_initial_response(
+      std::string("HTTP/1.1 101 Switching Protocols\r\n"
+                  "Connection: Upgrade\r\n"
+                  "Upgrade: h2c\r\n\r\n") +
+      std::string(kServerSettings, sizeof(kServerSettings) - 1));
+  scenario.mutable_connection()->add_on_readable(
+      std::string(kResponseHeaders, sizeof(kResponseHeaders) - 1));
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "h2c upgrade test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://h2c.test/upgrade");
+
+  RequestCapturingServer server;
+  server.Install(easy);
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 1,
+         "h2c upgrade test did not apply its version option");
+  Expect(server.DriveScenario(easy, scenario) == CURLE_OK,
+         "h2c upgrade did not complete");
+
+  long http_version = CURL_HTTP_VERSION_NONE;
+  long response_code = 0;
+  Expect(curl_easy_getinfo(easy, CURLINFO_HTTP_VERSION, &http_version) ==
+                 CURLE_OK &&
+             http_version == CURL_HTTP_VERSION_2_0,
+         "h2c upgrade did not transition to HTTP/2");
+  Expect(curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &response_code) ==
+                 CURLE_OK &&
+             response_code == 200,
+         "h2c upgrade did not receive the HTTP/2 response");
+  Expect(server.opened_connection_count() == 1,
+         "h2c upgrade opened an unexpected connection");
+  Expect(server.request().find("Upgrade: h2c\r\n") != std::string::npos,
+         "h2c upgrade request omitted the Upgrade header");
+  Expect(server.request().find("HTTP2-Settings: ") != std::string::npos,
+         "h2c upgrade request omitted HTTP2-Settings");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 /// Values retained from a completed TLS drive after its easy handle and peer
 /// have been safely dismantled. Tests assert these public/client and
@@ -1426,6 +1482,7 @@ int main() {
   TestClosedPeerIsAnOrdinaryWriteFailure();
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
+  TestH2cUpgradeTransitionsToHttp2();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();

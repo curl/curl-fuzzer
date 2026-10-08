@@ -1194,6 +1194,70 @@ void TestFastHttpOptionAllowlist() {
          "deep HTTP policy filtered an option intended for full coverage");
 }
 
+void TestFastHttpKeepsOnlyOwnedHttpVersions() {
+  struct VersionCase {
+    std::uint64_t input;
+    std::uint64_t expected;
+  };
+  constexpr VersionCase kCases[] = {
+      {CURL_HTTP_VERSION_NONE, CURL_HTTP_VERSION_NONE},
+      {CURL_HTTP_VERSION_1_0, CURL_HTTP_VERSION_1_0},
+      {CURL_HTTP_VERSION_1_1, CURL_HTTP_VERSION_1_1},
+      {CURL_HTTP_VERSION_2_0, CURL_HTTP_VERSION_2_0},
+      {CURL_HTTP_VERSION_2TLS, CURL_HTTP_VERSION_2TLS},
+      {CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE, CURL_HTTP_VERSION_NONE},
+      {CURL_HTTP_VERSION_3, CURL_HTTP_VERSION_NONE},
+      {CURL_HTTP_VERSION_3ONLY, CURL_HTTP_VERSION_NONE},
+      {CURL_HTTP_VERSION_LAST, CURL_HTTP_VERSION_NONE},
+      {std::numeric_limits<std::uint64_t>::max(), CURL_HTTP_VERSION_NONE},
+  };
+
+  Scenario scenario;
+  for (const auto &test_case : kCases) {
+    auto *option = scenario.add_options();
+    option->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+    option->set_uint_value(test_case.input);
+  }
+  auto *bool_value = scenario.add_options();
+  bool_value->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  bool_value->set_bool_value(true);
+  auto *false_value = scenario.add_options();
+  false_value->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  false_value->set_bool_value(false);
+  auto *string_value = scenario.add_options();
+  string_value->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  string_value->set_string_value("invalid");
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp);
+
+  for (std::size_t index = 0; index < sizeof(kCases) / sizeof(kCases[0]);
+       ++index) {
+    Expect(scenario.options(static_cast<int>(index)).uint_value() ==
+               kCases[index].expected,
+           "fast HTTP policy retained an unowned HTTP version");
+  }
+  const int malformed_start =
+      static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
+  Expect(scenario.options(malformed_start).uint_value() ==
+             CURL_HTTP_VERSION_1_0,
+         "fast HTTP policy did not canonicalize a boolean HTTP version");
+  Expect(scenario.options(malformed_start + 1).uint_value() ==
+             CURL_HTTP_VERSION_NONE,
+         "fast HTTP policy did not canonicalize a false HTTP version");
+  Expect(scenario.options(malformed_start + 2).uint_value() ==
+             CURL_HTTP_VERSION_NONE,
+         "fast HTTP policy did not canonicalize a string HTTP version");
+  Expect(scenario.options(malformed_start + 3).uint_value() ==
+             CURL_HTTP_VERSION_NONE,
+         "fast HTTP policy did not canonicalize an unset HTTP version");
+  const std::string normalized = scenario.SerializeAsString();
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp);
+  Expect(scenario.SerializeAsString() == normalized,
+         "fast HTTP version normalization was not idempotent");
+}
+
 void TestFastHttpFiltersBeforeApplyingOptionBound() {
   Scenario scenario;
   for (std::size_t index = 0;
@@ -1964,6 +2028,7 @@ int main() {
   TestTimingPolicyCanonicalizesOnlyConfiguredFollowOns();
   TestDeepPoliciesRemoveRuntimeInvisibleSuffixes();
   TestFastHttpOptionAllowlist();
+  TestFastHttpKeepsOnlyOwnedHttpVersions();
   TestFastHttpFiltersBeforeApplyingOptionBound();
   TestApiPolicyRetainsAndBoundsItsPlan();
   TestProtocolPoliciesDiscardApiPlans();

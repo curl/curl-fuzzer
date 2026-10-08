@@ -1613,6 +1613,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(HTTP2_SCENARIO_TEXTPROTOS
         ${HTTPS_H2_SCENARIO_TEXTPROTOS}
         ${RAW_HTTP2_SCENARIO_TEXTPROTOS})
+    set(H2C_UPGRADE_SCENARIO_TEXTPROTO
+        ${SCENARIO_SRC_DIR}/http/http2_upgrade.textproto)
 
     # Keep the fast seed population deliberately small and explicit. LPM's
     # seed choice materially affects executions per second even when the lane
@@ -1622,7 +1624,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/basic_get.textproto
         ${SCENARIO_SRC_DIR}/http/chunked_response.textproto
         ${SCENARIO_SRC_DIR}/http/http09_allowed.textproto
-        ${RAW_HTTP2_SCENARIO_TEXTPROTOS}
+        ${H2C_UPGRADE_SCENARIO_TEXTPROTO}
         ${SCENARIO_SRC_DIR}/http/http_brotli_decode.textproto
         ${SCENARIO_SRC_DIR}/http/http_chunk_extensions_trailers.textproto
         ${SCENARIO_SRC_DIR}/http/http_conflicting_framing.textproto
@@ -1650,9 +1652,29 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/url_malformed_authority.textproto
     )
     list(LENGTH FAST_HTTP_SCENARIO_TEXTPROTOS FAST_HTTP_SCENARIO_COUNT)
-    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 32)
+    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 29)
         message(FATAL_ERROR
-            "The fast HTTP corpus must contain exactly 32 seed declarations")
+            "The fast HTTP corpus must contain exactly 29 seed declarations")
+    endif()
+    foreach(raw_http2_textproto ${RAW_HTTP2_SCENARIO_TEXTPROTOS})
+        list(FIND FAST_HTTP_SCENARIO_TEXTPROTOS
+            "${raw_http2_textproto}" raw_http2_fast_index)
+        if(NOT raw_http2_fast_index EQUAL -1)
+            message(FATAL_ERROR
+                "Prior-knowledge HTTP/2 seed leaked into fast HTTP: ${raw_http2_textproto}")
+        endif()
+    endforeach()
+    list(FIND FAST_HTTP_SCENARIO_TEXTPROTOS
+        "${H2C_UPGRADE_SCENARIO_TEXTPROTO}" h2c_fast_index)
+    if(h2c_fast_index EQUAL -1)
+        message(FATAL_ERROR
+            "The fast HTTP corpus must contain the h2c upgrade seed")
+    endif()
+    list(FIND HTTP2_SCENARIO_TEXTPROTOS
+        "${H2C_UPGRADE_SCENARIO_TEXTPROTO}" h2c_http2_index)
+    if(NOT h2c_http2_index EQUAL -1)
+        message(FATAL_ERROR
+            "The prior-knowledge HTTP/2 corpus must not contain the h2c upgrade seed")
     endif()
     foreach(fast_http_textproto ${FAST_HTTP_SCENARIO_TEXTPROTOS})
         if(NOT EXISTS "${fast_http_textproto}")
