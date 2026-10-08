@@ -11,6 +11,7 @@ name: Profile fuzzer
         options:
           - curl_fuzzer_proto_http
           - curl_fuzzer_proto_http_deep
+          - curl_fuzzer_proto_http2
           - curl_fuzzer_proto_https_h2
           - curl_fuzzer_proto_multi
       seconds:
