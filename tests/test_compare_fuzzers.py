@@ -227,6 +227,7 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     document = json.loads(output.read_text(encoding="utf-8"))
+    assert document["schema_version"] == 3
     assert [run["corpus_before"]["count"] for run in document["runs"]] == [
         1,
         1,
@@ -236,7 +237,51 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
     assert [run["seed"] for run in document["runs"]] == [101, 101, 102, 102]
     assert document["summary"][0]["median_exec_per_second"] == 50
     assert document["comparison"][0]["exec_per_second_percent"] == 0
+    assert document["comparison"][0]["libfuzzer_counters_comparable"] is False
+    assert document["comparison"][0]["initial_cov_delta"] is None
+    assert document["comparison"][0]["final_ft_delta"] is None
+    assert document["config"]["compare_libfuzzer_counters"] is False
     assert document["corpora"]["dummy_fuzzer"]["count"] == 1
+
+
+def test_cli_compares_libfuzzer_counters_only_when_explicitly_enabled(
+    tmp_path: Path,
+) -> None:
+    binary_dir = tmp_path / "bin"
+    corpus_dir = tmp_path / "corpora" / "dummy_fuzzer"
+    binary_dir.mkdir()
+    corpus_dir.mkdir(parents=True)
+    _write_dummy_fuzzer(binary_dir / "dummy_fuzzer")
+    (corpus_dir / "seed").write_text("abc", encoding="utf-8")
+    output = tmp_path / "result.json"
+
+    result = _run_cli(
+        [
+            "--baseline-dir",
+            str(binary_dir),
+            "--candidate-dir",
+            str(binary_dir),
+            "--target",
+            "dummy_fuzzer",
+            "--corpus-root",
+            str(tmp_path / "corpora"),
+            "--seconds",
+            "1",
+            "--repeats",
+            "1",
+            "--compare-libfuzzer-counters",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    document = json.loads(output.read_text(encoding="utf-8"))
+    comparison = document["comparison"][0]
+    assert comparison["libfuzzer_counters_comparable"] is True
+    assert comparison["initial_cov_delta"] == 0
+    assert comparison["final_ft_delta"] == 0
+    assert document["config"]["compare_libfuzzer_counters"] is True
 
 
 def test_specialized_lanes_are_default_benchmark_targets() -> None:
@@ -327,6 +372,7 @@ def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
             str(llvm_profdata),
             "--llvm-cov",
             str(llvm_cov),
+            "--compare-libfuzzer-counters",
             "--output",
             str(output),
         ]
@@ -347,8 +393,11 @@ def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
         "legacy_http",
         "proto_http",
     ]
-    assert document["comparison"][0]["initial_cov_delta"] is None
-    assert document["comparison"][0]["final_ft_delta"] is None
+    comparison = document["comparison"][0]
+    assert comparison["libfuzzer_counters_comparable"] is False
+    assert comparison["initial_cov_delta"] is None
+    assert comparison["final_ft_delta"] is None
+    assert document["config"]["compare_libfuzzer_counters"] is True
     assert document["corpora"][label]["baseline"]["bytes"] == len(b"legacy TLV")
     assert document["corpora"][label]["candidate"]["bytes"] == len(b"protobuf")
     source_comparison = document["source_coverage"]["comparison"]["targets"][label]
@@ -411,3 +460,16 @@ def test_cli_rejects_partial_source_coverage_configuration(tmp_path: Path) -> No
 
     assert result.returncode == 2
     assert "requires both --coverage-baseline-dir" in result.stderr
+
+
+def test_cli_rejects_counter_comparison_without_candidate(tmp_path: Path) -> None:
+    result = _run_cli(
+        [
+            "--baseline-dir",
+            str(tmp_path / "baseline"),
+            "--compare-libfuzzer-counters",
+        ]
+    )
+
+    assert result.returncode == 2
+    assert "requires --candidate-dir" in result.stderr

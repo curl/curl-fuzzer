@@ -676,7 +676,7 @@ def _percentage_delta(baseline: object, candidate: object) -> float | None:
 def _comparisons(
     summaries: Sequence[dict[str, object]],
     targets: Sequence[str],
-    counter_comparable: set[str] | None = None,
+    counter_comparable: set[str],
 ) -> list[dict[str, object]]:
     by_key = {(summary["target"], summary["variant"]): summary for summary in summaries}
     comparisons: list[dict[str, object]] = []
@@ -685,10 +685,11 @@ def _comparisons(
         candidate = by_key.get((target, "candidate"))
         if baseline is None or candidate is None:
             continue
-        compare_counters = counter_comparable is None or target in counter_comparable
+        compare_counters = target in counter_comparable
         comparisons.append(
             {
                 "target": target,
+                "libfuzzer_counters_comparable": compare_counters,
                 "exec_per_second_percent": _percentage_delta(
                     baseline["median_exec_per_second"],
                     candidate["median_exec_per_second"],
@@ -1243,6 +1244,14 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="extra libFuzzer argument (use --fuzzer-arg=-max_len=...)",
     )
     parser.add_argument(
+        "--compare-libfuzzer-counters",
+        action="store_true",
+        help=(
+            "report cov/ft deltas for same-name targets; the caller must "
+            "guarantee identical SanitizerCoverage sites and feature semantics"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=REPO_ROOT / "build" / "measurements" / "comparison.json",
@@ -1309,6 +1318,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise MeasurementError("--cpu must not be negative")
     if args.target_pair and args.candidate_dir is None:
         raise MeasurementError("--target-pair requires --candidate-dir")
+    if args.compare_libfuzzer_counters and args.candidate_dir is None:
+        raise MeasurementError("--compare-libfuzzer-counters requires --candidate-dir")
     coverage_inputs = (
         args.coverage_baseline_dir,
         args.coverage_candidate_dir,
@@ -1540,11 +1551,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
 
         summaries = _summaries(runs, variants, target_labels)
-        comparable_counter_labels = {
-            target_pair.label
-            for target_pair in target_pairs
-            if target_pair.baseline_target == target_pair.candidate_target
-        }
+        comparable_counter_labels = (
+            {
+                target_pair.label
+                for target_pair in target_pairs
+                if target_pair.baseline_target == target_pair.candidate_target
+            }
+            if args.compare_libfuzzer_counters
+            else set()
+        )
         comparisons = _comparisons(summaries, target_labels, comparable_counter_labels)
         binary_metadata = {
             variant.name: {
@@ -1574,7 +1589,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else None
         )
         result_document = {
-            "schema_version": 2,
+            "schema_version": 3,
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "repository_revision": _git_revision(),
             "host": {
@@ -1603,6 +1618,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "seed_base": args.seed_base,
                 "cpu": args.cpu,
                 "fuzzer_args": args.fuzzer_arg,
+                "compare_libfuzzer_counters": args.compare_libfuzzer_counters,
                 "source_coverage": source_coverage_enabled,
                 "coverage_wall_timeout": args.coverage_wall_timeout,
             },
