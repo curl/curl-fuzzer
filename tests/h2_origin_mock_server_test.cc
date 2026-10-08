@@ -253,20 +253,52 @@ void TestStructuredPlanTracksRequestAndEncodesResponse() {
          "structured H2 peer did not track client setup and request HEADERS");
 }
 
+// Observe the same provider configuration through an ordinary TLS peer that
+// does not select a key-exchange group. Its default may legitimately be X25519.
+std::string DriveProviderDefaultTlsReference() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/group-reference");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nreference");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "TLS group reference could not allocate a handle");
+  curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTPS);
+  const std::string url = "https://" + scenario.host_path();
+  (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
+  std::string response;
+  (void)curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  (void)curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
+
+  proto_fuzzer::TlsMockServer server;
+  server.Install(easy);
+  const CURLcode code = server.DriveScenario(easy, scenario);
+  const std::string group = server.negotiated_group();
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+
+  Expect(code == CURLE_OK && response == "reference",
+         "provider-default TLS reference transfer did not complete");
+  Expect(!group.empty(), "TLS reference did not expose its negotiated group");
+  return group;
+}
+
 void TestProviderDefaultTlsGroupRemainsReachable() {
   Scenario scenario = MakeStructuredScenario();
   scenario.set_tls_group_profile(
       curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
 
+  const std::string reference_group = DriveProviderDefaultTlsReference();
   const H2TransferResult result = DriveH2Scenario(scenario);
 
   Expect(result.code == CURLE_OK && result.response == "structured",
          "provider-default TLS group prevented the H2 transfer");
   Expect(!result.negotiated_group.empty(),
          "provider-default handshake did not expose its negotiated group");
-  Expect(
-      !IsX25519Group(result.negotiated_group),
-      "provider-default handshake did not preserve alternate group coverage");
+  Expect(result.negotiated_group == reference_group,
+         "H2 provider-default handshake did not match the TLS reference group");
 }
 
 } // namespace
