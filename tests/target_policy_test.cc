@@ -8,6 +8,7 @@
 
 #include "proto_fuzzer/scenario_limits.h"
 
+#include <curl/curl.h>
 #include <google/protobuf/text_format.h>
 
 #include <cstdint>
@@ -1768,6 +1769,56 @@ void TestH2FlowControlSeedPreservesInitialWindow() {
   }
 }
 
+void TestRawHttp2SeedsFitDedicatedTarget() {
+  constexpr const char *kSeedNames[] = {
+      "http2_control_frames.textproto",
+      "http2_invalid_preface.textproto",
+      "http2_prior_knowledge.textproto",
+      "http2_truncated_headers_frame.textproto",
+  };
+
+  for (const char *name : kSeedNames) {
+    const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                             "/http/" + name;
+    std::ifstream input(path);
+    Expect(input.is_open(), "could not read a raw HTTP/2 seed");
+    const std::string text((std::istreambuf_iterator<char>(input)),
+                           std::istreambuf_iterator<char>());
+    Scenario scenario;
+    Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+           "could not parse a raw HTTP/2 seed");
+    const auto connection = scenario.connection();
+    bool selects_prior_knowledge = false;
+    for (const auto &option : scenario.options()) {
+      if (option.option_id() ==
+              curl::fuzzer::proto::CURLOPT_HTTP_VERSION &&
+          option.uint_value() == CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE) {
+        selects_prior_knowledge = true;
+      }
+    }
+    Expect(selects_prior_knowledge,
+           "raw HTTP/2 seed does not select prior knowledge");
+    Expect(!connection.initial_response().empty() ||
+               connection.on_readable_size() != 0,
+           "raw HTTP/2 seed has no response frames");
+
+    NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp2);
+
+    Expect(scenario.scheme() == SCHEME_HTTP,
+           "HTTP/2 target changed a raw seed's scheme");
+    Expect(!scenario.has_http2_plan(),
+           "HTTP/2 target materialized a structured plan for a raw seed");
+    Expect(scenario.connection().SerializeAsString() ==
+               connection.SerializeAsString(),
+           "HTTP/2 target changed a raw seed's response bytes");
+    for (const auto &option : scenario.options()) {
+      Expect(option.option_id() !=
+                 curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
+             "HTTP/2 target retained a seed's transport selection option");
+    }
+  }
+}
+
 void TestNormalizationBoundsCanonicalOptionStrings() {
   Scenario scenario;
   auto *pin = scenario.add_options();
@@ -1927,6 +1978,7 @@ int main() {
   TestH2NormalizationPreservesValidSettings();
   TestH2NormalizationCanonicalizesSettingsWireWidth();
   TestH2FlowControlSeedPreservesInitialWindow();
+  TestRawHttp2SeedsFitDedicatedTarget();
   TestNormalizationBoundsCanonicalOptionStrings();
   TestNormalizationPipelineIsIdempotent();
   return 0;
