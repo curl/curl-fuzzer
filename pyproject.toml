@@ -51,6 +51,7 @@ generate_option_manifest = "curl_fuzzer_tools.generate_option_manifest:run"
 tlv_to_proto = "curl_fuzzer_tools.tlv_to_proto:run"
 compare_fuzzers = "curl_fuzzer_tools.compare_fuzzers:main"
 profile_fuzzer = "curl_fuzzer_tools.profile_fuzzer:main"
+bootstrap_http2_corpus = "curl_fuzzer_tools.bootstrap_http2_corpus:main"
 
 
 [tool.setuptools.package-data]

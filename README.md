@@ -103,6 +103,29 @@ Inputs are extracted to `ossfuzz_corpus/<target>/`. Existing non-empty target
 directories are retained; pass `-f` to refresh them. Missing public corpora are
 reported and skipped because newly added targets may not have one yet.
 
+Bootstrap the dedicated HTTP/2 corpus from historical Scenario inputs after
+downloading them (requires `protoc`, provided by `protobuf-compiler`):
+
+```shell
+uv run bootstrap_http2_corpus
+```
+
+This adds byte-identical inputs whose final explicit `CURLOPT_HTTP_VERSION`
+setting in the first 64 options is prior knowledge (`uint_value: 5`) to
+`ossfuzz_corpus/curl_fuzzer_proto_http2/`. It excludes HTTP/1 version selections, overridden
+version settings, and malformed protobufs. The predicate is conservative;
+it does not simulate curl's validation or target normalization. Native inputs
+are retained, and the manifest under `ossfuzz_corpus/.manifests/` records source,
+schema, and selected corpus hashes plus rejected input hashes. Existing corpus
+routing picks up this native directory for coverage, benchmarking, and profiling.
+
+The bootstrap is additive. Before refreshing public corpora, use the downloader's
+`-f` flag so the bootstrapped directory does not hide a newly published native
+corpus, then rerun the bootstrap. `--source` accepts repeatable directory, ZIP,
+or file inputs; `--output-zip` writes a reproducible selected-input archive for
+a one-time upload to the dedicated OSS-Fuzz target. Keep ZIPs and manifests
+outside replay directories. Run `uv run bootstrap_http2_corpus --help` for paths.
+
 For legacy targets, checked-in binary seeds live in `corpora/`. For structured
 targets, checked-in textproto files under `scenarios/` are the source of truth;
 CMake generates their binary corpus entries in the build tree.
