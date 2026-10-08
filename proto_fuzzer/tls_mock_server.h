@@ -28,6 +28,16 @@ enum class TlsApplicationProtocol {
   kHttp2,
 };
 
+/// Key-exchange group policy fixed when a TLS peer is constructed. Keeping
+/// this separate from mutable transfer options prevents a scenario from
+/// configuring incompatible client and server group sets.
+enum class TlsGroupPolicy {
+  /// Retain the linked OpenSSL provider's preferred group ordering.
+  kProviderDefault,
+  /// Restrict negotiation to the inexpensive X25519 group.
+  kX25519,
+};
+
 /// Owns the OpenSSL server context without exposing OpenSSL types through the
 /// public mock-server headers used by sanitizer builds that disable TLS.
 class TlsServerContext;
@@ -40,7 +50,8 @@ class TlsMockTransport {
  public:
   explicit TlsMockTransport(TlsApplicationProtocol protocol = TlsApplicationProtocol::kHttp11,
                             curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                                curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
+                                curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+                            TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault);
   ~TlsMockTransport();
 
   TlsMockTransport(const TlsMockTransport&) = delete;
@@ -55,11 +66,14 @@ class TlsMockTransport {
   std::size_t reused_session_count() const;
   std::size_t write_retry_count() const;
   std::string negotiated_alpn() const;
+  TlsGroupPolicy group_policy() const;
+  std::string negotiated_group() const;
   int ech_status() const;
   std::string ech_inner_name() const;
   std::string ech_outer_name() const;
 
  private:
+  const TlsGroupPolicy group_policy_;
   std::unique_ptr<TlsServerContext> context_;
 };
 
@@ -94,6 +108,8 @@ class TlsMockServer : public MockServer {
 
   std::string negotiated_alpn() const;
 
+  std::string negotiated_group() const;
+
   int ech_status() const;
 
   std::string ech_inner_name() const;
@@ -103,7 +119,10 @@ class TlsMockServer : public MockServer {
  protected:
   explicit TlsMockServer(TlsApplicationProtocol protocol,
                          curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
+                             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+                         TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault);
+
+  TlsGroupPolicy group_policy() const;
 
   std::unique_ptr<MockConnection> CreateConnection() override;
 

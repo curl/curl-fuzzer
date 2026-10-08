@@ -143,7 +143,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   if (mode == ScenarioRunMode::kTlsHttp2Coverage) {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-    return std::make_unique<H2OriginMockServer>(scenario.tls_certificate_chain());
+    return std::make_unique<H2OriginMockServer>(scenario.tls_certificate_chain(), scenario.tls_group_profile());
 #else
     // This target remains buildable under MemorySanitizer, whose curl build
     // omits the OpenSSL server dependency required for TLS/ALPN h2.

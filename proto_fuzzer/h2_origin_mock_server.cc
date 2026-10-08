@@ -13,10 +13,23 @@
 
 namespace proto_fuzzer {
 
+namespace {
+
+/// Map the schema selector to the transport's immutable constructor policy.
+/// Unknown values retain the inexpensive zero-value behavior.
+TlsGroupPolicy GroupPolicyFor(curl::fuzzer::proto::TlsGroupProfile profile) {
+  return profile == curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT ? TlsGroupPolicy::kProviderDefault
+                                                                    : TlsGroupPolicy::kX25519;
+}
+
+}  // namespace
+
 /// Construct an HTTP/2 TLS peer with the selected certificate chain.
 /// @param certificate_chain Fixed certificate-chain profile to present.
-H2OriginMockServer::H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : TlsMockServer(TlsApplicationProtocol::kHttp2, certificate_chain) {}
+/// @param group_profile Key-exchange group profile shared by both endpoints.
+H2OriginMockServer::H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                                       curl::fuzzer::proto::TlsGroupProfile group_profile)
+    : TlsMockServer(TlsApplicationProtocol::kHttp2, certificate_chain, GroupPolicyFor(group_profile)) {}
 
 H2OriginMockServer::~H2OriginMockServer() {
   // The multi borrows runtime_ for push callbacks, and connections borrow its
@@ -32,6 +45,9 @@ H2OriginMockServer::~H2OriginMockServer() {
 /// @param easy Easy handle to configure.
 void H2OriginMockServer::Install(CURL* easy) {
   TlsMockServer::Install(easy);
+  if (group_policy() == TlsGroupPolicy::kX25519) {
+    (void)curl_easy_setopt(easy, CURLOPT_SSL_EC_CURVES, "X25519");
+  }
   (void)curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
   (void)curl_easy_setopt(easy, CURLOPT_UPKEEP_INTERVAL_MS, 0L);
 }

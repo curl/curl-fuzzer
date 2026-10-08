@@ -95,6 +95,19 @@ void CanonicalizeTlsCertificateChain(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep the HTTPS/HTTP2 group selector inside its closed, useful set. Unknown
+/// proto3 enum values take the inexpensive historical-input path.
+void CanonicalizeTlsGroupProfile(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->tls_group_profile()) {
+    case curl::fuzzer::proto::TLS_GROUP_X25519:
+    case curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT:
+      return;
+    default:
+      scenario->clear_tls_group_profile();
+      return;
+  }
+}
+
 /// Keep the tunneled origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
@@ -1348,6 +1361,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_tls_certificate_chain();
   }
 
+  // Only the dedicated TLS HTTP/2 origin consumes the group selector. The
+  // compatibility profile returned above so unknown fields remain stable.
+  if (profile != TargetProfile::kHttpsH2) {
+    scenario->clear_tls_group_profile();
+  }
+
   // Field 13 is append-only so the compatibility target can round-trip it,
   // but every other fixed lane must discard work its peer cannot consume.
   if (profile != TargetProfile::kFastHttp3) {
@@ -1456,6 +1475,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     CanonicalizeTlsAuthority(scenario);
     if (profile == TargetProfile::kHttpsH2) {
       CanonicalizeTlsCertificateChain(scenario);
+      CanonicalizeTlsGroupProfile(scenario);
     }
     return;
   }

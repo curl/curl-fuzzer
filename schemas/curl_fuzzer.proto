@@ -123,6 +123,11 @@ message Scenario {
   // symbolic stream reference follows requests as mutations add redirects or
   // concurrent streams. Non-H2 target policies discard this plan.
   Http2Plan http2_plan = 23;
+  // Select the key-exchange group policy for the dedicated HTTPS/HTTP2 peer.
+  // Zero fixes both endpoints to X25519 for the high-throughput path, while
+  // the provider-default profile preserves coverage of OpenSSL's evolving
+  // preferred groups. Other fixed target policies discard this field.
+  TlsGroupProfile tls_group_profile = 24;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -131,6 +136,14 @@ message Scenario {
 enum TlsCertificateChainProfile {
   TLS_CERTIFICATE_CHAIN_DEFAULT_EC = 0;
   TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES = 1;
+}
+
+// Key-exchange group policies available to the dedicated HTTPS/HTTP2 peer.
+// X25519 is zero so historical corpus inputs take the inexpensive path; one
+// explicit seed retains the provider's default negotiation and its coverage.
+enum TlsGroupProfile {
+  TLS_GROUP_X25519 = 0;
+  TLS_GROUP_PROVIDER_DEFAULT = 1;
 }
 
 enum SocksProxyMode {

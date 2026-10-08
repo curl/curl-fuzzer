@@ -38,7 +38,8 @@ The main groups of fields are:
 - Peer work: `connection`, `subsequent_connections`, structured WebSocket
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, TLS certificate
-  selection, `socks_proxy_mode`, `trace_ids`, and filename-backed parser
+  selection, HTTPS/H2 key-exchange selection, `socks_proxy_mode`, `trace_ids`,
+  and filename-backed parser
   inputs.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
