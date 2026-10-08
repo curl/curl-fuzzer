@@ -73,10 +73,11 @@ message Scenario {
   // in the protocol targets. curl_fuzzer_proto_multi retains this plan and
   // applies the same request/response shape to a small set of easy handles.
   MultiPlan multi_plan = 11;
-  // Select the fixed certificate chain served by the dedicated HTTPS peer.
+  // Select the fixed certificate chain served by dedicated TLS peers,
+  // including HTTPS, secure WebSocket, and QUIC lanes.
   // Keeping this a closed profile rather than fuzzing PEM bytes makes every
   // choice a parseable TLS handshake while still varying the X509 public-key
-  // types consumed by curl. Other fixed protocol lanes discard this field.
+  // types consumed by curl. Non-TLS fixed protocol lanes discard this field.
   TlsCertificateChainProfile tls_certificate_chain = 12;
   // Ordered HTTP/3 peer work for the dedicated QUIC lane. Keeping this in a
   // separate message lets the ordinary Connection retain its historical

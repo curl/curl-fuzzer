@@ -141,7 +141,8 @@ size_t WebSocketWriteCallback(void* /*contents*/, size_t size, size_t nmemb, voi
 
 /// Drain curl_ws_recv in a tight loop until it returns CURLE_AGAIN / nothing
 /// pending. Bounded; not expected to do anything on well-formed scenarios.
-void DrainWsRecv(CURL* easy) {
+std::size_t DrainWsRecv(CURL* easy) {
+  std::size_t total_received = 0;
   for (std::size_t i = 0; i < kMaxWsRecvIterations; ++i) {
     unsigned char buffer[4096];
     std::size_t nread = 0;
@@ -156,7 +157,9 @@ void DrainWsRecv(CURL* easy) {
     if (nread == 0 && meta == nullptr) {
       break;
     }
+    total_received += nread;
   }
+  return total_received;
 }
 
 }  // namespace
@@ -189,7 +192,12 @@ bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario
 /// Construct an idle WebSocketMockServer with no queued frames. Install()
 /// on the base class and DriveScenario() configure it from a Scenario proto.
 WebSocketMockServer::WebSocketMockServer()
-    : next_chunk_(0), manual_delivery_(false), handshake_sent_(false), ws_probe_fired_(false), easy_handle_(nullptr) {}
+    : next_chunk_(0),
+      manual_delivery_(false),
+      handshake_sent_(false),
+      ws_probe_fired_(false),
+      easy_handle_(nullptr),
+      manual_received_bytes_(0) {}
 
 /// Default destructor; the owned MockConnection (if any) cleans up its socketpair.
 WebSocketMockServer::~WebSocketMockServer() = default;
@@ -222,6 +230,10 @@ void WebSocketMockServer::MarkWsProbeFired() { ws_probe_fired_ = true; }
 
 /// @return the curl easy handle cached by Install() for the write callback.
 CURL* WebSocketMockServer::easy_handle() const { return easy_handle_; }
+
+/// @return Application payload bytes returned by curl_ws_recv during the
+/// latest manual-drive tail.
+std::size_t WebSocketMockServer::manual_received_bytes() const { return manual_received_bytes_; }
 
 /// Queue RFC 6455 wire-byte chunks to emit once the handshake has completed.
 /// Resets the next-chunk cursor.
@@ -262,6 +274,40 @@ void WebSocketMockServer::ConsumeChunk() {
   }
 }
 
+/// Construct the transport used for the WebSocket exchange. Secure WebSocket
+/// peers override this factory while retaining the same Upgrade and frame
+/// state machine.
+/// @return a new plaintext socketpair connection.
+std::unique_ptr<MockConnection> WebSocketMockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
+
+/// Consume the plaintext Upgrade request without applying DrainIncoming's
+/// backpressure limit. This preserves the historical WS and compatibility
+/// behavior; layered transports override the hook to perform their decoding.
+/// @return Number of request bytes appended during this call.
+std::size_t WebSocketMockServer::DrainHandshakeData() {
+  if (!connection_) {
+    return 0;
+  }
+  const std::size_t size_before = ws_request_buffer_.size();
+  connection_->ReadAvailable(&ws_request_buffer_);
+  return ws_request_buffer_.size() - size_before;
+}
+
+/// Flush application writes when the carrier queues them. Plain socket writes
+/// are synchronous, so the historical transport has nothing to do here.
+void WebSocketMockServer::FlushTransport() {}
+
+/// Collect application bytes consumed by the active transport. Plaintext
+/// connections report socket bytes directly; TLS connections report them only
+/// after record decryption, keeping the WebSocket handshake transport-agnostic.
+/// @param data First byte of one application-data fragment.
+/// @param size Number of bytes available at `data`.
+void WebSocketMockServer::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (!handshake_sent_ && data != nullptr && size != 0) {
+    ws_request_buffer_.append(reinterpret_cast<const char*>(data), size);
+  }
+}
+
 /// Called by the OPENSOCKETFUNCTION trampoline in the base class. Creates the
 /// MockConnection but does NOT write anything — the handshake is driven later
 /// by TryAdvanceHandshake().
@@ -277,11 +323,12 @@ curl_socket_t WebSocketMockServer::HandleOpenSocket(curlsocktype purpose, struct
   if (connection_) {
     return CURL_SOCKET_BAD;
   }
-  connection_ = std::make_unique<MockConnection>();
-  if (!connection_->ok()) {
+  connection_ = CreateConnection();
+  if (!connection_ || !connection_->ok()) {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
+  connection_->SetIncomingDataObserver(this);
   ApplyPendingBackpressure();
   // Wait for curl's Upgrade request before we write anything — the drive
   // loop calls TryAdvanceHandshake() to drive that exchange.
@@ -298,7 +345,11 @@ bool WebSocketMockServer::PushRawBytes(const unsigned char* data, std::size_t si
     return false;
   }
   connection_->DrainIncoming();
-  return connection_->WriteAll(data, size);
+  const bool written = connection_->WriteAll(data, size);
+  if (written) {
+    FlushTransport();
+  }
+  return written;
 }
 
 /// Push the next queued frame when curl is ready. Used in streaming mode;
@@ -312,7 +363,9 @@ bool WebSocketMockServer::DeliverNextChunk() {
   connection_->DrainIncoming();
   const std::string& chunk = frames_[next_chunk_++];
   if (!chunk.empty()) {
-    connection_->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
+    if (connection_->WriteAll(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size())) {
+      FlushTransport();
+    }
   }
   if (next_chunk_ >= frames_.size()) {
     connection_->ShutdownWrite();
@@ -323,12 +376,19 @@ bool WebSocketMockServer::DeliverNextChunk() {
 /// Drive the WebSocket opening handshake: read whatever curl has written so
 /// far, and once we've seen the end of the request headers, reply with a
 /// valid 101 Switching Protocols.
+/// @param made_progress Optional result set when transport or handshake state
+///        advanced during this call.
 /// @return true once the 101 response has been written (idempotent afterwards).
-bool WebSocketMockServer::TryAdvanceHandshake() {
+bool WebSocketMockServer::TryAdvanceHandshake(bool* made_progress) {
+  if (made_progress != nullptr) {
+    *made_progress = false;
+  }
   if (handshake_sent_ || !connection_) {
     return handshake_sent_;
   }
-  connection_->ReadAvailable(&ws_request_buffer_);
+  if (DrainHandshakeData() != 0 && made_progress != nullptr) {
+    *made_progress = true;
+  }
   if (ws_request_buffer_.find("\r\n\r\n") == std::string::npos) {
     return false;
   }
@@ -343,7 +403,11 @@ bool WebSocketMockServer::TryAdvanceHandshake() {
       "Sec-WebSocket-Accept: " +
       accept + "\r\n\r\n";
   connection_->WriteAll(reinterpret_cast<const unsigned char*>(response.data()), response.size());
+  FlushTransport();
   handshake_sent_ = true;
+  if (made_progress != nullptr) {
+    *made_progress = true;
+  }
   return true;
 }
 
@@ -358,6 +422,7 @@ bool WebSocketMockServer::TryAdvanceHandshake() {
 /// @param scenario source of the frame chunks and CONNECT_ONLY setting.
 void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   SetManualDelivery(ScenarioRequestsManualWsDrive(scenario));
+  manual_received_bytes_ = 0;
   // initial_response is unused in WS mode; we synthesise the 101 dynamically
   // from curl's Upgrade request.
   SetFrames(BuildFrameChunks(scenario.connection()));
@@ -387,9 +452,9 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
     }
     // Drive the 101 handshake on every iteration; no-op once sent.
     if (!handshake_sent()) {
-      if (TryAdvanceHandshake()) {
-        made_progress = true;
-      }
+      bool handshake_progress = false;
+      (void)TryAdvanceHandshake(&handshake_progress);
+      made_progress = handshake_progress || made_progress;
     }
     if (!still_running) {
       break;
@@ -432,10 +497,10 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
       PushRawBytes(reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size());
     }
     ConsumeChunk();
-    DrainWsRecv(easy);
+    manual_received_bytes_ += DrainWsRecv(easy);
   }
   // Final drain in case frame parsing produced more work after the last push.
-  DrainWsRecv(easy);
+  manual_received_bytes_ += DrainWsRecv(easy);
 
   const auto& probes = scenario.connection().manual_probes();
   static const unsigned char kPayload[] = "hello-from-proto-fuzzer";

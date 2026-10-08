@@ -5,7 +5,7 @@
  */
 
 /// @file
-/// @brief TLS transport for the structured HTTP mock server.
+/// @brief Reusable TLS transport for structured in-process protocol peers.
 
 #ifndef PROTO_FUZZER_TLS_MOCK_SERVER_H_
 #define PROTO_FUZZER_TLS_MOCK_SERVER_H_
@@ -31,6 +31,37 @@ enum class TlsApplicationProtocol {
 /// Owns the OpenSSL server context without exposing OpenSSL types through the
 /// public mock-server headers used by sanitizer builds that disable TLS.
 class TlsServerContext;
+
+/// Reusable TLS carrier for protocol-specific mock peers. It owns the
+/// per-scenario server context, creates nonblocking TLS connections, and
+/// installs the checked-in trust anchor without taking ownership of curl's
+/// socket callbacks or application-protocol drive loop.
+class TlsMockTransport {
+ public:
+  explicit TlsMockTransport(TlsApplicationProtocol protocol = TlsApplicationProtocol::kHttp11,
+                            curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
+                                curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
+  ~TlsMockTransport();
+
+  TlsMockTransport(const TlsMockTransport&) = delete;
+  TlsMockTransport& operator=(const TlsMockTransport&) = delete;
+
+  void Install(CURL* easy) const;
+
+  std::unique_ptr<MockConnection> CreateConnection();
+
+  int negotiated_tls_version() const;
+  std::size_t completed_handshake_count() const;
+  std::size_t reused_session_count() const;
+  std::size_t write_retry_count() const;
+  std::string negotiated_alpn() const;
+  int ech_status() const;
+  std::string ech_inner_name() const;
+  std::string ech_outer_name() const;
+
+ private:
+  std::unique_ptr<TlsServerContext> context_;
+};
 
 /// Runs MockServer's existing bounded HTTP scripts through a real TLS peer.
 /// The TLS connection itself remains nonblocking and is advanced by the same
@@ -79,7 +110,7 @@ class TlsMockServer : public MockServer {
   void ObserveActiveTransfer(CURL* easy) override;
 
  private:
-  std::unique_ptr<TlsServerContext> context_;
+  TlsMockTransport transport_;
   bool saw_live_tls_session_;
   std::size_t session_export_attempt_count_;
   std::size_t exported_session_count_;

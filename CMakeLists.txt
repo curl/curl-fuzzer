@@ -1321,7 +1321,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         list(APPEND PROTO_FUZZER_TLS_SOURCES
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
-            proto_fuzzer/tls_mock_server.cc)
+            proto_fuzzer/tls_mock_server.cc
+            proto_fuzzer/tls_websocket_mock_server.cc)
     endif()
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/api_lifecycle.cc

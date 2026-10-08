@@ -18,7 +18,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4 or SOCKS4A proxy. |
 | `curl_fuzzer_proto_resolver` | Localhost resolution and bounded `CURLOPT_RESOLVE` host-cache operations while harness callbacks retain transport control. |
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
-| `curl_fuzzer_proto_wss` | Secure-WebSocket setup under a fixed WSS scheme, with backpressure removed from this fast lane. |
+| `curl_fuzzer_proto_wss` | Verified in-process TLS followed by the WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_telnet` | Bounded TELNET negotiation and callback-backed input against a preloaded local peer. |
 | `curl_fuzzer_proto_ftp` | Plain FTP control plus passive or loopback-confined active data connections. |
 | `curl_fuzzer_proto_tftp` | Packet-preserving TFTP exchanges over private loopback UDP endpoints. |

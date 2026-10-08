@@ -342,6 +342,7 @@ void TestTlsPoliciesRejectUnknownCertificateChain() {
       TargetProfile::kFastHttps,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp3,
+      TargetProfile::kFastSecureWebSocket,
   };
   for (const TargetProfile profile : kTlsPolicies) {
     Scenario scenario;
@@ -571,14 +572,14 @@ void TestNonHttp3PoliciesDiscardPlans() {
   }
 }
 
-void TestNonHttpsPoliciesDiscardTlsCertificateChains() {
+void TestNonTlsPoliciesDiscardTlsCertificateChains() {
   constexpr TargetProfile kNonHttpsPolicies[] = {
       TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
       TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kApi,
-      TargetProfile::kMulti,         TargetProfile::kTiming,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,       TargetProfile::kFastTftp,
+      TargetProfile::kApi,           TargetProfile::kMulti,
+      TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kNonHttpsPolicies) {
@@ -655,6 +656,19 @@ void TestFastSecureWebSocketPolicy() {
   ExpectFixedPolicy(TargetProfile::kFastSecureWebSocket, SCHEME_WSS,
                     "fast secure WebSocket policy did not force WSS",
                     "fast secure WebSocket policy retained backpressure", true);
+
+  Scenario scenario;
+  scenario.set_host_path("mutated.example:8443/chat?room=fuzz#tail");
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastSecureWebSocket);
+
+  Expect(scenario.host_path() == "tls.test/chat?room=fuzz#tail",
+         "secure WebSocket policy did not canonicalize its TLS authority");
+  Expect(scenario.tls_certificate_chain() ==
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
+         "secure WebSocket policy discarded its TLS certificate chain");
 }
 
 void TestFastTelnetPolicy() {
@@ -1496,6 +1510,9 @@ void TestProfileRunModes() {
          "multi profile does not authorize concurrent transfers");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
+  Expect(RunModeFor(TargetProfile::kFastSecureWebSocket) ==
+             ScenarioRunMode::kTlsWebSocketCoverage,
+         "secure WebSocket profile does not authorize its TLS peer");
   Expect(RunModeFor(TargetProfile::kHttpsH2) ==
              ScenarioRunMode::kTlsHttp2Coverage,
          "HTTPS/H2 profile does not authorize its fixed-ALPN origin peer");
@@ -1523,7 +1540,6 @@ void TestProfileRunModes() {
 
   constexpr TargetProfile kCoverageProfiles[] = {
       TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
       TargetProfile::kTiming,
   };
   for (const TargetProfile profile : kCoverageProfiles) {
@@ -2010,7 +2026,7 @@ int main() {
   TestFastHttp3ProxyPolicyRetainsStreamScript();
   TestFastHttp3PolicyBoundsOrderedActions();
   TestNonHttp3PoliciesDiscardPlans();
-  TestNonHttpsPoliciesDiscardTlsCertificateChains();
+  TestNonTlsPoliciesDiscardTlsCertificateChains();
   TestH2ProxyPolicy();
   TestFastWebSocketPolicy();
   TestFastSecureWebSocketPolicy();

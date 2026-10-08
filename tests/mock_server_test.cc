@@ -39,6 +39,7 @@
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #include "proto_fuzzer/tls_test_credentials.h"
+#include "proto_fuzzer/tls_websocket_mock_server.h"
 #endif
 
 namespace {
@@ -511,6 +512,84 @@ void AddStringOption(Scenario *scenario,
   auto *option = scenario->add_options();
   option->set_option_id(option_id);
   option->set_string_value(value);
+}
+
+struct WssTransferResult {
+  CURLcode code = CURLE_FAILED_INIT;
+  long verify_result = -1;
+  std::size_t handshake_count = 0;
+  bool upgrade_sent = false;
+  std::size_t remaining_chunks = 0;
+  std::size_t manual_received_bytes = 0;
+};
+
+WssTransferResult DriveWssScenario(const Scenario &scenario) {
+  WssTransferResult result;
+  proto_fuzzer::TlsWebSocketMockServer server(scenario.tls_certificate_chain());
+  proto_fuzzer::CurlSlistPtr connect_to;
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr, "WSS test could not allocate an easy handle");
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_WSS));
+  const std::string url = "wss://" + scenario.host_path();
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
+         "WSS test could not set its URL");
+
+  server.Install(easy.get());
+  (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
+  result.code = server.DriveScenario(easy.get(), scenario);
+  (void)curl_easy_getinfo(easy.get(), CURLINFO_SSL_VERIFYRESULT,
+                          &result.verify_result);
+  result.handshake_count = server.completed_handshake_count();
+  result.upgrade_sent = server.handshake_sent();
+  result.remaining_chunks = server.remaining_chunks();
+  result.manual_received_bytes = server.manual_received_bytes();
+  return result;
+}
+
+void TestTlsWebSocketCompletesStreamingExchange() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_WSS);
+  scenario.set_host_path("tls.test/stream");
+  auto *frame = scenario.mutable_connection()->add_server_frames();
+  frame->set_fin(true);
+  frame->set_opcode(1);
+  frame->set_payload("secure-stream");
+
+  const WssTransferResult result = DriveWssScenario(scenario);
+  Expect(result.code == CURLE_OK,
+         "streaming WSS transfer did not complete successfully");
+  Expect(result.verify_result == 0,
+         "WSS peer certificate did not verify against the in-memory CA");
+  Expect(result.handshake_count == 1,
+         "streaming WSS transfer did not complete exactly one TLS handshake");
+  Expect(result.upgrade_sent,
+         "WSS peer did not synthesize its Switching Protocols response");
+  Expect(result.remaining_chunks == 0,
+         "streaming WSS peer did not deliver its scripted frame");
+}
+
+void TestTlsWebSocketFlushesFinalManualFrame() {
+  constexpr char kPayload[] = "secure-manual";
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_WSS);
+  scenario.set_host_path("tls.test/manual");
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_CONNECT_ONLY, 2);
+  auto *frame = scenario.mutable_connection()->add_server_frames();
+  frame->set_fin(true);
+  frame->set_opcode(1);
+  frame->set_payload(kPayload);
+
+  const WssTransferResult result = DriveWssScenario(scenario);
+  Expect(result.code == CURLE_OK,
+         "manual WSS connection did not complete its verified Upgrade");
+  Expect(result.verify_result == 0 && result.handshake_count == 1 &&
+             result.upgrade_sent,
+         "manual WSS connection did not complete TLS and WebSocket setup");
+  Expect(result.remaining_chunks == 0,
+         "manual WSS peer did not consume its final scripted frame");
+  Expect(result.manual_received_bytes == sizeof(kPayload) - 1,
+         "curl_ws_recv did not receive the final TLS-carried frame payload");
 }
 
 /// Retain request bytes that the production mock normally discards while
@@ -1490,6 +1569,8 @@ int main() {
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
   TestH2cUpgradeTransitionsToHttp2();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  TestTlsWebSocketCompletesStreamingExchange();
+  TestTlsWebSocketFlushesFinalManualFrame();
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();
 #endif
