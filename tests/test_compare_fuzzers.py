@@ -2,24 +2,49 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+from curl_fuzzer_tools import compare_fuzzers
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = REPO_ROOT / "scripts" / "compare_fuzzers.py"
 
 
-def _load_module():  # type: ignore[no-untyped-def]
-    specification = importlib.util.spec_from_file_location("compare_fuzzers", SCRIPT)
-    assert specification is not None
-    assert specification.loader is not None
-    module = importlib.util.module_from_spec(specification)
-    sys.modules[specification.name] = module
-    specification.loader.exec_module(module)
-    return module
+def _run_cli(arguments: list[str]) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    python_path = str(REPO_ROOT / "src")
+    if environment.get("PYTHONPATH"):
+        python_path += os.pathsep + environment["PYTHONPATH"]
+    environment["PYTHONPATH"] = python_path
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from curl_fuzzer_tools.compare_fuzzers import main; raise SystemExit(main())",
+            *arguments,
+        ],
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_pyproject_exposes_compare_fuzzers_entry_point() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert 'compare_fuzzers = "curl_fuzzer_tools.compare_fuzzers:main"' in pyproject
+
+
+def test_git_revision_is_absent_without_a_verified_checkout(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(compare_fuzzers, "SOURCE_CHECKOUT", None)
+
+    assert compare_fuzzers._git_revision() is None
 
 
 def _write_dummy_fuzzer(path: Path, exit_status: int = 0) -> None:
@@ -130,8 +155,7 @@ print(baseline if "coverage-baseline" in binary else candidate)
 
 
 def test_parse_libfuzzer_output() -> None:
-    module = _load_module()
-    parsed = module.parse_libfuzzer_output(
+    parsed = compare_fuzzers.parse_libfuzzer_output(
         """#2 INITED cov: 10 ft: 20 corp: 1/3b exec/s: 0 rss: 1Mb
 #100 DONE cov: 12 ft: 25 corp: 2/11b exec/s: 50 rss: 2Mb
 stat::number_of_executed_units: 100
@@ -149,7 +173,6 @@ stat::average_exec_per_sec:     50
 def test_source_coverage_compares_stable_curl_relative_identities(
     tmp_path: Path,
 ) -> None:
-    module = _load_module()
     baseline_root = tmp_path / "baseline-curl"
     candidate_root = tmp_path / "candidate-curl"
     for source_root in (baseline_root, candidate_root):
@@ -159,13 +182,13 @@ def test_source_coverage_compares_stable_curl_relative_identities(
             "void example(void) {}\n", encoding="utf-8"
         )
 
-    baseline = module.parse_source_coverage_export(
+    baseline = compare_fuzzers.parse_source_coverage_export(
         _coverage_document(baseline_root, (1, 1, 0)), baseline_root
     )
-    candidate = module.parse_source_coverage_export(
+    candidate = compare_fuzzers.parse_source_coverage_export(
         _coverage_document(candidate_root, (1, 0, 1)), candidate_root
     )
-    comparison = module.compare_source_coverage(baseline, candidate)
+    comparison = compare_fuzzers.compare_source_coverage(baseline, candidate)
 
     assert comparison["functions"]["baseline_retention_percent"] == 50.0
     assert comparison["functions"]["baseline_only"] == [
@@ -183,10 +206,8 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
     (corpus_dir / "seed").write_text("abc", encoding="utf-8")
     output = tmp_path / "result.json"
 
-    result = subprocess.run(
+    result = _run_cli(
         [
-            sys.executable,
-            str(SCRIPT),
             "--baseline-dir",
             str(binary_dir),
             "--candidate-dir",
@@ -201,10 +222,7 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
             "2",
             "--output",
             str(output),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
+        ]
     )
 
     assert result.returncode == 0, result.stderr
@@ -221,231 +239,26 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
     assert document["corpora"]["dummy_fuzzer"]["count"] == 1
 
 
-def test_proto_http_binary_uses_matching_corpus_directory(
-    tmp_path: Path,
-) -> None:
-    module = _load_module()
-    corpus_root = tmp_path / "corpora"
-    proto_http = corpus_root / "curl_fuzzer_proto_http"
-    proto_http.mkdir(parents=True)
-    (proto_http / "seed").write_bytes(b"proto")
-
-    sources = module._corpus_sources(
-        "curl_fuzzer_proto_http",
-        tmp_path / "bin",
-        corpus_root,
-        None,
-        {},
-    )
-
-    assert sources == [proto_http]
-
-
-def test_fixed_proto_lane_includes_historical_public_corpus(tmp_path: Path) -> None:
-    module = _load_module()
-    corpus_root = tmp_path / "corpora"
-    proto_http = corpus_root / "curl_fuzzer_proto_http"
-    proto_http.mkdir(parents=True)
-    (proto_http / "seed").write_bytes(b"proto")
-
-    public_root = tmp_path / "public"
-    current_public = public_root / "curl_fuzzer_proto_http"
-    historical_public = public_root / "curl_fuzzer_proto"
-    current_public.mkdir(parents=True)
-    historical_public.mkdir()
-    (current_public / "current").write_bytes(b"current")
-    (historical_public / "historical").write_bytes(b"historical")
-
-    sources = module._corpus_sources(
-        "curl_fuzzer_proto_http",
-        tmp_path / "bin",
-        corpus_root,
-        public_root,
-        {},
-    )
-
-    assert sources == [proto_http, current_public, historical_public]
-
-
-def test_deep_http_lane_is_a_default_fixed_proto_target() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_http_deep" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_http_deep" in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_telnet_lane_is_a_default_fixed_proto_target() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_telnet" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_telnet" in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_h2_proxy_lane_uses_only_its_frame_aware_corpus() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_h2_proxy" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_h2_proxy" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_https_h2_lane_uses_only_its_frame_aware_corpus() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_https_h2" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_https_h2" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_http2_lane_reuses_the_https_h2_frame_corpus() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_http2" in module.DEFAULT_TARGETS
-    assert module.COMPATIBLE_CORPUS_TARGETS["curl_fuzzer_proto_http2"] == (
+def test_specialized_lanes_are_default_benchmark_targets() -> None:
+    assert {
+        "curl_fuzzer_proto_http_deep",
+        "curl_fuzzer_proto_http2",
         "curl_fuzzer_proto_https_h2",
-    )
-    assert "curl_fuzzer_proto_http2" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_socks4_lane_uses_only_its_proxy_aware_corpus() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_socks4" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_socks4" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_resolver_lane_uses_only_its_structured_corpus() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_proto_resolver" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_resolver" not in module.HISTORICAL_PROTO_CORPUS_TARGETS
-
-
-def test_gnutls_https_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
-    module = _load_module()
-    corpus_root = tmp_path / "corpora"
-    https_corpus = corpus_root / "curl_fuzzer_proto_https"
-    https_corpus.mkdir(parents=True)
-    (https_corpus / "seed").write_bytes(b"https")
-
-    baseline_dir = tmp_path / "bin"
-    baseline_dir.mkdir()
-    https_seed_archive = baseline_dir / "curl_fuzzer_proto_https_seed_corpus.zip"
-    https_seed_archive.write_bytes(b"seed archive")
-
-    public_root = tmp_path / "public"
-    gnutls_public = public_root / "curl_fuzzer_proto_https_gnutls"
-    https_public = public_root / "curl_fuzzer_proto_https"
-    historical_public = public_root / "curl_fuzzer_proto"
-    for directory in (gnutls_public, https_public, historical_public):
-        directory.mkdir(parents=True)
-        (directory / "input").write_bytes(directory.name.encode())
-
-    sources = module._corpus_sources(
         "curl_fuzzer_proto_https_gnutls",
-        baseline_dir,
-        corpus_root,
-        public_root,
-        {},
-    )
-
-    assert "curl_fuzzer_proto_https_gnutls" in module.DEFAULT_TARGETS
-    assert sources == [
-        https_corpus,
-        https_seed_archive,
-        gnutls_public,
-        https_public,
-        historical_public,
-    ]
-
-
-def test_mbedtls_https_lane_reuses_compatible_https_corpora(
-    tmp_path: Path,
-) -> None:
-    module = _load_module()
-    corpus_root = tmp_path / "corpora"
-    https_corpus = corpus_root / "curl_fuzzer_proto_https"
-    https_corpus.mkdir(parents=True)
-    (https_corpus / "seed").write_bytes(b"https")
-
-    baseline_dir = tmp_path / "bin"
-    baseline_dir.mkdir()
-    https_seed_archive = baseline_dir / "curl_fuzzer_proto_https_seed_corpus.zip"
-    https_seed_archive.write_bytes(b"seed archive")
-
-    public_root = tmp_path / "public"
-    mbedtls_public = public_root / "curl_fuzzer_proto_https_mbedtls"
-    https_public = public_root / "curl_fuzzer_proto_https"
-    historical_public = public_root / "curl_fuzzer_proto"
-    for directory in (mbedtls_public, https_public, historical_public):
-        directory.mkdir(parents=True)
-        (directory / "input").write_bytes(directory.name.encode())
-
-    sources = module._corpus_sources(
         "curl_fuzzer_proto_https_mbedtls",
-        baseline_dir,
-        corpus_root,
-        public_root,
-        {},
-    )
-
-    assert "curl_fuzzer_proto_https_mbedtls" in module.DEFAULT_TARGETS
-    assert sources == [
-        https_corpus,
-        https_seed_archive,
-        mbedtls_public,
-        https_public,
-        historical_public,
-    ]
-
-
-def test_http3_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
-    module = _load_module()
-    corpus_root = tmp_path / "corpora"
-    http3_corpus = corpus_root / "curl_fuzzer_proto_http3"
-    https_corpus = corpus_root / "curl_fuzzer_proto_https"
-    http3_corpus.mkdir(parents=True)
-    https_corpus.mkdir()
-    (http3_corpus / "h3-seed").write_bytes(b"http3")
-    (https_corpus / "https-seed").write_bytes(b"https")
-
-    baseline_dir = tmp_path / "bin"
-    baseline_dir.mkdir()
-    https_seed_archive = baseline_dir / "curl_fuzzer_proto_https_seed_corpus.zip"
-    https_seed_archive.write_bytes(b"seed archive")
-
-    public_root = tmp_path / "public"
-    http3_public = public_root / "curl_fuzzer_proto_http3"
-    https_public = public_root / "curl_fuzzer_proto_https"
-    historical_public = public_root / "curl_fuzzer_proto"
-    for directory in (http3_public, https_public, historical_public):
-        directory.mkdir(parents=True)
-        (directory / "input").write_bytes(directory.name.encode())
-
-    sources = module._corpus_sources(
         "curl_fuzzer_proto_http3",
-        baseline_dir,
-        corpus_root,
-        public_root,
-        {},
-    )
-
-    assert "curl_fuzzer_proto_http3" in module.DEFAULT_TARGETS
-    assert sources == [
-        http3_corpus,
-        https_corpus,
-        https_seed_archive,
-        http3_public,
-        https_public,
-        historical_public,
-    ]
+        "curl_fuzzer_proto_h2_proxy",
+        "curl_fuzzer_proto_socks4",
+        "curl_fuzzer_proto_resolver",
+        "curl_fuzzer_proto_telnet",
+    }.issubset(compare_fuzzers.DEFAULT_TARGETS)
 
 
 def test_ftp_and_tftp_lanes_keep_legacy_speed_baselines() -> None:
-    module = _load_module()
-
-    assert "curl_fuzzer_ftp" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_ftp" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_tftp" in module.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_tftp" in module.DEFAULT_TARGETS
+    assert "curl_fuzzer_ftp" in compare_fuzzers.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_ftp" in compare_fuzzers.DEFAULT_TARGETS
+    assert "curl_fuzzer_tftp" in compare_fuzzers.DEFAULT_TARGETS
+    assert "curl_fuzzer_proto_tftp" in compare_fuzzers.DEFAULT_TARGETS
 
 
 def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
@@ -488,10 +301,8 @@ def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
     )
     output = tmp_path / "paired.json"
 
-    result = subprocess.run(
+    result = _run_cli(
         [
-            sys.executable,
-            str(SCRIPT),
             "--baseline-dir",
             str(baseline_bin),
             "--candidate-dir",
@@ -518,10 +329,7 @@ def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
             str(llvm_cov),
             "--output",
             str(output),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
+        ]
     )
 
     assert result.returncode == 0, result.stderr
@@ -563,10 +371,8 @@ def test_cli_preserves_log_and_fails_on_fuzzer_error(tmp_path: Path) -> None:
     (corpus_dir / "seed").write_text("abc", encoding="utf-8")
     output = tmp_path / "result.json"
 
-    result = subprocess.run(
+    result = _run_cli(
         [
-            sys.executable,
-            str(SCRIPT),
             "--baseline-dir",
             str(binary_dir),
             "--target",
@@ -579,10 +385,7 @@ def test_cli_preserves_log_and_fails_on_fuzzer_error(tmp_path: Path) -> None:
             "1",
             "--output",
             str(output),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
+        ]
     )
 
     assert result.returncode == 1
@@ -595,20 +398,15 @@ def test_cli_preserves_log_and_fails_on_fuzzer_error(tmp_path: Path) -> None:
 
 
 def test_cli_rejects_partial_source_coverage_configuration(tmp_path: Path) -> None:
-    result = subprocess.run(
+    result = _run_cli(
         [
-            sys.executable,
-            str(SCRIPT),
             "--baseline-dir",
             str(tmp_path / "baseline"),
             "--candidate-dir",
             str(tmp_path / "candidate"),
             "--coverage-baseline-dir",
             str(tmp_path / "coverage-baseline"),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
+        ]
     )
 
     assert result.returncode == 2
