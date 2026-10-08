@@ -1,0 +1,268 @@
+name: Profile fuzzer
+
+'on':
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Fuzzer target to profile.
+        required: true
+        default: curl_fuzzer_proto_http
+        type: choice
+        options:
+          - curl_fuzzer_proto_http
+          - curl_fuzzer_proto_http_deep
+          - curl_fuzzer_proto_https_h2
+          - curl_fuzzer_proto_multi
+      seconds:
+        description: Profiling duration.
+        required: true
+        default: '60'
+        type: choice
+        options:
+          - '30'
+          - '60'
+          - '120'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  DO_NOT_TRACK: '1'
+  OSS_FUZZ_REV: 868bfcbd1db0c8eb4dc6029598c90705d6c88e74
+  OSS_FUZZ_BASE_IMAGE: gcr.io/oss-fuzz-base/base-builder:ubuntu-24-04
+  OSS_FUZZ_DIR: ${{ github.workspace }}/oss-fuzz
+  OSS_FUZZ_OUT: ${{ github.workspace }}/oss-fuzz/build/out/curl
+  OSS_FUZZ_CACHE: ${{ github.workspace }}/oss-fuzz/build/work/curl/build
+  PROFILE_OUTPUT: ${{ github.workspace }}/profile-output
+
+jobs:
+  Profile:
+    name: 'Profile ${{ inputs.target }}'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    env:
+      PROFILE_TARGET: ${{ inputs.target }}
+      PROFILE_SECONDS: ${{ inputs.seconds }}
+    steps:
+      - name: Use disk-backed temporary files
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+      - name: Check out curl-fuzzer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install profiling command
+        run: >-
+          python -m pip --disable-pip-version-check --no-input --no-cache-dir
+          install --progress-bar off --no-deps .
+
+      - name: Install host tools
+        uses: $/.github/actions/apt-install
+        with:
+          packages: linux-perf unzip
+
+      - name: Verify perf access
+        run: |
+          sudo sysctl -w kernel.perf_event_paranoid=2
+          perf --version
+          perf record --quiet -o "$RUNNER_TEMP/perf-probe.data" \
+            -e cpu-clock:u -F 99 --call-graph fp -- \
+            python3 -c 'sum(range(20000000))'
+          test -s "$RUNNER_TEMP/perf-probe.data"
+          perf report --stdio --header-only \
+            -i "$RUNNER_TEMP/perf-probe.data"
+
+      - name: Check out OSS-Fuzz
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: google/oss-fuzz
+          ref: ${{ env.OSS_FUZZ_REV }}
+          path: oss-fuzz
+          persist-credentials: false
+
+      # The dependency cache must follow the compiler and system libraries in
+      # the mutable OSS-Fuzz base image, without being invalidated by every
+      # new curl revision cloned into the project image.
+      - name: Identify OSS-Fuzz build environment
+        id: build-environment
+        run: |
+          docker pull "$OSS_FUZZ_BASE_IMAGE"
+          base_ref=$(docker image inspect \
+            --format '{{index .RepoDigests 0}}' "$OSS_FUZZ_BASE_IMAGE")
+          base_digest=${base_ref##*@sha256:}
+          [[ "$base_digest" =~ ^[0-9a-f]{64}$ ]]
+
+          python3 "$OSS_FUZZ_DIR/infra/helper.py" build_image \
+            --architecture=x86_64 --cache --no-pull curl
+          image=gcr.io/oss-fuzz/curl
+          image_id=$(docker image inspect --format '{{.Id}}' "$image")
+          curl_revision=$(docker run --rm --entrypoint git "$image" \
+            -C /src/curl rev-parse HEAD)
+          builder_revision=$(docker run --rm --entrypoint git "$image" \
+            -C /src/curl_fuzzer rev-parse HEAD)
+          docker run --rm --entrypoint /bin/bash "$image" -c '
+            cat /etc/os-release
+            clang --version
+            clang++ --version
+            cmake --version
+            ninja --version
+            sha256sum /src/curl_fuzzer/scripts/ossfuzzdeps.sh
+            dpkg-query -W -f="\${binary:Package}=\${Version}\n" \
+              autoconf automake cmake libc6 libc6-dev libgmp-dev libssl-dev \
+              libstdc++6 libtool make ninja-build pkg-config wget zlib1g-dev \
+              | sort
+          ' > "$RUNNER_TEMP/oss-fuzz-toolchain.txt"
+          cat "$RUNNER_TEMP/oss-fuzz-toolchain.txt"
+          toolchain_hash=$(sha256sum \
+            "$RUNNER_TEMP/oss-fuzz-toolchain.txt" | cut -d ' ' -f 1)
+
+          echo "base_digest=$base_digest" >> "$GITHUB_OUTPUT"
+          echo "toolchain_hash=$toolchain_hash" >> "$GITHUB_OUTPUT"
+          echo "PROFILE_BASE_DIGEST=$base_digest" >> "$GITHUB_ENV"
+          echo "PROFILE_TOOLCHAIN_HASH=$toolchain_hash" >> "$GITHUB_ENV"
+          echo "PROFILE_PROJECT_IMAGE_ID=$image_id" >> "$GITHUB_ENV"
+          echo "PROFILE_CURL_REVISION=$curl_revision" >> "$GITHUB_ENV"
+          echo "PROFILE_BUILDER_REVISION=$builder_revision" >> "$GITHUB_ENV"
+
+      - name: Compute corpus cache key
+        id: corpus-key
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore public corpora
+        id: corpus-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ossfuzz_corpus
+          key: profile-corpus-v1-${{ steps.corpus-key.outputs.week }}
+
+      - name: Download public corpora
+        if: steps.corpus-cache.outputs.cache-hit != 'true'
+        run: ./scripts/download_public_corpus.sh
+
+      - name: Restore OSS-Fuzz dependencies
+        id: dependency-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.OSS_FUZZ_CACHE }}
+          key: profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-${{ inputs.target }}
+          restore-keys: |
+            profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-
+
+      # The project image supplies a fresh curl checkout. Keep dependency
+      # installs in the cache, but always rebuild curl itself.
+      - name: Discard cached curl builds
+        run: |
+          mkdir -p "$OSS_FUZZ_CACHE"
+          sudo find "$OSS_FUZZ_CACHE" -mindepth 1 -maxdepth 1 \
+            -type d -name 'curl*-install' -exec rm -rf -- {} +
+
+      - name: Build profiling target
+        run: |
+          python3 "$OSS_FUZZ_DIR/infra/helper.py" build_fuzzers \
+            --engine=libfuzzer --sanitizer=address --architecture=x86_64 \
+            -e "CURL_FUZZ_TARGET=${PROFILE_TARGET}" \
+            -e BUILD_DIR=/work/build \
+            curl "$GITHUB_WORKSPACE"
+          test -x "$OSS_FUZZ_OUT/$PROFILE_TARGET"
+          test -s "$OSS_FUZZ_OUT/${PROFILE_TARGET}.options"
+          test -s "$OSS_FUZZ_OUT/${PROFILE_TARGET}_seed_corpus.zip"
+          test -x "$OSS_FUZZ_OUT/llvm-symbolizer"
+
+      - name: Trim OSS-Fuzz dependency cache
+        run: |
+          sudo env TMPDIR="$RUNNER_TEMP" \
+            scripts/trim_cache.sh "$OSS_FUZZ_CACHE"
+          sudo find "$OSS_FUZZ_CACHE" -mindepth 1 -maxdepth 1 \
+            -type d -name 'curl*-install' -exec rm -rf -- {} +
+
+      - name: Save OSS-Fuzz dependencies
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.OSS_FUZZ_CACHE }}
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
+
+      - name: Profile fuzzer
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          ASAN_SYMBOLIZER_PATH: ${{ env.OSS_FUZZ_OUT }}/llvm-symbolizer
+        run: |
+          profile_cpu=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
+          profile_fuzzer \
+            --binary-dir "$OSS_FUZZ_OUT" \
+            --target "$PROFILE_TARGET" \
+            --corpus-root "$GITHUB_WORKSPACE/corpora" \
+            --public-corpus-root "$GITHUB_WORKSPACE/ossfuzz_corpus" \
+            --seconds "$PROFILE_SECONDS" \
+            --seed 101 \
+            --event cpu-clock:u \
+            --frequency 99 \
+            --call-graph fp \
+            --cpu "$profile_cpu" \
+            --perf "$(command -v perf)" \
+            --output-dir "$PROFILE_OUTPUT" \
+            --provenance "oss_fuzz_revision=$OSS_FUZZ_REV" \
+            --provenance "oss_fuzz_base_image_digest=$PROFILE_BASE_DIGEST" \
+            --provenance "oss_fuzz_toolchain_hash=$PROFILE_TOOLCHAIN_HASH" \
+            --provenance "oss_fuzz_project_image_id=$PROFILE_PROJECT_IMAGE_ID" \
+            --provenance "oss_fuzz_builder_revision=$PROFILE_BUILDER_REVISION" \
+            --provenance "curl_revision=$PROFILE_CURL_REVISION" \
+            --provenance "curl_fuzzer_revision=$GITHUB_SHA" \
+            --provenance "github_repository=$GITHUB_REPOSITORY" \
+            --provenance "github_ref=$GITHUB_REF" \
+            --provenance "github_run_id=$GITHUB_RUN_ID" \
+            --provenance "github_run_attempt=$GITHUB_RUN_ATTEMPT" \
+            --provenance "github_runner_image_os=${ImageOS:-unknown}" \
+            --provenance "github_runner_image_version=${ImageVersion:-unknown}"
+
+      # A tar preserves executable bits and keeps the exact ELF available for
+      # `perf buildid-cache -a` when the artifact is inspected elsewhere.
+      - name: Package profiling binary
+        if: always()
+        run: |
+          mkdir -p "$PROFILE_OUTPUT"
+          if [[ -f "$RUNNER_TEMP/oss-fuzz-toolchain.txt" ]]; then
+            cp "$RUNNER_TEMP/oss-fuzz-toolchain.txt" "$PROFILE_OUTPUT/"
+          fi
+          members=()
+          for member in \
+            "$PROFILE_TARGET" \
+            "${PROFILE_TARGET}.options" \
+            "${PROFILE_TARGET}_seed_corpus.zip" \
+            llvm-symbolizer; do
+            if [[ -e "$OSS_FUZZ_OUT/$member" ]]; then
+              members+=("$member")
+            fi
+          done
+          if [[ "${#members[@]}" -gt 0 ]]; then
+            tar -C "$OSS_FUZZ_OUT" -cf \
+              "$PROFILE_OUTPUT/oss-fuzz-build.tar" \
+              "${members[@]}"
+          fi
+
+      - name: Publish summary
+        if: always()
+        run: |
+          if [[ -s "$PROFILE_OUTPUT/summary.md" ]]; then
+            cat "$PROFILE_OUTPUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Profile summary was not produced; inspect the job log.' \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload profile artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: profile-${{ inputs.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: profile-output/
+          if-no-files-found: warn
+          retention-days: 30
