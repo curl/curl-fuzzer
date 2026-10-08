@@ -7,7 +7,7 @@ which peer is used, and how much work one mutation may create.
 | Target | Profile and peer focus |
 |---|---|
 | `curl_fuzzer_proto` | Compatibility target for the historical mixed HTTP, HTTPS, WebSocket, and TELNET corpus. It deliberately has no profile postprocessor. |
-| `curl_fuzzer_proto_http` | High-throughput plaintext HTTP. Retains cheap request options and raw response parsing; removes MIME, uploads, follow-on sockets, and timing controls. |
+| `curl_fuzzer_proto_http` | High-throughput plaintext HTTP/1 and h2c upgrade negotiation. Retains cheap request options and raw response parsing; removes MIME, uploads, follow-on sockets, prior-knowledge HTTP/2, HTTP/3 selection, and timing controls. |
 | `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, authentication, MIME, uploads, result APIs, and bounded cookie, Alt-Svc, HSTS, and netrc files. |
 | `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
 | `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, and bounded CRL-input coverage. |

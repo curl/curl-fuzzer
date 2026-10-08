@@ -143,6 +143,12 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
             "CURLOPT_HTTP_VERSION uint_value: 5",
             "text/plain",
         ),
+        "http2_upgrade.textproto": (
+            "CURLOPT_HTTP_VERSION uint_value: 3",
+            "101 Switching Protocols",
+            "Upgrade: h2c",
+            r"\x00\x00\x00\x04",
+        ),
         "http_httpsig_ed25519.textproto": (
             "CURLOPT_HTTPSIG_ALGORITHM uint_value: 1",
             "9f8362f87a484a954e6e740c5b4c0e84229139a20aa8ab56ff66586f6a7d29c5",

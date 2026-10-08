@@ -71,7 +71,8 @@ Other peers intentionally give those fields narrower meanings:
 - TFTP preserves packet boundaries: the initial response and each readable
   chunk are separate datagrams.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
-  after a fixed TLS/ALPN setup.
+  after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
+  the HTTP/1.1 h2c Upgrade request and `101` transition instead.
 - Direct HTTP/3 uses ordered `http3_plan` actions after a valid QUIC/TLS
   handshake and discards the ordinary connection script. Setting
   `http3_plan.use_h1_connect_udp_proxy` instead uses `connection` for a local

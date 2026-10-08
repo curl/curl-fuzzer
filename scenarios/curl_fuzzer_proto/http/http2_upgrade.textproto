@@ -1,0 +1,9 @@
+# Complete a cleartext HTTP/2 upgrade. The response first accepts curl's
+# HTTP/1.1 Upgrade request, then supplies the mandatory server SETTINGS frame
+# and an empty :status=200 response on stream 1.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/h2c-upgrade"
+options { option_id: CURLOPT_HTTP_VERSION uint_value: 3 }
+connection {
+  initial_response: "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: h2c\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x01\x05\x00\x00\x00\x01\x88"
+}
