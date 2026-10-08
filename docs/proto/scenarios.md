@@ -57,10 +57,10 @@ authentication retries, and other fresh HTTP sockets.
 
 Other peers intentionally give those fields narrower meanings:
 
-- Plain WebSocket scenarios use a peer that generates the `101` handshake and
-  accepts either raw chunks or structured `server_frames`. The WSS lane covers
-  secure setup under a fixed scheme; it does not promise post-handshake frame
-  coverage.
+- WebSocket scenarios use a peer that generates the `101` handshake and
+  accepts either raw chunks or structured `server_frames`. The WSS lane runs
+  that same Upgrade, framing, callback, and manual-drive behavior after a
+  verified in-process TLS handshake.
 - The dedicated HTTPS peer encrypts connection-script bytes as HTTP
   application data. The compatibility target preserves its older behavior and
   treats HTTPS script bytes as raw TLS records.

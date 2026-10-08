@@ -14,6 +14,7 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,7 @@ bool ScenarioRequestsManualWsDrive(const curl::fuzzer::proto::Scenario& scenario
 ///        bytes via the drive loop (streaming mode) or, for
 ///        CURLOPT_CONNECT_ONLY=2L, hands them to the caller-driven manual
 ///        path exercised from DriveScenario.
-class WebSocketMockServer : public MockServerBase {
+class WebSocketMockServer : public MockServerBase, public IncomingDataObserver {
  public:
   WebSocketMockServer();
   ~WebSocketMockServer() override;
@@ -43,7 +44,7 @@ class WebSocketMockServer : public MockServerBase {
   void SetManualDelivery(bool manual);
   bool manual_delivery() const;
 
-  bool TryAdvanceHandshake();
+  bool TryAdvanceHandshake(bool* made_progress = nullptr);
   bool handshake_sent() const;
 
   bool DeliverNextChunk();
@@ -55,6 +56,14 @@ class WebSocketMockServer : public MockServerBase {
   bool PushRawBytes(const unsigned char* data, std::size_t size);
 
  protected:
+  virtual std::unique_ptr<MockConnection> CreateConnection();
+
+  virtual std::size_t DrainHandshakeData();
+
+  virtual void FlushTransport();
+
+  void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
+
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
@@ -63,6 +72,7 @@ class WebSocketMockServer : public MockServerBase {
   bool ws_probe_fired() const;
   void MarkWsProbeFired();
   CURL* easy_handle() const;
+  std::size_t manual_received_bytes() const;
 
  private:
   std::vector<std::string> frames_;
@@ -71,6 +81,7 @@ class WebSocketMockServer : public MockServerBase {
   bool handshake_sent_;
   bool ws_probe_fired_;
   CURL* easy_handle_;
+  std::size_t manual_received_bytes_;
   std::string ws_request_buffer_;
 };
 

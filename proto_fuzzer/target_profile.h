@@ -38,7 +38,7 @@ enum class TargetProfile {
   kResolver,
   /// Exercise plaintext WebSocket framing without wall-clock waits.
   kFastWebSocket,
-  /// Exercise secure WebSocket setup without wall-clock waits.
+  /// Exercise WebSocket framing through a verified TLS connection.
   kFastSecureWebSocket,
   /// Exercise bounded TELNET negotiation and callback-backed input.
   kFastTelnet,
@@ -67,6 +67,8 @@ enum class ScenarioRunMode {
   kDeepHttpCoverage,
   /// Drive HTTPS through a real TLS peer and inspect live TLS result state.
   kTlsCoverage,
+  /// Drive WebSocket framing through a verified in-process TLS peer.
+  kTlsWebSocketCoverage,
   /// Drive an HTTPS origin through fixed ALPN h2 with push/upkeep probes.
   kTlsHttp2Coverage,
   /// Drive a plaintext HTTP/2 prior-knowledge origin with the H2 peer.
@@ -111,6 +113,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
     case TargetProfile::kFastHttps:
       return ScenarioRunMode::kTlsCoverage;
 
+    case TargetProfile::kFastSecureWebSocket:
+      return ScenarioRunMode::kTlsWebSocketCoverage;
+
     case TargetProfile::kHttpsH2:
       return ScenarioRunMode::kTlsHttp2Coverage;
 
@@ -140,7 +145,6 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kCompatibility:
     case TargetProfile::kFastWebSocket:
-    case TargetProfile::kFastSecureWebSocket:
     case TargetProfile::kTiming:
       return ScenarioRunMode::kProtocolCoverage;
 

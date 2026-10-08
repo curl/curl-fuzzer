@@ -499,6 +499,70 @@ class TlsMockConnection final : public MockConnection {
 
 }  // namespace
 
+/// Construct one reusable TLS context for a protocol-specific peer.
+/// @param protocol Fixed ALPN application protocol offered by the server.
+/// @param certificate_chain Certificate-chain profile presented to curl.
+TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
+                                   curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+    : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)) {}
+
+TlsMockTransport::~TlsMockTransport() = default;
+
+/// Install the stable local trust anchor and strict peer verification. Socket
+/// callbacks remain owned by the protocol-specific server using this carrier.
+/// @param easy Easy handle that will connect to this TLS transport.
+void TlsMockTransport::Install(CURL* easy) const {
+  struct curl_blob trust_anchor = {const_cast<char*>(tls_test_credentials::kCertificatePem),
+                                   sizeof(tls_test_credentials::kCertificatePem) - 1, CURL_BLOB_NOCOPY};
+  (void)curl_easy_setopt(easy, CURLOPT_CAINFO_BLOB, &trust_anchor);
+  (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
+  (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
+}
+
+/// Wrap one socketpair server endpoint in an OpenSSL acceptor.
+/// @return A failed connection when context setup was unavailable.
+std::unique_ptr<MockConnection> TlsMockTransport::CreateConnection() {
+  return std::make_unique<TlsMockConnection>(context_.get());
+}
+
+/// @return Protocol version selected by the most recent handshake, or zero.
+int TlsMockTransport::negotiated_tls_version() const {
+  return context_ == nullptr ? 0 : context_->negotiated_tls_version();
+}
+
+/// @return Number of connections that completed TLS negotiation.
+std::size_t TlsMockTransport::completed_handshake_count() const {
+  return context_ == nullptr ? 0 : context_->completed_handshake_count();
+}
+
+/// @return Number of completed connections that resumed a cached session.
+std::size_t TlsMockTransport::reused_session_count() const {
+  return context_ == nullptr ? 0 : context_->reused_session_count();
+}
+
+/// @return Number of application writes OpenSSL required an exact retry for.
+std::size_t TlsMockTransport::write_retry_count() const {
+  return context_ == nullptr ? 0 : context_->write_retry_count();
+}
+
+/// @return ALPN protocol selected by the most recent handshake.
+std::string TlsMockTransport::negotiated_alpn() const {
+  return context_ == nullptr ? std::string() : context_->negotiated_alpn();
+}
+
+/// @return OpenSSL's ECH result, or a negative sentinel when unavailable.
+int TlsMockTransport::ech_status() const { return context_ == nullptr ? -1 : context_->ech_status(); }
+
+/// @return Decrypted inner SNI recovered by the ECH-capable server.
+std::string TlsMockTransport::ech_inner_name() const {
+  return context_ == nullptr ? std::string() : context_->ech_inner_name();
+}
+
+/// @return Public outer SNI visible before ECH decryption.
+std::string TlsMockTransport::ech_outer_name() const {
+  return context_ == nullptr ? std::string() : context_->ech_outer_name();
+}
+
 /// Build one reusable in-process server context per fuzz iteration.
 TlsMockServer::TlsMockServer() : TlsMockServer(curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC) {}
 
@@ -513,7 +577,7 @@ TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile cer
 /// @param certificate_chain Peer certificate chain presented to curl.
 TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
                              curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)),
+    : transport_(protocol, certificate_chain),
       saw_live_tls_session_(false),
       session_export_attempt_count_(0),
       exported_session_count_(0),
@@ -531,11 +595,7 @@ TlsMockServer::~TlsMockServer() { ResetConnections(); }
 /// @param easy Easy handle that will connect to this TLS peer.
 void TlsMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
-  struct curl_blob trust_anchor = {const_cast<char*>(tls_test_credentials::kCertificatePem),
-                                   sizeof(tls_test_credentials::kCertificatePem) - 1, CURL_BLOB_NOCOPY};
-  (void)curl_easy_setopt(easy, CURLOPT_CAINFO_BLOB, &trust_anchor);
-  (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
-  (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
+  transport_.Install(easy);
 }
 
 /// @return true once curl exposed a live TLS backend session during drive.
@@ -551,48 +611,34 @@ std::size_t TlsMockServer::imported_session_count() const { return imported_sess
 
 /// @return protocol version selected by the most recent completed handshake,
 /// or zero when no connection completed TLS negotiation.
-int TlsMockServer::negotiated_tls_version() const {
-  return context_ == nullptr ? 0 : context_->negotiated_tls_version();
-}
+int TlsMockServer::negotiated_tls_version() const { return transport_.negotiated_tls_version(); }
 
 /// @return number of connections that completed TLS negotiation.
-std::size_t TlsMockServer::completed_handshake_count() const {
-  return context_ == nullptr ? 0 : context_->completed_handshake_count();
-}
+std::size_t TlsMockServer::completed_handshake_count() const { return transport_.completed_handshake_count(); }
 
 /// @return number of completed connections that resumed an earlier session.
-std::size_t TlsMockServer::reused_session_count() const {
-  return context_ == nullptr ? 0 : context_->reused_session_count();
-}
+std::size_t TlsMockServer::reused_session_count() const { return transport_.reused_session_count(); }
 
 /// @return number of application writes OpenSSL required an exact retry for.
-std::size_t TlsMockServer::write_retry_count() const { return context_ == nullptr ? 0 : context_->write_retry_count(); }
+std::size_t TlsMockServer::write_retry_count() const { return transport_.write_retry_count(); }
 
 /// @return ALPN protocol selected by the most recent completed handshake.
-std::string TlsMockServer::negotiated_alpn() const {
-  return context_ == nullptr ? std::string() : context_->negotiated_alpn();
-}
+std::string TlsMockServer::negotiated_alpn() const { return transport_.negotiated_alpn(); }
 
 /// @return OpenSSL's ECH status for the most recent completed handshake.
 /// Builds without ECH return a negative sentinel.
-int TlsMockServer::ech_status() const { return context_ == nullptr ? -1 : context_->ech_status(); }
+int TlsMockServer::ech_status() const { return transport_.ech_status(); }
 
 /// @return encrypted inner SNI recovered by the ECH-capable server.
-std::string TlsMockServer::ech_inner_name() const {
-  return context_ == nullptr ? std::string() : context_->ech_inner_name();
-}
+std::string TlsMockServer::ech_inner_name() const { return transport_.ech_inner_name(); }
 
 /// @return public outer SNI visible before ECH decryption.
-std::string TlsMockServer::ech_outer_name() const {
-  return context_ == nullptr ? std::string() : context_->ech_outer_name();
-}
+std::string TlsMockServer::ech_outer_name() const { return transport_.ech_outer_name(); }
 
 /// Wrap one socketpair server endpoint in an OpenSSL acceptor consumed by
 /// MockServer.
 /// @return a failed connection when context setup was unavailable.
-std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() {
-  return std::make_unique<TlsMockConnection>(context_.get());
-}
+std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() { return transport_.CreateConnection(); }
 
 /// Query while the connection filters are attached. Result-info probes stop
 /// after the first live result, and session export has its own fixed attempt
@@ -616,7 +662,7 @@ void TlsMockServer::ObserveActiveTransfer(CURL* easy) {
   // A TLS 1.3 ticket may arrive after the peer first completes its handshake.
   // Retry only a small fixed number of outer-loop observations, and stop
   // permanently once one copied ticket has made one import attempt.
-  const bool completed_live_handshake = context_ != nullptr && context_->completed_handshake_count() != 0;
+  const bool completed_live_handshake = transport_.completed_handshake_count() != 0;
   if (!completed_live_handshake || exported_session_count_ != 0 ||
       session_export_attempt_count_ >= kMaxSessionExportAttempts) {
     return;

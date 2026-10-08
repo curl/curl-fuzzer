@@ -34,6 +34,7 @@
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
+#include "proto_fuzzer/tls_websocket_mock_server.h"
 #endif
 #if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
 #include "proto_fuzzer/connect_udp_proxy_mock_server.h"
@@ -108,10 +109,10 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
 }
 
 /// Pick the peer implementation authorized by both protocol and target mode.
-/// The compatibility target must keep treating HTTPS response bytes as raw TLS
-/// records, while the dedicated HTTPS lane interprets them as decrypted HTTP.
-/// Keeping that semantic boundary in the closed run-mode enum prevents a new
-/// protobuf field from silently changing old OSS-Fuzz reproducers.
+/// The compatibility target must keep its historical raw-wire interpretation
+/// of secure schemes, while dedicated TLS lanes expose decrypted application
+/// protocols. Keeping that semantic boundary in the closed run-mode enum
+/// prevents a new peer from silently changing old OSS-Fuzz reproducers.
 std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::proto::Scenario& scenario,
                                                           ScenarioRunMode mode) {
   if (mode == ScenarioRunMode::kHttp3Coverage) {
@@ -181,7 +182,19 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       return nullptr;
 #endif
     case curl::fuzzer::proto::SCHEME_WS:
+      return std::make_unique<WebSocketMockServer>();
     case curl::fuzzer::proto::SCHEME_WSS:
+      if (mode == ScenarioRunMode::kTlsWebSocketCoverage) {
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+        return std::make_unique<TlsWebSocketMockServer>(scenario.tls_certificate_chain());
+#else
+        // MemorySanitizer builds deliberately omit OpenSSL. Keep the target
+        // available without pretending plaintext can carry a WSS exchange.
+        return nullptr;
+#endif
+      }
+      // Preserve the compatibility target's historical interpretation of WSS
+      // inputs, which exposed TLS bytes directly to the plaintext WS peer.
       return std::make_unique<WebSocketMockServer>();
     case curl::fuzzer::proto::SCHEME_TELNET:
       return std::make_unique<TelnetMockServer>();

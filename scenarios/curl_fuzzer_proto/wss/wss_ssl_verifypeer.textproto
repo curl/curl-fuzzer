@@ -1,5 +1,5 @@
-# Secure WebSocket counterpart to the HTTPS verification seed. It deliberately
-# overrides the harness's fast verification-off baseline to reach trust-store
+# Secure WebSocket counterpart to the HTTPS verification seed. The TLS peer
+# installs strict verification after the fast baseline; this reasserts peer
 # verification through the proto option-dispatch path.
 scheme: SCHEME_WSS
 host_path: "127.0.0.1/"

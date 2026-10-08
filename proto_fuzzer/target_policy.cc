@@ -1344,7 +1344,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // selector. Remove it before protocol-specific early returns so other fixed
   // targets do not spend mutations on inert TLS server state.
   if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kHttpsH2 &&
-      profile != TargetProfile::kFastHttp3) {
+      profile != TargetProfile::kFastHttp3 && profile != TargetProfile::kFastSecureWebSocket) {
     scenario->clear_tls_certificate_chain();
   }
 
@@ -1666,6 +1666,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastSecureWebSocket:
       ClearAllBackpressure(scenario);
       RemoveIgnoredWebSocketShape(scenario);
+      CanonicalizeTlsAuthority(scenario);
+      CanonicalizeTlsCertificateChain(scenario);
       return;
 
     case TargetProfile::kFastTelnet:
