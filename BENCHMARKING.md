@@ -84,10 +84,15 @@ Every run gets a fresh copy of one content-addressed snapshot. Repeat `N` uses
 the deterministic seed `--seed-base + N - 1`; baseline/candidate order
 alternates between repeats to reduce ordering bias. The JSON records corpus and
 binary hashes, exact managed arguments, host details, individual results, and
-medians. Raw `cov` and `ft` values are only comparable when compiler
-instrumentation and the curl revision are held constant. They remain recorded
-for mapped targets, but their cross-harness deltas are deliberately reported as
-null; use the source coverage comparison below for legacy-to-proto parity.
+medians.
+
+Raw `cov` and `ft` values are instrumentation-specific coverage and feature
+counts. They remain recorded for each run, but their cross-build deltas default
+to `null`: matching target names, compiler versions, and curl revisions do not
+prove that two binaries have the same coverage sites and feature semantics.
+Pass `--compare-libfuzzer-counters` only when those are known to be identical.
+Mapped targets always report these deltas as `null`. Use the source coverage
+comparison below for coverage parity across different binaries.
 
 ## Compare curl source coverage
 
