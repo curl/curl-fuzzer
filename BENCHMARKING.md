@@ -1,17 +1,21 @@
 # Comparing fuzzer coverage and speed
 
-`scripts/compare_fuzzers.py` runs repeatable A/B measurements against
+`compare_fuzzers` runs repeatable A/B measurements against
 production-style libFuzzer binaries. It records libFuzzer coverage (`cov`),
 features (`ft`), executions per second, corpus growth, peak RSS, and wall/user/
 system time. Complete logs and crash artifacts are retained, and any failed or
 unparseable run makes the command fail.
+
+The examples use `uv run` to invoke the entry point from the managed project
+environment. Omit `uv run` after activating another environment where the
+project is installed.
 
 Build the baseline and candidate with the same curl revision, compiler,
 sanitizer, and OSS-Fuzz settings. For example, use two OSS-Fuzz output
 directories produced with the address sanitizer and libFuzzer. Then run:
 
 ```shell
-scripts/compare_fuzzers.py \
+uv run compare_fuzzers \
   --baseline-dir /path/to/baseline/out/curl \
   --candidate-dir /path/to/candidate/out/curl \
   --seconds 30 \
@@ -32,7 +36,7 @@ and timing policy obscures lane-level throughput.
 Repeat `--target` to choose a different same-name A/B set:
 
 ```shell
-scripts/compare_fuzzers.py \
+uv run compare_fuzzers \
   --baseline-dir /path/to/baseline/out/curl \
   --candidate-dir /path/to/candidate/out/curl \
   --target curl_fuzzer_proto_http \
@@ -45,7 +49,7 @@ To compare a legacy target with a differently named proto replacement, use a
 target pair:
 
 ```shell
-scripts/compare_fuzzers.py \
+uv run compare_fuzzers \
   --baseline-dir /path/to/legacy/out/curl \
   --candidate-dir /path/to/proto/out/curl \
   --target-pair curl_fuzzer_http=curl_fuzzer_proto_http \
@@ -100,7 +104,7 @@ under `build-coverage/curl/src/curl_external`, which the helper detects:
 (cd /path/to/baseline-worktree && ./codecoverage.sh)
 (cd /path/to/candidate-worktree && ./codecoverage.sh)
 
-scripts/compare_fuzzers.py \
+uv run compare_fuzzers \
   --baseline-dir /path/to/baseline-libfuzzer-out \
   --candidate-dir /path/to/candidate-libfuzzer-out \
   --target-pair curl_fuzzer_http=curl_fuzzer_proto_http \
@@ -122,7 +126,7 @@ When curl was supplied with `codecoverage.sh -c`, pass the source roots
 explicitly:
 
 ```shell
-scripts/compare_fuzzers.py \
+uv run compare_fuzzers \
   ... \
   --baseline-curl-source-dir /path/to/baseline-curl \
   --candidate-curl-source-dir /path/to/candidate-curl

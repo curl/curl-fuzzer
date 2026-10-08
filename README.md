@@ -84,6 +84,8 @@ Useful commands include:
 - `generate_decoder_html` for the standalone browser decoder for legacy TLV
   and protobuf `Scenario` inputs. Run `npm ci --ignore-scripts` once before
   building it so the pinned protobuf.js runtime can be bundled into the page.
+- `compare_fuzzers` for repeatable throughput and source-coverage comparisons
+  between production libFuzzer builds.
 
 Each command supports `--help`. The complete list of installed entry points is
 in [`pyproject.toml`](pyproject.toml).
