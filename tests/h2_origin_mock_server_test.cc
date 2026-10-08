@@ -29,6 +29,11 @@ void Expect(bool condition, const char *message) {
   }
 }
 
+bool IsX25519Group(const std::string &group) {
+  return group.size() == 6 && (group[0] == 'x' || group[0] == 'X') &&
+         group.compare(1, 5, "25519") == 0;
+}
+
 std::size_t CollectResponse(char *contents, std::size_t size, std::size_t nmemb,
                             void *userdata) {
   const std::size_t bytes = size * nmemb;
@@ -40,6 +45,7 @@ struct H2TransferResult {
   CURLcode code = CURLE_FAILED_INIT;
   std::string response;
   std::string negotiated_alpn;
+  std::string negotiated_group;
   long http_version = CURL_HTTP_VERSION_NONE;
   long new_connection_count = -1;
   std::size_t handshake_count = 0;
@@ -65,7 +71,8 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   (void)curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   (void)curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
 
-  proto_fuzzer::H2OriginMockServer server;
+  proto_fuzzer::H2OriginMockServer server(scenario.tls_certificate_chain(),
+                                          scenario.tls_group_profile());
   server.Install(easy);
   for (const auto &option : scenario.options()) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
@@ -77,6 +84,7 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   (void)curl_easy_getinfo(easy, CURLINFO_NUM_CONNECTS,
                           &result.new_connection_count);
   result.negotiated_alpn = server.negotiated_alpn();
+  result.negotiated_group = server.negotiated_group();
   result.handshake_count = server.completed_handshake_count();
   const proto_fuzzer::H2Runtime &runtime = server.runtime();
   result.push_callback_count = runtime.push_callback_count();
@@ -196,6 +204,8 @@ void TestValidPushPromiseReachesCallback() {
   Expect(result.negotiated_alpn == "h2" &&
              result.http_version == CURL_HTTP_VERSION_2_0,
          "H2 origin did not negotiate and report HTTP/2");
+  Expect(IsX25519Group(result.negotiated_group),
+         "H2 origin did not restrict TLS key exchange to X25519");
   Expect(result.push_callback_count == 1 && result.push_header_count == 4 &&
              result.saw_push_path,
          "valid PUSH_PROMISE did not reach both public header accessors");
@@ -243,6 +253,22 @@ void TestStructuredPlanTracksRequestAndEncodesResponse() {
          "structured H2 peer did not track client setup and request HEADERS");
 }
 
+void TestProviderDefaultTlsGroupRemainsReachable() {
+  Scenario scenario = MakeStructuredScenario();
+  scenario.set_tls_group_profile(
+      curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
+
+  const H2TransferResult result = DriveH2Scenario(scenario);
+
+  Expect(result.code == CURLE_OK && result.response == "structured",
+         "provider-default TLS group prevented the H2 transfer");
+  Expect(!result.negotiated_group.empty(),
+         "provider-default handshake did not expose its negotiated group");
+  Expect(
+      !IsX25519Group(result.negotiated_group),
+      "provider-default handshake did not preserve alternate group coverage");
+}
+
 } // namespace
 
 int main() {
@@ -250,5 +276,6 @@ int main() {
   TestAcceptedPushCompletesAndCleansUpOneHandle();
   TestRedirectReusesH2ConnectionAroundPingAndUpkeep();
   TestStructuredPlanTracksRequestAndEncodesResponse();
+  TestProviderDefaultTlsGroupRemainsReachable();
   return 0;
 }

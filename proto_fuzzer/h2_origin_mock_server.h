@@ -26,8 +26,10 @@ namespace proto_fuzzer {
 /// push callback before curl emits its initial SETTINGS frame.
 class H2OriginMockServer final : public TlsMockServer {
  public:
-  explicit H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                                  curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
+  explicit H2OriginMockServer(
+      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
+          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      curl::fuzzer::proto::TlsGroupProfile group_profile = curl::fuzzer::proto::TLS_GROUP_X25519);
   ~H2OriginMockServer() override;
 
   void Install(CURL* easy) override;

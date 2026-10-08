@@ -105,9 +105,11 @@ class TlsServerContext {
   // Doxygen's no-preprocessing pass would see both conditional body openings.
   // Skip this implementation-only constructor to preserve the enclosing scope.
   /// @cond
-  TlsServerContext(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+  TlsServerContext(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                   TlsGroupPolicy group_policy)
       : context_(nullptr),
         protocol_(protocol),
+        group_policy_(group_policy),
         negotiated_tls_version_(0),
         completed_handshake_count_(0),
         reused_session_count_(0),
@@ -119,7 +121,7 @@ class TlsServerContext {
 #endif
     OpenSslErrorQueueGuard error_guard;
     context_ = SSL_CTX_new(TLS_server_method());
-    if (context_ == nullptr || !LoadCredentials(certificate_chain) || !LoadEchConfig()) {
+    if (context_ == nullptr || !ApplyGroupPolicy() || !LoadCredentials(certificate_chain) || !LoadEchConfig()) {
       SSL_CTX_free(context_);
       context_ = nullptr;
       return;
@@ -164,6 +166,9 @@ class TlsServerContext {
     if (SSL_session_reused(ssl) == 1) {
       ++reused_session_count_;
     }
+    const int negotiated_group = SSL_get_negotiated_group(ssl);
+    const char* group_name = negotiated_group == 0 ? nullptr : SSL_group_to_name(ssl, negotiated_group);
+    negotiated_group_ = group_name == nullptr ? std::string() : group_name;
 #ifndef OPENSSL_NO_ECH
     char* inner_name = nullptr;
     char* outer_name = nullptr;
@@ -188,6 +193,8 @@ class TlsServerContext {
   std::size_t write_retry_count() const { return write_retry_count_; }
   /// @return ALPN protocol from the most recent completed handshake.
   const std::string& negotiated_alpn() const { return negotiated_alpn_; }
+  /// @return key-exchange group from the most recent completed handshake.
+  const std::string& negotiated_group() const { return negotiated_group_; }
   /// @return fixed application protocol this context offers.
   TlsApplicationProtocol protocol() const { return protocol_; }
   /// @return OpenSSL ECH result from the latest completed handshake.
@@ -198,6 +205,18 @@ class TlsServerContext {
   const std::string& ech_outer_name() const { return ech_outer_name_; }
 
  private:
+  /// Apply the constructor-selected group policy before any SSL is created.
+  /// @return true when the provider accepted the requested policy.
+  bool ApplyGroupPolicy() {
+    switch (group_policy_) {
+      case TlsGroupPolicy::kProviderDefault:
+        return true;
+      case TlsGroupPolicy::kX25519:
+        return SSL_CTX_set1_groups_list(context_, "X25519") == 1;
+    }
+    return false;
+  }
+
   /// Append one profile-selected peer certificate without requiring it to
   /// authenticate the TLS handshake. OpenSSL transfers ownership on success;
   /// failure leaves cleanup with the caller.
@@ -281,7 +300,9 @@ class TlsServerContext {
 
   SSL_CTX* context_;
   TlsApplicationProtocol protocol_;
+  const TlsGroupPolicy group_policy_;
   std::string negotiated_alpn_;
+  std::string negotiated_group_;
   int negotiated_tls_version_;
   std::size_t completed_handshake_count_;
   std::size_t reused_session_count_;
@@ -502,9 +523,12 @@ class TlsMockConnection final : public MockConnection {
 /// Construct one reusable TLS context for a protocol-specific peer.
 /// @param protocol Fixed ALPN application protocol offered by the server.
 /// @param certificate_chain Certificate-chain profile presented to curl.
+/// @param group_policy Immutable server key-exchange group policy.
 TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
-                                   curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : context_(std::make_unique<TlsServerContext>(protocol, certificate_chain)) {}
+                                   curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                                   TlsGroupPolicy group_policy)
+    : group_policy_(group_policy),
+      context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy)) {}
 
 TlsMockTransport::~TlsMockTransport() = default;
 
@@ -550,6 +574,14 @@ std::string TlsMockTransport::negotiated_alpn() const {
   return context_ == nullptr ? std::string() : context_->negotiated_alpn();
 }
 
+/// @return Immutable key-exchange group policy selected at construction.
+TlsGroupPolicy TlsMockTransport::group_policy() const { return group_policy_; }
+
+/// @return Key-exchange group from the most recent completed handshake.
+std::string TlsMockTransport::negotiated_group() const {
+  return context_ == nullptr ? std::string() : context_->negotiated_group();
+}
+
 /// @return OpenSSL's ECH result, or a negative sentinel when unavailable.
 int TlsMockTransport::ech_status() const { return context_ == nullptr ? -1 : context_->ech_status(); }
 
@@ -575,9 +607,11 @@ TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile cer
 /// with one fixed ALPN outcome.
 /// @param protocol Fixed application protocol the server must negotiate.
 /// @param certificate_chain Peer certificate chain presented to curl.
+/// @param group_policy Immutable server key-exchange group policy.
 TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
-                             curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : transport_(protocol, certificate_chain),
+                             curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                             TlsGroupPolicy group_policy)
+    : transport_(protocol, certificate_chain, group_policy),
       saw_live_tls_session_(false),
       session_export_attempt_count_(0),
       exported_session_count_(0),
@@ -624,6 +658,12 @@ std::size_t TlsMockServer::write_retry_count() const { return transport_.write_r
 
 /// @return ALPN protocol selected by the most recent completed handshake.
 std::string TlsMockServer::negotiated_alpn() const { return transport_.negotiated_alpn(); }
+
+/// @return Immutable key-exchange group policy selected at construction.
+TlsGroupPolicy TlsMockServer::group_policy() const { return transport_.group_policy(); }
+
+/// @return Key-exchange group from the most recent completed handshake.
+std::string TlsMockServer::negotiated_group() const { return transport_.negotiated_group(); }
 
 /// @return OpenSSL's ECH status for the most recent completed handshake.
 /// Builds without ECH return a negative sentinel.

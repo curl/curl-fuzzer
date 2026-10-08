@@ -44,6 +44,11 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
             'data: "reused"',
             "curl_easy_upkeep",
         ),
+        "https_h2_provider_default_group.textproto": (
+            "TLS_GROUP_PROVIDER_DEFAULT",
+            "http2_plan",
+            'data: "provider-default"',
+        ),
     }
 
     assert {path.name for path in SCENARIO_ROOT.glob("*.textproto")} == set(

@@ -221,6 +221,8 @@ void TestFastHttpsPolicy() {
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.set_tls_group_profile(
+      curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
   scenario.set_cookie_file("HTTP-only input");
   scenario.set_crl_file("TLS CRL input");
 
@@ -235,6 +237,8 @@ void TestFastHttpsPolicy() {
   Expect(scenario.tls_certificate_chain() ==
              curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
          "fast HTTPS policy discarded its certificate-chain selector");
+  Expect(scenario.tls_group_profile() == curl::fuzzer::proto::TLS_GROUP_X25519,
+         "fast HTTPS policy retained HTTPS/H2 group work");
   Expect(scenario.cookie_file().empty(),
          "fast HTTPS policy retained deep HTTP filename input");
   Expect(scenario.crl_file() == "TLS CRL input",
@@ -246,6 +250,8 @@ void TestHttpsH2Policy() {
   scenario.set_host_path("mutated.invalid:8443/path?query#fragment");
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.set_tls_group_profile(
+      curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
   scenario.add_request_headers("X-H2: retained");
   scenario.mutable_connection()->add_on_readable("raw HTTP/2 frames");
   scenario.mutable_connection()->add_server_frames()->set_payload(
@@ -264,6 +270,8 @@ void TestHttpsH2Policy() {
       curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
   scenario.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_SSL_ENABLE_ALPN);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_SSL_EC_CURVES);
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
   scenario.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
@@ -277,6 +285,9 @@ void TestHttpsH2Policy() {
   Expect(scenario.tls_certificate_chain() ==
              curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
          "HTTPS/H2 policy discarded its certificate-chain selector");
+  Expect(scenario.tls_group_profile() ==
+             curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT,
+         "HTTPS/H2 policy discarded its TLS group selector");
   Expect(!scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0 &&
              !scenario.connection().has_manual_probes() &&
@@ -354,6 +365,43 @@ void TestTlsPoliciesRejectUnknownCertificateChain() {
     Expect(scenario.tls_certificate_chain() ==
                curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
            "a TLS policy retained an unknown certificate-chain selector");
+  }
+}
+
+void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
+  Scenario scenario;
+  scenario.set_tls_group_profile(
+      static_cast<curl::fuzzer::proto::TlsGroupProfile>(99));
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kHttpsH2);
+
+  Expect(scenario.tls_group_profile() == curl::fuzzer::proto::TLS_GROUP_X25519,
+         "HTTPS/H2 policy retained an unknown TLS group selector");
+}
+
+void TestOtherPoliciesDiscardTlsGroupProfiles() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,     TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
+      TargetProfile::kSocks4,        TargetProfile::kResolver,
+      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,      TargetProfile::kFastGopher,
+      TargetProfile::kApi,           TargetProfile::kMulti,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_tls_group_profile(
+        curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.tls_group_profile() ==
+               curl::fuzzer::proto::TLS_GROUP_X25519,
+           "a non-HTTPS/H2 policy retained TLS group work");
   }
 }
 
@@ -1556,6 +1604,8 @@ void TestCompatibilityProfileIsNoOp() {
   scenario.set_accept_h2_push(true);
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  scenario.set_tls_group_profile(
+      curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
   scenario.mutable_http3_plan()
       ->add_actions()
       ->mutable_stream_write()
@@ -2022,6 +2072,8 @@ int main() {
   TestHttpsH2Policy();
   TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
+  TestHttpsH2PolicyRejectsUnknownTlsGroupProfile();
+  TestOtherPoliciesDiscardTlsGroupProfiles();
   TestFastHttp3PolicyMaterializesUsefulPlan();
   TestFastHttp3ProxyPolicyRetainsStreamScript();
   TestFastHttp3PolicyBoundsOrderedActions();

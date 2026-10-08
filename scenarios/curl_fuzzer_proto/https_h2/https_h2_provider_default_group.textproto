@@ -1,0 +1,27 @@
+# Preserve coverage of the TLS provider's preferred key-exchange group while
+# the zero-value HTTPS/H2 path fixes both endpoints to inexpensive X25519.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/h2-provider-default-group"
+tls_group_profile: TLS_GROUP_PROVIDER_DEFAULT
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "provider-default"
+      end_stream: true
+    }
+  }
+}
