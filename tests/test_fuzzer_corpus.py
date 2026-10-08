@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import zipfile
 from pathlib import Path
 
@@ -66,6 +67,40 @@ def test_snapshot_rejects_a_missing_source(tmp_path: Path) -> None:
         builder.add(tmp_path / "missing")
 
 
+def test_snapshot_archive_is_stable_and_reusable(tmp_path: Path) -> None:
+    alpha = tmp_path / "alpha"
+    duplicate_alpha = tmp_path / "duplicate-alpha"
+    beta = tmp_path / "beta"
+    alpha.write_bytes(b"alpha")
+    duplicate_alpha.write_bytes(b"alpha")
+    beta.write_bytes(b"beta")
+
+    first = CorpusSnapshotBuilder(tmp_path / "first-snapshot")
+    second = CorpusSnapshotBuilder(tmp_path / "second-snapshot")
+    for source in (alpha, beta, duplicate_alpha):
+        first.add(source)
+    for source in (beta, duplicate_alpha, alpha):
+        second.add(source)
+
+    first_archive = tmp_path / "first.zip"
+    second_archive = tmp_path / "second.zip"
+    first.write_zip(first_archive)
+    second.write_zip(second_archive)
+
+    assert first_archive.read_bytes() == second_archive.read_bytes()
+    expected = {
+        hashlib.sha256(b"alpha").hexdigest(): b"alpha",
+        hashlib.sha256(b"beta").hexdigest(): b"beta",
+    }
+    with zipfile.ZipFile(first_archive) as archive:
+        assert archive.namelist() == sorted(expected)
+        for member in archive.infolist():
+            assert member.date_time == (1980, 1, 1, 0, 0, 0)
+            assert member.compress_type == zipfile.ZIP_STORED
+            assert member.external_attr >> 16 == 0o100644
+            assert archive.read(member) == expected[member.filename]
+
+
 def test_parse_corpus_mappings_preserves_repeated_paths_and_equals_signs() -> None:
     assert parse_corpus_mappings(
         ["target=first", "target=path=with=equals", "other=third"]
@@ -120,6 +155,17 @@ def test_target_uses_its_matching_checked_in_corpus(tmp_path: Path) -> None:
     )
 
     assert sources == [proto_http]
+
+
+def test_resolver_can_use_a_packaged_seed_without_a_checkout(tmp_path: Path) -> None:
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    seed_archive = binary_dir / "target_seed_corpus.zip"
+    seed_archive.write_bytes(b"seed archive")
+
+    sources = resolve_corpus_sources("target", binary_dir, None, None, {})
+
+    assert sources == [seed_archive]
 
 
 def test_fixed_proto_lane_includes_historical_public_corpus(tmp_path: Path) -> None:

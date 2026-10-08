@@ -36,6 +36,8 @@ python -m pip install -e .
 | `generate_matrix`          | Package built fuzzers into balanced artifact shards and produce the CI matrix                    |
 | `prepare_fuzzer`           | Extract one fuzzer and its supporting files from a CI artifact shard                             |
 | `generate_option_manifest` | Validate and stage the protobuf schema, then generate its C++ curl-option manifest              |
+| `compare_fuzzers`          | Compare repeatable throughput and source coverage measurements between fuzzer builds            |
+| `profile_fuzzer`           | Collect a reproducible Linux perf profile from one production libFuzzer target                  |
 
 Run any command with `--help` for its complete interface.
 
