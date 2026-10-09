@@ -9,9 +9,9 @@
 
 #include "proto_fuzzer/tls_mock_server.h"
 
+#include <openssl/bio.h>
 #include <openssl/ech.h>
 #include <openssl/err.h>
-#include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <sys/socket.h>
 
@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "proto_fuzzer/tls_test_credential_cache.h"
 #include "proto_fuzzer/tls_test_credentials.h"
 
 namespace proto_fuzzer {
@@ -121,7 +122,8 @@ class TlsServerContext {
 #endif
     OpenSslErrorQueueGuard error_guard;
     context_ = SSL_CTX_new(TLS_server_method());
-    if (context_ == nullptr || !ApplyGroupPolicy() || !LoadCredentials(certificate_chain) || !LoadEchConfig()) {
+    if (context_ == nullptr || !ApplyGroupPolicy() || !InstallCachedTlsTestCredentials(context_, certificate_chain) ||
+        !LoadEchConfig()) {
       SSL_CTX_free(context_);
       context_ = nullptr;
       return;
@@ -215,65 +217,6 @@ class TlsServerContext {
         return SSL_CTX_set1_groups_list(context_, "X25519") == 1;
     }
     return false;
-  }
-
-  /// Append one profile-selected peer certificate without requiring it to
-  /// authenticate the TLS handshake. OpenSSL transfers ownership on success;
-  /// failure leaves cleanup with the caller.
-  bool AddExtraChainCertificate(const char* certificate_pem) {
-    BIO* certificate_bio = BIO_new_mem_buf(certificate_pem, -1);
-    if (certificate_bio == nullptr) {
-      return false;
-    }
-    X509* certificate = PEM_read_bio_X509(certificate_bio, nullptr, nullptr, nullptr);
-    BIO_free(certificate_bio);
-    if (certificate == nullptr) {
-      return false;
-    }
-    if (SSL_CTX_add_extra_chain_cert(context_, certificate) != 1) {
-      X509_free(certificate);
-      return false;
-    }
-    return true;
-  }
-
-  /// Parse the checked-in test-only PEM values entirely in memory.
-  bool LoadCredentials(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain) {
-    BIO* certificate_bio = BIO_new_mem_buf(tls_test_credentials::kCertificatePem, -1);
-    BIO* key_bio = BIO_new_mem_buf(tls_test_credentials::kPrivateKeyPem, -1);
-    if (certificate_bio == nullptr || key_bio == nullptr) {
-      BIO_free(certificate_bio);
-      BIO_free(key_bio);
-      return false;
-    }
-
-    X509* certificate = PEM_read_bio_X509(certificate_bio, nullptr, nullptr, nullptr);
-    EVP_PKEY* key = PEM_read_bio_PrivateKey(key_bio, nullptr, nullptr, nullptr);
-    BIO_free(certificate_bio);
-    BIO_free(key_bio);
-    if (certificate == nullptr || key == nullptr) {
-      X509_free(certificate);
-      EVP_PKEY_free(key);
-      return false;
-    }
-
-    const bool loaded = SSL_CTX_use_certificate(context_, certificate) == 1 &&
-                        SSL_CTX_use_PrivateKey(context_, key) == 1 && SSL_CTX_check_private_key(context_) == 1;
-    X509_free(certificate);
-    EVP_PKEY_free(key);
-    if (!loaded) {
-      return false;
-    }
-
-    switch (certificate_chain) {
-      case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES:
-        return AddExtraChainCertificate(tls_test_credentials::kRsaCertificatePem) &&
-               AddExtraChainCertificate(tls_test_credentials::kDsaCertificatePem) &&
-               AddExtraChainCertificate(tls_test_credentials::kDhCertificatePem);
-      case curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC:
-      default:
-        return true;
-    }
   }
 
   /// Load a fixed test-only ECH private key and matching public config. This

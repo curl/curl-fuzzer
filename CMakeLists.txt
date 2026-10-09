@@ -1322,6 +1322,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
             proto_fuzzer/tls_mock_server.cc
+            proto_fuzzer/tls_test_credential_cache.cc
             proto_fuzzer/tls_websocket_mock_server.cc)
     endif()
     add_library(curl_fuzzer_proto_runtime OBJECT
@@ -2045,6 +2046,36 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         endif()
 
         if(TARGET openssl_external)
+            add_executable(tls_test_credential_cache_test
+                tests/tls_test_credential_cache_test.cc
+                proto_fuzzer/tls_test_credential_cache.cc)
+            target_compile_features(tls_test_credential_cache_test PRIVATE
+                cxx_std_17)
+            target_compile_options(tls_test_credential_cache_test PRIVATE
+                ${COMMON_FLAGS})
+            target_include_directories(tls_test_credential_cache_test PRIVATE
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include)
+            target_link_libraries(tls_test_credential_cache_test PRIVATE
+                ${OPENSSL_STATIC_LIB}
+                ${ZLIB_STATIC_LIB}
+                ${CMAKE_DL_LIBS}
+                pthread)
+            target_link_options(tls_test_credential_cache_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(tls_test_credential_cache_test
+                openssl_external
+                zlib_external
+                curl_fuzzer_proto_generated)
+            add_test(NAME tls_test_credential_cache_test
+                COMMAND tls_test_credential_cache_test)
+            set_tests_properties(tls_test_credential_cache_test PROPERTIES
+                TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests
+                tls_test_credential_cache_test)
+
             # Keep the fixed H2-origin callback/reuse assertions independent
             # of the broad mock-server matrix. The production lane uses the
             # default curl build and the OpenSSL-backed in-process TLS peer.
@@ -2054,6 +2085,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 proto_fuzzer/h2_runtime.cc
                 proto_fuzzer/h2_origin_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
