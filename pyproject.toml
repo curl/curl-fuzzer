@@ -32,7 +32,7 @@ Repository = "https://github.com/curl/curl-fuzzer"
 [project.optional-dependencies]
 browser-tests = [
     "playwright>=1.63,<1.64",
-    "pytest_playwright>=0.9,<0.10",
+    "pytest_playwright>=0.10,<0.11",
     "pytest>=9,<10",
 ]
 python-tests = [
