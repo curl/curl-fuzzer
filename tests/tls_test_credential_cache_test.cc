@@ -16,17 +16,23 @@ namespace {
 
 using SslContextPtr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
 
+/// Exit the focused test with a diagnostic.
+/// @param message Failure text written to standard error.
 void Fail(const char *message) {
   std::cerr << message << '\n';
   std::exit(1);
 }
 
+/// Require one ownership or lifetime invariant.
+/// @param condition Invariant result.
+/// @param message Failure text used when the invariant is false.
 void Expect(bool condition, const char *message) {
   if (!condition) {
     Fail(message);
   }
 }
 
+/// @return a separately owned, mutable server context.
 SslContextPtr MakeContext() {
   return SslContextPtr(SSL_CTX_new(TLS_server_method()), &SSL_CTX_free);
 }
@@ -113,8 +119,8 @@ void TestCachedCredentialsInstallInIndependentContexts() {
          "credential installation shared TLS session state");
 }
 
-/// Destroy a context after taking its owned references, then prove the cache
-/// can safely give the same parsed objects to a later context.
+/// Record cached credential addresses from one context, destroy it, then prove
+/// the cache can install the same objects in a later context.
 void TestCachedCredentialsOutliveContexts() {
   SslContextPtr first = MakeContext();
   Expect(first != nullptr &&
@@ -152,6 +158,7 @@ void TestCachedCredentialsOutliveContexts() {
   }
 }
 
+/// Reject installation when no destination context can own references.
 void TestNullContextIsRejected() {
   Expect(!proto_fuzzer::InstallCachedTlsTestCredentials(
              nullptr, curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC),
@@ -160,6 +167,8 @@ void TestNullContextIsRejected() {
 
 } // namespace
 
+/// Run the parsed-credential ownership and lifetime regressions.
+/// @return zero when every invariant holds.
 int main() {
   TestNullContextIsRejected();
   TestCachedCredentialsInstallInIndependentContexts();
