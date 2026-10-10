@@ -3,17 +3,11 @@ name: Profile fuzzer
 'on':
   workflow_dispatch:
     inputs:
-      target:
-        description: Fuzzer target to profile.
-        required: true
-        default: curl_fuzzer_proto_http
-        type: choice
-        options:
-          - curl_fuzzer_proto_http
-          - curl_fuzzer_proto_http_deep
-          - curl_fuzzer_proto_http2
-          - curl_fuzzer_proto_https_h2
-          - curl_fuzzer_proto_multi
+      filter:
+        description: Optional case-sensitive target-name substring; leave blank for all.
+        required: false
+        default: ''
+        type: string
       seconds:
         description: Profiling duration.
         required: true
@@ -41,12 +35,53 @@ env:
   PROFILE_OUTPUT: ${{ github.workspace }}/profile-output
 
 jobs:
+  Plan:
+    name: 'Select profile targets'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select targets
+        id: select
+        env:
+          PROFILE_FILTER: ${{ inputs.filter }}
+        run: |
+          targets=(
+            curl_fuzzer_proto_http
+            curl_fuzzer_proto_http_deep
+            curl_fuzzer_proto_http2
+            curl_fuzzer_proto_https_h2
+            curl_fuzzer_proto_multi
+          )
+          selected=()
+          for target in "${targets[@]}"; do
+            if [[ -z "$PROFILE_FILTER" || "$target" == *"$PROFILE_FILTER"* ]]; then
+              selected+=("$target")
+            fi
+          done
+          if (( ${#selected[@]} == 0 )); then
+            printf 'No profiling target matches filter %q\n' \
+              "$PROFILE_FILTER" >&2
+            exit 1
+          fi
+          matrix=$(
+            jq --compact-output --null-input --args \
+              '$ARGS.positional | {target: .}' "${selected[@]}"
+          )
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
   Profile:
-    name: 'Profile ${{ inputs.target }}'
+    name: 'Profile ${{ matrix.target }}'
+    needs: Plan
     runs-on: ubuntu-26.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.Plan.outputs.matrix) }}
     env:
-      PROFILE_TARGET: ${{ inputs.target }}
+      PROFILE_TARGET: ${{ matrix.target }}
       PROFILE_SECONDS: ${{ inputs.seconds }}
     steps:
       - name: Use disk-backed temporary files
@@ -154,7 +189,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.OSS_FUZZ_CACHE }}
-          key: profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-${{ inputs.target }}
+          key: profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-${{ matrix.target }}
           restore-keys: |
             profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-
 
@@ -301,7 +336,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: profile-${{ inputs.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: profile-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: profile-output/
           if-no-files-found: warn
           retention-days: 30

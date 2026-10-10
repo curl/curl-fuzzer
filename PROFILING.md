@@ -106,16 +106,19 @@ uv run profile_fuzzer ... \
 ## Run a profile in GitHub Actions
 
 The **Profile fuzzer** workflow can be dispatched manually from the Actions
-tab. Select a structured target and a 30, 60, or 120 second duration. The job
-builds that target with OSS-Fuzz's AddressSanitizer/libFuzzer configuration,
-downloads the public corpus, and records a user-space `cpu-clock` profile.
+tab. Leave the target filter blank to create one matrix job for every target
+offered by the workflow, or enter a case-sensitive substring such as `http2` to
+profile only matching targets. Then select a 30, 60, or 120 second duration.
+Each job builds its target with OSS-Fuzz's AddressSanitizer/libFuzzer
+configuration, downloads the public corpus, and records a user-space
+`cpu-clock` profile.
 
-The uploaded `profile-...` artifact contains the report, raw `perf.data`, folded
-stacks in `perf-folded.txt`, an interactive `flamegraph.svg`, the log, metadata,
-exact `corpus.zip`, build-toolchain manifest, and any testcase emitted by the
-fuzzer. It also includes `oss-fuzz-build.tar` with the exact binary, options,
-seed archive, and `llvm-symbolizer` needed to inspect the raw profile after the
-hosted runner has gone away.
+Each uploaded `profile-...` artifact contains the report, raw `perf.data`,
+folded stacks in `perf-folded.txt`, an interactive `flamegraph.svg`, the log,
+metadata, exact `corpus.zip`, build-toolchain manifest, and any testcase emitted
+by the fuzzer. It also includes `oss-fuzz-build.tar` with the exact binary,
+options, seed archive, and `llvm-symbolizer` needed to inspect the raw profile
+after the hosted runner has gone away.
 
 ## Interpreting results
 
