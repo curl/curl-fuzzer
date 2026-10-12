@@ -112,6 +112,22 @@ void H2Runtime::FinishTransfer(CURL* easy, MockConnection* connection) {
   if (connection != nullptr) {
     (void)connection->DrainIncoming();
   }
+
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  // The carrier still owns every callback and plan observation here. Retain
+  // the completed state in profiling builds without changing the H2 exchange
+  // or adding per-input work to ordinary fuzz targets.
+  const volatile std::size_t observation[] = {push_callback_count(),
+                                              push_header_count(),
+                                              saw_push_path(),
+                                              accepted_push_count(),
+                                              pushed_body_bytes(),
+                                              static_cast<std::size_t>(upkeep_result()),
+                                              observed_request_count(),
+                                              observed_client_settings_count(),
+                                              plan_driver_.has_pending_work()};
+  (void)observation;
+#endif
 }
 
 /// @return Number of syntactically valid pushes offered to this runtime.
