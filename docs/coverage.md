@@ -65,3 +65,6 @@ including their ABI adapters, fixed mutation seeds, and bounded framing and
 capacity cases. This runs on local byte buffers without performing a transfer.
 Standalone replay covers the weak byte-mutator fallback; engine-provided byte
 mutation and sanitizer-specific paths depend on the selected build/runtime.
+
+Utility probes cover the version string, documented date formats, and legacy
+escape/unescape aliases with short fixed strings and explicit binary lengths.

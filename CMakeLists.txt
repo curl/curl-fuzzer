@@ -1085,6 +1085,7 @@ if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
         LEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS)
     target_sources(curl_fuzzer_full_coverage PRIVATE
         full_coverage/public_api.cc
+        full_coverage/utility_api.cc
         full_coverage/legacy_mutator.cc
         legacy_tlv_mutator.cc)
 endif()
