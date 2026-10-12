@@ -1080,8 +1080,25 @@ add_dependencies(curl_fuzzer_full_coverage ${FUZZ_DEPS})
 if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
    "$ENV{SANITIZER}" STREQUAL "introspector")
     target_compile_definitions(curl_fuzzer_full_coverage PRIVATE
-        CURL_FUZZER_COVERAGE_ONLY)
-    target_sources(curl_fuzzer_full_coverage PRIVATE full_coverage/public_api.cc)
+        CURL_FUZZER_COVERAGE_ONLY
+        FUZZ_PROTOCOLS_ALL
+        LEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS)
+    target_sources(curl_fuzzer_full_coverage PRIVATE
+        full_coverage/public_api.cc
+        full_coverage/legacy_mutator.cc
+        legacy_tlv_mutator.cc)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(full_coverage_mutator_test
+        tests/full_coverage_mutator_test.cc
+        full_coverage/legacy_mutator.cc
+        legacy_tlv_mutator.cc)
+    target_compile_features(full_coverage_mutator_test PRIVATE cxx_std_11)
+    target_compile_definitions(full_coverage_mutator_test PRIVATE FUZZ_PROTOCOLS_ALL)
+    target_include_directories(full_coverage_mutator_test PRIVATE ${CMAKE_SOURCE_DIR})
+    add_test(NAME full_coverage_mutator_test COMMAND full_coverage_mutator_test)
+    add_dependencies(fuzzer_unit_tests full_coverage_mutator_test)
 endif()
 
 # BUFQ fuzzer

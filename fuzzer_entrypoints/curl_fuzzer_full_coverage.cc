@@ -9,6 +9,7 @@
 #include <cstdlib>
 
 #ifdef CURL_FUZZER_COVERAGE_ONLY
+#include "full_coverage/legacy_mutator.h"
 #include "full_coverage/public_api.h"
 #endif
 
@@ -22,6 +23,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *, size_t)
   if(!completed) {
     completed = true;
     full_coverage::ExercisePublicApiCoverage();
+    full_coverage::ExerciseLegacyMutatorCoverage();
   }
   return 0;
 #else
