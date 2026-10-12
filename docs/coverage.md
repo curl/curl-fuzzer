@@ -50,3 +50,12 @@ public-corpus cache whose key changes each ISO week.
 
 For controlled A/B performance and source-coverage comparisons, see
 [Benchmarking](benchmarking.md).
+
+`curl_fuzzer_full_coverage` supplements corpus replay with deterministic public
+compatibility API probes, such as formatting and legacy form serialization.
+The probes execute once per process in coverage builds (`ENABLE_COVERAGE=ON`
+or `SANITIZER=coverage`) and Fuzz Introspector builds (`SANITIZER=introspector`).
+Ordinary sanitizer builds exit successfully on the first callback, before any
+mutation fuzzing. The checked-in nonempty seed triggers standalone replay;
+the target ignores its contents. Keep additional bounded profiling probes in
+this target rather than creating another protocol lane.
