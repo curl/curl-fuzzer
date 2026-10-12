@@ -108,15 +108,29 @@ private:
   std::string request_;
 };
 
+/// Retain one parser-fault outcome and the allocation counters observed at the
+/// adjacent checkpoint and Location header callbacks.
 struct ParserFaultRun {
+  /// Transfer result, or CURLE_OUT_OF_MEMORY when easy initialization fails.
   CURLcode result = CURLE_OK;
+  /// Allocation statistics after handle and peer cleanup, before plan reset.
   proto_fuzzer::allocation_fault_injection::Statistics statistics;
+  /// Allocation attempts when the checkpoint callback ran; zero if absent.
   std::uint64_t checkpoint_attempts = 0;
+  /// Allocation attempts when the Location callback ran; zero if absent.
   std::uint64_t location_attempts = 0;
+  /// Whether the checkpoint header reached the application callback.
   bool checkpoint_seen = false;
+  /// Whether the Location header reached the application callback.
   bool location_seen = false;
 };
 
+/// Snapshot allocation attempts at the two headers bracketing Location parsing.
+/// @param contents Header bytes supplied by curl.
+/// @param size Size of each supplied element.
+/// @param nmemb Number of supplied elements.
+/// @param userdata Pointer to the ParserFaultRun receiving callback observations.
+/// @return size * nmemb, consuming every supplied byte without aborting delivery.
 size_t ObserveParserHeaders(char *contents, size_t size, size_t nmemb,
                             void *userdata) {
   const size_t bytes = size * nmemb;
@@ -136,6 +150,11 @@ size_t ObserveParserHeaders(char *contents, size_t size, size_t nmemb,
   return bytes;
 }
 
+/// Drive a fixed, bounded local HTTP response with one allocation fault armed
+/// from easy initialization through handle and peer cleanup. Capture the final
+/// statistics before resetting the plan for the next run.
+/// @param ordinal One-based allocation attempt selected for failure.
+/// @return Transfer outcome, header callback observations, and final statistics.
 ParserFaultRun DriveParserFaultScenario(std::uint32_t ordinal) {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
