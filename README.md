@@ -163,12 +163,16 @@ features and other platforms need their own builds, and failures or incomplete
 corpus replay need investigation before interpreting a result as complete.
 Compare changes using the same curl revision, toolchain, features, and corpora.
 
-`curl_fuzzer_full_coverage` runs deterministic, bounded compatibility API
-probes once per process during LLVM coverage or Fuzz Introspector builds
+`curl_fuzzer_full_coverage` runs deterministic, bounded compatibility API and
+legacy mutator probes once per process during LLVM coverage or Fuzz Introspector
+builds
 (`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`/`introspector`). It supplements
 corpus replay without adding protocol lanes. Ordinary sanitizer builds exit
 successfully on the first callback, so this target consumes no mutation time.
 Its seed input only triggers the probes; its contents are ignored.
+Mutator probes exercise framing, routing, capacity limits, and crossover on
+local byte buffers. They perform no transfers and cover the custom-mutator ABI
+adapters that corpus replay normally skips.
 
 Pass `-c /path/to/curl` to cover a local curl checkout. The manual `Coverage`
 GitHub Actions workflow publishes the same reports and reuses a public-corpus

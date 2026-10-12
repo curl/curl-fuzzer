@@ -28,6 +28,7 @@ def test_target_exits_or_runs_probes_once(tmp_path: Path, profiling: bool) -> No
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *, size_t);
 namespace full_coverage {
 void ExercisePublicApiCoverage() { std::puts("public API probe"); }
+void ExerciseLegacyMutatorCoverage() { std::puts("mutator probe"); }
 }
 int main() {
   const uint8_t seed[] = {1};
@@ -68,7 +69,7 @@ int main() {
         env=environment,
     )
     assert result.stdout.splitlines() == (
-        ["public API probe", "engine continued"] if profiling else []
+        ["public API probe", "mutator probe", "engine continued"] if profiling else []
     )
 
 

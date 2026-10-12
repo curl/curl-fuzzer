@@ -59,3 +59,9 @@ Ordinary sanitizer builds exit successfully on the first callback, before any
 mutation fuzzing. The checked-in nonempty seed triggers standalone replay;
 the target ignores its contents. Keep additional bounded profiling probes in
 this target rather than creating another protocol lane.
+
+The target also exercises the legacy TLV custom mutator and crossover,
+including their ABI adapters, fixed mutation seeds, and bounded framing and
+capacity cases. This runs on local byte buffers without performing a transfer.
+Standalone replay covers the weak byte-mutator fallback; engine-provided byte
+mutation and sanitizer-specific paths depend on the selected build/runtime.
