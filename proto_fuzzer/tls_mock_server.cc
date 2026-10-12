@@ -646,6 +646,24 @@ void TlsMockServer::ObserveActiveTransfer(CURL* easy) {
   // Retry only a small fixed number of outer-loop observations, and stop
   // permanently once one copied ticket has made one import attempt.
   const bool completed_live_handshake = transport_.completed_handshake_count() != 0;
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  // Read the owned peer observations once after a real handshake. Signed
+  // status values retain their unavailable sentinels; string results are
+  // consumed immediately while their temporaries and context are still live.
+  static bool observed = false;
+  if (completed_live_handshake && !observed) {
+    observed = true;
+    const volatile bool live = saw_live_tls_session();
+    const volatile int status[] = {negotiated_tls_version(), ech_status()};
+    const volatile std::size_t counts[] = {
+        exported_session_count(),  imported_session_count(), completed_handshake_count(),
+        reused_session_count(),    write_retry_count(),      negotiated_alpn().size(),
+        negotiated_group().size(), ech_inner_name().size(),  ech_outer_name().size()};
+    (void)live;
+    (void)status;
+    (void)counts;
+  }
+#endif
   if (!completed_live_handshake || exported_session_count_ != 0 ||
       session_export_attempt_count_ >= kMaxSessionExportAttempts) {
     return;
