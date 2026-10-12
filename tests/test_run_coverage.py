@@ -290,6 +290,73 @@ def test_failed_and_skipped_replays_keep_later_coverage_marked_partial(
     assert report.index("Selected corpus replay") < report.index("## libcurl")
 
 
+@pytest.mark.parametrize("keep_plain_inputs", [False, True])
+@pytest.mark.parametrize("link_corpus_directory", [False, True])
+def test_replay_counts_linked_files_without_following_linked_directories(
+    coverage_fixture: dict[str, Any],
+    keep_plain_inputs: bool,
+    link_corpus_directory: bool,
+) -> None:
+    """Replay linked seeds even when they are the corpus's only inputs."""
+    fixture = coverage_fixture
+    if not keep_plain_inputs:
+        for corpus in (fixture["local_corpus"], fixture["public_corpus"]):
+            for seed in corpus.iterdir():
+                seed.unlink()
+    external = fixture["checkout"] / "external-corpus"
+    external.mkdir()
+    seed = external / "seed"
+    seed.write_bytes(b"linked seed")
+    (fixture["local_corpus"] / "linked-seed").symlink_to(seed)
+    (fixture["local_corpus"] / "linked-directory").symlink_to(external)
+    if link_corpus_directory:
+        corpus = fixture["checkout"] / "linked-corpus-root"
+        fixture["local_corpus"].rename(corpus)
+        fixture["local_corpus"].symlink_to(corpus)
+
+    result = _replay(fixture)
+
+    assert result.returncode == 0, result.stderr
+    status = json.loads((fixture["coverage"] / "replay-status.json").read_text())
+    assert status["complete"] is True
+    row = status["targets"][0]
+    expected = 3 if keep_plain_inputs else 1
+    assert row["expected_inputs"] == expected
+    assert row["counters"]["attempted"] == expected
+    assert row["counters"]["completed"] == expected
+    assert row["outcome"] == "complete"
+    assert (fixture["coverage"] / "report.md").is_file()
+
+
+def test_corpus_symlink_loop_keeps_later_targets_running(
+    coverage_fixture: dict[str, Any],
+) -> None:
+    """Retain link errors and complete later targets after a failed replay."""
+    fixture = coverage_fixture
+    target = "broken_links_fuzzer"
+    binary = fixture["build"] / target
+    shutil.copyfile(fixture["build"] / fixture["target"], binary)
+    binary.chmod(0o755)
+    corpus = fixture["checkout"] / "corpora" / target
+    corpus.mkdir()
+    (corpus / "seed").write_bytes(b"normal")
+    link = corpus / "invalid-link"
+    link.symlink_to(link)
+
+    result = _replay(fixture, TARGETS=f"{target} {fixture['target']}")
+
+    assert result.returncode == 0, result.stderr
+    status = json.loads((fixture["coverage"] / "replay-status.json").read_text())
+    broken, normal = status["targets"]
+    assert status["complete"] is False
+    assert broken["outcome"] == "failed"
+    assert broken["count_errors"] == 1
+    assert Path(broken["log"]).read_text()
+    assert normal["outcome"] == "complete"
+    assert normal["counters"]["completed"] == 2
+    assert (fixture["coverage"] / "report.md").is_file()
+
+
 def test_merge_failure_cannot_publish_reports_from_a_previous_run(
     coverage_fixture: dict[str, Any],
 ) -> None:

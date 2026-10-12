@@ -119,7 +119,10 @@ for TARGET in ${TARGETS}; do
   fi
 
   for DIR in "${CORPUS_ARGS[@]}"; do
-    if COUNT=$(find "${DIR}" -type f -printf '.\n' 2>>"${LOG_FILE}" | wc -l); then
+    # Match the runner: follow a linked corpus root and links to regular files,
+    # but do not descend into linked directories within the corpus. Broken
+    # links are diagnosed during replay.
+    if COUNT=$(find -H "${DIR}" -xtype f -printf '.\n' 2>>"${LOG_FILE}" | wc -l); then
       INPUT_COUNT=$(( INPUT_COUNT + COUNT ))
     else
       COUNT_ERRORS=$(( COUNT_ERRORS + 1 ))

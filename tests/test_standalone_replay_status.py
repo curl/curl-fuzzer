@@ -218,13 +218,15 @@ def test_file_preparation_errors_do_not_claim_completed_inputs(
     assert ("callback returned" in result.stdout) == callback_returns
 
 
+@pytest.mark.parametrize("link_kind", ["dangling", "loop"])
 def test_directory_metadata_errors_are_counted_in_both_passes(
-    runner: Path, tmp_path: Path
+    runner: Path, tmp_path: Path, link_kind: str
 ) -> None:
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     (corpus / "normal").write_bytes(b"normal")
-    (corpus / "dangling").symlink_to(tmp_path / "missing")
+    link = corpus / "invalid-link"
+    link.symlink_to(link if link_kind == "loop" else tmp_path / "missing")
     status = tmp_path / "status.json"
 
     _run(runner, [corpus], status)
