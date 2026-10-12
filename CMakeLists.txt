@@ -1696,6 +1696,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/http_gzip_decode.textproto
         ${SCENARIO_SRC_DIR}/http/http_head_nobody.textproto
         ${SCENARIO_SRC_DIR}/http/http_interim_1xx.textproto
+        # Allocation ordinals are target-specific, so keep this seed out of
+        # the shared HTTP glob used by the compatibility, deep, and TLS lanes.
+        ${SCENARIO_SRC_DIR}/http_fast/http_location_allocation_failure.textproto
         ${SCENARIO_SRC_DIR}/http/http_maxfilesize_reject.textproto
         ${SCENARIO_SRC_DIR}/http/http_range_206.textproto
         ${SCENARIO_SRC_DIR}/http/http_request_target_path_as_is.textproto
@@ -1710,9 +1713,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         ${SCENARIO_SRC_DIR}/http/url_malformed_authority.textproto
     )
     list(LENGTH FAST_HTTP_SCENARIO_TEXTPROTOS FAST_HTTP_SCENARIO_COUNT)
-    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 29)
+    if(NOT FAST_HTTP_SCENARIO_COUNT EQUAL 30)
         message(FATAL_ERROR
-            "The fast HTTP corpus must contain exactly 29 seed declarations")
+            "The fast HTTP corpus must contain exactly 30 seed declarations")
     endif()
     foreach(raw_http2_textproto ${RAW_HTTP2_SCENARIO_TEXTPROTOS})
         list(FIND FAST_HTTP_SCENARIO_TEXTPROTOS
