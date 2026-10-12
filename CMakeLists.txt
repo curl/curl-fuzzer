@@ -2026,6 +2026,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         # would otherwise look like ordinary curl transfer failures.
         set(MOCK_SERVER_TEST_SOURCES
             tests/mock_server_test.cc
+            proto_fuzzer/allocation_fault_injection.cc
             proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/h2_plan.cc

@@ -17,10 +17,12 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <google/protobuf/text_format.h>
 
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/option_apply.h"
@@ -105,6 +107,108 @@ protected:
 private:
   std::string request_;
 };
+
+struct ParserFaultRun {
+  CURLcode result = CURLE_OK;
+  proto_fuzzer::allocation_fault_injection::Statistics statistics;
+  std::uint64_t checkpoint_attempts = 0;
+  std::uint64_t location_attempts = 0;
+  bool checkpoint_seen = false;
+  bool location_seen = false;
+};
+
+size_t ObserveParserHeaders(char *contents, size_t size, size_t nmemb,
+                            void *userdata) {
+  const size_t bytes = size * nmemb;
+  auto *run = static_cast<ParserFaultRun *>(userdata);
+  const std::string_view header(contents, bytes);
+  if (header.rfind("X-Fault-Checkpoint:", 0) == 0) {
+    run->checkpoint_seen = true;
+    run->checkpoint_attempts =
+        proto_fuzzer::allocation_fault_injection::GetStatistics()
+            .allocation_attempts;
+  } else if (header.rfind("Location:", 0) == 0) {
+    run->location_seen = true;
+    run->location_attempts =
+        proto_fuzzer::allocation_fault_injection::GetStatistics()
+            .allocation_attempts;
+  }
+  return bytes;
+}
+
+ParserFaultRun DriveParserFaultScenario(std::uint32_t ordinal) {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("127.0.0.1/parser");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\n"
+      "X-Fault-Checkpoint: ready\r\n"
+      "Location: /next\r\n"
+      "Content-Length: 0\r\n\r\n");
+
+  ParserFaultRun run;
+  proto_fuzzer::allocation_fault_injection::Configure(&ordinal, 1);
+  proto_fuzzer::allocation_fault_injection::Arm();
+  proto_fuzzer::CurlSlistPtr connect_to;
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  if (easy != nullptr) {
+    connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+        easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+    (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://127.0.0.1/parser");
+    (void)curl_easy_setopt(easy.get(), CURLOPT_HEADERFUNCTION,
+                           &ObserveParserHeaders);
+    (void)curl_easy_setopt(easy.get(), CURLOPT_HEADERDATA, &run);
+
+    proto_fuzzer::MockServer server;
+    server.SetScripts(scenario);
+    server.Install(easy.get());
+    run.result = curl_easy_perform(easy.get());
+    easy.reset();
+    connect_to.reset();
+  } else {
+    run.result = CURLE_OUT_OF_MEMORY;
+  }
+  run.statistics = proto_fuzzer::allocation_fault_injection::GetStatistics();
+  proto_fuzzer::allocation_fault_injection::Reset();
+  return run;
+}
+
+/// Search the small allocation interval between two adjacent application
+/// header callbacks. This derives the ordinal from the current build and
+/// proves that an injected failure reaches HTTP header parsing without pinning
+/// a build-sensitive absolute count.
+void TestAllocationFailureReachesHttpParser() {
+  const auto observed = DriveParserFaultScenario(static_cast<std::uint32_t>(
+      proto_fuzzer::scenario_limits::kMaxAllocationOrdinal));
+  Expect(observed.result == CURLE_OK && observed.checkpoint_seen &&
+             observed.location_seen &&
+             observed.statistics.injected_failures == 0 &&
+             observed.statistics.armed,
+         "HTTP parser allocation observation did not complete cleanly");
+  Expect(observed.checkpoint_attempts > 0 &&
+             observed.location_attempts > observed.checkpoint_attempts &&
+             observed.location_attempts <=
+                 observed.statistics.allocation_attempts &&
+             observed.checkpoint_attempts <
+                 proto_fuzzer::scenario_limits::kMaxAllocationOrdinal,
+         "HTTP parser checkpoint was outside the allocation ordinal range");
+
+  bool parser_failure_found = false;
+  for (std::uint64_t candidate = observed.checkpoint_attempts + 1;
+       candidate <= observed.location_attempts; ++candidate) {
+    const auto failed =
+        DriveParserFaultScenario(static_cast<std::uint32_t>(candidate));
+    if (failed.checkpoint_seen &&
+        failed.checkpoint_attempts == observed.checkpoint_attempts &&
+        !failed.location_seen && failed.result == CURLE_OUT_OF_MEMORY &&
+        failed.statistics.injected_failures == 1 && failed.statistics.armed) {
+      parser_failure_found = true;
+      break;
+    }
+  }
+  Expect(parser_failure_found,
+         "no selected allocation failed inside HTTP Location parsing");
+}
 
 void TestRequestHeadersDetachBeforeHandleReuse() {
   Scenario original;
@@ -1557,6 +1661,9 @@ void TestTelnetMaximumAmplificationCannotBlock() {
 } // namespace
 
 int main() {
+  Expect(proto_fuzzer::allocation_fault_injection::InitializeCurl(),
+         "mock-server tests could not install allocation callbacks");
+  TestAllocationFailureReachesHttpParser();
   TestStreamSocketDispositionIsExplicit();
   TestRequestHeadersDetachBeforeHandleReuse();
   TestFollowOnScriptsAndOldConnectionLifetime();
