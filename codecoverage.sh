@@ -2,8 +2,7 @@
 #
 # Build every fuzzer with LLVM source-based coverage instrumentation *on
 # libcurl and the fuzzer binaries only*, then replay the checked-in corpora
-# through them to produce a coverage summary and HTML report restricted to
-# curl's own sources.
+# through them to produce separate libcurl and curl-fuzzer coverage reports.
 #
 # Deps (openssl, zlib, zstd, brotli, nghttp2, libidn2, openldap, LPM +
 # protobuf + abseil) are intentionally built without coverage flags: they'd
@@ -12,8 +11,12 @@
 # curl_fuzzer_proto.
 #
 # Output:
-#   build-coverage/coverage/summary.txt  - llvm-cov report (curl lib/ + src/)
+#   build-coverage/coverage/summary.txt  - curl lib/, include/curl/, src/ report
 #   build-coverage/coverage/html/        - llvm-cov show (HTML report)
+#   build-coverage/coverage/harness-summary.txt - harness llvm-cov report
+#   build-coverage/coverage/harness-html/       - harness HTML report
+#   build-coverage/coverage/report.md    - four-metric summary and ranked gaps
+#   build-coverage/coverage/gaps.json    - exact counters and uncovered functions
 
 set -ex
 

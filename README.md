@@ -143,6 +143,25 @@ The reports are written to:
 
 - `build-coverage/coverage/summary.txt`
 - `build-coverage/coverage/html/index.html`
+- `build-coverage/coverage/harness-summary.txt`
+- `build-coverage/coverage/harness-html/index.html`
+- `build-coverage/coverage/report.md`
+- `build-coverage/coverage/gaps.json`
+
+The existing summary and HTML paths report curl's `lib/`, `include/curl/`, and
+`src/` sources.
+The harness reports cover checked-in C++ sources and headers, excluding tests,
+the standalone replay engine, generated code, and dependency build trees.
+`report.md` tracks line, function, region, and branch coverage separately for
+each source group and ranks remaining gaps. `gaps.json` preserves exact
+covered/total counters; an unavailable metric or empty denominator is not
+reported as 100%. The scoped LLVM exports, `curl-coverage.json` and
+`harness-coverage.json`, support further analysis.
+
+Coverage measures the sources mapped into the selected binaries. Disabled
+features and other platforms need their own builds, and failures or incomplete
+corpus replay need investigation before interpreting a result as complete.
+Compare changes using the same curl revision, toolchain, features, and corpora.
 
 Pass `-c /path/to/curl` to cover a local curl checkout. The manual `Coverage`
 GitHub Actions workflow publishes the same reports and reuses a public-corpus

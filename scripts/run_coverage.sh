@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
 # Replay corpora through instrumented fuzzer binaries, merge the resulting
-# .profraw files, and emit a summary + HTML report restricted to curl's own
-# lib/ and src/ trees. Invoked by codecoverage.sh after compile_target.sh
+# .profraw files, and emit separate reports for libcurl and the checked-in
+# fuzzer harness. Invoked by codecoverage.sh after compile_target.sh
 # has built the fuzz target with -fprofile-instr-generate -fcoverage-mapping.
 
-set -eu
+set -euo pipefail
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 export BUILD_ROOT; BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
@@ -119,12 +119,41 @@ fi
 
 SUMMARY="${COVERAGE_DIR}/summary.txt"
 HTML_DIR="${COVERAGE_DIR}/html"
+HARNESS_SUMMARY="${COVERAGE_DIR}/harness-summary.txt"
+HARNESS_HTML_DIR="${COVERAGE_DIR}/harness-html"
+CURL_JSON="${COVERAGE_DIR}/curl-coverage.json"
+HARNESS_JSON="${COVERAGE_DIR}/harness-coverage.json"
 
-echo "==> llvm-cov report (curl lib/ + src/)"
+# Public curl headers have instrumented inline functions and macros too. Keep
+# src/ in the filter for compatibility; ordinary libcurl archives do not link
+# the command-line tool, so unmapped files add nothing to the denominator.
+CURL_SOURCES=("${CURL_SRC}/lib" "${CURL_SRC}/include/curl" "${CURL_SRC}/src")
+
+# Select source files directly, rather than the repository directory: curl and
+# its cached dependencies normally live below it in build-coverage/. Headers
+# contain inline helpers and macros whose regions belong in the harness report.
+# Tests, generated protobuf code, and the local replay engine are outside this
+# source list, so they cannot inflate the harness denominator.
+HARNESS_SOURCES=()
+for SOURCE in \
+  "${BUILD_ROOT}"/*.cc "${BUILD_ROOT}"/*.h \
+  "${BUILD_ROOT}"/fuzzer_entrypoints/*.cc \
+  "${BUILD_ROOT}"/proto_fuzzer/*.cc "${BUILD_ROOT}"/proto_fuzzer/*.h \
+  "${BUILD_ROOT}"/full_coverage/*.cc "${BUILD_ROOT}"/full_coverage/*.h; do
+  [[ -f "${SOURCE}" ]] || continue
+  [[ "${SOURCE}" != "${BUILD_ROOT}/standalone_fuzz_target_runner.cc" ]] || continue
+  HARNESS_SOURCES+=("${SOURCE}")
+done
+if [[ ${#HARNESS_SOURCES[@]} -eq 0 ]]; then
+  echo "error: no harness source files found under ${BUILD_ROOT}" >&2
+  exit 1
+fi
+
+echo "==> llvm-cov report (curl lib/ + public headers + src/)"
 "${LLVM_COV}" report \
   "${FIRST_BIN}" "${OBJECTS[@]}" \
   -instr-profile="${PROFDATA}" \
-  "${CURL_SRC}/lib" "${CURL_SRC}/src" | tee "${SUMMARY}"
+  "${CURL_SOURCES[@]}" | tee "${SUMMARY}"
 
 echo "==> llvm-cov show -> ${HTML_DIR}"
 rm -rf "${HTML_DIR}"
@@ -132,11 +161,45 @@ rm -rf "${HTML_DIR}"
   "${FIRST_BIN}" "${OBJECTS[@]}" \
   -instr-profile="${PROFDATA}" \
   -format=html -output-dir="${HTML_DIR}" \
-  -show-line-counts-or-regions \
-  "${CURL_SRC}/lib" "${CURL_SRC}/src"
+  -show-line-counts-or-regions -show-branches=count \
+  "${CURL_SOURCES[@]}"
+
+echo "==> llvm-cov export (curl lib/ + public headers + src/) -> ${CURL_JSON}"
+"${LLVM_COV}" export \
+  "${FIRST_BIN}" "${OBJECTS[@]}" \
+  -instr-profile="${PROFDATA}" \
+  "${CURL_SOURCES[@]}" > "${CURL_JSON}"
+
+echo "==> llvm-cov report (curl-fuzzer harness)"
+"${LLVM_COV}" report \
+  "${FIRST_BIN}" "${OBJECTS[@]}" \
+  -instr-profile="${PROFDATA}" \
+  "${HARNESS_SOURCES[@]}" | tee "${HARNESS_SUMMARY}"
+
+echo "==> llvm-cov show -> ${HARNESS_HTML_DIR}"
+rm -rf "${HARNESS_HTML_DIR}"
+"${LLVM_COV}" show \
+  "${FIRST_BIN}" "${OBJECTS[@]}" \
+  -instr-profile="${PROFDATA}" \
+  -format=html -output-dir="${HARNESS_HTML_DIR}" \
+  -show-line-counts-or-regions -show-branches=count \
+  "${HARNESS_SOURCES[@]}"
+
+echo "==> llvm-cov export (curl-fuzzer harness) -> ${HARNESS_JSON}"
+"${LLVM_COV}" export \
+  "${FIRST_BIN}" "${OBJECTS[@]}" \
+  -instr-profile="${PROFDATA}" \
+  "${HARNESS_SOURCES[@]}" > "${HARNESS_JSON}"
+
+python3 "${SCRIPTDIR}/summarize_coverage.py" \
+  --libcurl "${CURL_JSON}" --harness "${HARNESS_JSON}" \
+  --output "${COVERAGE_DIR}/report.md" \
+  --json-output "${COVERAGE_DIR}/gaps.json" --limit 20
 
 echo
-echo "Coverage summary: ${SUMMARY}"
-echo "HTML report:      ${HTML_DIR}/index.html"
-# One-liner for the "how much did we cover" number.
-awk '/^TOTAL/ {print "TOTAL line coverage: " $10}' "${SUMMARY}" || true
+echo "Coverage report:         ${COVERAGE_DIR}/report.md"
+echo "Libcurl summary:         ${SUMMARY}"
+echo "Libcurl HTML report:     ${HTML_DIR}/index.html"
+echo "Harness summary:         ${HARNESS_SUMMARY}"
+echo "Harness HTML report:     ${HARNESS_HTML_DIR}/index.html"
+echo "Coverage exports:        ${CURL_JSON}, ${HARNESS_JSON}"
