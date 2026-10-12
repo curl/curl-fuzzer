@@ -74,7 +74,8 @@ class MockServer : public MockServerBase {
 
   void SetKeepConnectionsOpen(bool keep_open);
 
-  void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false) override;
+  CURLcode DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario,
+                             bool use_events = false) override;
 
   ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 

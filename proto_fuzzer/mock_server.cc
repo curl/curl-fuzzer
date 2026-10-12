@@ -421,7 +421,8 @@ curl_socket_t MockServer::HandleOpenSocket(curlsocktype purpose, struct curl_soc
 ///        mock.
 /// @param scenario Bounded response script to preload before performing.
 /// @param use_events Select curl's debug event-based easy entrypoint.
-void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events) {
+/// @return Transfer result reported by curl's selected easy entrypoint.
+CURLcode MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events) {
   SetScripts(scenario);
   preload_all_chunks_ = true;
   (void)curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, 50L);
@@ -434,12 +435,9 @@ void MockServer::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenar
   // one because CONNECT_ONLY=1 also disables the timeout and stays bounded only
   // through a curl-internal shortcut this harness should not depend on.
   (void)curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 0L);
-  if (use_events) {
-    (void)curl_easy_perform_ev(easy);
-  } else {
-    (void)curl_easy_perform(easy);
-  }
+  const CURLcode result = use_events ? curl_easy_perform_ev(easy) : curl_easy_perform(easy);
   preload_all_chunks_ = false;
+  return result;
 }
 
 /// Establish only the HTTP transport, then pass bounded application bytes

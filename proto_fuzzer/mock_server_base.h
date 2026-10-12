@@ -77,7 +77,8 @@ class MockServerBase {
 
   CURLcode DriveScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
-  virtual void DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool use_events = false);
+  virtual CURLcode DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario,
+                                     bool use_events = false);
 
   virtual ConnectOnlyRunStats DriveConnectOnlyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 

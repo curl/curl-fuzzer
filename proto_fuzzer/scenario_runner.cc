@@ -289,20 +289,26 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   }
   mock->ConfigureRequestData(request_data);
   const auto drive_mode = api_plan == nullptr ? curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM : api_plan->drive_mode();
+  CURLcode transfer_result = CURLE_FAILED_INIT;
   if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM) {
-    mock->DriveEasyScenario(easy, scenario);
+    transfer_result = mock->DriveEasyScenario(easy, scenario);
   } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS) {
-    mock->DriveEasyScenario(easy, scenario, true);
+    transfer_result = mock->DriveEasyScenario(easy, scenario, true);
   } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY) {
-    (void)mock->DriveConnectOnlyScenario(easy, scenario);
+    transfer_result = mock->DriveConnectOnlyScenario(easy, scenario).connect_result;
   } else {
-    mock->DriveScenario(easy, scenario);
+    transfer_result = mock->DriveScenario(easy, scenario);
   }
   if (api_lifecycle != nullptr) {
     const bool retains_internal_multi = drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM ||
                                         drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS ||
                                         drive_mode == curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY;
-    api_lifecycle->ProbeTransferResults(retains_internal_multi);
+    // An easy entrypoint can fail before attaching its private multi. The
+    // drive mode alone therefore cannot establish curl_easy_upkeep's state
+    // precondition. These are the two pre-attachment failure results.
+    const bool probe_upkeep =
+        retains_internal_multi && transfer_result != CURLE_OUT_OF_MEMORY && transfer_result != CURLE_FAILED_INIT;
+    api_lifecycle->ProbeTransferResults(probe_upkeep);
     api_lifecycle->ProbeEasyDuplication();
   } else if (mode != ScenarioRunMode::kFastProtocol) {
     ProbeTransferResults(easy);

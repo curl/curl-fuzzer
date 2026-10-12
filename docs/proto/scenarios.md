@@ -39,8 +39,7 @@ The main groups of fields are:
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, TLS certificate
   selection, HTTPS/H2 key-exchange selection, `socks_proxy_mode`, `trace_ids`,
-  and filename-backed parser
-  inputs.
+  filename-backed parser inputs, and `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
 contract. Its checked-in `CurlOptionId` numbers are part of the serialized
@@ -83,6 +82,46 @@ Other peers intentionally give those fields narrower meanings:
 Use a seed already assigned to the intended target as the closest example.
 A valid protobuf message can still be irrelevant to a lane if that lane's
 policy removes the field or replaces its scheme.
+
+## Select allocation failures
+
+All structured targets can reject selected libcurl allocation attempts while
+driving a transfer:
+
+```protobuf
+fail_allocations: 5
+fail_allocations: 9
+```
+
+Ordinals are one-based and count positive-size calls on the fuzzer thread
+through the callbacks installed by `curl_global_init_mem`. Scenario parsing
+stays outside the sequence; libcurl setup, transfer driving, result probes,
+and cleanup inside the shared scenario runner are included. Fixed target
+policies retain the four smallest distinct values after folding them into
+1..4096; the compatibility target applies that bound at execution time without
+rewriting the message. State-dependent probes still require the preceding
+transfer entrypoint to establish their documented runtime state.
+
+In the API target, a scenario that combines `API_DRIVE_EASY_EVENTS` with an
+allocation plan is normalized to `API_DRIVE_EASY_PERFORM`. After its
+heap-backed socket-monitor allocation fails, curl's current debug event adapter
+returns a status outside the socket-callback contract; event-based driving
+remains available when no allocation failure is selected.
+
+An active plan combined with an HTTP-family MIME body also removes the
+`CURLOPT_CRLF` and `CURLOPT_TRANSFERTEXT` line-ending conversion options before
+execution. curl currently installs the MIME reader before allocating the
+conversion reader, and the allocation-error path can otherwise leave the freed
+MIME reader installed. MIME failures remain selected, while ordinary inputs
+still cover MIME with line-ending conversion. Compatibility inputs receive the
+same execution-only safety rule without changing their serialized messages.
+
+Multiple failures describe one evolving execution. In the example, 9 means
+the ninth allocation attempt on the path produced after attempt 5 failed, not
+the ninth attempt from a failure-free baseline. Keep failure seeds with the
+target that produced them: allocation sequences can change with the target,
+curl revision, build configuration, and TLS backend. Resolver and peer worker
+threads deliberately do not inherit the calling thread's plan.
 
 ## Add a seed
 

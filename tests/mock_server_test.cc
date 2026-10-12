@@ -1157,10 +1157,9 @@ void TestEasyPerformPreloadsIncrementalResponse() {
 
   TestMockServer server;
   server.Install(easy);
-  server.DriveEasyScenario(easy, scenario);
+  const CURLcode result = server.DriveEasyScenario(easy, scenario);
 
-  Expect(
-      response == "easy",
+  Expect(result == CURLE_OK && response == "easy",
       "curl_easy_perform did not consume the preloaded incremental response");
 
   curl_easy_cleanup(easy);
@@ -1188,9 +1187,9 @@ void TestEasyEventsPreloadsIncrementalResponse() {
 
   TestMockServer server;
   server.Install(easy);
-  server.DriveEasyScenario(easy, scenario, true);
+  const CURLcode result = server.DriveEasyScenario(easy, scenario, true);
 
-  Expect(response == "events",
+  Expect(result == CURLE_OK && response == "events",
          "curl_easy_perform_ev did not consume the preloaded response");
 
   curl_easy_cleanup(easy);

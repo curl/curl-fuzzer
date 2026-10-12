@@ -21,6 +21,11 @@ def test_copy_postfields_is_a_supported_option() -> None:
 
 def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
     expected_tokens = {
+        "api_easy_events_allocation_failure.textproto": (
+            "API_DRIVE_EASY_EVENTS",
+            "fail_allocations: 53",
+            'host_path: "api.test/event\\201s"',
+        ),
         "api_easy_events.textproto": (
             "API_DRIVE_EASY_EVENTS",
             'on_readable: "events"',

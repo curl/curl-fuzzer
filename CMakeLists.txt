@@ -1106,6 +1106,18 @@ if(BUILD_TESTING)
     target_include_directories(full_coverage_mutator_test PRIVATE ${CMAKE_SOURCE_DIR})
     add_test(NAME full_coverage_mutator_test COMMAND full_coverage_mutator_test)
     add_dependencies(fuzzer_unit_tests full_coverage_mutator_test)
+
+    add_executable(fault_injection_test
+        tests/fault_injection_test.cc
+        proto_fuzzer/allocation_fault_injection.cc)
+    target_compile_features(fault_injection_test PRIVATE cxx_std_17)
+    target_compile_options(fault_injection_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(fault_injection_test PRIVATE ${CMAKE_SOURCE_DIR})
+    target_link_libraries(fault_injection_test PRIVATE curl_client_default)
+    target_link_options(fault_injection_test PRIVATE ${COVERAGE_LINK_FLAGS})
+    add_dependencies(fault_injection_test curl_external ${CURL_DEPS})
+    add_test(NAME fault_injection_test COMMAND fault_injection_test)
+    add_dependencies(fuzzer_unit_tests fault_injection_test)
 endif()
 
 # BUFQ fuzzer
@@ -1369,6 +1381,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/tls_websocket_mock_server.cc)
     endif()
     add_library(curl_fuzzer_proto_runtime OBJECT
+        proto_fuzzer/allocation_fault_injection.cc
         proto_fuzzer/api_lifecycle.cc
         proto_fuzzer/fuzzer_main.cc
         proto_fuzzer/ftp_mock_server.cc

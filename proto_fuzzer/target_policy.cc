@@ -12,6 +12,8 @@
 #include <curl/curl.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -345,6 +347,106 @@ void TrimRepeatedScalar(RepeatedScalar* values, std::size_t limit) {
   while (static_cast<std::size_t>(values->size()) > limit) {
     values->RemoveLast();
   }
+}
+
+/// Canonicalize the allocation failure plan to the same fixed-size sequence
+/// consumed by the runtime controller. Sorting lets its hot callback compare
+/// only the next ordinal, while retaining the lowest distinct values keeps
+/// an oversized mutation focused on reachable work.
+void CanonicalizeAllocationFailures(curl::fuzzer::proto::Scenario* scenario) {
+  std::array<std::uint32_t, scenario_limits::kMaxAllocationFailures> retained{};
+  std::size_t retained_count = 0;
+  const std::uint32_t maximum = static_cast<std::uint32_t>(scenario_limits::kMaxAllocationOrdinal);
+
+  for (const std::uint32_t raw : scenario->fail_allocations()) {
+    if (raw == 0) {
+      continue;
+    }
+    const std::uint32_t ordinal = 1U + ((raw - 1U) % maximum);
+    const auto begin = retained.begin();
+    const auto end = begin + static_cast<std::ptrdiff_t>(retained_count);
+    const auto position = std::lower_bound(begin, end, ordinal);
+    if (position != end && *position == ordinal) {
+      continue;
+    }
+    const std::size_t index = static_cast<std::size_t>(position - begin);
+    if (index >= retained.size()) {
+      continue;
+    }
+    if (retained_count < retained.size()) {
+      ++retained_count;
+    }
+    for (std::size_t destination = retained_count - 1; destination > index; --destination) {
+      retained[destination] = retained[destination - 1];
+    }
+    retained[index] = ordinal;
+  }
+
+  auto* values = scenario->mutable_fail_allocations();
+  values->Clear();
+  for (std::size_t index = 0; index < retained_count; ++index) {
+    values->Add(retained[index]);
+  }
+}
+
+/// Keep injected failures out of curl's debug event adapter. Its socket
+/// monitor is heap-backed, and rejecting the allocation that records a newly
+/// announced socket leaves a later CURL_POLL_REMOVE with no matching entry.
+/// Ordinary inputs still cover curl_easy_perform_ev; allocation plans use the
+/// equivalent blocking easy entrypoint and retain a stable allocation trace.
+void CanonicalizeAllocationFailureDrive(curl::fuzzer::proto::Scenario* scenario) {
+  if (!scenario->fail_allocations().empty() && scenario->has_api_plan() &&
+      scenario->api_plan().drive_mode() == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS) {
+    scenario->mutable_api_plan()->set_drive_mode(curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
+  }
+}
+
+/// Return whether a scenario can install MIME through curl's HTTP reader path.
+bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
+  switch (scenario.scheme()) {
+    case curl::fuzzer::proto::SCHEME_HTTP:
+    case curl::fuzzer::proto::SCHEME_HTTPS:
+    case curl::fuzzer::proto::SCHEME_WS:
+    case curl::fuzzer::proto::SCHEME_WSS:
+      return true;
+
+    case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
+    case curl::fuzzer::proto::SCHEME_TELNET:
+    case curl::fuzzer::proto::SCHEME_FTP:
+    case curl::fuzzer::proto::SCHEME_TFTP:
+    case curl::fuzzer::proto::SCHEME_GOPHER:
+    case curl::fuzzer::proto::SCHEME_GOPHERS:
+    default:
+      return false;
+  }
+}
+
+/// Keep an injected failure from leaving curl's MIME client-reader stack
+/// dangling. With line-ending conversion enabled, curl installs the MIME
+/// reader before allocating the conversion reader. If that second allocation
+/// fails, the current error path frees the MIME reader without clearing the
+/// installed stack pointer. Ordinary inputs still cover MIME plus conversion;
+/// failure plans retain MIME processing and use curl's unconverted reader
+/// path. Non-HTTP schemes do not install this reader, so their conversion
+/// options remain useful and safe even if a compatibility input carries MIME.
+void CanonicalizeAllocationFailureOptions(curl::fuzzer::proto::Scenario* scenario) {
+  if (scenario->fail_allocations().empty() || !scenario->has_mime_post() || !UsesHttpMimeReader(*scenario)) {
+    return;
+  }
+
+  auto* options = scenario->mutable_options();
+  int retained = 0;
+  for (int index = 0; index < options->size(); ++index) {
+    const auto option_id = options->Get(index).option_id();
+    if (option_id == curl::fuzzer::proto::CURLOPT_CRLF || option_id == curl::fuzzer::proto::CURLOPT_TRANSFERTEXT) {
+      continue;
+    }
+    if (retained != index) {
+      options->SwapElements(retained, index);
+    }
+    ++retained;
+  }
+  options->DeleteSubrange(retained, options->size() - retained);
 }
 
 /// Keep API work proportional to the fixed descriptor tables used by the
@@ -1727,6 +1829,20 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
 }  // namespace
 
+/// Apply execution-only allocation-failure safety rules. Fixed target
+/// postprocessors call this while serializing mutations; the shared runtime
+/// repeats it so the compatibility target keeps its persistent wire format
+/// while executing the same bounded, safe plan.
+/// @param scenario Parsed scenario to canonicalize in place.
+void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario) {
+  if (scenario == nullptr) {
+    return;
+  }
+  CanonicalizeAllocationFailures(scenario);
+  CanonicalizeAllocationFailureDrive(scenario);
+  CanonicalizeAllocationFailureOptions(scenario);
+}
+
 /// Complete normalization for a loaded or mutated fixed-target Scenario.
 /// Besides dispatch and timing controls, fixed lanes trim repeated-field and
 /// metadata suffixes that the runtime cannot consume. WebSocket lanes also
@@ -1745,6 +1861,7 @@ void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetP
   }
 
   ApplyLanePolicy(scenario, profile);
+  NormalizeScenarioForExecution(scenario);
   CanonicalizeOptionValueCases(scenario);
   // Canonicalization can materialize string values or prepend pin syntax.
   // Charge the final representation so normalization remains a fixed point.

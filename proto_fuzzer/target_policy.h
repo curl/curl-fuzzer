@@ -16,6 +16,7 @@
 
 namespace proto_fuzzer {
 
+void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario);
 void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile);
 
 }  // namespace proto_fuzzer

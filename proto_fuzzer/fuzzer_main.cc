@@ -14,9 +14,11 @@
 
 #include <cassert>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/scenario_runner.h"
 #include "proto_fuzzer/target_policy.h"
 
@@ -67,7 +69,10 @@ struct CurlGlobalBootstrap {
     // mock-peer teardown; those failures should be reported as socket errors,
     // not mistaken for process crashes.
     std::signal(SIGPIPE, SIG_IGN);
-    curl_global_init(CURL_GLOBAL_ALL);
+    if (!proto_fuzzer::allocation_fault_injection::InitializeCurl()) {
+      std::fputs("warning: libcurl allocation fault injection is unavailable\n", stderr);
+      (void)curl_global_init(CURL_GLOBAL_ALL);
+    }
   }
 };
 const CurlGlobalBootstrap kGlobalBootstrap;
@@ -85,6 +90,7 @@ namespace proto_fuzzer {
 /// @return Serialized size after mutation.
 std::size_t ProtoFuzzerCustomMutator(TargetProfile profile, std::uint8_t* data, std::size_t size, std::size_t max_size,
                                      unsigned int seed) {
+  allocation_fault_injection::Reset();
   EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario;
   return protobuf_mutator::libfuzzer::CustomProtoMutator(kUseBinaryFormat, data, size, max_size, seed, &scenario);
@@ -103,6 +109,7 @@ std::size_t ProtoFuzzerCustomMutator(TargetProfile profile, std::uint8_t* data, 
 std::size_t ProtoFuzzerCustomCrossOver(TargetProfile profile, const std::uint8_t* data1, std::size_t size1,
                                        const std::uint8_t* data2, std::size_t size2, std::uint8_t* out,
                                        std::size_t max_out_size, unsigned int seed) {
+  allocation_fault_injection::Reset();
   EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario1;
   curl::fuzzer::proto::Scenario scenario2;
@@ -120,10 +127,16 @@ std::size_t ProtoFuzzerCustomCrossOver(TargetProfile profile, const std::uint8_t
 /// @param size Number of bytes available at data.
 /// @return Always zero, as required by libFuzzer.
 int ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t* data, std::size_t size) {
+  allocation_fault_injection::Reset();
   EnsureTargetPostProcessor(profile);
   curl::fuzzer::proto::Scenario scenario;
   if (protobuf_mutator::libfuzzer::LoadProtoInput(kUseBinaryFormat, data, size, &scenario)) {
+    NormalizeScenarioForExecution(&scenario);
+    allocation_fault_injection::Configure(scenario.fail_allocations().data(),
+                                          static_cast<std::size_t>(scenario.fail_allocations_size()));
+    allocation_fault_injection::Arm();
     proto_fuzzer::RunScenario(scenario, RunModeFor(profile));
+    allocation_fault_injection::Reset();
   }
   return 0;
 }
