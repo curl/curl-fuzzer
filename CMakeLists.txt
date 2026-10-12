@@ -1082,10 +1082,16 @@ if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
     target_compile_definitions(curl_fuzzer_full_coverage PRIVATE
         CURL_FUZZER_COVERAGE_ONLY
         FUZZ_PROTOCOLS_ALL
-        LEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS)
+        LEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS
+        BUILDING_LIBCURL
+        DEBUGBUILD
+        HAVE_CONFIG_H)
+    target_include_directories(curl_fuzzer_full_coverage PRIVATE
+        ${CURL_PRIVATE_INCLUDE_DIRS})
     target_sources(curl_fuzzer_full_coverage PRIVATE
         full_coverage/public_api.cc
         full_coverage/utility_api.cc
+        full_coverage/dynamic_formatting.cc
         full_coverage/legacy_mutator.cc
         legacy_tlv_mutator.cc)
 endif()

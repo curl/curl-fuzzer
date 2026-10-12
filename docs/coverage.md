@@ -68,3 +68,8 @@ mutation and sanitizer-specific paths depend on the selected build/runtime.
 
 Utility probes cover the version string, documented date formats, and legacy
 escape/unescape aliases with short fixed strings and explicit binary lengths.
+
+Dynamic formatting probes use curl's real private buffer type and small
+explicit limits to exercise exact fits, staging boundaries, and size-limit
+errors. They allocate at most 1 KiB per case rather than depending on allocation
+failures or large formatted output.

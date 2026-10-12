@@ -29,6 +29,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *, size_t);
 namespace full_coverage {
 void ExercisePublicApiCoverage() { std::puts("public API probe"); }
 void ExerciseUtilityApiCoverage() { std::puts("utility API probe"); }
+void ExerciseDynamicFormattingCoverage() { std::puts("dynamic format probe"); }
 void ExerciseLegacyMutatorCoverage() { std::puts("mutator probe"); }
 }
 int main() {
@@ -70,7 +71,13 @@ int main() {
         env=environment,
     )
     assert result.stdout.splitlines() == (
-        ["public API probe", "utility API probe", "mutator probe", "engine continued"]
+        [
+            "public API probe",
+            "utility API probe",
+            "dynamic format probe",
+            "mutator probe",
+            "engine continued",
+        ]
         if profiling
         else []
     )
