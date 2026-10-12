@@ -220,6 +220,46 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
   }
 }
 
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+/// Retain protocol-specific outcomes in coverage and introspector builds.
+/// These peers already collect bounded state for focused tests; reading it
+/// after the transfer gives profiling builds visibility into the completed
+/// exchange without changing the protocol work performed by ordinary fuzzers.
+void ObserveProtocolPeerState(MockServerBase* mock) {
+  if (auto* ftp = dynamic_cast<FtpMockServer*>(mock)) {
+    const volatile std::size_t ftp_observation[] = {ftp->control_transcript().size(), ftp->uploaded_data().size(),
+                                                    ftp->opened_data_connection_count()};
+    (void)ftp_observation;
+  }
+
+  if (auto* tftp = dynamic_cast<TftpMockServer*>(mock)) {
+    const volatile std::size_t tftp_observation[] = {tftp->received_datagrams().size(), tftp->request_port(),
+                                                     tftp->transfer_port()};
+    (void)tftp_observation;
+  }
+
+  if (auto* websocket = dynamic_cast<WebSocketMockServer*>(mock)) {
+    const volatile std::size_t websocket_observation = websocket->manual_received_bytes();
+    (void)websocket_observation;
+  }
+
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  if (auto* websocket = dynamic_cast<TlsWebSocketMockServer*>(mock)) {
+    const volatile std::size_t tls_websocket_observation = websocket->completed_handshake_count();
+    (void)tls_websocket_observation;
+  }
+#endif
+
+#if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
+  if (auto* http3 = dynamic_cast<Http3MockServer*>(mock)) {
+    const volatile std::size_t http3_observation[] = {http3->handshake_complete(), http3->request_headers_received(),
+                                                      http3->executed_action_count(), http3->server_port()};
+    (void)http3_observation;
+  }
+#endif
+}
+#endif
+
 }  // namespace
 
 /// Execute one scenario under a complete target behaviour. An enum makes the
@@ -338,6 +378,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
                                                       upload.offset(),
                                                       upload.scripted()};
   (void)request_observation;
+  ObserveProtocolPeerState(mock.get());
 #endif
   return 0;
 }
