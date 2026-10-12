@@ -58,14 +58,26 @@ static volatile sig_atomic_t g_timeout_armed;
  * Counters do not change the runner's continue-on-error or exit-code behavior.
  */
 struct ReplayStatus {
+  /// Files selected for replay, including failed input preparation.
   size_t attempted;
+  /// Successfully read inputs whose fuzzer callbacks returned normally.
   size_t completed;
+  /// Callbacks interrupted by the per-input timeout.
   size_t timed_out;
+  /// Files whose open, allocation, seek, or read preparation failed.
   size_t input_errors;
+  /// Failed path metadata checks or directory traversals.
   size_t path_errors;
 };
+/// Aggregate counters across all file and directory arguments in this process.
 static ReplayStatus g_replay_status;
 
+/**
+ * Write numeric replay counters to FUZZ_REPLAY_STATUS_FILE on normal exit.
+ * An absent or empty path disables the sidecar. Open and write failures are
+ * logged without changing the runner's exit status. Callers must remove stale
+ * sidecars before replay because an interrupted process never reaches here.
+ */
 static void write_replay_status(void)
 {
   const char *path = getenv("FUZZ_REPLAY_STATUS_FILE");
