@@ -49,6 +49,10 @@ Path(sys.argv[1]).write_text(json.dumps({"complete": False, "targets": [
 ]}) + "\n", encoding="utf-8")
 PY
 
+# Persist the current target's replay evidence in REPLAY_STATUS. Arguments are
+# the outcome (executed or a skip reason) and exit code (null for skipped
+# targets). Per-target globals supply counts, sidecars, logs, and the fresh
+# profile pattern; the Python helper derives completeness for the selection.
 record_replay() {
   python3 - "${SCRIPTDIR}" "${REPLAY_STATUS}" "${TARGET}" "$1" "$2" \
     "${INPUT_COUNT}" "${COUNT_ERRORS}" "${COUNTER_FILE}" "${LOG_FILE}" \

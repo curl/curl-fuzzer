@@ -78,6 +78,14 @@ def _count(value: object, location: str) -> int:
 
 
 def _runner_counters(document: object) -> dict[str, int]:
+    """
+    Validate the runner's five nonnegative integer counters.
+
+    Completed and timed-out inputs cannot exceed attempted inputs, and input
+    errors cannot exceed attempts. Input errors may also accompany a timeout;
+    path errors describe metadata or traversal failures rather than attempts.
+    Raise CoverageReportError for missing, invalid, or inconsistent counters.
+    """
     record = _object(document, "runner status")
     counters = {
         name: _count(record.get(name), f"runner status.{name}")
@@ -165,6 +173,14 @@ def record_replay_result(
 
 
 def _replay_status(document: object) -> dict[str, Any]:
+    """
+    Validate selected-target outcomes and their aggregate completeness flag.
+
+    A complete target must have a successful exit, matching positive input and
+    completion counts, no detected errors, and a fresh nonempty profile. Other
+    outcomes remain explicit without requiring unavailable runner counters.
+    Return the validated document or raise CoverageReportError.
+    """
     status = _object(document, "replay status")
     rows = _list(status.get("targets"), "replay status.targets")
     for raw in rows:
