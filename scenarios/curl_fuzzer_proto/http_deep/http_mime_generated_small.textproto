@@ -1,0 +1,37 @@
+# Small generated sources cover nonempty, empty-pattern, and zero-repeat MIME
+# parts. Only six bytes are materialized across the top-level and nested body.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/generated-mime"
+request_headers: "Expect:"
+request_headers: "X-Fuzzer-Request: generated-mime"
+mime_post {
+  parts {
+    name: "repeated"
+    generated_data {
+      pattern: "ab"
+      repeat_count: 3
+    }
+  }
+  parts {
+    name: "message"
+    content_type: "multipart/alternative"
+    headers: "Content-Disposition: inline"
+    subparts {
+      parts {
+        name: "empty-pattern"
+        generated_data {}
+      }
+      parts {
+        name: "zero-repeat"
+        generated_data {
+          pattern: "z"
+          repeat_count: 0
+        }
+      }
+    }
+  }
+}
+connection {
+  initial_response: "HTTP/1.1 100 Continue\r\n\r\n"
+  on_readable: "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}
