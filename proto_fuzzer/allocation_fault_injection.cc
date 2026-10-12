@@ -20,19 +20,34 @@
 namespace proto_fuzzer::allocation_fault_injection {
 namespace {
 
+/// Keep one thread's bounded failure plan and allocation counters without
+/// allocating memory in the controller itself.
 struct ThreadState {
+  /// Sorted, distinct one-based ordinals; only ordinal_count entries are valid.
   std::array<std::uint32_t, scenario_limits::kMaxAllocationFailures> ordinals{};
+  /// Number of valid ordinals retained in the fixed-capacity plan.
   std::size_t ordinal_count = 0;
+  /// Index of the next configured ordinal that has not yet failed.
   std::size_t next_ordinal = 0;
+  /// Positive-size allocation attempts observed while this thread is armed.
   std::uint64_t allocation_attempts = 0;
+  /// Allocation attempts rejected at configured ordinals.
   std::uint64_t injected_failures = 0;
+  /// Whether positive-size callbacks should be counted and checked for failure.
   bool armed = false;
 };
 
+/// Isolate each calling thread's failure plan and counters.
 thread_local ThreadState state;
+/// Install and verify libcurl's process-wide allocator callbacks only once.
 std::once_flag initialize_once;
+/// Remember whether the initialization probe reached the installed callbacks.
 bool callbacks_active = false;
 
+/// Fold a positive ordinal into the bounded one-based allocation range.
+/// @param ordinal Requested allocation attempt number; zero disables the entry.
+/// @return Zero for a disabled entry, otherwise a value in
+/// 1..scenario_limits::kMaxAllocationOrdinal.
 std::uint32_t CanonicalOrdinal(std::uint32_t ordinal) noexcept {
   if (ordinal == 0) {
     return 0;
@@ -41,6 +56,10 @@ std::uint32_t CanonicalOrdinal(std::uint32_t ordinal) noexcept {
   return 1U + ((ordinal - 1U) % maximum);
 }
 
+/// Insert an ordinal into the calling thread's sorted, unique plan.
+/// When the plan is full, retain the smallest ordinals by dropping its largest
+/// entry if the new value sorts before it. Zero and duplicates are ignored.
+/// @param ordinal Canonical allocation attempt number to retain.
 void InsertOrdinal(std::uint32_t ordinal) noexcept {
   if (ordinal == 0) {
     return;
@@ -64,6 +83,12 @@ void InsertOrdinal(std::uint32_t ordinal) noexcept {
   state.ordinals[index] = ordinal;
 }
 
+/// Count an armed positive-size allocation and reject a selected attempt.
+/// Each configured ordinal fails once; rejected calls advance the plan and
+/// failure counter and set errno to ENOMEM. Zero-size and disarmed calls leave
+/// the controller state unchanged.
+/// @param positive_size Whether the allocation requests nonzero storage.
+/// @return true when the caller should reject this allocation.
 bool ShouldFail(bool positive_size) noexcept {
   if (!positive_size || !state.armed) {
     return false;
