@@ -13,6 +13,7 @@ connection {
   on_readable: "200 type set\r\n"
   on_readable: "213 11\r\n"
   on_readable: "150 opening data connection\r\n"
-  on_readable: "226 transfer complete\r\n"
+  # Exercise the peer's bounded repair of an otherwise complete final reply.
+  on_readable: "226 transfer complete"
 }
 subsequent_connections { initial_response: "hello world" }
