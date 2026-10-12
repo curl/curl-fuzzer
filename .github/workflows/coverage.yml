@@ -53,16 +53,10 @@ jobs:
       - name: Publish summary
         if: always()
         run: |
-          if [[ -f build-coverage/coverage/summary.txt ]]; then
-            {
-              echo "## Coverage summary"
-              echo ''
-              echo '```'
-              cat build-coverage/coverage/summary.txt
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f build-coverage/coverage/report.md ]]; then
+            cat build-coverage/coverage/report.md >> "$GITHUB_STEP_SUMMARY"
           else
-            echo 'build-coverage/coverage/summary.txt not produced' >> "$GITHUB_STEP_SUMMARY"
+            echo 'build-coverage/coverage/report.md not produced' >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload coverage artifacts
@@ -73,4 +67,10 @@ jobs:
           path: |
             build-coverage/coverage/html
             build-coverage/coverage/summary.txt
+            build-coverage/coverage/harness-html
+            build-coverage/coverage/harness-summary.txt
+            build-coverage/coverage/curl-coverage.json
+            build-coverage/coverage/harness-coverage.json
+            build-coverage/coverage/report.md
+            build-coverage/coverage/gaps.json
           if-no-files-found: warn
