@@ -1619,8 +1619,14 @@ void Http3MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::prot
     // Alternate curl readiness processing with one bounded peer turn. Neither
     // side blocks, so an idle limit prevents a malformed case spinning forever.
     CURLMcode result = driver->Start(&still_running);
-    for (int iteration = 0; result == CURLM_OK && iteration < kMaxDriveIterations && still_running != 0; ++iteration) {
+    for (int iteration = 0; result == CURLM_OK && iteration < kMaxDriveIterations; ++iteration) {
       std::size_t progress = impl_->DrivePeerTurn();
+      // Curl can queue the final ACK or reset while completing the transfer.
+      // Give the peer its next bounded turn before stopping, without driving
+      // curl again or extending the existing operation budget.
+      if (still_running == 0) {
+        break;
+      }
       const MultiSocketDriver::DriveResult drive_result = driver->DriveReady(&still_running);
       result = drive_result.code;
       progress += drive_result.made_progress ? 1U : 0U;

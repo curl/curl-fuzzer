@@ -1,0 +1,20 @@
+# Cancel a callback upload after two of the advertised four bytes. The peer
+# can consume curl's final stream-reset traffic after the client completes.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/upload/callback-abort"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 4 }
+request_headers: "Expect:"
+upload {
+  data: "ab"
+  read_sizes: 1
+  terminal: UPLOAD_TERMINAL_ABORT
+}
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      finish_stream: true
+    }
+  }
+}
