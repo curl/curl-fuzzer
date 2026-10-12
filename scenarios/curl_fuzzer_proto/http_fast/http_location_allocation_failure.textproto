@@ -1,0 +1,9 @@
+# Exercise the HTTP Location parser when Curl_copy_header_value cannot retain
+# the header. Allocation ordinals are target- and build-specific; this one was
+# derived from the full HTTP protofuzzer coverage build.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/parser"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nX-Fault-Checkpoint: ready\r\nLocation: /next\r\nContent-Length: 0\r\n\r\n"
+}
+fail_allocations: 76
