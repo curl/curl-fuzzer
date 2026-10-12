@@ -224,8 +224,10 @@ void MockServerBase::HandleDetachedMulti(CurlMultiPtr /*multi*/) {}
 /// @param scenario Scenario whose response the mock must prepare.
 /// @param use_events Select curl's debug event-based easy entrypoint when
 ///        the concrete mock supports it.
-void MockServerBase::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario, bool /*use_events*/) {
-  DriveScenario(easy, scenario);
+/// @return Transfer result reported by the selected easy or fallback drive.
+CURLcode MockServerBase::DriveEasyScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario,
+                                           bool /*use_events*/) {
+  return DriveScenario(easy, scenario);
 }
 
 /// Establish a CONNECT_ONLY transport, then perform bounded direct I/O.

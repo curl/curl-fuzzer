@@ -28,6 +28,12 @@ inline constexpr std::size_t kMaxResponseChunks = 16;
 /// Scalar options are cheap, but a finite list prevents protobuf allocation
 /// from growing independently of curl work.
 inline constexpr std::size_t kMaxOptions = 64;
+/// A short plan reaches combinations of recovery paths without letting one
+/// input turn every allocation into an artificial failure cascade.
+inline constexpr std::size_t kMaxAllocationFailures = 4;
+/// Fold mutated ordinals into a range large enough for the bounded transfer
+/// drivers while keeping most scalar mutations capable of selecting a call.
+inline constexpr std::size_t kMaxAllocationOrdinal = 4096;
 /// Request headers retain useful combinatorial interactions at this size.
 inline constexpr std::size_t kMaxRequestHeaders = 16;
 /// Host-cache mutations need only a compact sequence of add/remove/wildcard

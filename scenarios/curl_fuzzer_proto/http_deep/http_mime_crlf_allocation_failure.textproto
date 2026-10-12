@@ -1,0 +1,54 @@
+# Exact 533-byte CI regression input after textproto round-trip. Ordinal 102
+# rejected curl's CRLF conversion-reader allocation after its MIME reader was
+# installed; the shared execution policy now retains MIME and removes
+# line-ending conversion whenever an allocation plan is active.
+scheme: SCHEME_HTTP
+host_path: "altsvc-origin.test/crlf/source"
+options {
+  option_id: CURLOPT_UPLOAD
+  bool_value: true
+}
+options {
+  option_id: CURLOPT_UPLOAD
+  bool_value: true
+}
+options {
+  option_id: CURLOPT_CUSTOMREQUEST
+  string_value: "POST"
+}
+options {
+  option_id: CURLOPT_INFILESIZE_LARGE
+  uint_value: 11
+}
+options {
+  option_id: CURLOPT_CRLF
+  bool_value: true
+}
+options {
+  option_id: CURLOPT_FOLLOWLOCATION
+  uint_value: 10
+}
+connection {
+  on_readable: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://upload.test/crlf/destination\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+  manual_probes {}
+}
+mime_post {
+  parts {
+    filename: "\022"
+  }
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK"
+  on_readable: "H"
+}
+upload {
+  data: "alpha\nbeta\n"
+  read_sizes: 3
+  read_sizes: 2
+  read_sizes: 102
+  read_sizes: 0
+}
+cookie_file: "HTTP/1.1 302 Found\r\nLocation: http://auth-target.test/public\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+altsvc_file: "HTTP/1.1 200 OK\r\nContent-Len\000\000\000) 1744\r\n\r\n"
+netrc_file: "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
+fail_allocations: 102

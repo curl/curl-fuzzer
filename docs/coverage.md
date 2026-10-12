@@ -73,3 +73,47 @@ Dynamic formatting probes use curl's real private buffer type and small
 explicit limits to exercise exact fits, staging boundaries, and size-limit
 errors. They allocate at most 1 KiB per case rather than depending on allocation
 failures or large formatted output.
+
+Every structured target supports allocation fault injection through the
+scenario's `fail_allocations` field. The shared runtime installs libcurl's
+[`curl_global_init_mem`](https://curl.se/libcurl/c/curl_global_init_mem.html)
+callbacks once, before its ordinary global initialization, then arms them only
+for the shared scenario runner. Protobuf parsing remains outside the selected
+sequence; libcurl easy-handle setup, transfer driving, result probes, and
+teardown are all part of it. Result probes still honor their public state
+preconditions: in particular, upkeep runs only after an easy drive has
+progressed far enough to attach its private multi.
+
+Values are one-based positive-size allocation attempt numbers. Fixed target
+policies sort, deduplicate, and retain at most four ordinals in the range
+1..4096; the compatibility runtime applies the same safety bound without
+rewriting its persistent input. A plan such as `5, 9` rejects the fifth
+attempt, then interprets 9 as the ninth attempt on the execution path already
+changed by that first failure. Ordinals reproduce within the same target,
+build, TLS backend, and input; they are not source locations or portable
+identifiers.
+
+The API target keeps its event-based easy drive for inputs without a failure
+plan. When a plan is present, the target normalizes that drive to ordinary
+`curl_easy_perform`: after its socket-monitor allocation fails, curl's current
+debug event adapter returns a status outside the socket-callback contract and
+later removes a record it never inserted. This keeps the ordinal plan focused
+on libcurl transfer and parser state without call-stack-dependent exclusions.
+
+Likewise, an HTTP-family MIME body with an active plan drops the `CURLOPT_CRLF`
+and `CURLOPT_TRANSFERTEXT` line-ending conversion options before execution.
+curl currently installs its MIME client reader before allocating the optional
+conversion reader; if that second allocation fails, its error path frees the
+installed reader without clearing the stack pointer. MIME allocation failures
+remain enabled, and inputs without a failure plan continue to cover the
+combined MIME and conversion path. The compatibility target applies this rule
+to its parsed execution copy without rewriting the persistent corpus message.
+
+The active state is thread-local. Worker-thread allocations pass through, and
+only allocations routed through libcurl's configured callbacks are counted.
+This includes most libcurl storage and some dependency allocations made
+through curl-provided adapters, but not general C++ harness, protobuf, or TLS
+library heaps. Free is never rejected, a rejected realloc preserves its input,
+and zero-size calls do not consume an ordinal. Each fuzzer entry resets the
+controller before parsing so the standalone runner's timeout jump cannot carry
+an armed plan into the next input.

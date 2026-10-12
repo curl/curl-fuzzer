@@ -128,6 +128,12 @@ message Scenario {
   // the provider-default profile preserves coverage of OpenSSL's evolving
   // preferred groups. Other fixed target policies discard this field.
   TlsGroupProfile tls_group_profile = 24;
+  // Fail selected one-based positive-size allocation attempts while the
+  // target drives this transfer. The shared controller sorts, deduplicates,
+  // and bounds the list. Later ordinals refer to the execution path already
+  // changed by earlier failures, and are stable only for the same target,
+  // build, backend, and input.
+  repeated uint32 fail_allocations = 25 [packed = true];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

@@ -30,6 +30,7 @@ using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
+using proto_fuzzer::NormalizeScenarioForExecution;
 using proto_fuzzer::NormalizeScenarioForTarget;
 using proto_fuzzer::RunModeFor;
 using proto_fuzzer::ScenarioRunMode;
@@ -1543,6 +1544,98 @@ void TestApiEasyDrivesDropMultiOnlyWork() {
   }
 }
 
+void TestApiAllocationFailuresAvoidDebugEventAdapter() {
+  Scenario scenario;
+  scenario.mutable_api_plan()->set_drive_mode(
+      curl::fuzzer::proto::API_DRIVE_EASY_EVENTS);
+  scenario.add_fail_allocations(76);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kApi);
+
+  Expect(scenario.api_plan().drive_mode() ==
+             curl::fuzzer::proto::API_DRIVE_EASY_PERFORM,
+         "API allocation plan retained the debug event adapter");
+  Expect(scenario.fail_allocations_size() == 1 &&
+             scenario.fail_allocations(0) == 76,
+         "API drive normalization changed the allocation plan");
+}
+
+void TestAllocationFailuresAvoidDanglingMimeReader() {
+  Scenario scenario;
+  scenario.mutable_mime_post()->add_parts()->set_data("mime body");
+  scenario.add_fail_allocations(102);
+  auto* crlf = scenario.add_options();
+  crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
+  crlf->set_bool_value(true);
+  auto* transfer_text = scenario.add_options();
+  transfer_text->set_option_id(curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
+  transfer_text->set_bool_value(true);
+  auto* retained = scenario.add_options();
+  retained->set_option_id(curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
+  retained->set_uint_value(1);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kDeepHttp);
+
+  Expect(scenario.has_mime_post() && scenario.fail_allocations_size() == 1 &&
+             scenario.fail_allocations(0) == 102,
+         "MIME allocation safety changed the body or failure plan");
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION,
+         "MIME allocation safety did not remove only conversion options");
+
+  Scenario ordinary;
+  ordinary.mutable_mime_post()->add_parts()->set_data("mime body");
+  auto* ordinary_crlf = ordinary.add_options();
+  ordinary_crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
+  ordinary_crlf->set_bool_value(true);
+  NormalizeScenarioForTarget(&ordinary, TargetProfile::kDeepHttp);
+  Expect(ordinary.options_size() == 1 &&
+             ordinary.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_CRLF,
+         "ordinary MIME input lost CRLF conversion coverage");
+
+  ordinary.add_fail_allocations(0);
+  NormalizeScenarioForExecution(&ordinary);
+  Expect(ordinary.fail_allocations().empty() && ordinary.options_size() == 1,
+         "inactive allocation ordinal changed MIME execution");
+
+  Scenario no_mime;
+  no_mime.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  no_mime.add_fail_allocations(102);
+  no_mime.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
+  no_mime.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
+  NormalizeScenarioForExecution(&no_mime);
+  Expect(no_mime.options_size() == 2,
+         "allocation safety removed conversion options without a MIME body");
+
+  Scenario compatibility;
+  compatibility.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  compatibility.mutable_mime_post()->add_parts()->set_data("mime body");
+  compatibility.add_fail_allocations(102);
+  compatibility.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_CRLF);
+  compatibility.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
+  NormalizeScenarioForExecution(&compatibility);
+  Expect(compatibility.options_size() == 0 &&
+             compatibility.fail_allocations_size() == 1 &&
+             compatibility.fail_allocations(0) == 102,
+         "compatibility execution retained the unsafe MIME reader shape");
+
+  Scenario non_http;
+  non_http.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+  non_http.mutable_mime_post()->add_parts()->set_data("inert");
+  non_http.add_fail_allocations(102);
+  non_http.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
+  non_http.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
+  NormalizeScenarioForExecution(&non_http);
+  Expect(non_http.options_size() == 2,
+         "allocation safety removed conversion options for non-HTTP MIME");
+}
+
 void TestProfileRunModes() {
   Expect(RunModeFor(TargetProfile::kCompatibility) ==
              ScenarioRunMode::kProtocolCoverage,
@@ -1618,12 +1711,66 @@ void TestCompatibilityProfileIsNoOp() {
   pin->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
   pin->set_string_value(
       std::string(proto_fuzzer::scenario_limits::kMaxMetadataBytes + 17, 'p'));
+  scenario.add_fail_allocations(9);
+  scenario.add_fail_allocations(0);
+  scenario.add_fail_allocations(9);
   const std::string before = scenario.SerializeAsString();
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kCompatibility);
 
   Expect(scenario.SerializeAsString() == before,
          "compatibility profile changed an accumulated-corpus input");
+}
+
+void TestAllocationFailurePlansAreCanonicalized() {
+  constexpr TargetProfile kFixedProfiles[] = {
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kSocks4,
+      TargetProfile::kResolver,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kFastGopher,
+      TargetProfile::kApi,
+      TargetProfile::kMulti,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kFixedProfiles) {
+    Scenario scenario;
+    for (const std::uint32_t ordinal : {9U, 0U, 3U, 9U, 1U, 7U, 2U}) {
+      scenario.add_fail_allocations(ordinal);
+    }
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.fail_allocations_size() == 4 &&
+               scenario.fail_allocations(0) == 1 &&
+               scenario.fail_allocations(1) == 2 &&
+               scenario.fail_allocations(2) == 3 &&
+               scenario.fail_allocations(3) == 7,
+           "fixed policy did not sort, deduplicate, and bound allocation failures");
+    const std::string normalized = scenario.SerializeAsString();
+    NormalizeScenarioForTarget(&scenario, profile);
+    Expect(scenario.SerializeAsString() == normalized,
+           "allocation failure normalization was not idempotent");
+  }
+
+  Scenario folded;
+  folded.add_fail_allocations(
+      static_cast<std::uint32_t>(proto_fuzzer::scenario_limits::kMaxAllocationOrdinal + 1));
+  NormalizeScenarioForTarget(&folded, TargetProfile::kFastHttp);
+  Expect(folded.fail_allocations_size() == 1 &&
+             folded.fail_allocations(0) == 1,
+         "allocation failure ordinal was not folded into the runtime range");
 }
 
 void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
@@ -2015,6 +2162,10 @@ void TestNormalizationPipelineIsIdempotent() {
       scenario.mutable_upload()->add_read_sizes(999999);
       scenario.mutable_upload()->set_terminal(
           curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
+      scenario.add_fail_allocations(9);
+      scenario.add_fail_allocations(0);
+      scenario.add_fail_allocations(3);
+      scenario.add_fail_allocations(9);
       scenario.mutable_api_plan()->set_drive_mode(
           curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
       scenario.mutable_api_plan()->set_pause_response_once(true);
@@ -2103,8 +2254,11 @@ int main() {
   TestMultiPolicyRetainsAndBoundsItsPlan();
   TestOtherPoliciesDiscardMultiPlans();
   TestApiEasyDrivesDropMultiOnlyWork();
+  TestApiAllocationFailuresAvoidDebugEventAdapter();
+  TestAllocationFailuresAvoidDanglingMimeReader();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
+  TestAllocationFailurePlansAreCanonicalized();
   TestNonH2OriginPoliciesDiscardAcceptedPushMode();
   TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget();
   TestHttpsH2PolicyBoundsStructuredPlan();

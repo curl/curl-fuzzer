@@ -1,0 +1,18 @@
+# Regression from an early easy-events allocation failure. The API policy
+# routes plans through ordinary easy-perform before execution; ordinal 53 then
+# rejects creation of its internal multi, and post-transfer upkeep must not
+# inspect that incomplete state.
+scheme: SCHEME_HTTP
+host_path: "api.test/event\201s"
+connection {
+  initial_response: "api.test/event\201s"
+  on_readable: "events"
+  server_frames { rsv1: true }
+}
+api_plan {
+  share_data_selectors: 0
+  share_data_selectors: 0
+  drive_mode: API_DRIVE_EASY_EVENTS
+  reentrant_probe_selectors: 1
+}
+fail_allocations: 53
