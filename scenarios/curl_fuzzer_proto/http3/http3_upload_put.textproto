@@ -1,0 +1,19 @@
+# A short callback upload completes both sides of an ordinary request stream.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/upload/put"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 4 }
+request_headers: "Expect:"
+upload {
+  data: "data"
+  read_sizes: 2
+  terminal: UPLOAD_TERMINAL_EOF
+}
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      finish_stream: true
+    }
+  }
+}
