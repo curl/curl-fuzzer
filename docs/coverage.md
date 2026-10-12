@@ -20,14 +20,23 @@ The generated reports under `build-coverage/coverage/` are:
 - `curl-coverage.json` and `harness-coverage.json`,
   scoped LLVM exports for further analysis;
 - `report.md` and `gaps.json`, separate line, function,
-  region, and branch counts plus ranked remaining gaps.
+  region, and branch counts plus ranked remaining gaps;
+- `replay-status.json`, per-target input counts, exit codes, runner counters,
+  and fresh profile evidence;
+- `replay-logs/` and `replay-counters/`, retained target diagnostics and
+  numeric input outcomes.
 
 Percentages use exact covered/total counters. An unavailable metric or empty
 denominator is not reported as 100%. Counts cover sources mapped into the
 selected binaries; disabled features and other platforms require separate
 builds. Compare changes using the same curl revision, toolchain, features, and
 corpora, and investigate failed or incomplete replay before interpreting a
-result as complete.
+result as complete. `report.md` labels the selected replay as complete or
+partial before presenting coverage percentages. A complete replay requires
+every selected target to finish every counted input without detected errors
+and to write a fresh nonempty profile; it does not mean 100% source coverage.
+Failed, missing, or incomplete targets remain explicit while later targets
+continue to contribute partial coverage.
 
 Measure a local curl checkout with:
 
@@ -44,9 +53,13 @@ TARGETS=curl_fuzzer_proto_http \
 ./scripts/run_coverage.sh
 ```
 
+Each invocation replaces the previous replay profiles and derived reports,
+so a single-target rerun reports only that selection. Failed merges retain
+replay diagnostics without leaving old coverage reports available.
+
 The GitHub Actions `Coverage` workflow is manual. It uploads both source reports
-and their gap summaries, writes `report.md` to the job summary, and reuses a
-public-corpus cache whose key changes each ISO week.
+and their gap summaries and replay diagnostics, writes `report.md` to the job
+summary, and reuses a public-corpus cache whose key changes each ISO week.
 
 For controlled A/B performance and source-coverage comparisons, see
 [Benchmarking](benchmarking.md).
