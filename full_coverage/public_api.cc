@@ -42,6 +42,15 @@ void ExerciseVariadicFormatting(FILE *stream, const char *format, ...)
   va_end(args);
 }
 
+/** Exercise the stdout va_list wrapper with an empty formatted result. */
+void ExerciseVariadicStdout(const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  curl_mvprintf(format, args);
+  va_end(args);
+}
+
 /** Consume the in-memory serialization produced by the legacy form API. */
 size_t DiscardFormData(void *, const char *, size_t length)
 {
@@ -65,6 +74,22 @@ void ExerciseLegacyForms()
       {CURLFORM_COPYCONTENTS, "array-value"},
       {CURLFORM_END, nullptr}};
   curl_formadd(&first, &last, CURLFORM_ARRAY, fields, CURLFORM_END);
+  // Multiple files in one field create the legacy API's subordinate chain.
+  // /dev/null supplies a deterministic, empty local file for serialization.
+  curl_formadd(&first, &last, CURLFORM_COPYNAME, "empty-files",
+               CURLFORM_FILE, "/dev/null", CURLFORM_CONTENTTYPE, "text/plain",
+               CURLFORM_FILE, "/dev/null", CURLFORM_FILENAME, "empty.txt",
+               CURLFORM_END);
+
+  // A name containing NUL bytes is documented as invalid. Put it on the last
+  // of three files so rejection cleans up both copied fields and a partially
+  // constructed subordinate chain, while preserving the previously added form.
+  char invalid_name[] = {'a', '\0', 'b'};
+  curl_formadd(&first, &last, CURLFORM_COPYNAME, "invalid-files",
+               CURLFORM_FILE, "/dev/null", CURLFORM_FILE, "/dev/null",
+               CURLFORM_FILE, "/dev/null", CURLFORM_COPYNAME, invalid_name,
+               CURLFORM_NAMELENGTH, static_cast<long>(sizeof(invalid_name)),
+               CURLFORM_END);
   if(first)
     curl_formget(first, nullptr, DiscardFormData);
   curl_formfree(first);
@@ -90,6 +115,9 @@ void ExercisePublicApiCoverage()
   curl_msnprintf(buffer, 0, "%s", "zero-capacity");
   curl_msprintf(buffer, "%s:%d", "value", 42);
   curl_free(curl_maprintf("%2$s:%1$d", 42, "position"));
+  // The stdout wrappers remain quiet while covering their public entrypoints.
+  curl_mprintf("%s", "");
+  ExerciseVariadicStdout("%s", "");
 
   FILE *stream = std::tmpfile();
   if(stream)
