@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import sys
 from collections.abc import Sequence
@@ -74,6 +75,135 @@ def _count(value: object, location: str) -> int:
     if type(value) is not int or value < 0:
         raise CoverageReportError(f"{location}: expected a nonnegative integer")
     return value
+
+
+def _runner_counters(document: object) -> dict[str, int]:
+    record = _object(document, "runner status")
+    counters = {
+        name: _count(record.get(name), f"runner status.{name}")
+        for name in (
+            "attempted",
+            "completed",
+            "timed_out",
+            "input_errors",
+            "path_errors",
+        )
+    }
+    if (
+        counters["completed"] + counters["timed_out"] > counters["attempted"]
+        or counters["input_errors"] > counters["attempted"]
+    ):
+        raise CoverageReportError("runner status: outcomes exceed attempted inputs")
+    return counters
+
+
+def record_replay_result(
+    status_file: Path,
+    target: str,
+    outcome: str,
+    exit_code: int | None,
+    expected_inputs: int,
+    count_errors: int,
+    counter_file: Path,
+    log_file: Path,
+    profile_pattern: str,
+) -> None:
+    """Persist one target result while allowing subsequent targets to replay."""
+    counters = None
+    counter_error = None
+    profiles_written = 0
+    if outcome == "executed":
+        try:
+            counters = _runner_counters(json.loads(counter_file.read_text()))
+        except (OSError, UnicodeError, ValueError) as error:
+            counter_error = str(error)
+        profiles_written = sum(
+            Path(filename).is_file() and Path(filename).stat().st_size > 0
+            for filename in glob.glob(profile_pattern)
+        )
+        if (
+            exit_code != 0
+            or count_errors
+            or (
+                counters
+                and any(
+                    counters[name]
+                    for name in ("timed_out", "input_errors", "path_errors")
+                )
+            )
+        ):
+            outcome = "failed"
+        elif (
+            counters is not None
+            and expected_inputs > 0
+            and counters["attempted"] == counters["completed"] == expected_inputs
+            and profiles_written > 0
+        ):
+            outcome = "complete"
+        else:
+            outcome = "incomplete"
+    result = {
+        "target": target,
+        "outcome": outcome,
+        "exit_code": exit_code,
+        "expected_inputs": expected_inputs,
+        "count_errors": count_errors,
+        "counters": counters,
+        "counter_error": counter_error,
+        "profiles_written": profiles_written,
+        "log": str(log_file),
+    }
+    status = json.loads(status_file.read_text())
+    for index, row in enumerate(status["targets"]):
+        if row["target"] == target:
+            status["targets"][index] = result
+            break
+    status["complete"] = bool(status["targets"]) and all(
+        row["outcome"] == "complete" for row in status["targets"]
+    )
+    status_file.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
+
+
+def _replay_status(document: object) -> dict[str, Any]:
+    status = _object(document, "replay status")
+    rows = _list(status.get("targets"), "replay status.targets")
+    for raw in rows:
+        row = _object(raw, "replay target")
+        if not isinstance(row.get("target"), str) or row.get("outcome") not in {
+            "complete",
+            "failed",
+            "incomplete",
+            "missing_binary",
+            "no_corpus",
+            "empty_corpus",
+        }:
+            raise CoverageReportError("replay target: invalid identity or outcome")
+        if row["outcome"] == "complete":
+            counters = _runner_counters(row.get("counters"))
+            expected = _count(
+                row.get("expected_inputs"), "replay target.expected_inputs"
+            )
+            if (
+                _count(row.get("exit_code"), "replay target.exit_code") != 0
+                or _count(row.get("count_errors"), "replay target.count_errors")
+                or not _count(
+                    row.get("profiles_written"), "replay target.profiles_written"
+                )
+                or expected == 0
+                or counters["attempted"] != expected
+                or counters["completed"] != expected
+                or any(
+                    counters[name]
+                    for name in ("timed_out", "input_errors", "path_errors")
+                )
+            ):
+                raise CoverageReportError(
+                    "replay target: incomplete replay marked complete"
+                )
+    complete = bool(rows) and all(row["outcome"] == "complete" for row in rows)
+    if type(status.get("complete")) is not bool or status["complete"] != complete:
+        raise CoverageReportError("replay status: inconsistent completeness flag")
+    return status
 
 
 def _metric(summary: dict[str, Any], name: str, location: str) -> CoverageCount | None:
@@ -227,7 +357,9 @@ def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("`", "\\`").replace("\n", " ")
 
 
-def render_markdown(reports: Sequence[dict[str, Any]], limit: int) -> str:
+def render_markdown(
+    reports: Sequence[dict[str, Any]], limit: int, replay: dict[str, Any] | None = None
+) -> str:
     """Render counts and prioritized gaps with their measurement limitations."""
     lines = [
         "# Coverage gaps",
@@ -239,6 +371,28 @@ def render_markdown(reports: Sequence[dict[str, Any]], limit: int) -> str:
         ),
         "",
     ]
+    if replay is not None:
+        rows = replay["targets"]
+        completed = sum(row["outcome"] == "complete" for row in rows)
+        state = "complete" if replay["complete"] else "partial"
+        lines += [
+            "## Selected corpus replay",
+            "",
+            f"Replay is **{state}**: {completed} / {len(rows)} selected targets completed.",
+            "Completeness describes this selected replay, independently of coverage percentages.",
+            "",
+            "| Target | Outcome | Exit | Completed / declared inputs | Count errors | Profiles | Log |",
+            "| --- | --- | ---: | ---: | ---: | ---: | --- |",
+        ]
+        for row in rows:
+            counters = row.get("counters") or {}
+            lines.append(
+                f"| {_cell(row['target'])} | {_cell(row['outcome'])} | "
+                f"{row.get('exit_code')} | {counters.get('completed', 'unavailable')} / "
+                f"{row.get('expected_inputs', 'unavailable')} | {row.get('count_errors', 0)} | "
+                f"{row.get('profiles_written', 0)} | {_cell(row.get('log', 'unavailable'))} |"
+            )
+        lines.append("")
     for report in reports:
         lines += [
             f"## {_cell(report['label'])}",
@@ -367,6 +521,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--harness", required=True, type=Path)
     parser.add_argument("--output", type=Path, help="Markdown output; default: stdout")
     parser.add_argument("--json-output", type=Path)
+    parser.add_argument("--replay-status", type=Path)
     parser.add_argument(
         "--limit", type=int, default=20, help="Rows per ranking (default: 20)"
     )
@@ -383,14 +538,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ("curl-fuzzer", args.harness),
             )
         ]
-        markdown = render_markdown(reports, args.limit)
+        replay = (
+            _replay_status(json.loads(args.replay_status.read_text(encoding="utf-8")))
+            if args.replay_status
+            else None
+        )
+        markdown = render_markdown(reports, args.limit, replay)
         if args.output:
             args.output.write_text(markdown, encoding="utf-8")
         else:
             sys.stdout.write(markdown)
         if args.json_output:
+            result: dict[str, Any] = {"reports": reports}
+            if replay is not None:
+                result["replay"] = replay
             args.json_output.write_text(
-                json.dumps({"reports": reports}, indent=2) + "\n", encoding="utf-8"
+                json.dumps(result, indent=2) + "\n", encoding="utf-8"
             )
     except (OSError, UnicodeError, json.JSONDecodeError, CoverageReportError) as error:
         print(f"coverage summary: {error}", file=sys.stderr)
