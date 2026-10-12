@@ -51,6 +51,44 @@ static sigjmp_buf g_timeout_env;
 static const char *g_current_path;
 static volatile sig_atomic_t g_timeout_armed;
 
+/**
+ * Optional replay accounting for coverage runs. Completed inputs returned from
+ * the callback after a successful read; timeouts and input preparation errors
+ * remain separate. Path errors include failed metadata checks and traversals.
+ * Counters do not change the runner's continue-on-error or exit-code behavior.
+ */
+struct ReplayStatus {
+  size_t attempted;
+  size_t completed;
+  size_t timed_out;
+  size_t input_errors;
+  size_t path_errors;
+};
+static ReplayStatus g_replay_status;
+
+static void write_replay_status(void)
+{
+  const char *path = getenv("FUZZ_REPLAY_STATUS_FILE");
+  if(!path || !*path)
+    return;
+
+  FILE *status = fopen(path, "w");
+  if(!status) {
+    fprintf(stderr, "[%s] Replay status open failed.\n", path);
+    return;
+  }
+  const int written = fprintf(
+    status,
+    "{\"attempted\":%zu,\"completed\":%zu,\"timed_out\":%zu,"
+    "\"input_errors\":%zu,\"path_errors\":%zu}\n",
+    g_replay_status.attempted, g_replay_status.completed,
+    g_replay_status.timed_out, g_replay_status.input_errors,
+    g_replay_status.path_errors);
+  const int closed = fclose(status);
+  if(written < 0 || closed != 0)
+    fprintf(stderr, "[%s] Replay status write failed.\n", path);
+}
+
 static void timeout_handler(int sig)
 {
   (void)sig;
@@ -87,11 +125,13 @@ static void install_timeout_handler(void)
  */
 static void run_one_file(const char *path, bool verbose)
 {
+  g_replay_status.attempted++;
   if(verbose)
     printf("[%s] ", path);
 
   FILE *infile = fopen(path, "rb");
   if(!infile) {
+    g_replay_status.input_errors++;
     fprintf(stderr, "[%s] Open failed.\n", path);
     return;
   }
@@ -99,13 +139,23 @@ static void run_one_file(const char *path, bool verbose)
   if(verbose)
     printf("Opened.. ");
 
-  fseek(infile, 0L, SEEK_END);
-  size_t buffer_len = ftell(infile);
-  fseek(infile, 0L, SEEK_SET);
+  bool input_error = (fseek(infile, 0L, SEEK_END) != 0);
+  const long input_size = ftell(infile);
+  if(input_size < 0)
+    input_error = true;
+  size_t buffer_len = static_cast<size_t>(input_size);
+  if(fseek(infile, 0L, SEEK_SET) != 0)
+    input_error = true;
 
   uint8_t *buffer = (uint8_t *)calloc(buffer_len, sizeof(uint8_t));
   if(buffer) {
-    fread(buffer, sizeof(uint8_t), buffer_len, infile);
+    if(fread(buffer, sizeof(uint8_t), buffer_len, infile) != buffer_len ||
+       ferror(infile))
+      input_error = true;
+    if(input_error) {
+      g_replay_status.input_errors++;
+      fprintf(stderr, "[%s] Read failed.\n", path);
+    }
     if(verbose)
       printf("Read %zu bytes, fuzzing.. ", buffer_len);
 
@@ -117,12 +167,15 @@ static void run_one_file(const char *path, bool verbose)
         LLVMFuzzerTestOneInput(buffer, buffer_len);
         alarm(0);
         g_timeout_armed = 0;
+        if(!input_error)
+          g_replay_status.completed++;
         if(verbose)
           printf("complete !!");
       }
       else {
         /* Took the longjmp from timeout_handler. */
         alarm(0);
+        g_replay_status.timed_out++;
         fprintf(stderr,
                 "\n[%s] TIMEOUT after %ds, skipping\n",
                 path, g_timeout_secs);
@@ -130,12 +183,15 @@ static void run_one_file(const char *path, bool verbose)
     }
     else {
       LLVMFuzzerTestOneInput(buffer, buffer_len);
+      if(!input_error)
+        g_replay_status.completed++;
       if(verbose)
         printf("complete !!");
     }
     free(buffer);
   }
   else {
+    g_replay_status.input_errors++;
     fprintf(stderr,
             "[%s] Failed to allocate %zu bytes \n",
             path,
@@ -169,9 +225,14 @@ static void process_directory(const char *dir_path)
           fs::directory_options::skip_permission_denied, ec);
       !ec && it != fs::recursive_directory_iterator();
       it.increment(ec)) {
-    if(it->is_regular_file(ec) && !ec)
+    const bool regular = it->is_regular_file(ec);
+    if(ec)
+      g_replay_status.path_errors++;
+    if(regular && !ec)
       total++;
   }
+  if(ec)
+    g_replay_status.path_errors++;
 
   const bool is_tty = isatty(fileno(stderr));
   const size_t tick = std::max<size_t>(1, total / 20);
@@ -186,7 +247,10 @@ static void process_directory(const char *dir_path)
           fs::directory_options::skip_permission_denied, ec);
       !ec && it != fs::recursive_directory_iterator();
       it.increment(ec)) {
-    if(it->is_regular_file(ec) && !ec) {
+    const bool regular = it->is_regular_file(ec);
+    if(ec)
+      g_replay_status.path_errors++;
+    if(regular && !ec) {
       run_one_file(it->path().c_str(), /*verbose=*/false);
       processed++;
       if(is_tty) {
@@ -204,6 +268,7 @@ static void process_directory(const char *dir_path)
   if(is_tty)
     fprintf(stderr, "\n");
   if(ec) {
+    g_replay_status.path_errors++;
     fprintf(stderr, "[%s] walk failed: %s\n",
             dir_path, ec.message().c_str());
   }
@@ -235,6 +300,7 @@ int main(int argc, char **argv)
     std::error_code ec;
     auto status = fs::status(argv[ii], ec);
     if(ec) {
+      g_replay_status.path_errors++;
       fprintf(stderr, "[%s] stat failed: %s\n",
               argv[ii], ec.message().c_str());
       continue;
@@ -248,5 +314,6 @@ int main(int argc, char **argv)
     }
   }
 
+  write_replay_status();
   return 0;
 }
