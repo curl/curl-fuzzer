@@ -310,10 +310,35 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
         retains_internal_multi && transfer_result != CURLE_OUT_OF_MEMORY && transfer_result != CURLE_FAILED_INIT;
     api_lifecycle->ProbeTransferResults(probe_upkeep);
     api_lifecycle->ProbeEasyDuplication();
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+    const volatile std::size_t api_observation[] = {
+        api_lifecycle->response_pause_returned(), api_lifecycle->response_bytes_received(),
+        api_lifecycle->reentrant_probes_run(), api_lifecycle->reentrant_recursive_rejections()};
+    (void)api_observation;
+#endif
   } else if (mode != ScenarioRunMode::kFastProtocol) {
     ProbeTransferResults(easy);
   }
 
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  // TransferSession still owns these completed callback states. Local volatile
+  // stores retain their getter calls during profiling without adding work to
+  // ordinary fuzz builds or changing the transfer's callback configuration.
+  const RequestBuildStats& stats = request_data->stats();
+  const UploadScriptState& upload = request_data->upload_state();
+  const volatile std::size_t request_observation[] = {stats.request_headers,
+                                                      stats.resolve_entries,
+                                                      stats.telnet_options,
+                                                      stats.mime_parts,
+                                                      stats.mime_headers,
+                                                      stats.generated_mime_bytes,
+                                                      request_data->upload_callbacks_installed(),
+                                                      upload.data_size(),
+                                                      upload.read_step_count(),
+                                                      upload.offset(),
+                                                      upload.scripted()};
+  (void)request_observation;
+#endif
   return 0;
 }
 

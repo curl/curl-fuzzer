@@ -1489,6 +1489,18 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             libprotobuf_mutator_external)
     endif()
 
+    if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
+       "$ENV{SANITIZER}" STREQUAL "introspector")
+        target_compile_definitions(curl_fuzzer_proto_runtime PRIVATE
+            PROTO_FUZZER_OBSERVE_STATE)
+        target_compile_definitions(curl_fuzzer_proto_runner PRIVATE
+            PROTO_FUZZER_OBSERVE_STATE)
+        if(TARGET curl_fuzzer_proto_http3_runner)
+            target_compile_definitions(curl_fuzzer_proto_http3_runner PRIVATE
+                PROTO_FUZZER_OBSERVE_STATE)
+        endif()
+    endif()
+
     # Build one compatibility binary plus fixed protocol/cost lanes. Each
     # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
     # wiring independent of mutation and execution behaviour.
