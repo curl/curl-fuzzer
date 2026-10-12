@@ -1,0 +1,17 @@
+# A redirect keeps a second connection in the timing lane so its optional
+# backpressure policy is normalized and the follow-on timed drive remains
+# represented during corpus replay.
+scheme: SCHEME_HTTP
+host_path: "timing.test/start"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: http://timing.test/final\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+  backpressure {
+    recv_buf_bytes: 2048
+    drain_limit: 1
+  }
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+  backpressure { drain_limit: 1 }
+}

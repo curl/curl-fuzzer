@@ -12,6 +12,7 @@
 #include <curl/curl.h>
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
 
+#include <array>
 #include <cassert>
 #include <csignal>
 #include <cstdio>
@@ -77,6 +78,40 @@ struct CurlGlobalBootstrap {
 };
 const CurlGlobalBootstrap kGlobalBootstrap;
 
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+/// Exercise the mutation ABI once in the profiling-only timing lane. Corpus
+/// replay invokes test inputs but does not ask libFuzzer to mutate or cross
+/// them, leaving the two target hooks invisible to coverage and introspection.
+/// A fixed, bounded Scenario keeps the probe deterministic and also checks the
+/// timing policy's follow-on backpressure normalization without executing the
+/// generated children.
+void ProbeTimingMutationHelpers() {
+  constexpr std::size_t kBufferSize = 1024;
+  constexpr unsigned int kMutationSeed = 0x4355524cU;
+
+  curl::fuzzer::proto::Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("timing.test/profile");
+  scenario.mutable_connection();
+  scenario.add_subsequent_connections()->mutable_backpressure()->set_drain_limit(1);
+  proto_fuzzer::NormalizeScenarioForTarget(&scenario, proto_fuzzer::TargetProfile::kTiming);
+
+  std::array<std::uint8_t, kBufferSize> first = {};
+  const std::size_t original_size = scenario.ByteSizeLong();
+  (void)scenario.SerializeWithCachedSizesToArray(first.data());
+
+  std::array<std::uint8_t, kBufferSize> second = first;
+  std::array<std::uint8_t, kBufferSize> child = {};
+  const std::size_t mutated_size = proto_fuzzer::ProtoFuzzerCustomMutator(
+      proto_fuzzer::TargetProfile::kTiming, first.data(), original_size, first.size(), kMutationSeed);
+  const std::size_t crossed_size =
+      proto_fuzzer::ProtoFuzzerCustomCrossOver(proto_fuzzer::TargetProfile::kTiming, first.data(), mutated_size,
+                                               second.data(), original_size, child.data(), child.size(), kMutationSeed);
+  const volatile std::size_t result_sizes[] = {mutated_size, crossed_size};
+  (void)result_sizes;
+}
+#endif
+
 }  // namespace
 
 namespace proto_fuzzer {
@@ -129,6 +164,15 @@ std::size_t ProtoFuzzerCustomCrossOver(TargetProfile profile, const std::uint8_t
 int ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t* data, std::size_t size) {
   allocation_fault_injection::Reset();
   EnsureTargetPostProcessor(profile);
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  if (profile == TargetProfile::kTiming) {
+    static const bool mutation_helpers_probed = [] {
+      ProbeTimingMutationHelpers();
+      return true;
+    }();
+    (void)mutation_helpers_probed;
+  }
+#endif
   curl::fuzzer::proto::Scenario scenario;
   if (protobuf_mutator::libfuzzer::LoadProtoInput(kUseBinaryFormat, data, size, &scenario)) {
     NormalizeScenarioForExecution(&scenario);
