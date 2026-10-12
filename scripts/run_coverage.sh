@@ -40,31 +40,18 @@ rm -rf "${COVERAGE_DIR}/html" "${COVERAGE_DIR}/harness-html" \
 mkdir -p "${REPLAY_LOG_DIR}" "${REPLAY_COUNTER_DIR}"
 rm -f "${PROFRAW_DIR}"/*.profraw
 # shellcheck disable=SC2086
-python3 - "${REPLAY_STATUS}" ${TARGETS} <<'PY'
-import json
-import sys
-from pathlib import Path
-Path(sys.argv[1]).write_text(json.dumps({"complete": False, "targets": [
-    {"target": name, "outcome": "incomplete"} for name in sys.argv[2:]
-]}) + "\n", encoding="utf-8")
-PY
+python3 "${SCRIPTDIR}/replay_status.py" init --status "${REPLAY_STATUS}" -- ${TARGETS}
 
 # Persist the current target's replay evidence in REPLAY_STATUS. Arguments are
 # the outcome (executed or a skip reason) and exit code (null for skipped
 # targets). Per-target globals supply counts, sidecars, logs, and the fresh
 # profile pattern; the Python helper derives completeness for the selection.
 record_replay() {
-  python3 - "${SCRIPTDIR}" "${REPLAY_STATUS}" "${TARGET}" "$1" "$2" \
-    "${INPUT_COUNT}" "${COUNT_ERRORS}" "${COUNTER_FILE}" "${LOG_FILE}" \
-    "${PROFRAW_DIR}/${TARGET}-*.profraw" <<'PY'
-import sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-from summarize_coverage import record_replay_result
-record_replay_result(Path(sys.argv[2]), sys.argv[3], sys.argv[4],
-    None if sys.argv[5] == "null" else int(sys.argv[5]), int(sys.argv[6]),
-    int(sys.argv[7]), Path(sys.argv[8]), Path(sys.argv[9]), sys.argv[10])
-PY
+  python3 "${SCRIPTDIR}/replay_status.py" record \
+    --status "${REPLAY_STATUS}" --target "${TARGET}" --outcome "$1" \
+    --exit-code "$2" --expected-inputs "${INPUT_COUNT}" \
+    --count-errors "${COUNT_ERRORS}" --counters "${COUNTER_FILE}" \
+    --log "${LOG_FILE}" --profiles "${PROFRAW_DIR}/${TARGET}-*.profraw"
 }
 
 # Locate curl's source tree. With CURL_SOURCE_DIR set, the coverage mapping
