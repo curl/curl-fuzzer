@@ -42,6 +42,7 @@ def coverage_fixture(
         "run_coverage.sh",
         "fuzz_targets",
         "fuzz_corpus_helpers.sh",
+        "replay_status.py",
         "summarize_coverage.py",
     ):
         shutil.copyfile(REPO_ROOT / "scripts" / name, scripts / name)
