@@ -140,6 +140,34 @@ void ExerciseLegacyMutatorCoverage() {
       child.size(), 1);
   ObserveValidation(child.data(), crossed_size);
 
+  // Empty parents still use real storage. Reversing the existing empty-first
+  // case exercises the one-byte fallback from the first parent; two empty
+  // parents have no byte to inherit even when output capacity is available.
+  const Input &header = inputs[4];
+  const size_t reversed_size = LLVMFuzzerCustomCrossOver(
+      header.data(), header.size(), scratch.data(), 0, child.data(), 1, 7);
+  ObserveValidation(child.data(), reversed_size);
+  const size_t empty_size = LLVMFuzzerCustomCrossOver(
+      scratch.data(), 0, scratch.data(), 0, child.data(), 1, 7);
+  ObserveValidation(child.data(), empty_size);
+
+  // These framed IDs are explicitly excluded by the top-level type policy.
+  for(const uint16_t type : {15, 51, 212, 322}) {
+    Input rejected;
+    AppendRecord(&rejected, type, scratch.data(), 0);
+    ObserveValidation(rejected.data(), rejected.size());
+  }
+
+  // With exact capacity, a nonempty short routing value must shrink to the
+  // disabled empty value when its canonical spelling cannot fit. Seed 8
+  // selects duplication; scalar-only records leave no room for insertion.
+  Input short_routing = first;
+  AppendString(&short_routing, 53, "1");
+  std::copy(short_routing.begin(), short_routing.end(), scratch.begin());
+  const size_t routing_size = legacy_tlv_mutator::Mutate(
+      scratch.data(), short_routing.size(), short_routing.size(), 8);
+  ObserveValidation(scratch.data(), routing_size);
+
   for(const uint16_t type : {53, 102, 105, 129, 149, 0xffff}) {
     const char *volatile routing =
         legacy_tlv_mutator::CanonicalRoutingValue(type);
