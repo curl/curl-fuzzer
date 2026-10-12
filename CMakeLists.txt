@@ -1066,6 +1066,24 @@ curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
 curl_add_fuzzer(curl_fuzzer_ws        WS)
 
+# Deterministic profiling probes share one target rather than adding lanes
+# that compete with the existing fuzzers. Ordinary sanitizer builds exit on
+# their first callback; coverage and Introspector builds execute the probes.
+add_executable(curl_fuzzer_full_coverage
+    fuzzer_entrypoints/curl_fuzzer_full_coverage.cc)
+target_compile_features(curl_fuzzer_full_coverage PRIVATE cxx_std_11)
+target_compile_options(curl_fuzzer_full_coverage PRIVATE ${COMMON_FLAGS})
+target_include_directories(curl_fuzzer_full_coverage PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(curl_fuzzer_full_coverage PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(curl_fuzzer_full_coverage PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(curl_fuzzer_full_coverage ${FUZZ_DEPS})
+if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
+   "$ENV{SANITIZER}" STREQUAL "introspector")
+    target_compile_definitions(curl_fuzzer_full_coverage PRIVATE
+        CURL_FUZZER_COVERAGE_ONLY)
+    target_sources(curl_fuzzer_full_coverage PRIVATE full_coverage/public_api.cc)
+endif()
+
 # BUFQ fuzzer
 add_executable(fuzz_bufq fuzz_bufq.cc)
 target_compile_options(fuzz_bufq PRIVATE ${COMMON_FLAGS})
@@ -1115,6 +1133,7 @@ add_dependencies(fuzz_netrc ${FUZZ_DEPS})
 add_custom_target(fuzz
     DEPENDS
         curl_fuzzer
+        curl_fuzzer_full_coverage
         curl_fuzzer_dict
         curl_fuzzer_file
         curl_fuzzer_ftp
