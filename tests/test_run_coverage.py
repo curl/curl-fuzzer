@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,10 +21,11 @@ def _write_source(root: Path, name: str, contents: str) -> Path:
     return source
 
 
-def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
+@pytest.fixture
+def coverage_fixture(
     tmp_path: Path,
-) -> None:
-    """Keep generated/dependency/test regions out of the harness denominator."""
+) -> dict[str, Any]:
+    """Build an instrumented replay fixture with matching numeric sidecars."""
     compiler = shutil.which("clang++")
     llvm_cov = shutil.which("llvm-cov")
     llvm_profdata = shutil.which("llvm-profdata")
@@ -53,7 +55,8 @@ def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
     (local_corpus / "seed").write_bytes(b"seed")
     public_corpus = checkout / "ossfuzz_corpus" / target
     public_corpus.mkdir(parents=True)
-    (public_corpus / "public-seed").write_bytes(b"public")
+    # File names containing newlines must still count as exactly one input.
+    (public_corpus / "public\nseed").write_bytes(b"public")
 
     _write_source(
         checkout,
@@ -116,14 +119,24 @@ def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
             checkout,
             "standalone_fuzz_target_runner.cc",
             "#include <cstddef>\n#include <cstdint>\n"
-            "#include <cstdlib>\n#include <fstream>\n"
+            "#include <cstdlib>\n#include <cstdio>\n#include <fstream>\n#include <filesystem>\n"
             'extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t*, std::size_t);\n'
             "int CurlProbe(int);\nint CurlToolProbe();\nint DependencyProbe();\n"
             "int UnitTestProbe();\n"
             "int main(int argc, char** argv) {\n"
             '  std::ofstream log(std::getenv("REPLAY_LOG"), std::ios::app);\n'
-            "  for (int i = 1; i < argc; ++i) log << argv[i] << '\\n';\n"
-            "  LLVMFuzzerTestOneInput(nullptr, 0);\n"
+            "  size_t inputs = 0;\n"
+            "  for (int i = 1; i < argc; ++i) {\n"
+            "    log << argv[i] << '\\n';\n"
+            "    for(auto& file : std::filesystem::recursive_directory_iterator(argv[i]))\n"
+            "      if(file.is_regular_file()) ++inputs;\n  }\n"
+            "  for(size_t i = 0; i < inputs; ++i) LLVMFuzzerTestOneInput(nullptr, 0);\n"
+            "  auto name = std::filesystem::path(argv[0]).filename().string();\n"
+            '  if(name == "early_fuzzer") std::exit(0);\n'
+            '  std::ofstream status(std::getenv("FUZZ_REPLAY_STATUS_FILE"));\n'
+            '  status << "{\\"attempted\\":" << inputs << ",\\"completed\\":" << inputs\n'
+            '         << ",\\"timed_out\\":0,\\"input_errors\\":0,\\"path_errors\\":0}";\n'
+            '  if(name == "failed_fuzzer") { std::fputs("injected failure\\n", stderr); return 17; }\n'
             "  return CurlProbe(1) + CurlToolProbe() + DependencyProbe() +\n"
             "         UnitTestProbe() == 25 ? 0 : 1;\n}\n",
         ),
@@ -139,6 +152,7 @@ def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
             str(build / target),
         ],
         check=True,
+        env=dict(os.environ, TMPDIR=str(build)),
         capture_output=True,
         text=True,
         timeout=30,
@@ -157,27 +171,50 @@ def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
         CURL_SOURCE_DIR=str(curl_source),
         ARCHITECTURE="x86_64",
         SANITIZER="coverage",
-        TARGETS=f"{target} missing_fuzzer",
+        TARGETS=target,
         LLVM_COV=llvm_cov,
         LLVM_PROFDATA=llvm_profdata,
         REPLAY_LOG=str(replay_log),
+        TMPDIR=str(build),
     )
-    result = subprocess.run(
-        ["bash", str(scripts / "run_coverage.sh")],
-        check=True,
+    return locals()
+
+
+def _replay(
+    fixture: dict[str, Any], **updates: str
+) -> subprocess.CompletedProcess[str]:
+    environment = dict(fixture["environment"], **updates)
+    return subprocess.run(
+        ["bash", str(fixture["scripts"] / "run_coverage.sh")],
+        check=False,
         env=environment,
         capture_output=True,
         text=True,
         timeout=30,
     )
 
-    assert replay_log.read_text(encoding="utf-8").splitlines() == [
-        str(local_corpus),
-        str(public_corpus),
+
+def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
+    coverage_fixture: dict[str, Any],
+) -> None:
+    """Keep generated/dependency/test regions out of the harness denominator."""
+    checkout = coverage_fixture["checkout"]
+    curl_source = coverage_fixture["curl_source"]
+    target = coverage_fixture["target"]
+    coverage = coverage_fixture["coverage"]
+    result = _replay(coverage_fixture)
+    assert result.returncode == 0, result.stderr
+
+    assert coverage_fixture["replay_log"].read_text(encoding="utf-8").splitlines() == [
+        str(coverage_fixture["local_corpus"]),
+        str(coverage_fixture["public_corpus"]),
     ]
-    assert "Skipping missing_fuzzer: binary not found" in result.stdout
-    assert not stale_profile.exists()
-    assert len(list(raw_profiles.glob("*.profraw"))) == 1
+    assert not coverage_fixture["stale_profile"].exists()
+    assert len(list(coverage_fixture["raw_profiles"].glob("*.profraw"))) == 1
+    status = json.loads((coverage / "replay-status.json").read_text())
+    assert status["complete"] is True
+    assert status["targets"][0]["outcome"] == "complete"
+    assert status["targets"][0]["expected_inputs"] == 2
     assert (coverage / "html" / "index.html").is_file()
     assert (coverage / "harness-html" / "index.html").is_file()
     assert (coverage / "report.md").is_file()
@@ -215,3 +252,67 @@ def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
     assert "generated.cc" not in harness_summary
     assert "fixture_test.cc" not in harness_summary
     assert "standalone_fuzz_target_runner.cc" not in harness_summary
+
+
+def test_failed_and_skipped_replays_keep_later_coverage_marked_partial(
+    coverage_fixture: dict[str, Any],
+) -> None:
+    fixture = coverage_fixture
+    for name in ("failed_fuzzer", "early_fuzzer", "no_corpus", "empty_corpus"):
+        shutil.copyfile(fixture["build"] / fixture["target"], fixture["build"] / name)
+        (fixture["build"] / name).chmod(0o755)
+        if name != "no_corpus":
+            corpus = fixture["checkout"] / "corpora" / name
+            corpus.mkdir()
+            if name != "empty_corpus":
+                (corpus / "seed").write_bytes(b"seed")
+    targets = f"failed_fuzzer early_fuzzer {fixture['target']} missing_fuzzer no_corpus empty_corpus"
+
+    result = _replay(fixture, TARGETS=targets)
+
+    assert result.returncode == 0, result.stderr
+    document = json.loads((fixture["coverage"] / "gaps.json").read_text())
+    assert document["replay"]["complete"] is False
+    rows = document["replay"]["targets"]
+    assert [row["outcome"] for row in rows] == [
+        "failed",
+        "incomplete",
+        "complete",
+        "missing_binary",
+        "no_corpus",
+        "empty_corpus",
+    ]
+    assert rows[0]["exit_code"] == 17
+    assert "injected failure" in Path(rows[0]["log"]).read_text()
+    assert rows[1]["exit_code"] == 0 and rows[1]["counters"] is None
+    report = (fixture["coverage"] / "report.md").read_text()
+    assert "Replay is **partial**: 1 / 6" in report
+    assert report.index("Selected corpus replay") < report.index("## libcurl")
+
+
+def test_merge_failure_cannot_publish_reports_from_a_previous_run(
+    coverage_fixture: dict[str, Any],
+) -> None:
+    coverage = coverage_fixture["coverage"]
+    stale_names = (
+        "coverage.profdata",
+        "summary.txt",
+        "harness-summary.txt",
+        "curl-coverage.json",
+        "harness-coverage.json",
+        "report.md",
+        "gaps.json",
+    )
+    for name in stale_names:
+        (coverage / name).write_text("stale 100% report", encoding="utf-8")
+    merge_tool = coverage_fixture["build"] / "failed-profdata"
+    merge_tool.write_text('#!/bin/sh\nprintf "merge failed\\n" >&2\nexit 7\n')
+    merge_tool.chmod(0o755)
+
+    result = _replay(coverage_fixture, LLVM_PROFDATA=str(merge_tool))
+
+    assert result.returncode == 7
+    assert "merge failed" in result.stderr
+    assert all(not (coverage / name).exists() for name in stale_names)
+    assert (coverage / "replay-status.json").exists()
+    assert not (coverage / "coverage.profdata.tmp").exists()

@@ -292,3 +292,58 @@ def test_cli_reports_bad_json_without_a_traceback(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "coverage summary:" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "change,outcome",
+    [
+        ({}, "complete"),
+        ({"exit_code": 17}, "failed"),
+        ({"count_errors": 1}, "failed"),
+        ({"completed": 0, "timed_out": 1}, "failed"),
+        ({"attempted": True}, "incomplete"),
+        ({"completed": 0}, "incomplete"),
+        ({"profile": b""}, "incomplete"),
+    ],
+)
+def test_replay_completion_requires_verified_counters_and_a_fresh_profile(
+    module: Any, tmp_path: Path, change: dict[str, Any], outcome: str
+) -> None:
+    counters = {
+        "attempted": 1,
+        "completed": 1,
+        "timed_out": 0,
+        "input_errors": 0,
+        "path_errors": 0,
+    }
+    counters.update({name: value for name, value in change.items() if name in counters})
+    sidecar = tmp_path / "runner.json"
+    sidecar.write_text(json.dumps(counters))
+    profile = tmp_path / "target.profraw"
+    profile.write_bytes(change.get("profile", b"profile"))
+    status = tmp_path / "replay.json"
+    status.write_text(
+        json.dumps(
+            {
+                "complete": False,
+                "targets": [{"target": "target", "outcome": "incomplete"}],
+            }
+        )
+    )
+
+    module.record_replay_result(
+        status,
+        "target",
+        "executed",
+        change.get("exit_code", 0),
+        1,
+        change.get("count_errors", 0),
+        sidecar,
+        tmp_path / "target.log",
+        str(profile),
+    )
+
+    result = json.loads(status.read_text())
+    assert result["targets"][0]["outcome"] == outcome
+    assert result["complete"] == (outcome == "complete")
+    module._replay_status(result)

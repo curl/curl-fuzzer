@@ -73,4 +73,7 @@ jobs:
             build-coverage/coverage/harness-coverage.json
             build-coverage/coverage/report.md
             build-coverage/coverage/gaps.json
+            build-coverage/coverage/replay-status.json
+            build-coverage/coverage/replay-logs
+            build-coverage/coverage/replay-counters
           if-no-files-found: warn

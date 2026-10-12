@@ -14,6 +14,9 @@ export BUILD_ROOT; BUILD_ROOT=$(readlink -f "${SCRIPTDIR}/..")
 BUILD_DIR="${BUILD_DIR:-${BUILD_ROOT}/build}"
 COVERAGE_DIR="${BUILD_DIR}/coverage"
 PROFRAW_DIR="${COVERAGE_DIR}/profraw"
+REPLAY_STATUS="${COVERAGE_DIR}/replay-status.json"
+REPLAY_LOG_DIR="${COVERAGE_DIR}/replay-logs"
+REPLAY_COUNTER_DIR="${COVERAGE_DIR}/replay-counters"
 
 # Allow overriding the llvm tool names (some distros only ship versioned
 # binaries, e.g. llvm-cov-18).
@@ -29,9 +32,36 @@ LLVM_COV="${LLVM_COV:-llvm-cov}"
 . "${SCRIPTDIR}/fuzz_corpus_helpers.sh"
 TARGETS="${TARGETS:-${FUZZ_TARGETS}}"
 
+# Remove old derived reports before replay so failed runs cannot upload them.
 mkdir -p "${PROFRAW_DIR}"
-# Wipe any stale profraw from a previous run so the merge reflects *this* run.
+rm -f "${COVERAGE_DIR}"/{coverage.profdata,coverage.profdata.tmp,summary.txt,harness-summary.txt,curl-coverage.json,harness-coverage.json,report.md,gaps.json}
+rm -rf "${COVERAGE_DIR}/html" "${COVERAGE_DIR}/harness-html" \
+  "${REPLAY_LOG_DIR}" "${REPLAY_COUNTER_DIR}"
+mkdir -p "${REPLAY_LOG_DIR}" "${REPLAY_COUNTER_DIR}"
 rm -f "${PROFRAW_DIR}"/*.profraw
+# shellcheck disable=SC2086
+python3 - "${REPLAY_STATUS}" ${TARGETS} <<'PY'
+import json
+import sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({"complete": False, "targets": [
+    {"target": name, "outcome": "incomplete"} for name in sys.argv[2:]
+]}) + "\n", encoding="utf-8")
+PY
+
+record_replay() {
+  python3 - "${SCRIPTDIR}" "${REPLAY_STATUS}" "${TARGET}" "$1" "$2" \
+    "${INPUT_COUNT}" "${COUNT_ERRORS}" "${COUNTER_FILE}" "${LOG_FILE}" \
+    "${PROFRAW_DIR}/${TARGET}-*.profraw" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from summarize_coverage import record_replay_result
+record_replay_result(Path(sys.argv[2]), sys.argv[3], sys.argv[4],
+    None if sys.argv[5] == "null" else int(sys.argv[5]), int(sys.argv[6]),
+    int(sys.argv[7]), Path(sys.argv[8]), Path(sys.argv[9]), sys.argv[10])
+PY
+}
 
 # Locate curl's source tree. With CURL_SOURCE_DIR set, the coverage mapping
 # records inside the binaries point at that tree; otherwise curl was fetched
@@ -48,15 +78,18 @@ if [[ ! -d "${CURL_SRC}" ]]; then
   echo "         the coverage report filter may not match any files" >&2
 fi
 
-# %m-%p: per-module signature + PID. %p alone would collide if two targets
-# happened to reuse a PID across sequential runs; %m keeps them apart.
-export LLVM_PROFILE_FILE="${PROFRAW_DIR}/%m-%p.profraw"
-
 for TARGET in ${TARGETS}; do
+  INPUT_COUNT=0
+  COUNT_ERRORS=0
+  LOG_FILE="${REPLAY_LOG_DIR}/${TARGET}.log"
+  COUNTER_FILE="${REPLAY_COUNTER_DIR}/${TARGET}.json"
+  : > "${LOG_FILE}"
+  rm -f "${COUNTER_FILE}" "${PROFRAW_DIR}/${TARGET}-"*.profraw
   CORPUS_DIR=$(fuzz_local_corpus_dir "${TARGET}" "${BUILD_ROOT}" "${BUILD_DIR}")
   BIN="${BUILD_DIR}/${TARGET}"
   if [[ ! -x "${BIN}" ]]; then
     echo "Skipping ${TARGET}: binary not found at ${BIN}"
+    record_replay missing_binary null
     continue
   fi
 
@@ -77,26 +110,43 @@ for TARGET in ${TARGETS}; do
   done < <(fuzz_public_corpus_names "${TARGET}")
   if [[ ${#CORPUS_ARGS[@]} -eq 0 ]]; then
     echo "Skipping ${TARGET}: no corpus dirs"
+    record_replay no_corpus null
     continue
   fi
 
-  INPUT_COUNT=0
   for DIR in "${CORPUS_ARGS[@]}"; do
-    INPUT_COUNT=$(( INPUT_COUNT + $(find "${DIR}" -type f | wc -l) ))
+    if COUNT=$(find "${DIR}" -type f -printf '.\n' 2>>"${LOG_FILE}" | wc -l); then
+      INPUT_COUNT=$(( INPUT_COUNT + COUNT ))
+    else
+      COUNT_ERRORS=$(( COUNT_ERRORS + 1 ))
+    fi
   done
+  if [[ ${INPUT_COUNT} -eq 0 && ${COUNT_ERRORS} -eq 0 ]]; then
+    echo "Skipping ${TARGET}: empty corpus"
+    record_replay empty_corpus null
+    continue
+  fi
   echo "==> ${TARGET}: replaying ${INPUT_COUNT} inputs from ${#CORPUS_ARGS[@]} dir(s)"
   # The standalone runner walks each directory itself, so we get a single
-  # process per target - one .profraw, no xargs batching. || true because a single
-  # crashing input must not abort the whole coverage run.
-  "${BIN}" "${CORPUS_ARGS[@]}" >/dev/null 2>&1 || true
+  # process per target. Capture failures while continuing other targets.
+  # The target prefix attributes fresh profiles to their replay status.
+  export LLVM_PROFILE_FILE="${PROFRAW_DIR}/${TARGET}-%m-%p.profraw"
+  export FUZZ_REPLAY_STATUS_FILE="${COUNTER_FILE}"
+  if "${BIN}" "${CORPUS_ARGS[@]}" >>"${LOG_FILE}" 2>&1; then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
+  record_replay executed "${EXIT_CODE}"
 done
 
 PROFDATA="${COVERAGE_DIR}/coverage.profdata"
 echo "==> Merging profraw -> ${PROFDATA}"
 # shellcheck disable=SC2046
 "${LLVM_PROFDATA}" merge -sparse \
-  -o "${PROFDATA}" \
+  -o "${PROFDATA}.tmp" \
   "${PROFRAW_DIR}"/*.profraw
+mv -f "${PROFDATA}.tmp" "${PROFDATA}"
 
 # Assemble the object list llvm-cov needs: the first binary is positional,
 # the rest are -object=.
@@ -194,7 +244,8 @@ echo "==> llvm-cov export (curl-fuzzer harness) -> ${HARNESS_JSON}"
 python3 "${SCRIPTDIR}/summarize_coverage.py" \
   --libcurl "${CURL_JSON}" --harness "${HARNESS_JSON}" \
   --output "${COVERAGE_DIR}/report.md" \
-  --json-output "${COVERAGE_DIR}/gaps.json" --limit 20
+  --json-output "${COVERAGE_DIR}/gaps.json" \
+  --replay-status "${REPLAY_STATUS}" --limit 20
 
 echo
 echo "Coverage report:         ${COVERAGE_DIR}/report.md"
