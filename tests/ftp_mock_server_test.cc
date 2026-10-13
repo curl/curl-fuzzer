@@ -6,8 +6,6 @@
 
 #include <curl/curl.h>
 
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "curl_fuzzer.pb.h"
@@ -15,23 +13,15 @@
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
+#include "test_assertions.h"
 
 namespace {
 
 using curl::fuzzer::proto::Scenario;
 using proto_fuzzer::CurlEasyPtr;
 using proto_fuzzer::CurlSlistPtr;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
+using test_support::Fail;
 
 size_t CollectResponse(char *contents, size_t size, size_t nmemb,
                        void *userdata) {

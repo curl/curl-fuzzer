@@ -7,14 +7,13 @@
 #include "proto_fuzzer/target_policy.h"
 
 #include "proto_fuzzer/scenario_limits.h"
+#include "test_assertions.h"
 
 #include <curl/curl.h>
 #include <google/protobuf/text_format.h>
 
 #include <cstdint>
-#include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -35,17 +34,8 @@ using proto_fuzzer::NormalizeScenarioForTarget;
 using proto_fuzzer::RunModeFor;
 using proto_fuzzer::ScenarioRunMode;
 using proto_fuzzer::TargetProfile;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
+using test_support::Fail;
 
 Scenario ScenarioWithBackpressure(curl::fuzzer::proto::Scheme scheme,
                                   std::uint32_t recv_buf_bytes,

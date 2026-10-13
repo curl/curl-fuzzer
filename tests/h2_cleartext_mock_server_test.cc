@@ -7,23 +7,16 @@
 #include <curl/curl.h>
 
 #include <cstddef>
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
+#include "test_assertions.h"
 
 namespace {
 
 using curl::fuzzer::proto::Scenario;
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << message << '\n';
-    std::exit(1);
-  }
-}
+using test_support::Expect;
 
 std::size_t CollectResponse(char *contents, std::size_t size, std::size_t nmemb,
                             void *userdata) {

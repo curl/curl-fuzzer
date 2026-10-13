@@ -9,26 +9,15 @@
 #include <curl/curl.h>
 
 #include <cstddef>
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "proto_fuzzer/scenario_limits.h"
+#include "test_assertions.h"
 
 namespace {
 
 using curl::fuzzer::proto::Scenario;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
 
 void AddCompleteResponse(curl::fuzzer::proto::Connection *connection,
                          char body) {

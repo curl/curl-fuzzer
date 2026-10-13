@@ -5,25 +5,16 @@
  */
 
 #include "legacy_protocol_allowlist.h"
+#include "test_assertions.h"
 
 #include <curl/curl.h>
 
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 namespace {
 
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
+using test_support::Fail;
 
 bool ContainsToken(const std::string &list, const std::string &token) {
   std::string::size_type start = 0;

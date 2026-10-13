@@ -8,13 +8,12 @@
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
+#include "test_assertions.h"
 
 #include <curl/curl.h>
 
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <limits>
 #include <string>
 #include <type_traits>
@@ -27,6 +26,7 @@ using ApiPlan = curl::fuzzer::proto::ApiPlan;
 using UploadScriptState = proto_fuzzer::UploadScriptState;
 using ScenarioRequestData = proto_fuzzer::ScenarioRequestData;
 using ApiLifecycle = proto_fuzzer::ApiLifecycle;
+using test_support::Expect;
 
 // Borrowing APIs accept stable const lvalues, but must reject both kinds of
 // temporary and every supported constructor arity before any callback runs.
@@ -42,17 +42,6 @@ static_assert(!std::is_constructible_v<ScenarioRequestData, CURL*, Scenario&&> &
 static_assert(std::is_constructible_v<ApiLifecycle, CURL*, const ApiPlan&, std::string_view>);
 static_assert(!std::is_constructible_v<ApiLifecycle, CURL*, ApiPlan&&, std::string_view> &&
               !std::is_constructible_v<ApiLifecycle, CURL*, const ApiPlan&&, std::string_view>);
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
 
 void PopulatePart(curl::fuzzer::proto::MimeDataPart *part) {
   part->set_name("child");

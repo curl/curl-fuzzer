@@ -5,26 +5,19 @@
  */
 
 #include "proto_fuzzer/allocation_fault_injection.h"
+#include "test_assertions.h"
 
 #include <curl/curl.h>
 
 #include <array>
-#include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <iterator>
 #include <thread>
 
 namespace {
 
 namespace faults = proto_fuzzer::allocation_fault_injection;
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << message << '\n';
-    std::exit(1);
-  }
-}
+using test_support::Expect;
 
 void TestBoundedOrdinalPlan() {
   const std::uint32_t ordinals[] = {9, 0, 3, 9, 1, 7, 2};

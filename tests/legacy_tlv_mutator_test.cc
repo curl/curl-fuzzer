@@ -5,27 +5,18 @@
  */
 
 #include "legacy_tlv_mutator.h"
+#include "test_assertions.h"
 
 #include <stdint.h>
 
 #include <algorithm>
 #include <array>
-#include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <vector>
 
 namespace {
 
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if(!condition)
-    Fail(message);
-}
+using test_support::Expect;
 
 void AppendTlv(std::vector<uint8_t> *out, uint16_t type,
                const std::vector<uint8_t> &value) {

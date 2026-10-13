@@ -6,25 +6,15 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/h2_plan.h"
+#include "test_assertions.h"
 
 namespace {
 
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
 
 std::uint32_t FrameStream(const std::string &frame) {
   if (frame.size() < 9) {

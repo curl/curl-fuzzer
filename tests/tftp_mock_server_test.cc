@@ -6,9 +6,7 @@
 
 #include <curl/curl.h>
 
-#include <cstdlib>
 #include <initializer_list>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -17,23 +15,15 @@
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/tftp_mock_server.h"
+#include "test_assertions.h"
 
 namespace {
 
 using curl::fuzzer::proto::Scenario;
 using proto_fuzzer::CurlEasyPtr;
 using proto_fuzzer::CurlSlistPtr;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
+using test_support::Fail;
 
 std::string Packet(std::uint16_t opcode, std::uint16_t value,
                    const std::string &payload = {}) {

@@ -7,27 +7,16 @@
 #include <curl/curl.h>
 
 #include <cstddef>
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
+#include "test_assertions.h"
 
 namespace {
 
 using curl::fuzzer::proto::Scenario;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
 
 bool IsX25519Group(const std::string &group) {
   return group.size() == 6 && (group[0] == 'x' || group[0] == 'X') &&

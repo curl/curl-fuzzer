@@ -5,14 +5,14 @@
  */
 
 #include "full_coverage/legacy_mutator.h"
+#include "test_assertions.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
-#include <cstdlib>
-#include <iostream>
-
 namespace {
+
+using test_support::Expect;
 
 struct Observations {
   size_t calls = 0;
@@ -23,13 +23,6 @@ struct Observations {
 };
 
 Observations observed;
-
-void Expect(bool condition, const char *message) {
-  if(!condition) {
-    std::cerr << message << '\n';
-    std::exit(1);
-  }
-}
 
 void Hash(uint64_t value) {
   observed.fingerprint ^= value;

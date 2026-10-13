@@ -15,20 +15,14 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdio>
-#include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "proto_fuzzer/tls_test_credentials.h"
+#include "test_assertions.h"
 
 namespace {
 
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << message << '\n';
-    std::exit(1);
-  }
-}
+using test_support::Expect;
 
 struct ClientConnection {
   SSL_CTX *context = nullptr;
