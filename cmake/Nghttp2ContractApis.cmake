@@ -1,0 +1,28 @@
+# nghttp2 APIs whose session-state contract is enforced by the link shim.
+set(NGHTTP2_CONTRACT_WRAPPED_APIS
+    nghttp2_session_client_new3
+    nghttp2_session_del
+    nghttp2_session_check_request_allowed
+    nghttp2_session_consume
+    nghttp2_session_get_local_window_size
+    nghttp2_session_get_remote_settings
+    nghttp2_session_get_remote_window_size
+    nghttp2_session_get_stream_effective_local_window_size
+    nghttp2_session_get_stream_effective_recv_data_length
+    nghttp2_session_get_stream_remote_window_size
+    nghttp2_session_get_stream_user_data
+    nghttp2_session_mem_recv
+    nghttp2_session_resume_data
+    nghttp2_session_send
+    nghttp2_session_set_local_window_size
+    nghttp2_session_set_stream_user_data
+    nghttp2_session_upgrade2
+    nghttp2_session_want_read
+    nghttp2_session_want_write
+    nghttp2_submit_goaway
+    nghttp2_submit_ping
+    nghttp2_submit_priority
+    nghttp2_submit_request
+    nghttp2_submit_rst_stream
+    nghttp2_submit_settings
+    nghttp2_submit_window_update)
