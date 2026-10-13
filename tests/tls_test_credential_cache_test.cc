@@ -6,31 +6,15 @@
 
 #include <openssl/ssl.h>
 
-#include <cstdlib>
-#include <iostream>
 #include <memory>
 
 #include "proto_fuzzer/tls_test_credential_cache.h"
+#include "test_assertions.h"
 
 namespace {
 
 using SslContextPtr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
-
-/// Exit the focused test with a diagnostic.
-/// @param message Failure text written to standard error.
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-/// Require one ownership or lifetime invariant.
-/// @param condition Invariant result.
-/// @param message Failure text used when the invariant is false.
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
 
 /// @return a separately owned, mutable server context.
 SslContextPtr MakeContext() {

@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <string>
 
@@ -17,23 +16,15 @@
 #include "proto_fuzzer/http3_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
+#include "test_assertions.h"
 
 namespace {
 
 using curl::fuzzer::proto::Scenario;
 using proto_fuzzer::CurlEasyPtr;
 using proto_fuzzer::CurlSlistPtr;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
+using test_support::Fail;
 
 std::size_t CollectBytes(char *contents, std::size_t size, std::size_t nmemb,
                          void *userdata) {

@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -33,6 +32,7 @@
 #include "proto_fuzzer/transfer_session.h"
 #include "proto_fuzzer/websocket_mock_server.h"
 #include "proto_fuzzer/ws_frame.h"
+#include "test_assertions.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #include <openssl/ech.h>
@@ -47,17 +47,7 @@
 namespace {
 
 using curl::fuzzer::proto::Scenario;
-
-void Fail(const char *message) {
-  std::cerr << message << '\n';
-  std::exit(1);
-}
-
-void Expect(bool condition, const char *message) {
-  if (!condition) {
-    Fail(message);
-  }
-}
+using test_support::Expect;
 
 size_t CollectResponse(char *contents, size_t size, size_t nmemb,
                        void *userdata) {
