@@ -1,0 +1,56 @@
+# OpenSSL APIs whose connection-state contract is enforced by the link shim.
+set(OPENSSL_CONTRACT_WRAPPED_APIS
+    SSL_new
+    SSL_free
+    SSL_clear
+    SSL_get_error
+    SSL_accept
+    SSL_connect
+    SSL_do_handshake
+    SSL_read
+    SSL_read_ex
+    SSL_read_early_data
+    SSL_peek
+    SSL_peek_ex
+    SSL_sendfile
+    SSL_write
+    SSL_write_ex
+    SSL_write_ex2
+    SSL_write_early_data
+    SSL_shutdown
+    SSL_shutdown_ex)
+
+# Current non-I/O SSL APIs used by libcurl and ngtcp2. The archive checks
+# require every future SSL API to be classified as wrapped or safe.
+set(OPENSSL_CONTRACT_ALLOWED_APIS
+    SSL_alert_desc_string_long
+    SSL_ctrl
+    SSL_ech_get1_retry_config
+    SSL_ech_get1_status
+    SSL_ech_set1_server_names
+    SSL_get0_alpn_selected
+    SSL_get0_group_name
+    SSL_get0_verified_chain
+    SSL_get1_peer_certificate
+    SSL_get_certificate
+    SSL_get_current_cipher
+    SSL_get_early_data_status
+    SSL_get_ex_data
+    SSL_get_peer_cert_chain
+    SSL_get_peer_signature_type_nid
+    SSL_get_privatekey
+    SSL_get_shutdown
+    SSL_get_verify_result
+    SSL_get_version
+    SSL_set0_rbio
+    SSL_set0_wbio
+    SSL_set1_ech_config_list
+    SSL_set_alpn_protos
+    SSL_set_connect_state
+    SSL_set_ex_data
+    SSL_set_options
+    SSL_set_quic_tls_cbs
+    SSL_set_quic_tls_early_data_enabled
+    SSL_set_quic_tls_transport_params
+    SSL_set_session
+    SSL_version)

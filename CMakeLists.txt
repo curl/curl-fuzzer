@@ -33,6 +33,8 @@ set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 # alone keeps the link size of the curl_fuzzer_proto binaries under the
 # memory limits of a stock GitHub runner.
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
+option(ENABLE_OPENSSL_CONTRACT_SHIM
+    "Assert if OpenSSL I/O continues after a fatal result" ON)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
@@ -813,8 +815,46 @@ set(COMMON_SOURCES
     legacy_tlv_mutator.cc
 )
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
+
+# SSL_ERROR_SSL and SSL_ERROR_SYSCALL terminate an OpenSSL connection: no
+# further I/O or SSL_shutdown call is permitted. Route TLS I/O through an ELF
+# link wrapper so fuzzing reports the first forbidden call with the operation
+# that produced the fatal SSL_get_error classification.
+add_library(openssl_contract_checked INTERFACE)
+set(OPENSSL_CONTRACT_SHIM_ACTIVE FALSE)
+if(TARGET openssl_external)
+    if(ENABLE_OPENSSL_CONTRACT_SHIM AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_library(openssl_contract_shim_objects OBJECT
+            openssl_contract_shim.cc)
+        target_compile_features(openssl_contract_shim_objects PRIVATE
+            cxx_std_11)
+        target_compile_options(openssl_contract_shim_objects PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(openssl_contract_shim_objects PRIVATE
+            ${OPENSSL_INSTALL_DIR}/include)
+        add_dependencies(openssl_contract_shim_objects openssl_external)
+
+        include(${CMAKE_SOURCE_DIR}/cmake/OpenSSLContractApis.cmake)
+        foreach(_openssl_api IN LISTS OPENSSL_CONTRACT_WRAPPED_APIS)
+            target_link_options(openssl_contract_checked INTERFACE
+                "LINKER:--wrap=${_openssl_api}")
+        endforeach()
+        target_link_libraries(openssl_contract_checked INTERFACE
+            $<TARGET_OBJECTS:openssl_contract_shim_objects>)
+        set(OPENSSL_CONTRACT_SHIM_ACTIVE TRUE)
+    else()
+        if(ENABLE_OPENSSL_CONTRACT_SHIM)
+            message(WARNING
+                "OpenSSL contract assertions require Linux with GNU or "
+                "Clang; building without the shim")
+        endif()
+    endif()
+endif()
+
 set(CURL_STATIC_DEPENDENCY_LIBS
     ${NGHTTP2_STATIC_LIB}
+    openssl_contract_checked
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
     ${ZSTD_STATIC_LIB}
@@ -841,6 +881,7 @@ if(TARGET openssl_external)
     target_include_directories(curl_tls_mock_openssl INTERFACE
         ${OPENSSL_INSTALL_DIR}/include)
     target_link_libraries(curl_tls_mock_openssl INTERFACE
+        openssl_contract_checked
         ${OPENSSL_STATIC_LIB})
     add_dependencies(curl_tls_mock_openssl openssl_external)
 endif()
@@ -851,6 +892,7 @@ if(BUILD_HTTP3_VARIANT)
         ${CURL_HTTP3_INCLUDE_DIRS})
     target_link_libraries(curl_client_http3 INTERFACE
         ${CURL_HTTP3_STATIC_LIB}
+        openssl_contract_checked
         curl_fuzzer::http3_dependencies
         ${NGHTTP2_STATIC_LIB}
         ${ZLIB_STATIC_LIB}
@@ -924,8 +966,58 @@ set(COMMON_LINK_LIBS
 )
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG} ${COVERAGE_LINK_FLAGS})
 
+# Curl tracks its own master branch in standalone builds, and ngtcp2 changes
+# when its pinned release advances. Fail the fuzz build if either adds an SSL
+# API without classifying it as contract-checked I/O or a safe non-I/O call.
+set(OPENSSL_CONTRACT_DEP "")
+if(OPENSSL_CONTRACT_SHIM_ACTIVE)
+    function(add_openssl_contract_surface_check _target _archive
+             _archive_target _client_target)
+        set(_stamp ${CMAKE_BINARY_DIR}/${_target}.checked)
+        add_custom_command(
+            OUTPUT ${_stamp}
+            COMMAND ${CMAKE_COMMAND}
+                "-DNM=${CMAKE_NM}"
+                "-DARCHIVE=${_archive}"
+                "-DWRAPPED_APIS=${OPENSSL_CONTRACT_WRAPPED_APIS}"
+                "-DALLOWED_APIS=${OPENSSL_CONTRACT_ALLOWED_APIS}"
+                -P
+                ${CMAKE_SOURCE_DIR}/scripts/check_openssl_contract_symbols.cmake
+            COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+            DEPENDS
+                ${_archive_target}
+                ${_archive}
+                ${CMAKE_SOURCE_DIR}/cmake/OpenSSLContractApis.cmake
+                ${CMAKE_SOURCE_DIR}/scripts/check_openssl_contract_symbols.cmake
+            VERBATIM)
+        add_custom_target(${_target} DEPENDS ${_stamp})
+        add_dependencies(${_client_target} ${_target})
+    endfunction()
+
+    add_openssl_contract_surface_check(
+        openssl_contract_surface_check
+        ${CURL_STATIC_LIB}
+        curl_external
+        curl_client_default)
+    set(OPENSSL_CONTRACT_DEP openssl_contract_surface_check)
+
+    if(BUILD_HTTP3_VARIANT)
+        add_openssl_contract_surface_check(
+            openssl_contract_surface_check_http3
+            ${CURL_HTTP3_STATIC_LIB}
+            curl_http3_external
+            curl_client_http3)
+        add_openssl_contract_surface_check(
+            openssl_contract_surface_check_ngtcp2_crypto
+            ${HTTP3_NGTCP2_CRYPTO_OSSL_STATIC_LIB}
+            http3_ngtcp2_external
+            curl_client_http3)
+    endif()
+endif()
+
 # Ensure that curl and its dependencies are built before the fuzzers
-set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
+set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP}
+    ${OPENSSL_CONTRACT_DEP})
 
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
@@ -1118,6 +1210,32 @@ if(BUILD_TESTING)
     add_dependencies(fault_injection_test curl_external ${CURL_DEPS})
     add_test(NAME fault_injection_test COMMAND fault_injection_test)
     add_dependencies(fuzzer_unit_tests fault_injection_test)
+
+    if(OPENSSL_CONTRACT_SHIM_ACTIVE)
+        add_executable(openssl_contract_shim_test
+            tests/openssl_contract_shim_test.cc)
+        target_compile_features(openssl_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(openssl_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(openssl_contract_shim_test PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${OPENSSL_INSTALL_DIR}/include)
+        target_link_libraries(openssl_contract_shim_test PRIVATE
+            openssl_contract_checked
+            ${OPENSSL_STATIC_LIB}
+            ${ZLIB_STATIC_LIB}
+            ${CMAKE_DL_LIBS}
+            pthread)
+        target_link_options(openssl_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(openssl_contract_shim_test
+            openssl_external
+            zlib_external)
+        add_test(NAME openssl_contract_shim_test
+            COMMAND openssl_contract_shim_test)
+        set_tests_properties(openssl_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests openssl_contract_shim_test)
+    endif()
 endif()
 
 # BUFQ fuzzer
