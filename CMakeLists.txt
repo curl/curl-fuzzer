@@ -33,6 +33,8 @@ set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 # alone keeps the link size of the curl_fuzzer_proto binaries under the
 # memory limits of a stock GitHub runner.
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
+option(ENABLE_NGHTTP2_CONTRACT_SHIM
+    "Assert if a poisoned nghttp2 session is used by a fuzz executable" ON)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
@@ -813,8 +815,71 @@ set(COMMON_SOURCES
     legacy_tlv_mutator.cc
 )
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
+
+# nghttp2 documents every return below NGHTTP2_ERR_FATAL as terminal for that
+# session: the application may only call nghttp2_session_del afterward. Route
+# libcurl's complete session-bearing API surface through an ELF link wrapper so
+# fuzzing reports a precise contract assertion at the first forbidden call.
+add_library(nghttp2_contract_checked INTERFACE)
+if(ENABLE_NGHTTP2_CONTRACT_SHIM AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_library(nghttp2_contract_shim_objects OBJECT
+        nghttp2_contract_shim.cc)
+    target_compile_features(nghttp2_contract_shim_objects PRIVATE cxx_std_11)
+    target_compile_options(nghttp2_contract_shim_objects PRIVATE
+        ${COMMON_FLAGS})
+    target_include_directories(nghttp2_contract_shim_objects PRIVATE
+        ${NGHTTP2_INSTALL_DIR}/include)
+    add_dependencies(nghttp2_contract_shim_objects nghttp2_external)
+
+    set(NGHTTP2_CONTRACT_WRAPPED_APIS
+        nghttp2_session_client_new3
+        nghttp2_session_del
+        nghttp2_session_check_request_allowed
+        nghttp2_session_consume
+        nghttp2_session_get_local_window_size
+        nghttp2_session_get_remote_settings
+        nghttp2_session_get_remote_window_size
+        nghttp2_session_get_stream_effective_local_window_size
+        nghttp2_session_get_stream_effective_recv_data_length
+        nghttp2_session_get_stream_remote_window_size
+        nghttp2_session_get_stream_user_data
+        nghttp2_session_mem_recv
+        nghttp2_session_resume_data
+        nghttp2_session_send
+        nghttp2_session_set_local_window_size
+        nghttp2_session_set_stream_user_data
+        nghttp2_session_upgrade2
+        nghttp2_session_want_read
+        nghttp2_session_want_write
+        nghttp2_submit_goaway
+        nghttp2_submit_ping
+        nghttp2_submit_priority
+        nghttp2_submit_request
+        nghttp2_submit_rst_stream
+        nghttp2_submit_settings
+        nghttp2_submit_window_update)
+    foreach(_nghttp2_api IN LISTS NGHTTP2_CONTRACT_WRAPPED_APIS)
+        target_link_options(nghttp2_contract_checked INTERFACE
+            "LINKER:--wrap=${_nghttp2_api}")
+    endforeach()
+    target_link_libraries(nghttp2_contract_checked INTERFACE
+        $<TARGET_OBJECTS:nghttp2_contract_shim_objects>
+        ${NGHTTP2_STATIC_LIB})
+    set(NGHTTP2_CONTRACT_SHIM_ACTIVE TRUE)
+else()
+    target_link_libraries(nghttp2_contract_checked INTERFACE
+        ${NGHTTP2_STATIC_LIB})
+    set(NGHTTP2_CONTRACT_SHIM_ACTIVE FALSE)
+    if(ENABLE_NGHTTP2_CONTRACT_SHIM)
+        message(WARNING
+            "nghttp2 contract assertions require Linux with GNU or Clang; "
+            "linking nghttp2 without the shim")
+    endif()
+endif()
+
 set(CURL_STATIC_DEPENDENCY_LIBS
-    ${NGHTTP2_STATIC_LIB}
+    nghttp2_contract_checked
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
     ${ZSTD_STATIC_LIB}
@@ -852,7 +917,7 @@ if(BUILD_HTTP3_VARIANT)
     target_link_libraries(curl_client_http3 INTERFACE
         ${CURL_HTTP3_STATIC_LIB}
         curl_fuzzer::http3_dependencies
-        ${NGHTTP2_STATIC_LIB}
+        nghttp2_contract_checked
         ${ZLIB_STATIC_LIB}
         ${ZSTD_STATIC_LIB}
         ${BROTLI_STATIC_LIBS}
@@ -871,7 +936,7 @@ if(BUILD_MBEDTLS_VARIANT)
         ${CURL_MBEDTLS_INCLUDE_DIRS})
     target_link_libraries(curl_client_mbedtls INTERFACE
         ${CURL_MBEDTLS_STATIC_LIB}
-        ${NGHTTP2_STATIC_LIB}
+        nghttp2_contract_checked
         curl_fuzzer::mbedtls_dependencies
         ${ZLIB_STATIC_LIB}
         ${ZSTD_STATIC_LIB}
@@ -898,7 +963,7 @@ if(BUILD_GNUTLS_VARIANT)
         ${CURL_GNUTLS_INCLUDE_DIRS})
     target_link_libraries(curl_client_gnutls INTERFACE
         ${CURL_GNUTLS_STATIC_LIB}
-        ${NGHTTP2_STATIC_LIB}
+        nghttp2_contract_checked
         curl_fuzzer::gnutls_dependencies
         ${ZLIB_STATIC_LIB}
         ${ZSTD_STATIC_LIB}
@@ -924,8 +989,68 @@ set(COMMON_LINK_LIBS
 )
 set(COMMON_LINK_OPTIONS ${LIB_FUZZING_ENGINE_FLAG} ${COVERAGE_LINK_FLAGS})
 
+# Curl tracks its own master branch in standalone builds, so fail the fuzz
+# build if a future curl revision starts using a session-bearing nghttp2 API
+# that is absent from the maintained wrapper surface. Check each configured
+# libcurl variant independently because their feature sets can diverge.
+set(NGHTTP2_CONTRACT_DEP "")
+if(NGHTTP2_CONTRACT_SHIM_ACTIVE)
+    function(add_nghttp2_contract_surface_check _target _archive
+             _archive_target _client_target)
+        set(_stamp ${CMAKE_BINARY_DIR}/${_target}.checked)
+        add_custom_command(
+            OUTPUT ${_stamp}
+            COMMAND ${CMAKE_COMMAND}
+                "-DNM=${CMAKE_NM}"
+                "-DARCHIVE=${_archive}"
+                "-DWRAPPED_APIS=${NGHTTP2_CONTRACT_WRAPPED_APIS}"
+                -P
+                ${CMAKE_SOURCE_DIR}/scripts/check_nghttp2_contract_symbols.cmake
+            COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+            DEPENDS
+                ${_archive_target}
+                ${_archive}
+                ${CMAKE_SOURCE_DIR}/scripts/check_nghttp2_contract_symbols.cmake
+            VERBATIM)
+        add_custom_target(${_target} DEPENDS ${_stamp})
+        # Dependencies attached to an INTERFACE library propagate to every
+        # executable that links that client bundle.
+        add_dependencies(${_client_target} ${_target})
+    endfunction()
+
+    add_nghttp2_contract_surface_check(
+        nghttp2_contract_surface_check
+        ${CURL_STATIC_LIB}
+        curl_external
+        curl_client_default)
+    set(NGHTTP2_CONTRACT_DEP nghttp2_contract_surface_check)
+
+    if(BUILD_GNUTLS_VARIANT)
+        add_nghttp2_contract_surface_check(
+            nghttp2_contract_surface_check_gnutls
+            ${CURL_GNUTLS_STATIC_LIB}
+            curl_gnutls_external
+            curl_client_gnutls)
+    endif()
+    if(BUILD_MBEDTLS_VARIANT)
+        add_nghttp2_contract_surface_check(
+            nghttp2_contract_surface_check_mbedtls
+            ${CURL_MBEDTLS_STATIC_LIB}
+            curl_mbedtls_external
+            curl_client_mbedtls)
+    endif()
+    if(BUILD_HTTP3_VARIANT)
+        add_nghttp2_contract_surface_check(
+            nghttp2_contract_surface_check_http3
+            ${CURL_HTTP3_STATIC_LIB}
+            curl_http3_external
+            curl_client_http3)
+    endif()
+endif()
+
 # Ensure that curl and its dependencies are built before the fuzzers
-set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP})
+set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP}
+    ${NGHTTP2_CONTRACT_DEP})
 
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
@@ -1118,6 +1243,26 @@ if(BUILD_TESTING)
     add_dependencies(fault_injection_test curl_external ${CURL_DEPS})
     add_test(NAME fault_injection_test COMMAND fault_injection_test)
     add_dependencies(fuzzer_unit_tests fault_injection_test)
+
+    if(NGHTTP2_CONTRACT_SHIM_ACTIVE)
+        add_executable(nghttp2_contract_shim_test
+            tests/nghttp2_contract_shim_test.cc)
+        target_compile_features(nghttp2_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(nghttp2_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(nghttp2_contract_shim_test PRIVATE
+            ${NGHTTP2_INSTALL_DIR}/include)
+        target_link_libraries(nghttp2_contract_shim_test PRIVATE
+            nghttp2_contract_checked
+            pthread)
+        target_link_options(nghttp2_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(nghttp2_contract_shim_test nghttp2_external)
+        add_test(NAME nghttp2_contract_shim_test
+            COMMAND nghttp2_contract_shim_test)
+        set_tests_properties(nghttp2_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests nghttp2_contract_shim_test)
+    endif()
 endif()
 
 # BUFQ fuzzer
