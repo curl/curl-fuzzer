@@ -17,12 +17,31 @@
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/multi_socket_driver.h"
+#include "proto_fuzzer/scenario_limits.h"
 
 namespace proto_fuzzer {
 
 namespace {
 
 constexpr long kSelectTimeoutUs = 1000;  // 1 ms; explicit timing cases only.
+
+/// Enumerate the attached handles despite the scenario's bounded allocation
+/// failures. The parent remains attached, so a null result means the array
+/// allocation failed and is safe to retry. One final attempt follows the
+/// largest possible run of injected failures.
+/// @param multi Live multi handle whose attached easies are required.
+/// @return Caller-owned, null-terminated handle array, or nullptr after all
+///         bounded attempts fail.
+CURL** GetHandlesForCleanup(CURLM* multi) {
+  constexpr std::size_t kMaxAttempts = scenario_limits::kMaxAllocationFailures + 1;
+  for (std::size_t attempt = 0; attempt < kMaxAttempts; ++attempt) {
+    CURL** handles = curl_multi_get_handles(multi);
+    if (handles != nullptr) {
+      return handles;
+    }
+  }
+  return nullptr;
+}
 
 }  // namespace
 
@@ -181,7 +200,7 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
     // the application. Enumerate attached handles only after draining their
     // completion messages, then honor the public remove-before-cleanup
     // lifecycle. The original `easy` remains caller-owned.
-    CURL** handles = curl_multi_get_handles(multi.get());
+    CURL** handles = GetHandlesForCleanup(multi.get());
     if (handles != nullptr) {
       for (std::size_t index = 0; handles[index] != nullptr; ++index) {
         CURL* handle = handles[index];

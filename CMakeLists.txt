@@ -2144,6 +2144,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             m
         )
         target_link_options(h2_cleartext_mock_server_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+           CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_definitions(h2_cleartext_mock_server_test PRIVATE
+                PROTO_FUZZER_WRAP_MULTI_GET_HANDLES)
+            target_link_options(h2_cleartext_mock_server_test PRIVATE
+                "LINKER:--wrap=curl_multi_get_handles")
+        endif()
         add_dependencies(h2_cleartext_mock_server_test
             ${FUZZ_DEPS}
             libprotobuf_mutator_external
