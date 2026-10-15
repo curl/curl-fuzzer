@@ -34,7 +34,11 @@ set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 # memory limits of a stock GitHub runner.
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
 option(ENABLE_OPENSSL_CONTRACT_SHIM
-    "Assert if OpenSSL I/O continues after a fatal result" ON)
+    "Assert OpenSSL I/O, error-classification, and write-retry contracts" ON)
+option(ENABLE_GNUTLS_CONTRACT_SHIM
+    "Assert GnuTLS fatal-state and record retry contract violations" ON)
+option(ENABLE_MBEDTLS_CONTRACT_SHIM
+    "Assert Mbed TLS fatal-state and write retry contract violations" ON)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
@@ -852,6 +856,65 @@ if(TARGET openssl_external)
     endif()
 endif()
 
+# GnuTLS queues the exact buffer passed to a record send that returns AGAIN or
+# INTERRUPTED, and fatal session errors permit only deinitialization. Enforce
+# both rules without allocating from the fuzzed process.
+add_library(gnutls_contract_checked INTERFACE)
+set(GNUTLS_CONTRACT_SHIM_ACTIVE FALSE)
+if(BUILD_GNUTLS_VARIANT AND ENABLE_GNUTLS_CONTRACT_SHIM AND
+   CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_library(gnutls_contract_shim_objects OBJECT gnutls_contract_shim.cc)
+    target_compile_features(gnutls_contract_shim_objects PRIVATE cxx_std_11)
+    target_compile_options(gnutls_contract_shim_objects PRIVATE
+        ${COMMON_FLAGS})
+    target_include_directories(gnutls_contract_shim_objects PRIVATE
+        ${GNUTLS_INCLUDE_DIR})
+    add_dependencies(gnutls_contract_shim_objects gnutls_external)
+
+    include(${CMAKE_SOURCE_DIR}/cmake/GnuTLSContractApis.cmake)
+    foreach(_gnutls_api IN LISTS GNUTLS_CONTRACT_WRAPPED_APIS)
+        target_link_options(gnutls_contract_checked INTERFACE
+            "LINKER:--wrap=${_gnutls_api}")
+    endforeach()
+    target_link_libraries(gnutls_contract_checked INTERFACE
+        $<TARGET_OBJECTS:gnutls_contract_shim_objects>)
+    set(GNUTLS_CONTRACT_SHIM_ACTIVE TRUE)
+elseif(BUILD_GNUTLS_VARIANT AND ENABLE_GNUTLS_CONTRACT_SHIM)
+    message(WARNING
+        "GnuTLS contract assertions require Linux with GNU or Clang; "
+        "building without the shim")
+endif()
+
+# Mbed TLS requires a blocked write to be retried with identical arguments and
+# forbids connection I/O after terminal errors until reset or free.
+add_library(mbedtls_contract_checked INTERFACE)
+set(MBEDTLS_CONTRACT_SHIM_ACTIVE FALSE)
+if(BUILD_MBEDTLS_VARIANT AND ENABLE_MBEDTLS_CONTRACT_SHIM AND
+   CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_library(mbedtls_contract_shim_objects OBJECT mbedtls_contract_shim.cc)
+    target_compile_features(mbedtls_contract_shim_objects PRIVATE cxx_std_11)
+    target_compile_options(mbedtls_contract_shim_objects PRIVATE
+        ${COMMON_FLAGS})
+    target_include_directories(mbedtls_contract_shim_objects PRIVATE
+        ${MBEDTLS_INCLUDE_DIR})
+    add_dependencies(mbedtls_contract_shim_objects mbedtls_external)
+
+    include(${CMAKE_SOURCE_DIR}/cmake/MbedTLSContractApis.cmake)
+    foreach(_mbedtls_api IN LISTS MBEDTLS_CONTRACT_WRAPPED_APIS)
+        target_link_options(mbedtls_contract_checked INTERFACE
+            "LINKER:--wrap=${_mbedtls_api}")
+    endforeach()
+    target_link_libraries(mbedtls_contract_checked INTERFACE
+        $<TARGET_OBJECTS:mbedtls_contract_shim_objects>)
+    set(MBEDTLS_CONTRACT_SHIM_ACTIVE TRUE)
+elseif(BUILD_MBEDTLS_VARIANT AND ENABLE_MBEDTLS_CONTRACT_SHIM)
+    message(WARNING
+        "Mbed TLS contract assertions require Linux with GNU or Clang; "
+        "building without the shim")
+endif()
+
 set(CURL_STATIC_DEPENDENCY_LIBS
     ${NGHTTP2_STATIC_LIB}
     openssl_contract_checked
@@ -914,6 +977,7 @@ if(BUILD_MBEDTLS_VARIANT)
     target_link_libraries(curl_client_mbedtls INTERFACE
         ${CURL_MBEDTLS_STATIC_LIB}
         ${NGHTTP2_STATIC_LIB}
+        mbedtls_contract_checked
         curl_fuzzer::mbedtls_dependencies
         ${ZLIB_STATIC_LIB}
         ${ZSTD_STATIC_LIB}
@@ -941,6 +1005,7 @@ if(BUILD_GNUTLS_VARIANT)
     target_link_libraries(curl_client_gnutls INTERFACE
         ${CURL_GNUTLS_STATIC_LIB}
         ${NGHTTP2_STATIC_LIB}
+        gnutls_contract_checked
         curl_fuzzer::gnutls_dependencies
         ${ZLIB_STATIC_LIB}
         ${ZSTD_STATIC_LIB}
@@ -958,6 +1023,52 @@ if(BUILD_GNUTLS_VARIANT)
         curl_client_gnutls)
     add_dependencies(curl_proto_client_gnutls
         curl_gnutls_external openssl_external)
+endif()
+
+if(GNUTLS_CONTRACT_SHIM_ACTIVE)
+    set(_gnutls_contract_stamp
+        ${CMAKE_BINARY_DIR}/gnutls_contract_surface_check.checked)
+    add_custom_command(
+        OUTPUT ${_gnutls_contract_stamp}
+        COMMAND ${CMAKE_COMMAND}
+            "-DNM=${CMAKE_NM}"
+            "-DARCHIVE=${CURL_GNUTLS_STATIC_LIB}"
+            "-DWRAPPED_APIS=${GNUTLS_CONTRACT_WRAPPED_APIS}"
+            "-DALLOWED_APIS=${GNUTLS_CONTRACT_ALLOWED_APIS}"
+            -P ${CMAKE_SOURCE_DIR}/scripts/check_gnutls_contract_symbols.cmake
+        COMMAND ${CMAKE_COMMAND} -E touch ${_gnutls_contract_stamp}
+        DEPENDS
+            curl_gnutls_external
+            ${CURL_GNUTLS_STATIC_LIB}
+            ${CMAKE_SOURCE_DIR}/cmake/GnuTLSContractApis.cmake
+            ${CMAKE_SOURCE_DIR}/scripts/check_gnutls_contract_symbols.cmake
+        VERBATIM)
+    add_custom_target(gnutls_contract_surface_check
+        DEPENDS ${_gnutls_contract_stamp})
+    add_dependencies(curl_client_gnutls gnutls_contract_surface_check)
+endif()
+
+if(MBEDTLS_CONTRACT_SHIM_ACTIVE)
+    set(_mbedtls_contract_stamp
+        ${CMAKE_BINARY_DIR}/mbedtls_contract_surface_check.checked)
+    add_custom_command(
+        OUTPUT ${_mbedtls_contract_stamp}
+        COMMAND ${CMAKE_COMMAND}
+            "-DNM=${CMAKE_NM}"
+            "-DARCHIVE=${CURL_MBEDTLS_STATIC_LIB}"
+            "-DWRAPPED_APIS=${MBEDTLS_CONTRACT_WRAPPED_APIS}"
+            "-DALLOWED_APIS=${MBEDTLS_CONTRACT_ALLOWED_APIS}"
+            -P ${CMAKE_SOURCE_DIR}/scripts/check_mbedtls_contract_symbols.cmake
+        COMMAND ${CMAKE_COMMAND} -E touch ${_mbedtls_contract_stamp}
+        DEPENDS
+            curl_mbedtls_external
+            ${CURL_MBEDTLS_STATIC_LIB}
+            ${CMAKE_SOURCE_DIR}/cmake/MbedTLSContractApis.cmake
+            ${CMAKE_SOURCE_DIR}/scripts/check_mbedtls_contract_symbols.cmake
+        VERBATIM)
+    add_custom_target(mbedtls_contract_surface_check
+        DEPENDS ${_mbedtls_contract_stamp})
+    add_dependencies(curl_client_mbedtls mbedtls_contract_surface_check)
 endif()
 
 set(COMMON_LINK_LIBS
@@ -1235,6 +1346,50 @@ if(BUILD_TESTING)
             COMMAND openssl_contract_shim_test)
         set_tests_properties(openssl_contract_shim_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests openssl_contract_shim_test)
+    endif()
+
+    if(GNUTLS_CONTRACT_SHIM_ACTIVE)
+        add_executable(gnutls_contract_shim_test
+            tests/gnutls_contract_shim_test.cc
+            tests/gnutls_contract_test_backend.cc)
+        target_compile_features(gnutls_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(gnutls_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(gnutls_contract_shim_test PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${GNUTLS_INCLUDE_DIR})
+        target_link_libraries(gnutls_contract_shim_test PRIVATE
+            gnutls_contract_checked
+            pthread)
+        target_link_options(gnutls_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(gnutls_contract_shim_test gnutls_external)
+        add_test(NAME gnutls_contract_shim_test
+            COMMAND gnutls_contract_shim_test)
+        set_tests_properties(gnutls_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests gnutls_contract_shim_test)
+    endif()
+
+    if(MBEDTLS_CONTRACT_SHIM_ACTIVE)
+        add_executable(mbedtls_contract_shim_test
+            tests/mbedtls_contract_shim_test.cc
+            tests/mbedtls_contract_test_backend.cc)
+        target_compile_features(mbedtls_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(mbedtls_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(mbedtls_contract_shim_test PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${MBEDTLS_INCLUDE_DIR})
+        target_link_libraries(mbedtls_contract_shim_test PRIVATE
+            mbedtls_contract_checked
+            pthread)
+        target_link_options(mbedtls_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(mbedtls_contract_shim_test mbedtls_external)
+        add_test(NAME mbedtls_contract_shim_test
+            COMMAND mbedtls_contract_shim_test)
+        set_tests_properties(mbedtls_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests mbedtls_contract_shim_test)
     endif()
 endif()
 
