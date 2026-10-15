@@ -35,6 +35,8 @@ set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
 option(ENABLE_OPENSSL_CONTRACT_SHIM
     "Assert if OpenSSL I/O continues after a fatal result" ON)
+option(ENABLE_ZSTD_CONTRACT_SHIM
+    "Assert if zstd decompression continues after an error" ON)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
@@ -852,11 +854,47 @@ if(TARGET openssl_external)
     endif()
 endif()
 
+# ZSTD_decompressStream leaves its context in an undefined state after an
+# error. Route the relevant APIs through an ELF link wrapper so fuzzing reports
+# attempts to decompress again before the context is reset or freed.
+add_library(zstd_contract_checked INTERFACE)
+set(ZSTD_CONTRACT_SHIM_ACTIVE FALSE)
+if(TARGET zstd_external)
+    if(ENABLE_ZSTD_CONTRACT_SHIM AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_library(zstd_contract_shim_objects OBJECT
+            zstd_contract_shim.cc)
+        target_compile_features(zstd_contract_shim_objects PRIVATE
+            cxx_std_11)
+        target_compile_options(zstd_contract_shim_objects PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(zstd_contract_shim_objects PRIVATE
+            ${ZSTD_INSTALL_DIR}/include)
+        add_dependencies(zstd_contract_shim_objects zstd_external)
+
+        include(${CMAKE_SOURCE_DIR}/cmake/ZstdContractApis.cmake)
+        foreach(_zstd_api IN LISTS ZSTD_CONTRACT_WRAPPED_APIS)
+            target_link_options(zstd_contract_checked INTERFACE
+                "LINKER:--wrap=${_zstd_api}")
+        endforeach()
+        target_link_libraries(zstd_contract_checked INTERFACE
+            $<TARGET_OBJECTS:zstd_contract_shim_objects>)
+        set(ZSTD_CONTRACT_SHIM_ACTIVE TRUE)
+    else()
+        if(ENABLE_ZSTD_CONTRACT_SHIM)
+            message(WARNING
+                "zstd contract assertions require Linux with GNU or Clang; "
+                "building without the shim")
+        endif()
+    endif()
+endif()
+
 set(CURL_STATIC_DEPENDENCY_LIBS
     ${NGHTTP2_STATIC_LIB}
     openssl_contract_checked
     ${OPENSSL_STATIC_LIB}
     ${ZLIB_STATIC_LIB}
+    zstd_contract_checked
     ${ZSTD_STATIC_LIB}
     ${BROTLI_STATIC_LIBS}
     ${LIBIDN2_STATIC_LIB}
@@ -896,6 +934,7 @@ if(BUILD_HTTP3_VARIANT)
         curl_fuzzer::http3_dependencies
         ${NGHTTP2_STATIC_LIB}
         ${ZLIB_STATIC_LIB}
+        zstd_contract_checked
         ${ZSTD_STATIC_LIB}
         ${BROTLI_STATIC_LIBS}
         ${LIBIDN2_STATIC_LIB}
@@ -916,6 +955,7 @@ if(BUILD_MBEDTLS_VARIANT)
         ${NGHTTP2_STATIC_LIB}
         curl_fuzzer::mbedtls_dependencies
         ${ZLIB_STATIC_LIB}
+        zstd_contract_checked
         ${ZSTD_STATIC_LIB}
         ${BROTLI_STATIC_LIBS}
         ${LIBIDN2_STATIC_LIB}
@@ -943,6 +983,7 @@ if(BUILD_GNUTLS_VARIANT)
         ${NGHTTP2_STATIC_LIB}
         curl_fuzzer::gnutls_dependencies
         ${ZLIB_STATIC_LIB}
+        zstd_contract_checked
         ${ZSTD_STATIC_LIB}
         ${BROTLI_STATIC_LIBS}
         ${OPENLDAP_STATIC_LIB_LDAP}
@@ -1015,9 +1056,67 @@ if(OPENSSL_CONTRACT_SHIM_ACTIVE)
     endif()
 endif()
 
+# Every libcurl archive linked with zstd must keep its public API use in this
+# explicit catalog. A new call therefore requires deciding whether it observes
+# or changes the poisoned decompression-context state.
+set(ZSTD_CONTRACT_DEP "")
+if(ZSTD_CONTRACT_SHIM_ACTIVE)
+    function(add_zstd_contract_surface_check _target _archive
+             _archive_target _client_target)
+        set(_stamp ${CMAKE_BINARY_DIR}/${_target}.checked)
+        add_custom_command(
+            OUTPUT ${_stamp}
+            COMMAND ${CMAKE_COMMAND}
+                "-DNM=${CMAKE_NM}"
+                "-DARCHIVE=${_archive}"
+                "-DWRAPPED_APIS=${ZSTD_CONTRACT_WRAPPED_APIS}"
+                "-DALLOWED_APIS=${ZSTD_CONTRACT_ALLOWED_APIS}"
+                -P
+                ${CMAKE_SOURCE_DIR}/scripts/check_zstd_contract_symbols.cmake
+            COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+            DEPENDS
+                ${_archive_target}
+                ${_archive}
+                ${CMAKE_SOURCE_DIR}/cmake/ZstdContractApis.cmake
+                ${CMAKE_SOURCE_DIR}/scripts/check_zstd_contract_symbols.cmake
+            VERBATIM)
+        add_custom_target(${_target} DEPENDS ${_stamp})
+        add_dependencies(${_client_target} ${_target})
+    endfunction()
+
+    add_zstd_contract_surface_check(
+        zstd_contract_surface_check
+        ${CURL_STATIC_LIB}
+        curl_external
+        curl_client_default)
+    set(ZSTD_CONTRACT_DEP zstd_contract_surface_check)
+
+    if(BUILD_HTTP3_VARIANT)
+        add_zstd_contract_surface_check(
+            zstd_contract_surface_check_http3
+            ${CURL_HTTP3_STATIC_LIB}
+            curl_http3_external
+            curl_client_http3)
+    endif()
+    if(BUILD_MBEDTLS_VARIANT)
+        add_zstd_contract_surface_check(
+            zstd_contract_surface_check_mbedtls
+            ${CURL_MBEDTLS_STATIC_LIB}
+            curl_mbedtls_external
+            curl_client_mbedtls)
+    endif()
+    if(BUILD_GNUTLS_VARIANT)
+        add_zstd_contract_surface_check(
+            zstd_contract_surface_check_gnutls
+            ${CURL_GNUTLS_STATIC_LIB}
+            curl_gnutls_external
+            curl_client_gnutls)
+    endif()
+endif()
+
 # Ensure that curl and its dependencies are built before the fuzzers
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP}
-    ${OPENSSL_CONTRACT_DEP})
+    ${OPENSSL_CONTRACT_DEP} ${ZSTD_CONTRACT_DEP})
 
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
@@ -1235,6 +1334,28 @@ if(BUILD_TESTING)
             COMMAND openssl_contract_shim_test)
         set_tests_properties(openssl_contract_shim_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests openssl_contract_shim_test)
+    endif()
+
+    if(ZSTD_CONTRACT_SHIM_ACTIVE)
+        add_executable(zstd_contract_shim_test
+            tests/zstd_contract_shim_test.cc)
+        target_compile_features(zstd_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(zstd_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(zstd_contract_shim_test PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${ZSTD_INSTALL_DIR}/include)
+        target_link_libraries(zstd_contract_shim_test PRIVATE
+            zstd_contract_checked
+            ${ZSTD_STATIC_LIB}
+            pthread)
+        target_link_options(zstd_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(zstd_contract_shim_test zstd_external)
+        add_test(NAME zstd_contract_shim_test
+            COMMAND zstd_contract_shim_test)
+        set_tests_properties(zstd_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests zstd_contract_shim_test)
     endif()
 endif()
 
