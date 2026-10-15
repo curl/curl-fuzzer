@@ -40,6 +40,8 @@ option(ENABLE_ZSTD_CONTRACT_SHIM
     "Assert if zstd decompression continues after an error" ON)
 option(ENABLE_NGHTTP2_CONTRACT_SHIM
     "Assert if a poisoned nghttp2 session is used by a fuzz executable" ON)
+option(ENABLE_NGTCP2_CONTRACT_SHIM
+    "Assert ngtcp2 packet-coalescing contract violations" ON)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
@@ -930,6 +932,45 @@ else()
     endif()
 endif()
 
+# NGTCP2_WRITE_STREAM_FLAG_MORE and NGTCP2_WRITE_DATAGRAM_FLAG_MORE can start a
+# packet-coalescing transaction. Until ngtcp2 reaches the origin API's
+# documented completion condition, subsequent writes must retain the same
+# packet tuple and almost every other ngtcp2 API is forbidden.
+# Route connection calls through ELF link wrappers so violations identify both
+# the write that began coalescing and the forbidden operation.
+add_library(ngtcp2_contract_checked INTERFACE)
+set(NGTCP2_CONTRACT_SHIM_ACTIVE FALSE)
+if(BUILD_HTTP3_VARIANT)
+    if(ENABLE_NGTCP2_CONTRACT_SHIM AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_library(ngtcp2_contract_shim_objects OBJECT
+            ngtcp2_contract_shim.cc)
+        target_compile_features(ngtcp2_contract_shim_objects PRIVATE
+            cxx_std_11)
+        target_compile_options(ngtcp2_contract_shim_objects PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(ngtcp2_contract_shim_objects PRIVATE
+            ${HTTP3_NGTCP2_INCLUDE_DIR})
+        add_dependencies(ngtcp2_contract_shim_objects
+            http3_ngtcp2_external)
+
+        include(${CMAKE_SOURCE_DIR}/cmake/NGTCP2ContractApis.cmake)
+        foreach(_ngtcp2_api IN LISTS NGTCP2_CONTRACT_WRAPPED_APIS)
+            target_link_options(ngtcp2_contract_checked INTERFACE
+                "LINKER:--wrap=${_ngtcp2_api}")
+        endforeach()
+        target_link_libraries(ngtcp2_contract_checked INTERFACE
+            $<TARGET_OBJECTS:ngtcp2_contract_shim_objects>)
+        set(NGTCP2_CONTRACT_SHIM_ACTIVE TRUE)
+    else()
+        if(ENABLE_NGTCP2_CONTRACT_SHIM)
+            message(WARNING
+                "ngtcp2 contract assertions require Linux with GNU or "
+                "Clang; building without the shim")
+        endif()
+    endif()
+endif()
+
 set(CURL_STATIC_DEPENDENCY_LIBS
     nghttp2_contract_checked
     openssl_contract_checked
@@ -972,6 +1013,7 @@ if(BUILD_HTTP3_VARIANT)
     target_link_libraries(curl_client_http3 INTERFACE
         ${CURL_HTTP3_STATIC_LIB}
         openssl_contract_checked
+        ngtcp2_contract_checked
         curl_fuzzer::http3_dependencies
         nghttp2_contract_checked
         ${ZLIB_STATIC_LIB}
@@ -1215,9 +1257,46 @@ if(NGHTTP2_CONTRACT_SHIM_ACTIVE)
     endif()
 endif()
 
+# Curl follows master while ngtcp2 is pinned independently. Fail the fuzz build
+# if the HTTP/3 archive or in-process peer starts calling an ngtcp2 API that has
+# not been marked as transaction-checked or explicitly safe.
+set(NGTCP2_CONTRACT_DEP "")
+if(NGTCP2_CONTRACT_SHIM_ACTIVE)
+    function(add_ngtcp2_contract_surface_check _target _binary
+             _binary_target _consumer_target)
+        set(_stamp ${CMAKE_BINARY_DIR}/${_target}.checked)
+        add_custom_command(
+            OUTPUT ${_stamp}
+            COMMAND ${CMAKE_COMMAND}
+                "-DNM=${CMAKE_NM}"
+                "-DARCHIVE=${_binary}"
+                "-DWRAPPED_APIS=${NGTCP2_CONTRACT_WRAPPED_APIS}"
+                "-DALLOWED_APIS=${NGTCP2_CONTRACT_ALLOWED_APIS}"
+                -P
+                ${CMAKE_SOURCE_DIR}/scripts/check_ngtcp2_contract_symbols.cmake
+            COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+            DEPENDS
+                ${_binary_target}
+                ${_binary}
+                ${CMAKE_SOURCE_DIR}/cmake/NGTCP2ContractApis.cmake
+                ${CMAKE_SOURCE_DIR}/scripts/check_ngtcp2_contract_symbols.cmake
+            VERBATIM)
+        add_custom_target(${_target} DEPENDS ${_stamp})
+        add_dependencies(${_consumer_target} ${_target})
+    endfunction()
+
+    add_ngtcp2_contract_surface_check(
+        ngtcp2_contract_surface_check_http3
+        ${CURL_HTTP3_STATIC_LIB}
+        curl_http3_external
+        curl_client_http3)
+    set(NGTCP2_CONTRACT_DEP ngtcp2_contract_surface_check_http3)
+endif()
+
 # Ensure that curl and its dependencies are built before the fuzzers
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP}
-    ${OPENSSL_CONTRACT_DEP} ${ZSTD_CONTRACT_DEP} ${NGHTTP2_CONTRACT_DEP})
+    ${OPENSSL_CONTRACT_DEP} ${ZSTD_CONTRACT_DEP} ${NGHTTP2_CONTRACT_DEP}
+    ${NGTCP2_CONTRACT_DEP})
 
 # Helper macro to define a fuzzer target
 macro(curl_add_fuzzer _name _proto)
@@ -1514,6 +1593,50 @@ if(BUILD_TESTING)
             COMMAND nghttp2_contract_shim_test)
         set_tests_properties(nghttp2_contract_shim_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests nghttp2_contract_shim_test)
+    endif()
+
+    if(NGTCP2_CONTRACT_SHIM_ACTIVE)
+        add_library(ngtcp2_contract_shim_test_objects OBJECT
+            ngtcp2_contract_shim.cc)
+        target_compile_features(ngtcp2_contract_shim_test_objects PRIVATE
+            cxx_std_11)
+        target_compile_definitions(ngtcp2_contract_shim_test_objects PRIVATE
+            NGTCP2_CONTRACT_TESTING)
+        target_compile_options(ngtcp2_contract_shim_test_objects PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(ngtcp2_contract_shim_test_objects PRIVATE
+            ${HTTP3_NGTCP2_INCLUDE_DIR})
+        add_dependencies(ngtcp2_contract_shim_test_objects
+            http3_ngtcp2_external)
+
+        add_library(ngtcp2_contract_test_checked INTERFACE)
+        foreach(_ngtcp2_api IN LISTS NGTCP2_CONTRACT_WRAPPED_APIS)
+            target_link_options(ngtcp2_contract_test_checked INTERFACE
+                "LINKER:--wrap=${_ngtcp2_api}")
+        endforeach()
+        target_link_libraries(ngtcp2_contract_test_checked INTERFACE
+            $<TARGET_OBJECTS:ngtcp2_contract_shim_test_objects>)
+
+        add_executable(ngtcp2_contract_shim_test
+            tests/ngtcp2_contract_shim_test.cc)
+        target_compile_features(ngtcp2_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(ngtcp2_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(ngtcp2_contract_shim_test PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${HTTP3_NGTCP2_INCLUDE_DIR})
+        target_link_libraries(ngtcp2_contract_shim_test PRIVATE
+            ngtcp2_contract_test_checked
+            ${HTTP3_NGTCP2_STATIC_LIB}
+            pthread)
+        target_link_options(ngtcp2_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(ngtcp2_contract_shim_test
+            http3_ngtcp2_external)
+        add_test(NAME ngtcp2_contract_shim_test
+            COMMAND ngtcp2_contract_shim_test)
+        set_tests_properties(ngtcp2_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests ngtcp2_contract_shim_test)
     endif()
 endif()
 
@@ -2035,6 +2158,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             ${CURL_HTTP3_DEPS}
             curl_fuzzer_proto_generated
             libprotobuf_mutator_external)
+        if(NGTCP2_CONTRACT_SHIM_ACTIVE)
+            add_ngtcp2_contract_surface_check(
+                ngtcp2_contract_surface_check_peer
+                "$<TARGET_OBJECTS:curl_fuzzer_proto_http3_runner>"
+                curl_fuzzer_proto_http3_runner
+                curl_client_http3)
+        endif()
     endif()
 
     if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
