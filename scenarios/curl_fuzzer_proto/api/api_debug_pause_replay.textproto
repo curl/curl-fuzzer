@@ -1,0 +1,13 @@
+# Replay paused output, then re-enter cw-out from the write trace's debug
+# callback by toggling receive pause off and on. This keeps the callback site
+# and ordered API calls together as one mutation-visible action.
+scheme: SCHEME_HTTP
+host_path: "api.test/debug-pause-replay"
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n"
+  on_readable: "paused"
+}
+api_plan {
+  drive_mode: API_DRIVE_MULTI_PERFORM
+  debug_pause_cycle_during_replay: true
+}

@@ -353,7 +353,8 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
     const volatile std::size_t api_observation[] = {
         api_lifecycle->response_pause_returned(), api_lifecycle->response_bytes_received(),
-        api_lifecycle->reentrant_probes_run(), api_lifecycle->reentrant_recursive_rejections()};
+        api_lifecycle->reentrant_probes_run(), api_lifecycle->reentrant_recursive_rejections(),
+        api_lifecycle->debug_pause_cycle_ran()};
     (void)api_observation;
 #endif
   } else if (mode != ScenarioRunMode::kFastProtocol) {

@@ -50,6 +50,11 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
             "reentrant_probe_selectors: 13",
             "API_DRIVE_MULTI_PERFORM",
         ),
+        "api_debug_pause_replay.textproto": (
+            "debug_pause_cycle_during_replay: true",
+            'on_readable: "paused"',
+            "API_DRIVE_MULTI_PERFORM",
+        ),
         "api_copy_postfields.textproto": (
             "CURLOPT_COPYPOSTFIELDS",
             'string_value: "copy\\000body"',
