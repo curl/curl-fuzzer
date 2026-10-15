@@ -477,8 +477,7 @@ std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, st
 /// Re-enter the pause API from the write trace emitted after ResponseWrite
 /// returns PAUSE for a replayed buffer but before cw-out records that second
 /// pause. Disarm first because either nested call may itself emit debug records.
-int ApiLifecycle::DebugCallback(CURL* easy, curl_infotype type, char* /*data*/,
-                                std::size_t /*size*/, void* user_data) {
+int ApiLifecycle::DebugCallback(CURL* easy, curl_infotype type, char* /*data*/, std::size_t /*size*/, void* user_data) {
   auto* state = static_cast<ResponseCallbackState*>(user_data);
   if (state == nullptr || type != CURLINFO_TEXT || !state->debug_pause_armed || state->debug_pause_cycle_done) {
     return 0;
@@ -518,10 +517,13 @@ std::size_t ApiLifecycle::reentrant_recursive_rejections() const {
   return response_callback_state_.recursive_rejections;
 }
 
+/// @return Whether the write-trace callback ran its nested pause cycle.
 bool ApiLifecycle::debug_pause_cycle_ran() const { return response_callback_state_.debug_pause_cycle_done; }
 
+/// @return Result of pausing receive from the write-trace callback.
 CURLcode ApiLifecycle::debug_pause_result() const { return response_callback_state_.debug_pause_result; }
 
+/// @return Result of continuing receive from the write-trace callback.
 CURLcode ApiLifecycle::debug_continue_result() const { return response_callback_state_.debug_continue_result; }
 
 /// Fire each selected public API call once, in scenario order, from inside the
