@@ -461,6 +461,9 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
   switch (plan->drive_mode()) {
     case curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM:
     case curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET:
+      if (plan->debug_pause_cycle_during_replay()) {
+        plan->set_pause_response_once(true);
+      }
       break;
     case curl::fuzzer::proto::API_DRIVE_EASY_PERFORM:
     case curl::fuzzer::proto::API_DRIVE_EASY_EVENTS:
@@ -471,6 +474,7 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
       // every retained API-plan value observable and bounded.
       plan->set_wake_multi(false);
       plan->set_pause_response_once(false);
+      plan->set_debug_pause_cycle_during_replay(false);
       break;
     default:
       plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);

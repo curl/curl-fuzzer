@@ -58,6 +58,12 @@ class ApiLifecycle {
 
   std::size_t reentrant_recursive_rejections() const;
 
+  bool debug_pause_cycle_ran() const;
+
+  CURLcode debug_pause_result() const;
+
+  CURLcode debug_continue_result() const;
+
  private:
   /// Counters provide real callback userdata without synchronization: this
   /// fuzzer drives one easy handle on one thread.
@@ -75,9 +81,17 @@ class ApiLifecycle {
     bool probes_done = false;
     std::size_t probes_run = 0;
     std::size_t recursive_rejections = 0;
+    bool debug_pause_cycle = false;
+    bool debug_pause_armed = false;
+    bool debug_pause_write_trace_seen = false;
+    bool debug_pause_cycle_done = false;
+    CURLcode debug_pause_result = CURLE_OK;
+    CURLcode debug_continue_result = CURLE_OK;
   };
 
   static std::size_t ResponseWrite(char* contents, std::size_t size, std::size_t nmemb, void* user_data);
+
+  static int DebugCallback(CURL* easy, curl_infotype type, char* data, std::size_t size, void* user_data);
 
   void ConfigureShare();
 
