@@ -35,6 +35,8 @@ set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
 option(ENABLE_OPENSSL_CONTRACT_SHIM
     "Assert if OpenSSL I/O continues after a fatal result" ON)
+option(ENABLE_NGHTTP3_CONTRACT_SHIM
+    "Assert if a poisoned nghttp3 connection is reused" ON)
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
@@ -852,6 +854,44 @@ if(TARGET openssl_external)
     endif()
 endif()
 
+# A negative result from nghttp3_conn_read_stream(), read_stream2(), or
+# writev_stream() invalidates the connection: the application may only call
+# nghttp3_conn_del() afterward. Route curl and the in-process HTTP/3 peer
+# through an ELF link wrapper so fuzzing diagnoses the first forbidden call.
+add_library(nghttp3_contract_checked INTERFACE)
+set(NGHTTP3_CONTRACT_SHIM_ACTIVE FALSE)
+if(BUILD_HTTP3_VARIANT)
+    if(ENABLE_NGHTTP3_CONTRACT_SHIM AND
+       CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_library(nghttp3_contract_shim_objects OBJECT
+            nghttp3_contract_shim.cc)
+        target_compile_features(nghttp3_contract_shim_objects PRIVATE
+            cxx_std_11)
+        target_compile_options(nghttp3_contract_shim_objects PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(nghttp3_contract_shim_objects PRIVATE
+            ${HTTP3_NGHTTP3_INCLUDE_DIR})
+        add_dependencies(nghttp3_contract_shim_objects
+            http3_nghttp3_external)
+
+        include(${CMAKE_SOURCE_DIR}/cmake/Nghttp3ContractApis.cmake)
+        foreach(_nghttp3_api IN LISTS NGHTTP3_CONTRACT_WRAPPED_APIS)
+            target_link_options(nghttp3_contract_checked INTERFACE
+                "LINKER:--wrap=${_nghttp3_api}")
+        endforeach()
+        target_link_libraries(nghttp3_contract_checked INTERFACE
+            $<TARGET_OBJECTS:nghttp3_contract_shim_objects>)
+        set(NGHTTP3_CONTRACT_SHIM_ACTIVE TRUE)
+    else()
+        if(ENABLE_NGHTTP3_CONTRACT_SHIM)
+            message(WARNING
+                "nghttp3 contract assertions require Linux with GNU or "
+                "Clang; building without the shim")
+        endif()
+    endif()
+endif()
+
 set(CURL_STATIC_DEPENDENCY_LIBS
     ${NGHTTP2_STATIC_LIB}
     openssl_contract_checked
@@ -893,6 +933,7 @@ if(BUILD_HTTP3_VARIANT)
     target_link_libraries(curl_client_http3 INTERFACE
         ${CURL_HTTP3_STATIC_LIB}
         openssl_contract_checked
+        nghttp3_contract_checked
         curl_fuzzer::http3_dependencies
         ${NGHTTP2_STATIC_LIB}
         ${ZLIB_STATIC_LIB}
@@ -1013,6 +1054,40 @@ if(OPENSSL_CONTRACT_SHIM_ACTIVE)
             http3_ngtcp2_external
             curl_client_http3)
     endif()
+endif()
+
+# Curl tracks its own master branch. Fail the fuzz build if a future revision
+# starts using an nghttp3 API that is absent from the maintained wrapper and
+# allowed surfaces.
+if(NGHTTP3_CONTRACT_SHIM_ACTIVE)
+    function(add_nghttp3_contract_surface_check _target _binary
+             _binary_target _consumer_target)
+        set(_stamp ${CMAKE_BINARY_DIR}/${_target}.checked)
+        add_custom_command(
+            OUTPUT ${_stamp}
+            COMMAND ${CMAKE_COMMAND}
+                "-DNM=${CMAKE_NM}"
+                "-DARCHIVE=${_binary}"
+                "-DWRAPPED_APIS=${NGHTTP3_CONTRACT_WRAPPED_APIS}"
+                "-DALLOWED_APIS=${NGHTTP3_CONTRACT_ALLOWED_APIS}"
+                -P
+                ${CMAKE_SOURCE_DIR}/scripts/check_nghttp3_contract_symbols.cmake
+            COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+            DEPENDS
+                ${_binary_target}
+                ${_binary}
+                ${CMAKE_SOURCE_DIR}/cmake/Nghttp3ContractApis.cmake
+                ${CMAKE_SOURCE_DIR}/scripts/check_nghttp3_contract_symbols.cmake
+            VERBATIM)
+        add_custom_target(${_target} DEPENDS ${_stamp})
+        add_dependencies(${_consumer_target} ${_target})
+    endfunction()
+
+    add_nghttp3_contract_surface_check(
+        nghttp3_contract_surface_check_http3
+        ${CURL_HTTP3_STATIC_LIB}
+        curl_http3_external
+        curl_client_http3)
 endif()
 
 # Ensure that curl and its dependencies are built before the fuzzers
@@ -1235,6 +1310,29 @@ if(BUILD_TESTING)
             COMMAND openssl_contract_shim_test)
         set_tests_properties(openssl_contract_shim_test PROPERTIES TIMEOUT 5)
         add_dependencies(fuzzer_unit_tests openssl_contract_shim_test)
+    endif()
+
+    if(NGHTTP3_CONTRACT_SHIM_ACTIVE)
+        add_executable(nghttp3_contract_shim_test
+            tests/nghttp3_contract_shim_test.cc)
+        target_compile_features(nghttp3_contract_shim_test PRIVATE cxx_std_17)
+        target_compile_options(nghttp3_contract_shim_test PRIVATE
+            ${COMMON_FLAGS})
+        target_include_directories(nghttp3_contract_shim_test PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${HTTP3_NGHTTP3_INCLUDE_DIR})
+        target_link_libraries(nghttp3_contract_shim_test PRIVATE
+            nghttp3_contract_checked
+            ${HTTP3_NGHTTP3_STATIC_LIB}
+            pthread)
+        target_link_options(nghttp3_contract_shim_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(nghttp3_contract_shim_test
+            http3_nghttp3_external)
+        add_test(NAME nghttp3_contract_shim_test
+            COMMAND nghttp3_contract_shim_test)
+        set_tests_properties(nghttp3_contract_shim_test PROPERTIES TIMEOUT 5)
+        add_dependencies(fuzzer_unit_tests nghttp3_contract_shim_test)
     endif()
 endif()
 
@@ -1605,6 +1703,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             ${CURL_HTTP3_DEPS}
             curl_fuzzer_proto_generated
             libprotobuf_mutator_external)
+        if(NGHTTP3_CONTRACT_SHIM_ACTIVE)
+            add_nghttp3_contract_surface_check(
+                nghttp3_contract_surface_check_peer
+                "$<TARGET_OBJECTS:curl_fuzzer_proto_http3_runner>"
+                curl_fuzzer_proto_http3_runner
+                curl_client_http3)
+        endif()
     endif()
 
     if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
