@@ -93,9 +93,13 @@ scenario's `fail_allocations` field. The shared runtime installs libcurl's
 callbacks once, before its ordinary global initialization, then arms them only
 for the shared scenario runner. Protobuf parsing remains outside the selected
 sequence; libcurl easy-handle setup, transfer driving, result probes, and
-teardown are all part of it. Result probes still honor their public state
-preconditions: in particular, upkeep runs only after an easy drive has
-progressed far enough to attach its private multi.
+teardown are all part of it except for narrowly scoped harness ownership
+operations. The `COPYPOSTFIELDS` ownership commit and pushed-handle cleanup
+enumeration suppress injected failures; allocations in those scopes neither
+count nor consume ordinals, leaving failures pending for subsequent injectable
+allocations. Result probes still honor their public state preconditions: in
+particular, upkeep runs only after an easy drive has progressed far enough to
+attach its private multi.
 
 Values are one-based positive-size allocation attempt numbers. Fixed target
 policies sort, deduplicate, and retain at most four ordinals in the range

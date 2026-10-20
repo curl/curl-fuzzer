@@ -12,6 +12,7 @@
 #include <array>
 #include <cstring>
 #include <iterator>
+#include <optional>
 #include <thread>
 
 namespace {
@@ -121,6 +122,81 @@ void TestDisarmAndReset() {
   faults::internal::Free(allocation);
 }
 
+void TestScopedFailureSuppression() {
+  const std::uint32_t first[] = {1};
+  faults::Configure(first, std::size(first));
+  faults::Arm();
+
+  void *outer_allocation = nullptr;
+  void *nested_allocation = nullptr;
+  void *resumed_allocation = nullptr;
+  bool worker_failure_observed = false;
+  {
+    faults::ScopedFailureSuppression outer;
+    outer_allocation = faults::internal::Malloc(8);
+    {
+      faults::ScopedFailureSuppression nested;
+      nested_allocation = faults::internal::Malloc(8);
+      std::thread worker([&worker_failure_observed] {
+        const std::uint32_t worker_first[] = {1};
+        faults::Configure(worker_first, std::size(worker_first));
+        faults::Arm();
+        void *allocation = faults::internal::Malloc(8);
+        const faults::Statistics statistics = faults::GetStatistics();
+        worker_failure_observed = allocation == nullptr && statistics.armed &&
+                                  statistics.allocation_attempts == 1 &&
+                                  statistics.injected_failures == 1;
+        faults::internal::Free(allocation);
+        faults::Reset();
+      });
+      worker.join();
+    }
+    resumed_allocation = faults::internal::Malloc(8);
+    const faults::Statistics suppressed = faults::GetStatistics();
+    Expect(outer_allocation != nullptr && nested_allocation != nullptr &&
+               resumed_allocation != nullptr && worker_failure_observed &&
+               !suppressed.armed && suppressed.allocation_attempts == 0 &&
+               suppressed.injected_failures == 0,
+           "scoped suppression consumed an ordinal or crossed threads");
+  }
+
+  Expect(faults::internal::Malloc(8) == nullptr,
+         "suppression did not preserve the pending allocation failure");
+  void *recovered = faults::internal::Malloc(8);
+  const faults::Statistics resumed = faults::GetStatistics();
+  Expect(recovered != nullptr && resumed.allocation_attempts == 2 &&
+             resumed.injected_failures == 1,
+         "allocation plan did not resume after suppression");
+  faults::Disarm();
+  faults::internal::Free(outer_allocation);
+  faults::internal::Free(nested_allocation);
+  faults::internal::Free(resumed_allocation);
+  faults::internal::Free(recovered);
+}
+
+void TestResetInvalidatesLiveSuppression() {
+  std::optional<faults::ScopedFailureSuppression> stale_guard;
+  stale_guard.emplace();
+  faults::Reset();
+
+  const std::uint32_t first[] = {1};
+  faults::Configure(first, std::size(first));
+  faults::Arm();
+  void *suppressed = nullptr;
+  {
+    faults::ScopedFailureSuppression current_guard;
+    stale_guard.reset();
+    suppressed = faults::internal::Malloc(8);
+    Expect(suppressed != nullptr &&
+               faults::GetStatistics().allocation_attempts == 0,
+           "stale suppression guard changed the current generation");
+  }
+  Expect(faults::internal::Malloc(8) == nullptr,
+         "reset suppression generation lost the pending failure");
+  faults::Reset();
+  faults::internal::Free(suppressed);
+}
+
 void TestThreadLocalPlan() {
   const std::uint32_t first[] = {1};
   faults::Configure(first, std::size(first));
@@ -165,6 +241,8 @@ int main() {
   TestBoundedOrdinalPlan();
   TestAllocatorContracts();
   TestDisarmAndReset();
+  TestScopedFailureSuppression();
+  TestResetInvalidatesLiveSuppression();
   TestThreadLocalPlan();
   TestInstalledCurlCallbacks();
   faults::Reset();

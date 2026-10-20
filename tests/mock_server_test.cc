@@ -220,14 +220,13 @@ void TestAllocationFailureReachesHttpParser() {
          "no selected allocation failed inside HTTP Location parsing");
 }
 
-/// Keep a correlated POST body valid while COPYPOSTFIELDS walks past every
-/// consecutive failure the scenario can inject. Mutating the protobuf after
-/// setup also proves that the eventual successful attempt retained copy
-/// semantics instead of relying on the borrowed recovery buffer.
-void TestCopyPostFieldsRetriesAllocationFailures() {
+/// Keep COPYPOSTFIELDS ownership setup outside the allocation-failure plan.
+/// The deferred failures must remain available to later target allocations,
+/// while mutating the protobuf proves curl retained an independent copy.
+void TestCopyPostFieldsSuppressesAllocationFailures() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
-  scenario.set_host_path("copy.test/retry");
+  scenario.set_host_path("copy.test/suppressed");
   scenario.mutable_connection()->add_on_readable(
       "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
 
@@ -241,15 +240,17 @@ void TestCopyPostFieldsRetriesAllocationFailures() {
 
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
-  Expect(easy != nullptr, "COPYPOSTFIELDS retry test could not allocate easy");
+  Expect(easy != nullptr,
+         "COPYPOSTFIELDS suppression test could not allocate easy");
   connect_to.reset(
       proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
-  (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://copy.test/retry");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
+                         "http://copy.test/suppressed");
 
   RequestCapturingServer server;
   server.Install(easy.get());
   Expect(proto_fuzzer::ApplySetOption(easy.get(), *borrowed) == CURLE_OK,
-         "COPYPOSTFIELDS retry test could not install its borrowed body");
+         "COPYPOSTFIELDS suppression test could not install its borrowed body");
 
   std::array<std::uint32_t,
              proto_fuzzer::scenario_limits::kMaxAllocationFailures>
@@ -264,24 +265,45 @@ void TestCopyPostFieldsRetriesAllocationFailures() {
       proto_fuzzer::ApplySetOption(easy.get(), *copied);
   const auto statistics =
       proto_fuzzer::allocation_fault_injection::GetStatistics();
-  proto_fuzzer::allocation_fault_injection::Reset();
 
   Expect(copy_result == CURLE_OK && statistics.armed &&
              statistics.configured_failures == failures.size() &&
-             statistics.injected_failures == failures.size() &&
-             statistics.allocation_attempts > statistics.injected_failures,
-         "COPYPOSTFIELDS did not retry past every bounded allocation failure");
+             statistics.injected_failures == 0 &&
+             statistics.allocation_attempts == 0,
+         "COPYPOSTFIELDS consumed a suppressed allocation failure");
+
+  std::array<void *, proto_fuzzer::scenario_limits::kMaxAllocationFailures + 1>
+      deferred_allocations{};
+  bool deferred_plan_preserved = true;
+  for (std::size_t index = 0; index < deferred_allocations.size(); ++index) {
+    deferred_allocations[index] =
+        proto_fuzzer::allocation_fault_injection::internal::Malloc(8);
+    deferred_plan_preserved =
+        deferred_plan_preserved &&
+        ((deferred_allocations[index] == nullptr) == (index < failures.size()));
+  }
+  const auto resumed_statistics =
+      proto_fuzzer::allocation_fault_injection::GetStatistics();
+  proto_fuzzer::allocation_fault_injection::Reset();
+  for (void *allocation : deferred_allocations) {
+    proto_fuzzer::allocation_fault_injection::internal::Free(allocation);
+  }
+  Expect(deferred_plan_preserved &&
+             resumed_statistics.allocation_attempts ==
+                 deferred_allocations.size() &&
+             resumed_statistics.injected_failures == failures.size(),
+         "COPYPOSTFIELDS suppression did not preserve the pending failures");
 
   for (char &byte : *copied->mutable_string_value()) {
     byte = 'x';
   }
   Expect(server.DriveScenario(easy.get(), scenario) == CURLE_OK,
-         "COPYPOSTFIELDS retry test did not complete its request");
+         "COPYPOSTFIELDS suppression test did not complete its request");
   const std::string &request = server.request();
   Expect(request.size() >= expected_body.size() &&
              request.compare(request.size() - expected_body.size(),
                              expected_body.size(), expected_body) == 0,
-         "COPYPOSTFIELDS retry test lost the copied request body");
+         "COPYPOSTFIELDS suppression test lost the copied request body");
 
   // OPENSOCKET userdata borrows the peer, so clean easy while it is live.
   easy.reset();
@@ -1741,7 +1763,7 @@ int main() {
   Expect(proto_fuzzer::allocation_fault_injection::InitializeCurl(),
          "mock-server tests could not install allocation callbacks");
   TestAllocationFailureReachesHttpParser();
-  TestCopyPostFieldsRetriesAllocationFailures();
+  TestCopyPostFieldsSuppressesAllocationFailures();
   TestStreamSocketDispositionIsExplicit();
   TestRequestHeadersDetachBeforeHandleReuse();
   TestFollowOnScriptsAndOldConnectionLifetime();

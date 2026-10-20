@@ -9,27 +9,26 @@
 #include <cstddef>
 #include <string>
 
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
-#include "proto_fuzzer/scenario_limits.h"
 #include "test_assertions.h"
 
 #if defined(PROTO_FUZZER_WRAP_MULTI_GET_HANDLES)
 namespace {
 
-std::size_t get_handles_failures_remaining = 0;
-std::size_t get_handles_failure_count = 0;
+std::size_t get_handles_call_count = 0;
+bool get_handles_suppression_observed = false;
 
 } // namespace
 
 extern "C" CURL **__real_curl_multi_get_handles(CURLM *multi);
 
 extern "C" CURL **__wrap_curl_multi_get_handles(CURLM *multi) {
-  if (get_handles_failures_remaining != 0) {
-    --get_handles_failures_remaining;
-    ++get_handles_failure_count;
-    return nullptr;
-  }
+  ++get_handles_call_count;
+  get_handles_suppression_observed =
+      get_handles_suppression_observed ||
+      proto_fuzzer::allocation_fault_injection::internal::FailuresSuppressed();
   return __real_curl_multi_get_handles(multi);
 }
 #endif
@@ -232,23 +231,19 @@ void TestAcceptedPushCompletesAndCleansUpOneHandle() {
 }
 
 #if defined(PROTO_FUZZER_WRAP_MULTI_GET_HANDLES)
-void TestAcceptedPushCleanupRetriesHandleEnumeration() {
-  get_handles_failures_remaining =
-      proto_fuzzer::scenario_limits::kMaxAllocationFailures;
-  get_handles_failure_count = 0;
+void TestAcceptedPushCleanupSuppressesHandleEnumerationFailures() {
+  get_handles_call_count = 0;
+  get_handles_suppression_observed = false;
 
   const H2TransferResult result = DriveH2Scenario(MakePushScenario(true));
 
-  Expect(get_handles_failures_remaining == 0 &&
-             get_handles_failure_count ==
-                 proto_fuzzer::scenario_limits::kMaxAllocationFailures,
-         "accepted h2c push cleanup did not consume the bounded enumeration "
+  Expect(get_handles_call_count != 0 && get_handles_suppression_observed,
+         "accepted h2c push cleanup did not suppress handle enumeration "
          "failures");
   Expect(result.code == CURLE_OK && result.response == "OK" &&
              result.accepted_push_count == 1 &&
              result.cleaned_push_count == 1 && result.pushed_body_bytes == 6,
-         "accepted h2c push leaked after handle enumeration allocation "
-         "failures");
+         "accepted h2c push leaked during suppressed handle enumeration");
 }
 #endif
 
@@ -260,7 +255,7 @@ int main() {
   TestValidPushPromiseReachesCallback();
   TestAcceptedPushCompletesAndCleansUpOneHandle();
 #if defined(PROTO_FUZZER_WRAP_MULTI_GET_HANDLES)
-  TestAcceptedPushCleanupRetriesHandleEnumeration();
+  TestAcceptedPushCleanupSuppressesHandleEnumerationFailures();
 #endif
   return 0;
 }
