@@ -33,7 +33,7 @@ struct ThreadState {
   std::uint64_t allocation_attempts = 0;
   /// Allocation attempts rejected at configured ordinals.
   std::uint64_t injected_failures = 0;
-  /// Whether positive-size callbacks should be counted and checked for failure.
+  /// Whether the plan is armed; suppression can still bypass its callbacks.
   bool armed = false;
 };
 
@@ -90,7 +90,7 @@ void InsertOrdinal(std::uint32_t ordinal) noexcept {
 /// @param positive_size Whether the allocation requests nonzero storage.
 /// @return true when the caller should reject this allocation.
 bool ShouldFail(bool positive_size) noexcept {
-  if (!positive_size || !state.armed) {
+  if (!positive_size || !state.armed || internal::FailuresSuppressed()) {
     return false;
   }
   ++state.allocation_attempts;
@@ -157,15 +157,19 @@ void Arm() noexcept {
 /// Stop fault injection while retaining counters for diagnostics and tests.
 void Disarm() noexcept { state.armed = false; }
 
-/// Clear all thread-local controller state. Fuzzer entrypoints call this
-/// before parsing so a standalone-runner siglongjmp cannot leak an armed plan
-/// into the next input.
-void Reset() noexcept { state = ThreadState{}; }
+/// Clear all thread-local controller state and invalidate live suppression
+/// guards. Fuzzer entrypoints call this before parsing so a standalone-runner
+/// siglongjmp cannot leak an armed plan or suppression into the next input.
+void Reset() noexcept {
+  state = ThreadState{};
+  internal::ResetFailureSuppression();
+}
 
 /// Read the calling thread's current plan and counters.
 /// @return A value snapshot that remains valid after later controller calls.
 Statistics GetStatistics() noexcept {
-  return {state.allocation_attempts, state.injected_failures, state.ordinal_count, state.armed};
+  return {state.allocation_attempts, state.injected_failures, state.ordinal_count,
+          state.armed && !internal::FailuresSuppressed()};
 }
 
 namespace internal {

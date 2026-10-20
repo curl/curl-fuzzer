@@ -14,10 +14,10 @@
 #include <curl/multi.h>
 #include <sys/select.h>
 
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/multi_socket_driver.h"
-#include "proto_fuzzer/scenario_limits.h"
 
 namespace proto_fuzzer {
 
@@ -25,22 +25,14 @@ namespace {
 
 constexpr long kSelectTimeoutUs = 1000;  // 1 ms; explicit timing cases only.
 
-/// Enumerate the attached handles despite the scenario's bounded allocation
-/// failures. The parent remains attached, so a null result means the array
-/// allocation failed and is safe to retry. One final attempt follows the
-/// largest possible run of injected failures.
+/// Enumerate attached handles without letting an injected failure prevent
+/// harness-owned pushed-handle cleanup. Genuine allocation failure can still
+/// return null and follows the caller's existing safe fallback.
 /// @param multi Live multi handle whose attached easies are required.
-/// @return Caller-owned, null-terminated handle array, or nullptr after all
-///         bounded attempts fail.
+/// @return Caller-owned, null-terminated handle array, or nullptr on real OOM.
 CURL** GetHandlesForCleanup(CURLM* multi) {
-  constexpr std::size_t kMaxAttempts = scenario_limits::kMaxAllocationFailures + 1;
-  for (std::size_t attempt = 0; attempt < kMaxAttempts; ++attempt) {
-    CURL** handles = curl_multi_get_handles(multi);
-    if (handles != nullptr) {
-      return handles;
-    }
-  }
-  return nullptr;
+  allocation_fault_injection::ScopedFailureSuppression suppress_failures;
+  return curl_multi_get_handles(multi);
 }
 
 }  // namespace

@@ -96,7 +96,10 @@ fail_allocations: 9
 Ordinals are one-based and count positive-size calls on the fuzzer thread
 through the callbacks installed by `curl_global_init_mem`. Scenario parsing
 stays outside the sequence; libcurl setup, transfer driving, result probes,
-and cleanup inside the shared scenario runner are included. Fixed target
+and cleanup inside the shared scenario runner are included except for narrow
+harness ownership scopes. The `COPYPOSTFIELDS` ownership commit and
+pushed-handle cleanup enumeration neither fail nor advance the ordinal counter,
+so failures remain pending for subsequent injectable allocations. Fixed target
 policies retain the four smallest distinct values after folding them into
 1..4096; the compatibility target applies that bound at execution time without
 rewriting the message. State-dependent probes still require the preceding
