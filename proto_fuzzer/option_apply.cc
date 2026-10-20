@@ -35,6 +35,25 @@ constexpr char kHstsHttpEnvVar[] = "CURL_HSTS_HTTP";
 constexpr long kConnectTimeoutMs = 200;
 constexpr long kTimeoutMs = 200;
 
+/// Copy a POST body despite the scenario's bounded allocation failures. The
+/// caller has already installed the same bytes through CURLOPT_POSTFIELDS, so
+/// exhausting every retry still leaves curl with a valid borrowed fallback.
+/// One final attempt follows the largest possible run of injected failures.
+/// @param easy Easy handle receiving the copied POST body.
+/// @param value NUL-terminated view of the protobuf-owned body bytes.
+/// @return The first result other than CURLE_OUT_OF_MEMORY, or the final OOM.
+CURLcode SetCopyPostFieldsWithRetries(CURL* easy, const char* value) {
+  constexpr std::size_t kMaxAttempts = scenario_limits::kMaxAllocationFailures + 1;
+  CURLcode result = CURLE_OUT_OF_MEMORY;
+  for (std::size_t attempt = 0; attempt < kMaxAttempts; ++attempt) {
+    result = curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, value);
+    if (result != CURLE_OUT_OF_MEMORY) {
+      return result;
+    }
+  }
+  return result;
+}
+
 /// Baseline write callback for both CURLOPT_WRITEFUNCTION and
 /// CURLOPT_HEADERFUNCTION. Consumes every byte so transfers don't stall on
 /// backpressure and emits nothing. Protocol-specific mocks may install their
@@ -205,6 +224,18 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
     case OptionValueKind::kString: {
       const std::string& value = option.string_value();
 
+      // COPYPOSTFIELDS allocates after reading the separately configured
+      // POSTFIELDSIZE. First install the same protobuf-owned bytes as a
+      // no-allocation borrowed fallback. If every copy attempt encounters a
+      // real OOM, the ignored option error still leaves a coherent pointer and
+      // length for later consumers such as AWS SigV4.
+      if (desc->curlopt == CURLOPT_COPYPOSTFIELDS) {
+        CURLcode result = curl_easy_setopt(easy, CURLOPT_POSTFIELDS, value.c_str());
+        if (result != CURLE_OK) {
+          return result;
+        }
+      }
+
       // POSTFIELDS borrows its pointer and COPYPOSTFIELDS copies exactly the
       // previously configured size. Apply the correlated byte length first so
       // either option accepts embedded NULs without strlen semantics and the
@@ -214,6 +245,10 @@ CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option
         if (result != CURLE_OK) {
           return result;
         }
+      }
+
+      if (desc->curlopt == CURLOPT_COPYPOSTFIELDS) {
+        return SetCopyPostFieldsWithRetries(easy, value.c_str());
       }
 
       // Curl otherwise treats this option as a filename during the TLS
