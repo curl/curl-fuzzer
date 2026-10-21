@@ -9,6 +9,6 @@
   "devDependencies": {
     "esbuild": "0.28.2",
     "long": "5.3.2",
-    "protobufjs": "8.8.0"
+    "protobufjs": "8.8.1"
   }
 }
