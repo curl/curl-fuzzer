@@ -80,9 +80,12 @@ probe at a real listener on `127.0.0.1` instead:
 
 The listener answers with plaintext HTTP, which requires the debug-enabled
 curl build used by this repository. If `socket`/`bind` is unavailable, the
-input runs without DoH rather than failing. The mutator preserves these records
-when they are inherited from a seed but never invents them for other inputs.
-See `corpora/curl_fuzzer/doh_loopback*` for examples.
+input runs without DoH rather than failing. While a loopback input runs, the
+harness temporarily sets `no_proxy`/`NO_PROXY` to `*` and restores the prior
+environment afterwards, so ambient proxy settings cannot divert the internal
+DoH handle. The mutator preserves these records when they are inherited from a
+seed but never invents them for other inputs. See
+`corpora/curl_fuzzer/doh_loopback*` for examples.
 
 ## Build and replay
 
