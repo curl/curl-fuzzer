@@ -1743,6 +1743,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kMulti: {
       ClearAllBackpressure(scenario);
       CanonicalizeMultiAuthority(scenario);
+      // The multi runner is HTTP-only (it drives every handle through one
+      // plaintext HTTP peer), so pin the scheme instead of letting a mutation
+      // select a protocol the runner cannot service.
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
       auto* plan = scenario->mutable_multi_plan();
       BoundMultiPlanShape(plan);
       TrimRepeated(scenario->mutable_subsequent_connections(), plan->transfer_count() - 1U);

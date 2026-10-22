@@ -230,7 +230,7 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
     if (!transfer.session.Initialize()) {
       continue;
     }
-    transfer.session.ApplyBaseline(curl::fuzzer::proto::SCHEME_HTTP, scenario.trace_ids());
+    transfer.session.ApplyBaseline(scenario);
     (void)curl_easy_setopt(transfer.session.easy(), CURLOPT_URL, url.c_str());
     mock.Install(transfer.session.easy());
     (void)ApplyScenarioOptions(transfer.session.easy(), scenario);

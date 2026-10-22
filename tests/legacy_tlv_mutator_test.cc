@@ -186,6 +186,20 @@ void TestValidation() {
          "invalid nested MIME TLV was accepted");
 }
 
+void TestTraceControls() {
+  std::vector<uint8_t> input = MakeParentOne();
+  AppendTlv(&input, 166, Bytes("all"));
+  AppendTlv(&input, 167, {0, 0, 0, 1});
+  Expect(legacy_tlv_mutator::IsStructurallyValid(input.data(), input.size()),
+         "trace control records were rejected");
+
+  std::vector<uint8_t> wrong_numeric = MakeParentOne();
+  AppendTlv(&wrong_numeric, 167, {0, 1});
+  Expect(!legacy_tlv_mutator::IsStructurallyValid(wrong_numeric.data(),
+                                                   wrong_numeric.size()),
+         "short stderr trace flag was accepted");
+}
+
 void TestCanonicalRoutingValuePolicy() {
   struct ExpectedValue {
     uint16_t type;
@@ -576,6 +590,7 @@ void TestDohControlsArePreservedButNotInvented() {
 
 int main() {
   TestValidation();
+  TestTraceControls();
   TestCanonicalRoutingValuePolicy();
   TestStructuredMutationsStayValidAndBounded();
   TestStructuredMutationRepairsTransferScaffold();

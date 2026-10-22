@@ -31,6 +31,38 @@
 #include "legacy_tlv_mutator.h"
 
 /**
+ * Consume libcurl verbose records without emitting per-input diagnostics.
+ * Enabling CURLOPT_VERBOSE is what makes curl evaluate its trace format
+ * arguments; the callback keeps that work off stderr during fuzzing.
+ */
+int fuzz_silent_debug_callback(CURL *handle,
+                               curl_infotype type,
+                               char *data,
+                               size_t size,
+                               void *userptr)
+{
+  (void)handle;
+  (void)type;
+  (void)data;
+  (void)size;
+  (void)userptr;
+  return 0;
+}
+
+/**
+ * Open /dev/null once for the no-callback verbose lane. When no debug
+ * callback is installed libcurl writes its trace directly to this stream.
+ */
+static FILE *fuzz_devnull(void)
+{
+  static FILE *devnull = NULL;
+
+  if(devnull == NULL)
+    devnull = fopen("/dev/null", "wb");
+  return devnull;
+}
+
+/**
  * Run one legacy TLV input independently of the exported libFuzzer symbol.
  * Keeping the implementation behind a normal C++ function lets every
  * protocol binary expose its own same-named source entrypoint, which is how
@@ -223,6 +255,12 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 {
   int rc = 0;
 
+  /* Reset curl's global trace configuration so every input starts from a known
+     off baseline. curl_global_trace() only changes the components it names, so
+     without this a prior input's "all" leaks into later inputs that request a
+     subset, making coverage depend on corpus order. */
+  (void)curl_global_trace("-all");
+
   /* Existing seeds and direct reproducers bypass the custom mutator. Close
      that path before any transfer can resolve a corpus-provided endpoint. */
   FTRY(fuzz_finalize_routing_options(fuzz));
@@ -305,6 +343,47 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
                           CURLOPT_DEBUGFUNCTION,
                           fuzz_doh_debug_callback));
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGDATA, fuzz));
+  }
+
+  /* Fuzzer-controlled trace configuration. curl_global_trace() selects the
+     per-feature trace formatters and the silent callback keeps them off
+     stderr. The no-callback lane below deliberately takes precedence if both
+     flags appear in one input. */
+  if(fuzz->trace_verbose && !fuzz->trace_stderr_verbose) {
+    const char *trace_config =
+      fuzz->trace_config[0] ? fuzz->trace_config : "all";
+
+    (void)curl_global_trace(trace_config);
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
+    FTRY(curl_easy_setopt(fuzz->easy,
+                          CURLOPT_DEBUGFUNCTION,
+                          fuzz_silent_debug_callback));
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGDATA, fuzz));
+    FTRY(curl_easy_setopt(fuzz->easy,
+                          CURLOPT_ERRORBUFFER,
+                          fuzz->error_buffer));
+  }
+
+  /* With no debug callback libcurl's trace helpers write to CURLOPT_STDERR
+     directly. Point that at /dev/null so the fwrite() paths run without
+     flooding the coverage log. */
+  if(fuzz->trace_stderr_verbose) {
+    FILE *devnull = fuzz_devnull();
+    const char *trace_config =
+      fuzz->trace_config[0] ? fuzz->trace_config : "all";
+
+    (void)curl_global_trace(trace_config);
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
+    /* This lane must reach the direct-write path, so drop any debug callback a
+       DoH (TLV 165) or trace (TLV 166) record may have installed earlier. */
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGFUNCTION, NULL));
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGDATA, NULL));
+    if(devnull != NULL) {
+      FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_STDERR, devnull));
+    }
+    FTRY(curl_easy_setopt(fuzz->easy,
+                          CURLOPT_ERRORBUFFER,
+                          fuzz->error_buffer));
   }
 
   /* Force resolution of all addresses to a specific IP address. DoH loopback

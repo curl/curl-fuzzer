@@ -155,6 +155,8 @@
 #define TLV_TYPE_DOH_RESPONSE 163
 #define TLV_TYPE_DOH_HTTP_STATUS 164
 #define TLV_TYPE_VERBOSE 165
+#define TLV_TYPE_TRACE 166
+#define TLV_TYPE_TRACE_STDERR 167
 
 #define TLV_TYPE_PORT 200
 #define TLV_TYPE_LOW_SPEED_LIMIT 201
@@ -504,6 +506,16 @@ typedef struct fuzz_data
   /* Enable verbose tracing (and a no-op debug callback) for DoH coverage. */
   int doh_verbose;
 
+  /* Fuzzer-controlled curl_global_trace() configuration. */
+  char trace_config[128];
+  int trace_verbose;
+
+  /* Exercise the no-callback verbose path by sending stderr to /dev/null. */
+  int trace_stderr_verbose;
+
+  /* Error buffer installed by the trace lanes so Curl_failf() records errors. */
+  char error_buffer[CURL_ERROR_SIZE];
+
   /* Verbose mode. */
   int verbose;
 
@@ -535,6 +547,11 @@ int fuzz_doh_debug_callback(CURL *handle,
                             char *data,
                             size_t size,
                             void *userptr);
+int fuzz_silent_debug_callback(CURL *handle,
+                               curl_infotype type,
+                               char *data,
+                               size_t size,
+                               void *userptr);
 curl_socket_t fuzz_open_socket(void *ptr,
                                curlsocktype purpose,
                                struct curl_sockaddr *address);

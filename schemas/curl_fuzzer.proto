@@ -134,6 +134,13 @@ message Scenario {
   // changed by earlier failures, and are stable only for the same target,
   // build, backend, and input.
   repeated uint32 fail_allocations = 25 [packed = true];
+  // Fuzzer-controlled curl_global_trace() configuration. Declared as `bytes`
+  // rather than `string` so a mutator can produce non-UTF-8 tokens without
+  // proto3 parse warnings; curl ignores unknown names. Non-empty values enable
+  // verbose tracing with a silent debug callback so the per-feature formatters
+  // stay reachable without emitting per-input diagnostics. Empty preserves the
+  // historical behavior.
+  bytes trace_config = 26;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

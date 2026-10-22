@@ -76,6 +76,7 @@ def generate_corpus(args: argparse.Namespace) -> None:
         enc.maybe_write_string(enc.TYPE_USERAGENT, args.useragent)
         enc.maybe_write_string(enc.TYPE_SSH_HOST_PUBLIC_KEY_SHA256, args.hostpksha256)
         enc.maybe_write_string(enc.TYPE_HSTS, args.hsts)
+        enc.maybe_write_string(enc.TYPE_TRACE, args.trace)
 
         enc.maybe_write_u32(enc.TYPE_OPTHEADER, args.optheader)
         enc.maybe_write_u32(enc.TYPE_NOBODY, args.nobody)
@@ -87,6 +88,7 @@ def generate_corpus(args: argparse.Namespace) -> None:
         enc.maybe_write_u32(enc.TYPE_NETRC, args.netrclevel)
         enc.maybe_write_u32(enc.TYPE_CONNECT_ONLY, args.connectonly)
         enc.maybe_write_u32(enc.TYPE_SSL_VERIFYPEER, args.ssl_verifypeer)
+        enc.maybe_write_u32(enc.TYPE_TRACE_STDERR, args.trace_stderr)
 
         if args.httpauth:
             # translate a string HTTP auth name to an unsigned long bitmask
@@ -178,6 +180,16 @@ def main() -> None:
     )
     parser.add_argument("--post", action="store_true")
     parser.add_argument("--hsts")
+    parser.add_argument(
+        "--trace", help="curl_global_trace() config (e.g. all or +all,-ssl)"
+    )
+    parser.add_argument(
+        "--trace-stderr",
+        dest="trace_stderr",
+        type=int,
+        choices=(0, 1),
+        help="exercise verbose tracing without a debug callback",
+    )
 
     upload1 = parser.add_mutually_exclusive_group()
     upload1.add_argument("--upload1")

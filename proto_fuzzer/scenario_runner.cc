@@ -269,6 +269,10 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
 /// @param mode Runtime coverage and lifecycle policy for this invocation.
 /// @return zero after either a bounded run or an ignored invalid scenario.
 int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
+  // Every input starts from a known off trace baseline (and returns to it when
+  // the scope exits), so one input's trace selection cannot leak into another.
+  proto_fuzzer::ScopedTraceReset trace_reset;
+
   if (mode == ScenarioRunMode::kMultiTransfer) {
     (void)proto_fuzzer::RunMultiTransferScenario(scenario);
     return 0;
@@ -294,7 +298,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   CURL* easy = transfer.easy();
   const std::string url = std::string(prefix) + "://" + scenario.host_path();
   const auto configure_easy = [&] {
-    transfer.ApplyBaseline(scenario.scheme(), scenario.trace_ids());
+    transfer.ApplyBaseline(scenario);
     (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
     mock->Install(easy);
     transfer.ApplyInputFiles();
