@@ -1,0 +1,10 @@
+# Race several cached loopback addresses through curl's happy-eyeballs
+# filter. The resolver lane binds real listeners and returns unconnected
+# non-blocking sockets, so more than one connect attempt stays in flight;
+# the first completed attempt wins and frees the others.
+scheme: SCHEME_HTTP
+host_path: "resolve.test/happy"
+happy_eyeballs: true
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhappy"
+}

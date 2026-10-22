@@ -934,11 +934,23 @@ void TestResolverPolicy() {
   Expect(localhost.host_path() == "localhost/no-cache",
          "empty resolver policy did not retain the localhost path");
 
+  Scenario happy;
+  happy.set_host_path("untrusted.invalid/race");
+  happy.set_happy_eyeballs(true);
+  NormalizeScenarioForTarget(&happy, TargetProfile::kResolver);
+  Expect(happy.host_path() == "resolve.test/race",
+         "happy-eyeballs policy did not select the cache-backed authority");
+  Expect(happy.happy_eyeballs(),
+         "resolver policy discarded its happy-eyeballs selector");
+
   Scenario ordinary;
   ordinary.add_resolve_entries("example.test:80:127.0.0.1");
+  ordinary.set_happy_eyeballs(true);
   NormalizeScenarioForTarget(&ordinary, TargetProfile::kFastHttp);
   Expect(ordinary.resolve_entries_size() == 0,
          "non-resolver policy retained structured DNS work");
+  Expect(!ordinary.happy_eyeballs(),
+         "non-resolver policy retained happy-eyeballs state");
 }
 
 void TestPauseTerminalIsTelnetOnly() {

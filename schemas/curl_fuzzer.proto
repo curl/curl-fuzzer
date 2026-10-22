@@ -141,6 +141,12 @@ message Scenario {
   // stay reachable without emitting per-input diagnostics. Empty preserves the
   // historical behavior.
   bytes trace_config = 26;
+  // Race several cached addresses through curl's happy-eyeballs filter in the
+  // dedicated resolver lane. The peer binds real loopback listeners, returns
+  // unconnected non-blocking sockets, and sets a zero initial delay so more
+  // than one connection attempt can be in flight. Other lanes clear this
+  // field, and empty/false preserves ordinary single-address resolution.
+  bool happy_eyeballs = 27;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
