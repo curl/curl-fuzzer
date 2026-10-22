@@ -81,6 +81,8 @@ class HappyEyeballsMockServer : public MockServerBase {
 
   const curl::fuzzer::proto::Connection* ScriptForAccept(std::size_t index) const;
 
+  bool IsOwnedDestination(const struct curl_sockaddr* address) const;
+
   CURL* easy_;
 
   /// Listener on 127.0.0.1 whose accept queue is pre-filled by dummies.
@@ -95,6 +97,11 @@ class HappyEyeballsMockServer : public MockServerBase {
 
   std::size_t opened_socket_count_;
   std::size_t accepted_peer_count_;
+
+  /// True once both listeners and the CURLOPT_RESOLVE/PORT mapping are in
+  /// place. RunLoop refuses to drive curl when this is false so a partial
+  /// setup can never fall through to a real (external) connection.
+  bool setup_ok_ = false;
 
   /// Scenario that owns every Peer::script and stays alive for RunLoop.
   const curl::fuzzer::proto::Scenario* scenario_;

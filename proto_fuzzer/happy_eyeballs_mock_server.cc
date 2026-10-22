@@ -42,11 +42,6 @@ constexpr std::size_t kMaxConnectAttempts = 16;
 constexpr std::size_t kMaxAcceptedPeers = 12;
 constexpr int kMaxAcceptsPerCall = 8;
 
-/// The first accepted connections belong to the address race. Serving the
-/// same primary script to each means the winning baller always sees a complete
-/// response no matter which completion order the kernel reports.
-constexpr std::size_t kMaxRaceScriptPeers = 6;
-
 /// Alternate loopback addresses tried for the serving listener, in order. The
 /// first address always stays the deliberately stalled race endpoint so the
 /// second baller is the one that can win.
@@ -131,9 +126,9 @@ HappyEyeballsMockServer::~HappyEyeballsMockServer() {
 void HappyEyeballsMockServer::Install(CURL* easy) {
   MockServerBase::Install(easy);
   easy_ = easy;
-  (void)OpenListeners();
-  if (easy_ != nullptr) {
-    (void)curl_easy_setopt(easy_, CURLOPT_HAPPY_EYEBALLS_TIMEOUT_MS, 0L);
+  setup_ok_ = OpenListeners();
+  if (easy_ != nullptr && setup_ok_) {
+    setup_ok_ = curl_easy_setopt(easy_, CURLOPT_HAPPY_EYEBALLS_TIMEOUT_MS, 0L) == CURLE_OK;
   }
 }
 
@@ -143,6 +138,10 @@ void HappyEyeballsMockServer::Install(CURL* easy) {
 /// own list, so the race mapping is the one curl loads.
 /// @param request_data Installed request state; unused by this transport.
 void HappyEyeballsMockServer::ConfigureRequestData(ScenarioRequestData* /*request_data*/) {
+  // Any early return leaves setup_ok_ false, so RunLoop refuses to drive curl
+  // rather than falling through to the previous resolve.test mapping and
+  // connecting to an unrelated address (e.g. 127.0.0.1:80).
+  setup_ok_ = false;
   if (easy_ == nullptr || listener_port_ <= 0 || serve_address_.empty()) {
     return;
   }
@@ -159,7 +158,10 @@ void HappyEyeballsMockServer::ConfigureRequestData(ScenarioRequestData* /*reques
     return;
   }
   resolve_list_ = std::move(resolve_list);
-  (void)curl_easy_setopt(easy_, CURLOPT_PORT, static_cast<long>(listener_port_));
+  if (curl_easy_setopt(easy_, CURLOPT_PORT, static_cast<long>(listener_port_)) != CURLE_OK) {
+    return;
+  }
+  setup_ok_ = true;
 }
 
 /// Hand curl a fresh unconnected socket for every address its happy-eyeballs
@@ -173,7 +175,7 @@ curl_socket_t HappyEyeballsMockServer::HandleOpenSocket(curlsocktype purpose, st
   if (purpose != CURLSOCKTYPE_IPCXN || address == nullptr || opened_socket_count_ >= kMaxConnectAttempts) {
     return CURL_SOCKET_BAD;
   }
-  if (address->family != AF_INET && address->family != AF_INET6) {
+  if (!IsOwnedDestination(address)) {
     return CURL_SOCKET_BAD;
   }
 
@@ -199,6 +201,20 @@ SocketSetupDisposition HappyEyeballsMockServer::GetSocketSetupDisposition(curl_s
   return SocketSetupDisposition::kNeedsSetup;
 }
 
+/// Accept only the owned loopback endpoints. Every other destination is
+/// refused so a failed setup (missing listeners or an uninstalled resolve
+/// mapping) cannot let curl connect to an unrelated host or port.
+/// @param address curl's description of the intended destination.
+/// @return true when the destination is a loopback address on the owned port.
+bool HappyEyeballsMockServer::IsOwnedDestination(const struct curl_sockaddr* address) const {
+  if (address == nullptr || address->family != AF_INET || listener_port_ <= 0) {
+    return false;
+  }
+  const struct sockaddr_in* sin = reinterpret_cast<const struct sockaddr_in*>(&address->addr);
+  const std::uint32_t host = ntohl(sin->sin_addr.s_addr);
+  return (host & 0xff000000U) == 0x7f000000U && sin->sin_port == htons(static_cast<std::uint16_t>(listener_port_));
+}
+
 /// Run a bounded perform loop that also accepts real loopback connections and
 /// serves their response scripts. Explicit short select waits let the kernel
 /// report connect completion without busy-spinning.
@@ -206,6 +222,11 @@ SocketSetupDisposition HappyEyeballsMockServer::GetSocketSetupDisposition(curl_s
 /// @param easy  Easy handle driving this peer.
 /// @param scenario Source of the bounded response scripts.
 void HappyEyeballsMockServer::RunLoop(CURLM* multi, CURL* /*easy*/, const curl::fuzzer::proto::Scenario& scenario) {
+  if (!setup_ok_) {
+    // Listeners or the resolve mapping failed to install. Never perform: the
+    // only safe outcome is no connection attempt at all.
+    return;
+  }
   scenario_ = &scenario;
 
   int still_running = 1;
@@ -481,10 +502,15 @@ const curl::fuzzer::proto::Connection* HappyEyeballsMockServer::ScriptForAccept(
   if (scenario_ == nullptr) {
     return nullptr;
   }
-  if (index < kMaxRaceScriptPeers) {
+  // Each race produces exactly one serving connection, so the accepted order
+  // maps one-to-one onto the primary script followed by the subsequent
+  // connections (mirroring MockServer::SetScripts). A redirect or HTTP/1.1
+  // retry must therefore receive subsequent_connections[0], not a repeat of
+  // the primary script.
+  if (index == 0) {
     return &scenario_->connection();
   }
-  const std::size_t subsequent_index = index - kMaxRaceScriptPeers;
+  const std::size_t subsequent_index = index - 1;
   if (subsequent_index < static_cast<std::size_t>(scenario_->subsequent_connections_size()) &&
       subsequent_index < scenario_limits::kMaxConnections - 1) {
     return &scenario_->subsequent_connections(static_cast<int>(subsequent_index));

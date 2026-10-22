@@ -1800,6 +1800,47 @@ void TestHappyEyeballsRacesMultipleAddresses() {
   curl_slist_free_all(connect_to);
 }
 
+/// A redirect must receive subsequent_connections[0] on the second accepted
+/// connection, not a repeat of the primary script. Replaying the 302 again
+/// would loop until curl's redirect limit instead of completing.
+void TestHappyEyeballsAdvancesSubsequentScripts() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("resolve.test/happy");
+  scenario.set_happy_eyeballs(true);
+  scenario.mutable_connection()->add_on_readable(
+      "HTTP/1.1 302 Found\r\nLocation: /next\r\nContent-Length: 0\r\n"
+      "Connection: close\r\n\r\n");
+  scenario.add_subsequent_connections()->add_on_readable(
+      "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "happy-eyeballs redirect test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://resolve.test/happy");
+  curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_setopt(easy, CURLOPT_CONNECT_TO, nullptr);
+
+  proto_fuzzer::HappyEyeballsMockServer server;
+  server.Install(easy);
+  CURLcode result = CURLE_FAILED_INIT;
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    result = server.DriveScenario(easy, scenario);
+  }
+
+  Expect(result == CURLE_OK,
+         "redirect did not complete against subsequent_connections[0]");
+  Expect(server.accepted_peer_count() >= 2,
+         "redirect did not open a second serving connection");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 } // namespace
 
 int main() {
@@ -1849,5 +1890,6 @@ int main() {
   TestTelnetPreloadsChunksAndNeverReadsStdin();
   TestTelnetMaximumAmplificationCannotBlock();
   TestHappyEyeballsRacesMultipleAddresses();
+  TestHappyEyeballsAdvancesSubsequentScripts();
   return 0;
 }
