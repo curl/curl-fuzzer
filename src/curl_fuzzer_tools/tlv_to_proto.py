@@ -38,6 +38,14 @@ STRING_TAGS = frozenset(
         BaseType.TYPE_POSTFIELDS,
         BaseType.TYPE_ACCEPT_ENCODING,
         BaseType.TYPE_REFERER,
+        # Mail/credential options shared by SMTP (and the IMAP/POP3 lanes).
+        BaseType.TYPE_USERNAME,
+        BaseType.TYPE_PASSWORD,
+        BaseType.TYPE_USERPWD,
+        BaseType.TYPE_MAIL_FROM,
+        BaseType.TYPE_MAIL_AUTH,
+        BaseType.TYPE_LOGIN_OPTIONS,
+        BaseType.TYPE_XOAUTH2_BEARER,
     }
 )
 
@@ -72,6 +80,8 @@ class ProtoOutput:
     scheme: str | None = None
     host_path: bytes | None = None
     options: list[str] = field(default_factory=list)
+    mail_rcpt: list[bytes] = field(default_factory=list)
+    upload_data: bytes | None = None
     initial_response: bytes | None = None
     response_chunks: list[tuple[int, bytes]] = field(default_factory=list)
     skipped: list[int] = field(default_factory=list)
@@ -159,6 +169,7 @@ def convert_stream(stream: bytes) -> ProtoOutput:
                 b"https": "SCHEME_HTTPS",
                 b"ws": "SCHEME_WS",
                 b"wss": "SCHEME_WSS",
+                b"smtp": "SCHEME_SMTP",
             }.get(scheme.lower())
             if separator and scheme_name is not None and host_path:
                 out.scheme = scheme_name
@@ -172,6 +183,19 @@ def convert_stream(stream: bytes) -> ProtoOutput:
             out.initial_response = tlv.data
         elif tlv.type in RESPONSE_CHUNK_TAGS:
             out.response_chunks.append((tlv.type, tlv.data))
+        elif tlv.type == BaseType.TYPE_MAIL_RECIPIENT:
+            # CURLOPT_MAIL_RCPT is an slist; the proto schema exposes it as the
+            # repeated mail_rcpt field. One TLV record is one recipient.
+            out.mail_rcpt.append(tlv.data)
+        elif tlv.type == BaseType.TYPE_UPLOAD1:
+            # The legacy upload record is the message body served through the
+            # read callback (CURLOPT_UPLOAD + CURLOPT_INFILESIZE_LARGE). The
+            # proto runner drives uploads from the upload script instead.
+            out.upload_data = tlv.data
+            out.options.append("options { option_id: CURLOPT_UPLOAD bool_value: true }")
+            out.options.append(
+                f"options {{ option_id: CURLOPT_INFILESIZE_LARGE uint_value: {len(tlv.data)} }}"
+            )
         elif tlv.type in STRING_TAGS:
             out.options.append(render_string_option(tlv.type, tlv.data))
         elif tlv.type in BOOL_TAGS:
@@ -194,6 +218,13 @@ def render_textproto(source_name: str, data: ProtoOutput) -> str:
     if data.host_path is not None:
         lines.append(f"host_path: {escape_bytes(data.host_path)}")
     lines.extend(data.options)
+
+    for rcpt in data.mail_rcpt:
+        lines.append(f"mail_rcpt: {escape_bytes(rcpt)}")
+    if data.upload_data is not None:
+        lines.append("upload {")
+        lines.append(f"  data: {escape_bytes(data.upload_data)}")
+        lines.append("}")
 
     connection_lines: list[str] = []
     if data.initial_response is not None:
