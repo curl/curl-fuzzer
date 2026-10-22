@@ -16,7 +16,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS/HTTP/2 CONNECT proxy; mutations control bounded raw proxy frames and origin request settings. |
 | `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4 or SOCKS4A proxy. |
-| `curl_fuzzer_proto_resolver` | Localhost resolution and bounded `CURLOPT_RESOLVE` host-cache operations while harness callbacks retain transport control. |
+| `curl_fuzzer_proto_resolver` | Localhost resolution, bounded `CURLOPT_RESOLVE` host-cache operations, and an opt-in real loopback happy-eyeballs race while harness callbacks retain transport control. |
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_wss` | Verified in-process TLS followed by the WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_telnet` | Bounded TELNET negotiation and callback-backed input against a preloaded local peer. |

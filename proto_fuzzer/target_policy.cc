@@ -145,7 +145,8 @@ void CanonicalizeSocksAuthority(curl::fuzzer::proto::Scenario* scenario) {
 void CanonicalizeResolverAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
-  const char* host = scenario->resolve_entries().empty() ? "localhost" : "resolve.test";
+  const char* host =
+      (scenario->happy_eyeballs() || !scenario->resolve_entries().empty()) ? "resolve.test" : "localhost";
   if (suffix_start == std::string::npos) {
     scenario->set_host_path(std::string(host) + "/");
     return;
@@ -1485,6 +1486,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
   if (profile != TargetProfile::kResolver) {
     scenario->clear_resolve_entries();
+    scenario->clear_happy_eyeballs();
   }
 
   // Anonymous parser files add syscalls and line parsing that belong only in

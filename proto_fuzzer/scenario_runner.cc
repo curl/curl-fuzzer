@@ -19,6 +19,7 @@
 #include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
+#include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/multi_transfer_runner.h"
@@ -153,6 +154,13 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   if (mode == ScenarioRunMode::kSocks4Coverage) {
     return std::make_unique<Socks4MockServer>(scenario.socks_proxy_mode());
+  }
+
+  if (mode == ScenarioRunMode::kResolverCoverage && scenario.happy_eyeballs()) {
+    // The loopback race peer returns real unconnected sockets, so curl's
+    // happy-eyeballs filter can keep several connect attempts in progress
+    // instead of accepting the first preconnected socketpair.
+    return std::make_unique<HappyEyeballsMockServer>();
   }
 
   switch (scenario.scheme()) {

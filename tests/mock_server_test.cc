@@ -25,6 +25,7 @@
 #include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/curl_raii.h"
+#include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
@@ -1757,6 +1758,48 @@ void TestTelnetMaximumAmplificationCannotBlock() {
   curl_slist_free_all(connect_to);
 }
 
+/// The happy-eyeballs peer must start a second real connect while the first
+/// one is still in progress, then let the second listener serve the winner.
+/// The first address's accept queue is deliberately full, so this ordering is
+/// deterministic rather than dependent on loopback handshake timing.
+void TestHappyEyeballsRacesMultipleAddresses() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("resolve.test/happy");
+  scenario.set_happy_eyeballs(true);
+  scenario.mutable_connection()->add_on_readable(
+      "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhappy");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "happy-eyeballs test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://resolve.test/happy");
+  // The resolver lane removes the wildcard override so the structured
+  // CURLOPT_RESOLVE entry below is the only routing information.
+  curl_easy_setopt(easy, CURLOPT_CONNECT_TO, nullptr);
+
+  proto_fuzzer::HappyEyeballsMockServer server;
+  server.Install(easy);
+  CURLcode result = CURLE_FAILED_INIT;
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    result = server.DriveScenario(easy, scenario);
+  }
+
+  Expect(result == CURLE_OK,
+         "happy-eyeballs race did not complete against the serving listener");
+  Expect(server.opened_socket_count() >= 2,
+         "happy-eyeballs filter did not start a second in-progress attempt");
+  Expect(server.accepted_peer_count() >= 1,
+         "happy-eyeballs serving listener accepted no connection");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
 } // namespace
 
 int main() {
@@ -1805,5 +1848,6 @@ int main() {
   TestEasyPerformBoundsConnectOnlyUpload();
   TestTelnetPreloadsChunksAndNeverReadsStdin();
   TestTelnetMaximumAmplificationCannotBlock();
+  TestHappyEyeballsRacesMultipleAddresses();
   return 0;
 }

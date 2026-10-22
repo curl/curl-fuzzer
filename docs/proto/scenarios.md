@@ -37,9 +37,9 @@ The main groups of fields are:
   and `telnet_options`.
 - Peer work: `connection`, `subsequent_connections`, structured WebSocket
   frames, and `http3_plan`.
-- Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, TLS certificate
-  selection, HTTPS/H2 key-exchange selection, `socks_proxy_mode`, `trace_ids`,
-  filename-backed parser inputs, and `fail_allocations`.
+- Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
+  TLS certificate selection, HTTPS/H2 key-exchange selection, `socks_proxy_mode`,
+  `trace_ids`, filename-backed parser inputs, and `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
 contract. Its checked-in `CurlOptionId` numbers are part of the serialized
