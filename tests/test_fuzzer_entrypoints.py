@@ -49,6 +49,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_smtp": "kFastSmtp",
     "curl_fuzzer_proto_imap": "kFastImap",
     "curl_fuzzer_proto_pop3": "kFastPop3",
+    "curl_fuzzer_proto_mqtt": "kFastMqtt",
     "curl_fuzzer_proto_gopher": "kFastGopher",
     "curl_fuzzer_proto_api": "kApi",
     "curl_fuzzer_proto_multi": "kMulti",

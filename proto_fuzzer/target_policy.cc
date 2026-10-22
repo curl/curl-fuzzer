@@ -228,6 +228,21 @@ void CanonicalizePop3Authority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("pop3.test" + host_path.substr(suffix_start));
 }
 
+/// Pin the MQTT broker authority while leaving the URL path mutation-
+/// controlled: curl percent-decodes that path into the PUBLISH/SUBSCRIBE topic.
+/// A missing path is a legitimate "No MQTT topic found" error, but a default
+/// topic makes most newly generated inputs reach the packet peer instead of
+/// stopping at URL validation.
+void CanonicalizeMqttAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("mqtt.test/topic");
+    return;
+  }
+  scenario->set_host_path("mqtt.test" + host_path.substr(suffix_start));
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -461,6 +476,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_TFTP:
     case curl::fuzzer::proto::SCHEME_IMAP:
     case curl::fuzzer::proto::SCHEME_POP3:
+    case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
     case curl::fuzzer::proto::SCHEME_SMTP:
@@ -1259,6 +1275,37 @@ bool IsTftpOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// Keep the datagram lane from spending mutations on stream-only options.
 void RetainTftpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsTftpOption); }
 
+/// Return whether an option can change the single-connection MQTT exchange.
+/// The topic comes from the URL path and the publish body from POSTFIELDS, so
+/// authentication, publish/subscribe mode, receive sizing, and the publish
+/// size ceiling are the meaningful scalar controls. Transport and connection-
+/// reuse options stay with the peer.
+bool IsMqttOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_COPYPOSTFIELDS:
+    case curl::fuzzer::proto::CURLOPT_HTTPGET:
+    case curl::fuzzer::proto::CURLOPT_KEEP_SENDING_ON_ERROR:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_POST:
+    case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the MQTT target's general option budget focused on credential and
+/// publish-mode states its packet-aware peer can advance.
+void RetainMqttOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsMqttOption); }
+
 /// Decode an integral oneof locally before the generated option canonicalizer
 /// runs. Protocol mode bounds are policy, not setopt mechanics: folding them
 /// here keeps nearly every mutation on a real FTP/TFTP state while the shared
@@ -1555,6 +1602,22 @@ void RemoveIgnoredGopherShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+/// Retain the one binary server script and the scalar publish payload. MQTT
+/// cannot open follow-on sockets, does not use HTTP headers or MIME, and takes
+/// its publish body from CURLOPT_POSTFIELDS rather than curl's read callback.
+/// The remaining connection fields (initial CONNACK plus server packets) are
+/// exactly what the packet-aware peer consumes.
+void RemoveIgnoredMqttShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  scenario->clear_upload();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -1580,6 +1643,7 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_TFTP:
     case curl::fuzzer::proto::SCHEME_IMAP:
     case curl::fuzzer::proto::SCHEME_POP3:
+    case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return curl::fuzzer::proto::SCHEME_HTTP;
@@ -1631,6 +1695,14 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     // to omit postprocessor registration altogether. The append-only FTP/TFTP
     // scheme values do not justify rewriting historical mixed-lane inputs.
     return;
+  }
+
+  // MQTT is append-only as well. No other fixed lane may reinterpret one of
+  // its packet scripts, so clear the selector before the lane-specific early
+  // paths install their own scheme. Compatibility returned above and keeps
+  // historical unknown-field semantics.
+  if (profile != TargetProfile::kFastMqtt && scenario->scheme() == curl::fuzzer::proto::SCHEME_MQTT) {
+    scenario->clear_scheme();
   }
 
   // Accepted server push adds a harness-owned easy handle and therefore
@@ -1852,6 +1924,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastMqtt) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
+    RemoveIgnoredMqttShape(scenario);
+    RetainMqttOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeMqttAuthority(scenario);
+    return;
+  }
+
   if (profile == TargetProfile::kFastGopher) {
     scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
                              ? curl::fuzzer::proto::SCHEME_GOPHERS
@@ -1919,6 +2000,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastSmtp:
     case TargetProfile::kFastImap:
     case TargetProfile::kFastPop3:
+    case TargetProfile::kFastMqtt:
     case TargetProfile::kFastGopher:
       // Protocol-specific early-return paths selected their scheme above.
       return;
@@ -2029,6 +2111,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastSmtp:
     case TargetProfile::kFastImap:
     case TargetProfile::kFastPop3:
+    case TargetProfile::kFastMqtt:
     case TargetProfile::kFastGopher:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.

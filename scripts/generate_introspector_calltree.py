@@ -21,6 +21,7 @@ SOURCE_PATHS = (
     "tests/smtp_mock_server_test.cc",
     "tests/imap_mock_server_test.cc",
     "tests/pop3_mock_server_test.cc",
+    "tests/mqtt_mock_server_test.cc",
     "fuzzer_entrypoints/curl_fuzzer_proto_multi.cc",
     "proto_fuzzer/fuzzer_main.cc",
     "proto_fuzzer/scenario_runner.cc",

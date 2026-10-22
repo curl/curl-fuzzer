@@ -34,6 +34,7 @@ HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
         "curl_fuzzer_proto_smtp",
         "curl_fuzzer_proto_imap",
         "curl_fuzzer_proto_pop3",
+        "curl_fuzzer_proto_mqtt",
         "curl_fuzzer_proto_api",
         "curl_fuzzer_proto_multi",
         "curl_fuzzer_proto_timing",
