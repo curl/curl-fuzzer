@@ -436,6 +436,15 @@ typedef struct fuzz_doh_server
   char url[128];
   FUZZ_DOH_CONN conns[FUZZ_DOH_MAX_CONNECTIONS];
 
+  /* Saved NO_PROXY environment while a loopback input is active. The internal
+     DoH easy handle consults the environment and does not inherit proxy
+     options from the parent transfer. */
+  char *saved_no_proxy_lower;
+  char *saved_no_proxy_upper;
+  int lower_no_proxy_was_set;
+  int upper_no_proxy_was_set;
+  int proxy_bypass_active;
+
 } FUZZ_DOH_SERVER;
 
 /**
@@ -512,6 +521,8 @@ void fuzz_free(void **ptr);
 void fuzz_doh_server_init(FUZZ_DATA *fuzz);
 int fuzz_doh_server_start(FUZZ_DATA *fuzz);
 void fuzz_doh_server_stop(FUZZ_DATA *fuzz);
+void fuzz_doh_proxy_bypass_begin(FUZZ_DATA *fuzz);
+void fuzz_doh_proxy_bypass_end(FUZZ_DATA *fuzz);
 void fuzz_doh_server_add_fds(FUZZ_DATA *fuzz,
                              fd_set *readfds,
                              fd_set *writefds,

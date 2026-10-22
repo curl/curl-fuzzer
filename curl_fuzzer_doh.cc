@@ -84,6 +84,11 @@ void fuzz_doh_server_init(FUZZ_DATA *fuzz)
   fuzz->doh.response = NULL;
   fuzz->doh.response_len = 0;
   fuzz->doh.url[0] = '\0';
+  fuzz->doh.saved_no_proxy_lower = NULL;
+  fuzz->doh.saved_no_proxy_upper = NULL;
+  fuzz->doh.lower_no_proxy_was_set = 0;
+  fuzz->doh.upper_no_proxy_was_set = 0;
+  fuzz->doh.proxy_bypass_active = 0;
 
   for(i = 0; i < FUZZ_DOH_MAX_CONNECTIONS; i++) {
     fuzz->doh.conns[i].fd = CURL_SOCKET_BAD;
@@ -163,9 +168,93 @@ int fuzz_doh_server_start(FUZZ_DATA *fuzz)
   return 0;
 }
 
+/**
+ * Copy one proxy environment variable so it can be restored after the input.
+ * @return 0 on success, -1 when a set value could not be copied.
+ */
+static int fuzz_save_env(const char *name, char **copy, int *was_set)
+{
+  const char *value = getenv(name);
+  size_t length;
+
+  *copy = NULL;
+  *was_set = 0;
+  if(!value)
+    return 0;
+
+  length = strlen(value) + 1;
+  *copy = (char *)malloc(length);
+  if(!*copy)
+    return -1;
+  memcpy(*copy, value, length);
+  *was_set = 1;
+  return 0;
+}
+
+static void fuzz_free_saved_env(char **copy, int *was_set)
+{
+  free(*copy);
+  *copy = NULL;
+  *was_set = 0;
+}
+
+/**
+ * Force NO_PROXY for the duration of a loopback input. The internal DoH easy
+ * handle consults the process environment and does not inherit proxy options
+ * from the parent transfer, so an ambient http_proxy/ALL_PROXY could divert
+ * probes away from the listener and generate off-loopback traffic.
+ */
+void fuzz_doh_proxy_bypass_begin(FUZZ_DATA *fuzz)
+{
+  if(!fuzz->doh.enabled || fuzz->doh.proxy_bypass_active)
+    return;
+
+  if(fuzz_save_env("no_proxy", &fuzz->doh.saved_no_proxy_lower,
+                   &fuzz->doh.lower_no_proxy_was_set) != 0 ||
+     fuzz_save_env("NO_PROXY", &fuzz->doh.saved_no_proxy_upper,
+                   &fuzz->doh.upper_no_proxy_was_set) != 0) {
+    fuzz_free_saved_env(&fuzz->doh.saved_no_proxy_lower,
+                        &fuzz->doh.lower_no_proxy_was_set);
+    fuzz_free_saved_env(&fuzz->doh.saved_no_proxy_upper,
+                        &fuzz->doh.upper_no_proxy_was_set);
+    return;
+  }
+
+  /* Mark active before setenv so a partial failure is still restored. */
+  fuzz->doh.proxy_bypass_active = 1;
+  if(setenv("no_proxy", "*", 1) != 0 || setenv("NO_PROXY", "*", 1) != 0)
+    fuzz_doh_proxy_bypass_end(fuzz);
+  else
+    FV_PRINTF(fuzz, "FUZZ: DoH proxy bypass enabled\n");
+}
+
+void fuzz_doh_proxy_bypass_end(FUZZ_DATA *fuzz)
+{
+  if(!fuzz->doh.proxy_bypass_active)
+    return;
+
+  if(fuzz->doh.lower_no_proxy_was_set)
+    (void)setenv("no_proxy", fuzz->doh.saved_no_proxy_lower, 1);
+  else
+    (void)unsetenv("no_proxy");
+  if(fuzz->doh.upper_no_proxy_was_set)
+    (void)setenv("NO_PROXY", fuzz->doh.saved_no_proxy_upper, 1);
+  else
+    (void)unsetenv("NO_PROXY");
+
+  fuzz_free_saved_env(&fuzz->doh.saved_no_proxy_lower,
+                      &fuzz->doh.lower_no_proxy_was_set);
+  fuzz_free_saved_env(&fuzz->doh.saved_no_proxy_upper,
+                      &fuzz->doh.upper_no_proxy_was_set);
+  fuzz->doh.proxy_bypass_active = 0;
+  FV_PRINTF(fuzz, "FUZZ: DoH proxy bypass restored\n");
+}
+
 void fuzz_doh_server_stop(FUZZ_DATA *fuzz)
 {
   int i;
+
+  fuzz_doh_proxy_bypass_end(fuzz);
 
   if(fuzz->doh.listener != CURL_SOCKET_BAD) {
     close(fuzz->doh.listener);

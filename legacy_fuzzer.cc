@@ -172,6 +172,10 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
 
   FCHECK(setenv("CURL_HSTS_HTTP", "1", 0) == 0);
   FCHECK(setenv("CURL_ALTSVC_HTTP", "1", 0) == 0);
+  /* Current curl permits plaintext DoH under DEBUGBUILD directly. Set the
+     analogous override as well so a future curl that gates it on an
+     environment check keeps the loopback lane reachable. */
+  FCHECK(setenv("CURL_DOH_HTTP", "1", 0) == 0);
 
 EXIT_LABEL:
 
@@ -317,6 +321,7 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
   if(fuzz->doh.enabled) {
     if(fuzz_doh_server_start(fuzz) == 0) {
       FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DOH_URL, fuzz->doh.url));
+      fuzz_doh_proxy_bypass_begin(fuzz);
     }
     else {
       /* Loopback is unavailable in this environment; run without DoH rather
