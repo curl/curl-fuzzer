@@ -135,7 +135,7 @@ endif()
 # Install Brotli
 #
 # renovate: datasource=github-tags depName=google/brotli
-set(BROTLI_VERSION 1.2.0)
+set(BROTLI_VERSION 1.2.1)
 set(BROTLI_URL https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz)
 set(BROTLI_BUILD_NAME brotli-${BROTLI_VERSION})
 set(BROTLI_INSTALL_DIR ${CMAKE_BINARY_DIR}/${BROTLI_BUILD_NAME}-install)
