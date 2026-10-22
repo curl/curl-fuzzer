@@ -1,0 +1,15 @@
+# A 550 reply to DATA must fail the transfer before any message body is sent.
+# The peer therefore consumes no upload bytes and must not enter body mode.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/rejected.test"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_MAIL_FROM string_value: "sender@example.test" }
+mail_rcpt: "recipient@example.test"
+upload { data: "never sent\r\n" }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250 smtp.test\r\n"
+  on_readable: "250 sender accepted\r\n"
+  on_readable: "250 recipient accepted\r\n"
+  on_readable: "550 data rejected\r\n"
+}

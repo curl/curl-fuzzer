@@ -70,6 +70,13 @@ Other peers intentionally give those fields narrower meanings:
   follow-on connections as data streams.
 - TFTP preserves packet boundaries: the initial response and each readable
   chunk are separate datagrams.
+- SMTP uses the primary connection as command-aligned replies. The initial
+  response is the 220 greeting, each readable chunk answers the next command,
+  and after a 354 DATA reply the peer drains the dot-stuffed message body up to
+  its `\r\n.\r\n` end marker before releasing the final 250. Envelope
+  recipients come from the schema-native `mail_rcpt` list because
+  `CURLOPT_MAIL_RCPT` is a `curl_slist`; the URL path supplies curl's EHLO
+  domain rather than the recipient in current libcurl.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

@@ -41,6 +41,14 @@ inline constexpr std::size_t kMaxRequestHeaders = 16;
 inline constexpr std::size_t kMaxResolveEntries = 16;
 /// CURLOPT_RESOLVE consumes NUL-terminated host:port:address records.
 inline constexpr std::size_t kMaxResolveEntryBytes = 4096;
+/// SMTP envelope recipients are schema-native because CURLOPT_MAIL_RCPT is a
+/// curl_slist. A short list reaches multi-recipient retry and
+/// CURLOPT_MAIL_RCPT_ALLOWFAILS behavior without making one input allocate an
+/// unbounded list.
+inline constexpr std::size_t kMaxMailRecipients = 8;
+/// Keep recipient mailbox bytes within curl's normal address-processing range;
+/// oversized suffixes add no distinct SMTP parser state.
+inline constexpr std::size_t kMaxMailRecipientBytes = 1024;
 /// One filename-only parser input can span many lines and cross curl's normal
 /// transfer buffer boundary without permitting mutation-sized temporary files.
 inline constexpr std::size_t kMaxFileInputBytes = 64 * 1024;

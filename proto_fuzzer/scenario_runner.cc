@@ -25,6 +25,7 @@
 #include "proto_fuzzer/multi_transfer_runner.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
+#include "proto_fuzzer/smtp_mock_server.h"
 #include "proto_fuzzer/socks4_mock_server.h"
 #include "proto_fuzzer/telnet_mock_server.h"
 #include "proto_fuzzer/tftp_mock_server.h"
@@ -99,6 +100,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "ftp";
     case curl::fuzzer::proto::SCHEME_TFTP:
       return "tftp";
+    case curl::fuzzer::proto::SCHEME_SMTP:
+      return "smtp";
     case curl::fuzzer::proto::SCHEME_GOPHER:
       return "gopher";
     case curl::fuzzer::proto::SCHEME_GOPHERS:
@@ -222,6 +225,14 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<TftpMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_SMTP:
+      // SMTP reuses the stream socketpair but needs command-aligned replies
+      // and a DATA body drain. Only the dedicated lane may reinterpret an
+      // append-only scheme value that historical corpus inputs could carry.
+      if (mode == ScenarioRunMode::kSmtpCoverage) {
+        return std::make_unique<SmtpMockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -244,6 +255,11 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
     const volatile std::size_t tftp_observation[] = {tftp->received_datagrams().size(), tftp->request_port(),
                                                      tftp->transfer_port()};
     (void)tftp_observation;
+  }
+
+  if (auto* smtp = dynamic_cast<SmtpMockServer*>(mock)) {
+    const volatile std::size_t smtp_observation[] = {smtp->control_transcript().size(), smtp->uploaded_data().size()};
+    (void)smtp_observation;
   }
 
   if (auto* websocket = dynamic_cast<WebSocketMockServer*>(mock)) {

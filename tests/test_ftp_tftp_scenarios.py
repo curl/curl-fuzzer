@@ -133,3 +133,26 @@ def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
     for name, tokens in expected_tokens.items():
         scenario = (tftp_root / name).read_text(encoding="utf-8")
         assert all(token in scenario for token in tokens), name
+
+
+def test_smtp_seeds_keep_envelope_and_data_order() -> None:
+    """Keep MAIL/RCPT/DATA replies paired with the body exchange."""
+    smtp_root = SCENARIO_ROOT / "smtp"
+    upload = (smtp_root / "smtp_upload_mail.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "scheme: SCHEME_SMTP" in upload
+    assert 'host_path: "smtp.test/client.test"' in upload
+    assert "CURLOPT_UPLOAD bool_value: true" in upload
+    assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in upload
+    assert 'mail_rcpt: "recipient@example.test"' in upload
+    assert "250 sender accepted" in upload
+    assert "250 recipient accepted" in upload
+    assert "354 send the message" in upload
+    assert "250 message queued" in upload
+
+    rejected = (smtp_root / "smtp_data_rejected.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "550 data rejected" in rejected
+    assert "354" not in rejected

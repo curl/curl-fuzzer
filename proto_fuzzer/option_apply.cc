@@ -28,6 +28,7 @@ constexpr char kEventDrivenProtocolsAllowed[] = "http,https,ws,wss";
 constexpr char kTelnetProtocolAllowed[] = "telnet";
 constexpr char kFtpProtocolAllowed[] = "ftp";
 constexpr char kTftpProtocolAllowed[] = "tftp";
+constexpr char kSmtpProtocolAllowed[] = "smtp";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
 constexpr char kVerboseEnvVar[] = "FUZZ_VERBOSE";
@@ -126,6 +127,9 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       break;
     case curl::fuzzer::proto::SCHEME_TFTP:
       direct_protocols = kTftpProtocolAllowed;
+      break;
+    case curl::fuzzer::proto::SCHEME_SMTP:
+      direct_protocols = kSmtpProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_GOPHER:
       direct_protocols = "gopher";

@@ -462,6 +462,7 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
       request_headers_(nullptr),
       resolve_entries_(nullptr),
       telnet_options_(nullptr),
+      mail_rcpt_(nullptr),
       mime_post_(nullptr),
       upload_state_(scenario),
       upload_callbacks_installed_(false),
@@ -502,6 +503,13 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     }
   }
 
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_SMTP || !scenario.mail_rcpt().empty()) {
+    // Recipient list entries borrow protobuf-owned storage only for the
+    // duration of BuildStringList; curl_slist_append copies each address.
+    mail_rcpt_ = BuildStringList(scenario.mail_rcpt(), scenario_limits::kMaxMailRecipients,
+                                 scenario_limits::kMaxMailRecipientBytes, &stats_.mail_rcpt);
+  }
+
   if (resolve_entries_built) {
     resolve_entries_ready_ = curl_easy_setopt(easy_, CURLOPT_RESOLVE, resolve_entries_.get()) == CURLE_OK;
   }
@@ -521,6 +529,9 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
 
   if (telnet_options_ != nullptr) {
     (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, telnet_options_.get());
+  }
+  if (mail_rcpt_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_MAIL_RCPT, mail_rcpt_.get());
   }
   if (request_headers_ != nullptr) {
     (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, request_headers_.get());
@@ -557,6 +568,9 @@ ScenarioRequestData::~ScenarioRequestData() {
     }
     if (telnet_options_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, nullptr);
+    }
+    if (mail_rcpt_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_MAIL_RCPT, nullptr);
     }
   }
 }

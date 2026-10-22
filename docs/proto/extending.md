@@ -18,7 +18,7 @@ one:
    update the overrides in
    `src/curl_fuzzer_tools/generate_option_manifest.py`.
 3. Decide which fixed profiles may retain it. The fast HTTP, HTTP/2 proxy,
-   HTTP/3, TELNET, FTP, and TFTP lanes use explicit option allowlists in
+   HTTP/3, TELNET, FTP, TFTP, and SMTP lanes use explicit option allowlists in
    `proto_fuzzer/target_policy.cc`.
 4. Add a correlated textproto seed when reaching useful code requires other
    options or particular peer bytes.
