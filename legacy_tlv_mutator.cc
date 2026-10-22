@@ -42,6 +42,9 @@ static_assert(TLV_TYPE_DOH_LOOPBACK == 162,
 static_assert(TLV_TYPE_DOH_HTTP_STATUS == 164,
               "legacy DoH status TLV IDs changed");
 static_assert(TLV_TYPE_VERBOSE == 165, "legacy DoH verbose TLV ID changed");
+static_assert(TLV_TYPE_TRACE == 166, "legacy trace TLV ID changed");
+static_assert(TLV_TYPE_TRACE_STDERR == 167,
+              "legacy stderr trace TLV ID changed");
 static_assert(TLV_TYPE_PORT == 200, "legacy integer TLV range changed");
 static_assert(TLV_TYPE_TCP_KEEPCNT == 293,
               "legacy integer TLV range changed");
@@ -335,6 +338,12 @@ TypeInfo GetTypeInfo(uint16_t type) {
   if(type >= 300 && type <= 312)
     return {ValueKind::kU32, false};
   if(type >= 320 && type <= 325 && type != 322)
+    return {ValueKind::kU32, false};
+  /* Trace controls are harness policy rather than CURLOPT values. 166 carries
+     a bounded curl_global_trace() string; 167 enables the no-callback lane. */
+  if(type == 166)
+    return {ValueKind::kString, false};
+  if(type == 167)
     return {ValueKind::kU32, false};
 
   return {ValueKind::kUnknown, false};

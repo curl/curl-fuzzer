@@ -137,6 +137,8 @@ class BaseType:
     TYPE_DOH_RESPONSE = 163
     TYPE_DOH_HTTP_STATUS = 164
     TYPE_VERBOSE = 165
+    TYPE_TRACE = 166
+    TYPE_TRACE_STDERR = 167
 
     TYPE_PORT = 200
     TYPE_LOW_SPEED_LIMIT = 201
@@ -378,6 +380,8 @@ class BaseType:
         TYPE_DOH_RESPONSE: "DoH response override",
         TYPE_DOH_HTTP_STATUS: "DoH HTTP status",
         TYPE_VERBOSE: "Verbose tracing",
+        TYPE_TRACE: "curl_global_trace config",
+        TYPE_TRACE_STDERR: "Verbose tracing without callback",
         # Numeric libcurl options (u32 and enums)
         TYPE_PORT: "CURLOPT_PORT",
         TYPE_LOW_SPEED_LIMIT: "CURLOPT_LOW_SPEED_LIMIT",

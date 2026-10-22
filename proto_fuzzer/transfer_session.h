@@ -43,7 +43,7 @@ class TransferSession {
 
   CURL* easy() const;
 
-  void ApplyBaseline(curl::fuzzer::proto::Scheme scheme, bool trace_ids = false);
+  void ApplyBaseline(curl::fuzzer::proto::Scheme scheme, bool trace_ids = false, const std::string& trace_config = {});
 
   bool ResetConfiguration();
 

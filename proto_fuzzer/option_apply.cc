@@ -81,19 +81,28 @@ void EnableTraceIds() {
 /// @param easy The curl easy handle to configure.
 /// @param scheme Protocol whose dedicated in-process mock will service it.
 /// @param trace_ids Enable verbose LIB-IDS tracing for this scenario.
+/// @param trace_config Optional curl_global_trace() configuration.
 /// @return Caller-owned CURLOPT_CONNECT_TO list, which must outlive the easy
 ///         handle and be freed with curl_slist_free_all after curl_easy_cleanup.
-struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids) {
+struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids,
+                                        const std::string& trace_config) {
   EnableDebugHttpTransportMetadata();
 
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &SilentWriteCallback);
   curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, &SilentWriteCallback);
 
   const bool user_requested_verbose = std::getenv(kVerboseEnvVar) != nullptr;
+  if (!trace_config.empty()) {
+    // Apply the fuzzer-selected categories before any explicit trace-ID
+    // request so a scenario cannot accidentally disable its own ID prefixes.
+    (void)curl_global_trace(trace_config.c_str());
+  }
   if (trace_ids) {
     EnableTraceIds();
-    // Keep trace-ID coverage enabled during fuzzing without flooding the
-    // process log. The callback still executes curl_trc.c's formatting path.
+  }
+  if (trace_ids || !trace_config.empty()) {
+    // Keep trace coverage enabled during fuzzing without flooding the process
+    // log. The callback still executes curl_trc.c's formatting path.
     curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &SilentDebugCallback);
     curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
   } else if (scheme == curl::fuzzer::proto::SCHEME_TELNET && !user_requested_verbose) {

@@ -87,10 +87,12 @@ CURL* TransferSession::easy() const { return easy_.get(); }
 /// Apply baseline options and retain their CONNECT_TO storage.
 /// @param scheme Protocol serviced by the installed peer.
 /// @param trace_ids Whether to enable bounded trace-ID diagnostics.
-void TransferSession::ApplyBaseline(curl::fuzzer::proto::Scheme scheme, bool trace_ids) {
+/// @param trace_config Optional curl_global_trace() configuration.
+void TransferSession::ApplyBaseline(curl::fuzzer::proto::Scheme scheme, bool trace_ids,
+                                    const std::string& trace_config) {
   if (easy_) {
     // Apply the new pointer before releasing the previous list.
-    connect_to_.reset(ApplyBaselineOptions(easy_.get(), scheme, trace_ids));
+    connect_to_.reset(ApplyBaselineOptions(easy_.get(), scheme, trace_ids, trace_config));
   }
 }
 

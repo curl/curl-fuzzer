@@ -294,7 +294,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   CURL* easy = transfer.easy();
   const std::string url = std::string(prefix) + "://" + scenario.host_path();
   const auto configure_easy = [&] {
-    transfer.ApplyBaseline(scenario.scheme(), scenario.trace_ids());
+    transfer.ApplyBaseline(scenario.scheme(), scenario.trace_ids(), scenario.trace_config());
     (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
     mock->Install(easy);
     transfer.ApplyInputFiles();

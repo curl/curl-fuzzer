@@ -48,3 +48,32 @@ def test_ssl_verifypeer_can_be_seeded_explicitly(tmp_path: Path) -> None:
         (1, b"wss://127.0.0.1/"),
         (214, b"\x00\x00\x00\x01"),
     ]
+
+
+def test_trace_controls_can_be_seeded_explicitly(tmp_path: Path) -> None:
+    """Keep the fuzzer-driven trace lanes reproducible from the generator."""
+    output = tmp_path / "trace.tlv"
+    subprocess.run(
+        [
+            sys.executable,
+            str(GENERATOR),
+            "--output",
+            str(output),
+            "--url",
+            "http://127.0.0.1/",
+            "--curl_test_dir",
+            str(tmp_path),
+            "--trace",
+            "all",
+            "--trace-stderr",
+            "1",
+        ],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+    assert _decode_tlvs(output.read_bytes()) == [
+        (1, b"http://127.0.0.1/"),
+        (166, b"all"),
+        (167, b"\x00\x00\x00\x01"),
+    ]

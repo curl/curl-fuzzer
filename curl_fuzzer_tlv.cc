@@ -358,6 +358,25 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
       fuzz->doh_verbose = 1;
       break;
 
+    case TLV_TYPE_TRACE:
+      /* Copy a bounded curl_global_trace() configuration. An empty value is
+         treated as "all" when the options are applied. */
+      if(tlv->length > 0) {
+        size_t copy_len = tlv->length;
+        if(copy_len >= sizeof(fuzz->trace_config))
+          copy_len = sizeof(fuzz->trace_config) - 1;
+        memcpy(fuzz->trace_config, tlv->value, copy_len);
+        fuzz->trace_config[copy_len] = '\0';
+      }
+      fuzz->trace_verbose = 1;
+      break;
+
+    case TLV_TYPE_TRACE_STDERR:
+      /* Enable verbose tracing without a debug callback. The option applier
+         redirects curl's stderr to /dev/null to keep the fuzzer quiet. */
+      fuzz->trace_stderr_verbose = 1;
+      break;
+
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
     FSINGLETONTLV(fuzz, TLV_TYPE_URL, CURLOPT_URL);
