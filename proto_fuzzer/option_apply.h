@@ -22,7 +22,25 @@
 
 namespace proto_fuzzer {
 
-void ResetGlobalTrace();
+/// Reset curl's global trace configuration to a known off baseline for the
+/// lifetime of one input.
+///
+/// curl_global_trace() only mutates the components it names and exposes no
+/// read-back, so a true save/restore is not possible through the public API.
+/// Instead the guard resets "-all" on both entry and exit: the input's trace
+/// selection is contained to the guard's scope, and a previous input's "all"
+/// (or any subset it left enabled) cannot leak into the next input. This makes
+/// coverage and any trace-dependent failure independent of corpus order.
+class ScopedTraceReset final {
+ public:
+  ScopedTraceReset() { (void)curl_global_trace("-all"); }
+  ~ScopedTraceReset() { (void)curl_global_trace("-all"); }
+
+  ScopedTraceReset(const ScopedTraceReset&) = delete;
+  ScopedTraceReset& operator=(const ScopedTraceReset&) = delete;
+  ScopedTraceReset(ScopedTraceReset&&) = delete;
+  ScopedTraceReset& operator=(ScopedTraceReset&&) = delete;
+};
 
 struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids = false,
                                         const std::string& trace_config = {});

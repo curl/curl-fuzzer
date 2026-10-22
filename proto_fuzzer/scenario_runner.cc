@@ -269,11 +269,9 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
 /// @param mode Runtime coverage and lifecycle policy for this invocation.
 /// @return zero after either a bounded run or an ignored invalid scenario.
 int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
-  // Every input starts from a known off trace baseline. curl_global_trace()
-  // only mutates the components it names, so without this an earlier "all"
-  // input would leave extra features enabled for later "dns" inputs, making
-  // coverage and any trace-dependent failure depend on corpus order.
-  proto_fuzzer::ResetGlobalTrace();
+  // Every input starts from a known off trace baseline (and returns to it when
+  // the scope exits), so one input's trace selection cannot leak into another.
+  proto_fuzzer::ScopedTraceReset trace_reset;
 
   if (mode == ScenarioRunMode::kMultiTransfer) {
     (void)proto_fuzzer::RunMultiTransferScenario(scenario);
