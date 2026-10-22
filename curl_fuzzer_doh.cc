@@ -349,8 +349,9 @@ static int fuzz_doh_request_complete(FUZZ_DOH_CONN *conn,
 /**
  * Synthesize a minimal DNS response matching the query's QTYPE. A and AAAA
  * answers point at loopback so the outer transfer can continue through the
- * existing socketpair mock. HTTPS queries get a minimal HTTPS RR so the
- * resolver's HTTPS-RR consume path is reachable. Other QTYPEs get NOTIMP.
+ * existing socketpair mock. HTTPS queries get an HTTPS RR carrying an alpn
+ * SvcParam so the HTTPS-connect filter can select its first ALPN from the
+ * resolver record. Other QTYPEs get NOTIMP.
  */
 static size_t fuzz_doh_build_dns_response(const unsigned char *query,
                                           size_t query_len,
@@ -391,7 +392,12 @@ static size_t fuzz_doh_build_dns_response(const unsigned char *query,
                            query[qname_end + 1]);
   question_len = (qname_end + 4) - 12;
   has_answer = (qtype == 1 || qtype == 28 || qtype == 65);
-  rdlength = (qtype == 1) ? 4 : ((qtype == 28) ? 16 : 3);
+  if(qtype == 1)
+    rdlength = 4;
+  else if(qtype == 28)
+    rdlength = 16;
+  else
+    rdlength = 13; /* priority + root target + alpn SvcParam */
   answer_count = (qtype == 65) ? 1 : (has_answer ? 2 : 0);
   total = 12 + question_len +
           ((size_t)answer_count * (12 + rdlength));
@@ -432,10 +438,21 @@ static size_t fuzz_doh_build_dns_response(const unsigned char *query,
       p += 16;
     }
     else {
-      /* Minimal HTTPS RR: priority 1, root target, no SvcParams. */
-      *p++ = 0;
-      *p++ = 1;
-      *p++ = 0;
+      /* HTTPS RR: priority 1, root target, alpn=h2,h3.
+         SvcParam key 1 (alpn) holds length-prefixed protocol names, so the
+         value is 02 'h' '2' 02 'h' '3'. This exercises the HTTPS-connect
+         filter's HTTPS-RR ALPN selection instead of falling back to the
+         configured HTTP-version preference. */
+      static const unsigned char httpsrr_alpn[] = {
+        0, 1,              /* priority = 1 */
+        0,                 /* root target (".") */
+        0, 1,              /* SvcParamKey = alpn */
+        0, 6,              /* SvcParamValue length */
+        2, 'h', '2',       /* h2 */
+        2, 'h', '3'        /* h3 */
+      };
+      memcpy(p, httpsrr_alpn, sizeof(httpsrr_alpn));
+      p += sizeof(httpsrr_alpn);
     }
   }
 
