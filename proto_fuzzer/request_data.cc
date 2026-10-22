@@ -503,7 +503,8 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     }
   }
 
-  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_SMTP || !scenario.mail_rcpt().empty()) {
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_SMTP || scenario.scheme() == curl::fuzzer::proto::SCHEME_SMTPS ||
+      !scenario.mail_rcpt().empty()) {
     // Recipient list entries borrow protobuf-owned storage only for the
     // duration of BuildStringList; curl_slist_append copies each address.
     mail_rcpt_ = BuildStringList(scenario.mail_rcpt(), scenario_limits::kMaxMailRecipients,

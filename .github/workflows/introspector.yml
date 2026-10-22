@@ -23,6 +23,7 @@ name: Fuzz Introspector
       - 'tests/imap_mock_server_test.cc'
       - 'tests/pop3_mock_server_test.cc'
       - 'tests/mqtt_mock_server_test.cc'
+      - 'tests/smtps_mock_server_test.cc'
       - 'tests/tftp_mock_server_test.cc'
   pull_request:
     branches:
@@ -46,6 +47,7 @@ name: Fuzz Introspector
       - 'tests/imap_mock_server_test.cc'
       - 'tests/pop3_mock_server_test.cc'
       - 'tests/mqtt_mock_server_test.cc'
+      - 'tests/smtps_mock_server_test.cc'
       - 'tests/tftp_mock_server_test.cc'
   workflow_dispatch: {}
 

@@ -86,6 +86,23 @@ void SmtpMockServer::ApplyScriptBackpressure(MockConnection* connection,
   connection->ApplyBackpressure(receive_buffer, static_cast<std::size_t>(backpressure.drain_limit()));
 }
 
+/// Create the default plaintext transport for the SMTP exchange. The SMTPS
+/// subclass overrides this factory while retaining the command/reply parser.
+/// @return A new socketpair-backed connection.
+std::unique_ptr<MockConnection> SmtpMockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
+
+/// Append decoded application bytes to the pending parser buffer. The outer
+/// service loop drains this buffer after every transport call, so it remains
+/// bounded by the scenario's command and upload budgets.
+/// @param data First decoded byte.
+/// @param size Number of bytes available at `data`.
+void SmtpMockServer::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  pending_control_bytes_.append(reinterpret_cast<const char*>(data), size);
+}
+
 /// Create the single control socketpair and queue the server greeting. SMTP
 /// never opens a second application socket, so any later request is rejected
 /// rather than silently replacing the live peer.
@@ -98,11 +115,12 @@ curl_socket_t SmtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl
     return CURL_SOCKET_BAD;
   }
 
-  connection_ = std::make_unique<MockConnection>();
-  if (!connection_->ok()) {
+  connection_ = CreateConnection();
+  if (!connection_ || !connection_->ok()) {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
+  connection_->SetIncomingDataObserver(this);
 
   ApplyScriptBackpressure(connection_.get(), scenario_->connection());
   const std::string& greeting = scenario_->connection().initial_response();
@@ -301,18 +319,21 @@ void SmtpMockServer::HandleControlCommand(std::string_view command) {
   }
 }
 
-/// Read without waiting, retain partial final commands, and process all full
-/// lines already emitted by curl. After an accepted DATA command the same
-/// buffer is interpreted as message body until "\r\n.\r\n" is observed.
-/// @return true when bytes or a command/reply cursor advanced.
+/// Advance the carrier without waiting, then process all complete command lines
+/// already decoded into the pending buffer. A plaintext connection yields raw
+/// socket bytes; a TLS carrier completes its handshake and yields decrypted
+/// application bytes through ObserveIncomingData. After an accepted DATA
+/// command the same buffer is interpreted as message body until "\r\n.\r\n" is
+/// observed.
+/// @return true when bytes, transport state, or a command/reply cursor advanced.
 bool SmtpMockServer::ServiceControlConnection() {
   if (connection_ == nullptr) {
     return false;
   }
 
   const std::size_t size_before_read = pending_control_bytes_.size();
-  connection_->ReadAvailable(&pending_control_bytes_);
-  bool made_progress = pending_control_bytes_.size() != size_before_read;
+  const std::size_t transport_progress = connection_->DrainIncoming();
+  bool made_progress = pending_control_bytes_.size() != size_before_read || transport_progress != 0;
 
   std::size_t consumed = 0;
   while (consumed < pending_control_bytes_.size()) {

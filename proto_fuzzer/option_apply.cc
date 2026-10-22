@@ -28,7 +28,7 @@ constexpr char kEventDrivenProtocolsAllowed[] = "http,https,ws,wss";
 constexpr char kTelnetProtocolAllowed[] = "telnet";
 constexpr char kFtpProtocolAllowed[] = "ftp";
 constexpr char kTftpProtocolAllowed[] = "tftp";
-constexpr char kSmtpProtocolAllowed[] = "smtp";
+constexpr char kSmtpProtocolAllowed[] = "smtp,smtps";
 constexpr char kImapProtocolAllowed[] = "imap";
 constexpr char kPop3ProtocolAllowed[] = "pop3";
 constexpr char kMqttProtocolAllowed[] = "mqtt";
@@ -132,6 +132,7 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       direct_protocols = kTftpProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_SMTP:
+    case curl::fuzzer::proto::SCHEME_SMTPS:
       direct_protocols = kSmtpProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_IMAP:

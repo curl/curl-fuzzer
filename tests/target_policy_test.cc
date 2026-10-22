@@ -28,6 +28,7 @@ using curl::fuzzer::proto::SCHEME_MQTT;
 using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_SMTP;
+using curl::fuzzer::proto::SCHEME_SMTPS;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
@@ -939,6 +940,25 @@ void TestFastSmtpPolicy() {
          "fast SMTP policy lost the mail envelope option values");
 }
 
+void TestFastSmtpsPolicy() {
+  Scenario scenario;
+  scenario.set_scheme(SCHEME_SMTPS);
+  scenario.set_host_path("untrusted.invalid:2465/client.test?query#fragment");
+  scenario.mutable_upload()->set_data("implicit tls mail body");
+  scenario.mutable_connection()->set_initial_response("220 smtps.test\r\n");
+  scenario.mutable_connection()->add_on_readable("250 reply");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastSmtp);
+
+  Expect(scenario.scheme() == SCHEME_SMTPS,
+         "fast SMTP lane did not preserve an explicit SMTPS scheme");
+  Expect(scenario.host_path() == "tls.test/client.test?query#fragment",
+         "fast SMTP lane did not give SMTPS the certifiable authority");
+  Expect(scenario.has_upload() &&
+             scenario.upload().data() == "implicit tls mail body",
+         "fast SMTP lane removed the SMTPS message body");
+}
+
 void TestFastTftpPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:1234/path;mode=netascii?query");
@@ -1313,6 +1333,11 @@ void TestTimingPolicyMapsSecureSchemesToPlaintext() {
   Scenario wss = ScenarioWithBackpressure(SCHEME_WSS, 2048, 1);
   NormalizeScenarioForTarget(&wss, TargetProfile::kTiming);
   Expect(wss.scheme() == SCHEME_WS, "timing policy did not map WSS to WS");
+
+  Scenario smtps = ScenarioWithBackpressure(SCHEME_SMTPS, 2048, 1);
+  NormalizeScenarioForTarget(&smtps, TargetProfile::kTiming);
+  Expect(smtps.scheme() == SCHEME_SMTP,
+         "timing policy did not map SMTPS to SMTP");
 }
 
 void TestTimingPolicySuppliesBackpressureForZeroConfig() {
@@ -2549,6 +2574,7 @@ int main() {
   TestFastPop3Policy();
   TestFastMqttPolicy();
   TestNonMqttPoliciesClearMqttScheme();
+  TestFastSmtpsPolicy();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();

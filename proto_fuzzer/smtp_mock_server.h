@@ -13,10 +13,12 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/incoming_data_observer.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/scenario_limits.h"
 
@@ -38,7 +40,12 @@ namespace proto_fuzzer {
 /// are not commands, so the peer drains them until it observes "\r\n.\r\n".
 /// The post-body 250 is queued at DATA-acceptance time because curl's blocking
 /// smtp_done() wait cannot be serviced by the outer loop.
-class SmtpMockServer final : public MockServerBase {
+///
+/// Subclasses replace the transport through CreateConnection(). The implicit-
+/// TLS SMTPS peer uses that hook to wrap the identical command exchange in a
+/// verified OpenSSL connection; incoming bytes are observed after transport
+/// decoding so the state machine does not depend on the carrier.
+class SmtpMockServer : public MockServerBase, public IncomingDataObserver {
  public:
   SmtpMockServer();
 
@@ -54,12 +61,16 @@ class SmtpMockServer final : public MockServerBase {
   const std::string& uploaded_data() const;
 
  protected:
+  virtual std::unique_ptr<MockConnection> CreateConnection();
+
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
 
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
   void HandleDetachedMulti(CurlMultiPtr multi) override;
+
+  void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
 
  private:
   /// The SMTP end-of-body marker curl's dot-stuffing reader appends.

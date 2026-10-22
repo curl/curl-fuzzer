@@ -38,6 +38,7 @@
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
+#include "proto_fuzzer/smtps_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #include "proto_fuzzer/tls_websocket_mock_server.h"
 #endif
@@ -111,6 +112,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "pop3";
     case curl::fuzzer::proto::SCHEME_MQTT:
       return "mqtt";
+    case curl::fuzzer::proto::SCHEME_SMTPS:
+      return "smtps";
     case curl::fuzzer::proto::SCHEME_GOPHER:
       return "gopher";
     case curl::fuzzer::proto::SCHEME_GOPHERS:
@@ -263,6 +266,17 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<MqttMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_SMTPS:
+      // Implicit TLS shares the SMTP lane, parser, and command budget with the
+      // plaintext scheme; only the transport factory differs. Keep it gated on
+      // the same fixed run mode so no other target can turn an appended enum
+      // value into a TLS exchange.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kSmtpCoverage) {
+        return std::make_unique<SmtpsMockServer>();
+      }
+#endif
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -308,6 +322,15 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                      mqtt->published_payload().size()};
     (void)mqtt_observation;
   }
+
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  if (auto* smtps = dynamic_cast<SmtpsMockServer*>(mock)) {
+    const volatile std::size_t smtps_observation[] = {smtps->completed_handshake_count(),
+                                                      static_cast<std::size_t>(smtps->negotiated_tls_version()),
+                                                      smtps->negotiated_alpn().size()};
+    (void)smtps_observation;
+  }
+#endif
 
   if (auto* websocket = dynamic_cast<WebSocketMockServer*>(mock)) {
     const volatile std::size_t websocket_observation = websocket->manual_received_bytes();
