@@ -381,6 +381,8 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
       TargetProfile::kFastGopher,
+      TargetProfile::kFastTftp,      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -597,6 +599,8 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
       TargetProfile::kApi,
+      TargetProfile::kFastTftp,      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,      TargetProfile::kApi,
       TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
@@ -621,6 +625,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastWebSocket, TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastImap,      TargetProfile::kFastPop3,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -973,6 +978,118 @@ void TestFastTftpPolicy() {
          "fast TFTP policy retained a non-TFTP option");
   Expect(scenario.options(0).uint_value() == 65464,
          "fast TFTP policy did not clamp block size to curl's upper boundary");
+}
+
+void TestFastImapPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path("untrusted.invalid:143/INBOX;UID=1?query#fragment");
+  scenario.add_request_headers("X-Ignored: imap");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_upload()->set_data("append sentinel");
+  scenario.mutable_connection()->add_on_readable("control reply");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *username = scenario.add_options();
+  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
+  username->set_string_value("fuzz");
+  auto *password = scenario.add_options();
+  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
+  password->set_string_value("secret");
+  auto *upload = scenario.add_options();
+  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload->set_bool_value(true);
+  auto *custom = scenario.add_options();
+  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
+  custom->set_string_value("STORE 1 +FLAGS (\\Deleted)");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastImap);
+
+  Expect(scenario.scheme() == curl::fuzzer::proto::SCHEME_IMAP,
+         "fast IMAP policy did not force IMAP");
+  Expect(scenario.host_path() == "imap.test/INBOX;UID=1?query#fragment",
+         "fast IMAP policy did not retain the mailbox selectors");
+  Expect(scenario.request_headers_size() == 0 &&
+             scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+             scenario.subsequent_connections_size() == 0,
+         "fast IMAP policy retained another protocol's shape");
+  Expect(scenario.has_mime_post() && scenario.has_upload() &&
+             scenario.upload().data() == "append sentinel",
+         "fast IMAP policy removed the APPEND inputs curl can consume");
+  Expect(scenario.connection().on_readable(0) == "control reply" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast IMAP policy changed replies or retained stream-only controls");
+  Expect(scenario.options_size() == 4,
+         "fast IMAP policy retained a non-IMAP option");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERNAME &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_UPLOAD &&
+             scenario.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
+         "fast IMAP policy changed retained option order");
+}
+
+void TestFastPop3Policy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  scenario.set_host_path("untrusted.invalid:110/2?query");
+  scenario.add_request_headers("X-Ignored: pop3");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_upload()->set_data("ignored upload");
+  scenario.mutable_connection()->add_on_readable("control reply");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *username = scenario.add_options();
+  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
+  username->set_string_value("fuzz");
+  auto *password = scenario.add_options();
+  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
+  password->set_string_value("secret");
+  auto *custom = scenario.add_options();
+  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
+  custom->set_string_value("TOP 1 0");
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_DIRLISTONLY);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastPop3);
+
+  Expect(scenario.scheme() == curl::fuzzer::proto::SCHEME_POP3,
+         "fast POP3 policy did not force POP3");
+  Expect(scenario.host_path() == "pop3.test/2?query",
+         "fast POP3 policy did not retain the message-id path");
+  Expect(scenario.request_headers_size() == 0 &&
+             !scenario.has_mime_post() && !scenario.has_upload() &&
+             scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+             scenario.subsequent_connections_size() == 0,
+         "fast POP3 policy retained work its download-only peer cannot use");
+  Expect(scenario.connection().on_readable(0) == "control reply" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast POP3 policy changed replies or retained stream-only controls");
+  Expect(scenario.options_size() == 4,
+         "fast POP3 policy retained a non-POP3 option");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERNAME &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST &&
+             scenario.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_DIRLISTONLY,
+         "fast POP3 policy changed retained option order");
 }
 
 void TestResolverPolicy() {
@@ -1500,6 +1617,8 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,
       TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1590,6 +1709,8 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,
       TargetProfile::kApi,
       TargetProfile::kTiming,
   };
@@ -1759,6 +1880,10 @@ void TestProfileRunModes() {
          "fast TFTP profile does not authorize the UDP peer");
   Expect(RunModeFor(TargetProfile::kFastSmtp) == ScenarioRunMode::kSmtpCoverage,
          "fast SMTP profile does not authorize the single-connection peer");
+  Expect(RunModeFor(TargetProfile::kFastImap) == ScenarioRunMode::kImapCoverage,
+         "fast IMAP profile does not authorize the tagged control peer");
+  Expect(RunModeFor(TargetProfile::kFastPop3) == ScenarioRunMode::kPop3Coverage,
+         "fast POP3 profile does not authorize the control peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -1823,6 +1948,8 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -1871,6 +1998,8 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,
       TargetProfile::kFastGopher,
       TargetProfile::kSocks4,
       TargetProfile::kResolver,
@@ -2226,6 +2355,8 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2324,6 +2455,8 @@ int main() {
   TestFastFtpPolicy();
   TestFastTftpPolicy();
   TestFastSmtpPolicy();
+  TestFastImapPolicy();
+  TestFastPop3Policy();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();

@@ -1,0 +1,15 @@
+# Complete IMAP FETCH: greeting, CAPABILITY, LOGIN, SELECT, then a FETCH
+# literal. The peer prepends the generated command tag to each `OK` line, so
+# the seed stays independent of curl's process-global connection id. The
+# literal size must match the bytes between `{17}` and the tagged completion.
+scheme: SCHEME_IMAP
+host_path: "imap.test/INBOX;UID=1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "* OK imap.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1\r\nOK CAPABILITY completed\r\n"
+  on_readable: "OK LOGIN completed\r\n"
+  on_readable: "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n"
+  on_readable: "* 1 FETCH (BODY[] {17}\r\nHello from IMAP\r\nOK FETCH completed\r\n"
+}

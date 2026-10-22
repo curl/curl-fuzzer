@@ -48,6 +48,10 @@ enum class TargetProfile {
   kFastTftp,
   /// Exercise single-connection SMTP mail transfers through the control peer.
   kFastSmtp,
+  /// Exercise single-connection IMAP mailbox transfers through the control peer.
+  kFastImap,
+  /// Exercise single-connection POP3 mailbox transfers through the control peer.
+  kFastPop3,
   /// Exercise Gopher selectors through the bounded stream peer.
   kFastGopher,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
@@ -89,6 +93,10 @@ enum class ScenarioRunMode {
   kTftpCoverage,
   /// Drive SMTP through its command-aware control peer, including DATA body.
   kSmtpCoverage,
+  /// Drive IMAP through its command-aware control peer, including literals.
+  kImapCoverage,
+  /// Drive POP3 through its command-aware control peer, including RETR bodies.
+  kPop3Coverage,
   /// Drive Gopher through the bounded stream peer.
   kGopherCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
@@ -146,6 +154,12 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastSmtp:
       return ScenarioRunMode::kSmtpCoverage;
+
+    case TargetProfile::kFastImap:
+      return ScenarioRunMode::kImapCoverage;
+
+    case TargetProfile::kFastPop3:
+      return ScenarioRunMode::kPop3Coverage;
 
     case TargetProfile::kFastGopher:
       return ScenarioRunMode::kGopherCoverage;

@@ -1,0 +1,9 @@
+# POP3 listing without credentials. The empty URL path selects the multi-line
+# LIST command, whose response ends with the required dot line.
+scheme: SCHEME_POP3
+host_path: "pop3.test/"
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nUSER\r\n.\r\n"
+  on_readable: "+OK 2 messages\r\n1 17\r\n2 20\r\n.\r\n"
+}

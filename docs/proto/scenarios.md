@@ -77,6 +77,16 @@ Other peers intentionally give those fields narrower meanings:
   recipients come from the schema-native `mail_rcpt` list because
   `CURLOPT_MAIL_RCPT` is a `curl_slist`; the URL path supplies curl's EHLO
   domain rather than the recipient in current libcurl.
+- IMAP uses the primary connection as command-aligned replies. The initial
+  response is the `* OK` greeting, each readable chunk answers the next
+  command, and a status line beginning with `OK`, `NO`, `BAD`, or `PREAUTH`
+  receives curl's generated command tag. A `{N}` literal copies the next N
+  bytes verbatim, so FETCH bodies and their tagged completion can share one
+  chunk. An accepted APPEND continuation drains exactly the announced literal
+  size.
+- POP3 also uses command-aligned replies, but its `+OK`/`-ERR` status lines
+  need no rewriting. Multi-line CAPA, LIST, and RETR replies include their
+  terminating dot line and are written unchanged.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

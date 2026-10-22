@@ -1,0 +1,14 @@
+# Complete POP3 RETR: greeting, CAPA, USER/PASS, then a multi-line message
+# terminated by its own dot line. Curl strips dot-stuffing and detects the
+# terminator, so the peer writes this bounded script unchanged.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nUSER\r\n.\r\n"
+  on_readable: "+OK user accepted\r\n"
+  on_readable: "+OK pass accepted\r\n"
+  on_readable: "+OK 17 octets\r\nHello from POP3\r\n.\r\n"
+}

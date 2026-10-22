@@ -200,6 +200,34 @@ void CanonicalizeSmtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("smtp.test" + host_path.substr(suffix_start));
 }
 
+/// Keep the IMAP lane inside a parseable authority while retaining every URL
+/// path parameter, query, and fragment byte. The path carries the mailbox and
+/// the `;UID=`, `;MAILINDEX=`, `;SECTION=`, and `;PARTIAL=` selectors that
+/// choose FETCH, SEARCH, and LIST states; canonicalizing only the host avoids
+/// spending iterations on failures before curl sends its first command.
+void CanonicalizeImapAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("imap.test/INBOX");
+    return;
+  }
+  scenario->set_host_path("imap.test" + host_path.substr(suffix_start));
+}
+
+/// Give POP3 a mailbox with a message id by default so the lane reaches RETR
+/// rather than only LIST. The id remains mutation-controlled, and an explicit
+/// trailing slash or query continues to select the listing and error states.
+void CanonicalizePop3Authority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("pop3.test/1");
+    return;
+  }
+  scenario->set_host_path("pop3.test" + host_path.substr(suffix_start));
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -431,6 +459,8 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_TELNET:
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_TFTP:
+    case curl::fuzzer::proto::SCHEME_IMAP:
+    case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
     case curl::fuzzer::proto::SCHEME_SMTP:
@@ -1149,6 +1179,61 @@ bool IsSmtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// authentication states its command-aware peer can advance.
 void RetainSmtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsSmtpOption); }
 
+/// Return whether an option affects IMAP authentication, command selection, or
+/// APPEND upload state. IMAP has no envelope recipient list; STARTTLS belongs
+/// to a future TLS lane and is deliberately excluded here.
+bool IsImapOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
+    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the IMAP target's general option budget focused on command selection,
+/// authentication, and the bounded APPEND upload.
+void RetainImapOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsImapOption); }
+
+/// Return whether an option affects POP3 authentication or command selection.
+/// POP3 is download-only, so upload and file-size controls would add callback
+/// work that its state machine never consumes.
+bool IsPop3Option(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
+    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
+    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the POP3 target's general option budget focused on authentication and
+/// LIST/RETR command selection.
+void RetainPop3Options(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsPop3Option); }
+
 /// Return whether an option affects TFTP request construction, option
 /// negotiation, transfer direction, or bounded body delivery. TFTP has no
 /// connection reuse or stream-level controls, so retaining those settings
@@ -1431,6 +1516,34 @@ void RemoveIgnoredSmtpShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+/// Retain the one command-aligned control script and optional APPEND body
+/// consumed by the IMAP peer. IMAP cannot open follow-on sockets, and HTTP
+/// headers and structured stream controls have no representation in its
+/// exchange. MIME remains meaningful because curl serializes it as an APPEND
+/// literal.
+void RemoveIgnoredImapShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
+/// Retain only the command-aligned control script. POP3 is a download-only
+/// protocol: upload state, MIME bodies, HTTP headers, and follow-on sockets
+/// cannot reach its state machine.
+void RemoveIgnoredPop3Shape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  scenario->clear_upload();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 void RemoveIgnoredGopherShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_subsequent_connections();
   scenario->clear_request_headers();
@@ -1465,6 +1578,8 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_TELNET:
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_TFTP:
+    case curl::fuzzer::proto::SCHEME_IMAP:
+    case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return curl::fuzzer::proto::SCHEME_HTTP;
@@ -1719,6 +1834,24 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastImap) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
+    RemoveIgnoredImapShape(scenario);
+    RetainImapOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeImapAuthority(scenario);
+    return;
+  }
+
+  if (profile == TargetProfile::kFastPop3) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+    RemoveIgnoredPop3Shape(scenario);
+    RetainPop3Options(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizePop3Authority(scenario);
+    return;
+  }
+
   if (profile == TargetProfile::kFastGopher) {
     scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
                              ? curl::fuzzer::proto::SCHEME_GOPHERS
@@ -1784,6 +1917,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastFtp:
     case TargetProfile::kFastTftp:
     case TargetProfile::kFastSmtp:
+    case TargetProfile::kFastImap:
+    case TargetProfile::kFastPop3:
     case TargetProfile::kFastGopher:
       // Protocol-specific early-return paths selected their scheme above.
       return;
@@ -1892,6 +2027,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastFtp:
     case TargetProfile::kFastTftp:
     case TargetProfile::kFastSmtp:
+    case TargetProfile::kFastImap:
+    case TargetProfile::kFastPop3:
     case TargetProfile::kFastGopher:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.

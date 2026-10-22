@@ -23,6 +23,8 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_ftp` | Plain FTP control plus passive or loopback-confined active data connections. |
 | `curl_fuzzer_proto_tftp` | Packet-preserving TFTP exchanges over private loopback UDP endpoints. |
 | `curl_fuzzer_proto_smtp` | Single-connection SMTP greeting, EHLO/HELO, mail envelope, DATA body upload and EOB drain, and graceful QUIT. |
+| `curl_fuzzer_proto_imap` | Single-connection IMAP greeting, CAPABILITY, LOGIN/AUTHENTICATE, SELECT, FETCH literals, APPEND uploads, and tagged completion. |
+| `curl_fuzzer_proto_pop3` | Single-connection POP3 greeting, CAPA, USER/PASS or APOP, LIST, RETR multi-line bodies, and QUIT. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
 | `curl_fuzzer_proto_api` | Easy, share, multi, URL, connect-only, pause/resume, and typed result API lifecycles described by `api_plan`. |
 | `curl_fuzzer_proto_multi` | Two to four easy handles on one shared multi handle, with bounded scheduling actions, connection-cache controls, and a five-second packaged timeout. |
@@ -61,7 +63,8 @@ Fast lanes clear backpressure because a single mutated value would otherwise
 move an ordinary case into a timed loop. The timing lane does the inverse and
 forces bounded pressure. Direct HTTP/3 discards the stream `Connection`;
 CONNECT-UDP mode retains it and clears direct HTTP/3 actions. FTP, TFTP,
-SMTP, TELNET, and Gopher prune fields that their specialized peers cannot
+SMTP, IMAP, POP3, TELNET, and Gopher prune fields that their specialized peers
+cannot
 observe.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz

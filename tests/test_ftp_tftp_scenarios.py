@@ -138,9 +138,7 @@ def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
 def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     """Keep MAIL/RCPT/DATA replies paired with the body exchange."""
     smtp_root = SCENARIO_ROOT / "smtp"
-    upload = (smtp_root / "smtp_upload_mail.textproto").read_text(
-        encoding="utf-8"
-    )
+    upload = (smtp_root / "smtp_upload_mail.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_SMTP" in upload
     assert 'host_path: "smtp.test/client.test"' in upload
     assert "CURLOPT_UPLOAD bool_value: true" in upload
@@ -151,8 +149,47 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "354 send the message" in upload
     assert "250 message queued" in upload
 
-    rejected = (smtp_root / "smtp_data_rejected.textproto").read_text(
-        encoding="utf-8"
-    )
+    rejected = (smtp_root / "smtp_data_rejected.textproto").read_text(encoding="utf-8")
     assert "550 data rejected" in rejected
     assert "354" not in rejected
+
+
+def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
+    """Keep tagless status replies paired with literal and multi-line bodies."""
+    imap_root = SCENARIO_ROOT / "imap"
+    fetch = (imap_root / "imap_fetch_literal.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_IMAP" in fetch
+    assert 'host_path: "imap.test/INBOX;UID=1"' in fetch
+    assert "* CAPABILITY IMAP4rev1" in fetch
+    assert "OK LOGIN completed" in fetch
+    assert "OK [UIDVALIDITY 7] SELECT completed" in fetch
+    assert "* 1 FETCH (BODY[] {17}" in fetch
+    assert "Hello from IMAP" in fetch
+    # The peer supplies curl's generated tag, so seeds stay tagless.
+    assert "A001" not in fetch
+
+    append = (imap_root / "imap_append_upload.textproto").read_text(encoding="utf-8")
+    assert "CURLOPT_UPLOAD bool_value: true" in append
+    assert "CURLOPT_INFILESIZE_LARGE uint_value: 17" in append
+    assert "+ Ready for literal" in append
+    assert "OK APPEND completed" in append
+
+    denied = (imap_root / "imap_login_denied.textproto").read_text(encoding="utf-8")
+    assert "NO [AUTHENTICATIONFAILED] invalid credentials" in denied
+
+    pop3_root = SCENARIO_ROOT / "pop3"
+    retr = (pop3_root / "pop3_retr_message.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_POP3" in retr
+    assert 'host_path: "pop3.test/1"' in retr
+    assert "+OK capabilities" in retr
+    assert "USER\\r\\n.\\r\\n" in retr
+    assert "+OK pass accepted" in retr
+    assert "+OK 17 octets" in retr
+    assert "Hello from POP3" in retr
+
+    listing = (pop3_root / "pop3_list_mailbox.textproto").read_text(encoding="utf-8")
+    assert 'host_path: "pop3.test/"' in listing
+    assert "+OK 2 messages" in listing
+
+    rejected = (pop3_root / "pop3_user_denied.textproto").read_text(encoding="utf-8")
+    assert "-ERR no such user" in rejected
