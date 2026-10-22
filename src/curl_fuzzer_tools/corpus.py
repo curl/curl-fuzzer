@@ -132,6 +132,12 @@ class BaseType:
     TYPE_HAPROXY_CLIENT_IP = 160
     TYPE_ECH = 161
 
+    # Harness-owned DoH loopback controls; not CURLOPT values.
+    TYPE_DOH_LOOPBACK = 162
+    TYPE_DOH_RESPONSE = 163
+    TYPE_DOH_HTTP_STATUS = 164
+    TYPE_VERBOSE = 165
+
     TYPE_PORT = 200
     TYPE_LOW_SPEED_LIMIT = 201
     TYPE_LOW_SPEED_TIME = 202
@@ -367,6 +373,11 @@ class BaseType:
         TYPE_REDIR_PROTOCOLS_STR: "CURLOPT_REDIR_PROTOCOLS_STR",
         TYPE_HAPROXY_CLIENT_IP: "CURLOPT_HAPROXY_CLIENT_IP",
         TYPE_ECH: "CURLOPT_ECH",
+        # Harness-owned DoH loopback controls
+        TYPE_DOH_LOOPBACK: "DoH loopback responder",
+        TYPE_DOH_RESPONSE: "DoH response override",
+        TYPE_DOH_HTTP_STATUS: "DoH HTTP status",
+        TYPE_VERBOSE: "Verbose tracing",
         # Numeric libcurl options (u32 and enums)
         TYPE_PORT: "CURLOPT_PORT",
         TYPE_LOW_SPEED_LIMIT: "CURLOPT_LOW_SPEED_LIMIT",

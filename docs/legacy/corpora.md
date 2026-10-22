@@ -64,6 +64,26 @@ Before checking in a seed, put it under the matching active target directory,
 decode it, and replay it with that target. A protocol-specific URL is important:
 an HTTP-only executable will reject an FTP URL before reaching FTP code.
 
+## DoH loopback seeds
+
+`curl_fuzzer` cannot install its socketpair mocks on the internal easy handle
+curl creates for DNS-over-HTTPS probes, so ordinary `CURLOPT_DOH_URL` inputs
+always fail in the sandbox. The harness-owned records below let a seed point the
+probe at a real listener on `127.0.0.1` instead:
+
+- `TLV_TYPE_DOH_LOOPBACK` (162): start the listener and set `CURLOPT_DOH_URL`.
+- `TLV_TYPE_DOH_RESPONSE` (163): optional raw DNS response body to serve; the
+  default synthesizes A, AAAA, or HTTPS RR answers matching the query.
+- `TLV_TYPE_DOH_HTTP_STATUS` (164): HTTP status to return (default `200`).
+- `TLV_TYPE_VERBOSE` (165): enable curl's DoH tracing with a no-op debug
+  callback, which exercises the status/error string helpers.
+
+The listener answers with plaintext HTTP, which requires the debug-enabled
+curl build used by this repository. If `socket`/`bind` is unavailable, the
+input runs without DoH rather than failing. The mutator preserves these records
+when they are inherited from a seed but never invents them for other inputs.
+See `corpora/curl_fuzzer/doh_loopback*` for examples.
+
 ## Build and replay
 
 Build one target with the repository's standalone replay engine:

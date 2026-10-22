@@ -815,6 +815,7 @@ set(COMMON_SOURCES
     legacy_fuzzer.cc
     curl_fuzzer_tlv.cc
     curl_fuzzer_callback.cc
+    curl_fuzzer_doh.cc
     legacy_protocol_allowlist.cc
     legacy_tlv_mutator.cc
 )

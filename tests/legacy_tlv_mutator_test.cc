@@ -531,6 +531,47 @@ void TestCrossOverSynthesizesMissingTransferScaffold() {
          "crossover did not synthesize a missing initial response");
 }
 
+/**
+ * The DoH control records are seed-owned policy, not transfer options. They
+ * must survive structured mutation once present, but must never be invented
+ * for an ordinary input: doing so would turn unrelated transfers into real
+ * loopback DoH clients.
+ */
+void TestDohControlsArePreservedButNotInvented() {
+  std::vector<uint8_t> plain;
+  AppendTlv(&plain, 1, Bytes("http://127.0.0.1/"));
+  AppendTlv(&plain, 2, Bytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"));
+
+  std::vector<uint8_t> doh = plain;
+  AppendTlv(&doh, 162, {0, 0, 0, 1});
+  AppendTlv(&doh, 163, {0, 0, 0x81, 0x82, 0, 0, 0, 0, 0, 0, 0, 0});
+  AppendTlv(&doh, 164, {0, 0, 0, 200});
+  AppendTlv(&doh, 165, {0, 0, 0, 1});
+
+  for(unsigned int seed = 1; seed < 64; ++seed) {
+    if((seed % legacy_tlv_mutator::kRawMutationPeriod) == 0)
+      continue;
+
+    std::vector<uint8_t> plain_out(plain.size() + 4096);
+    std::copy(plain.begin(), plain.end(), plain_out.begin());
+    const size_t plain_size = legacy_tlv_mutator::Mutate(
+        plain_out.data(), plain.size(), plain_out.size(), seed);
+    for(uint16_t type = 162; type <= 165; ++type) {
+      Expect(!HasTlv(plain_out.data(), plain_size, type),
+             "structured mutation invented a DoH control record");
+    }
+
+    std::vector<uint8_t> doh_out(doh.size() + 4096);
+    std::copy(doh.begin(), doh.end(), doh_out.begin());
+    const size_t doh_size = legacy_tlv_mutator::Mutate(
+        doh_out.data(), doh.size(), doh_out.size(), seed);
+    for(uint16_t type = 162; type <= 165; ++type) {
+      Expect(HasTlv(doh_out.data(), doh_size, type),
+             "structured mutation dropped a DoH control record");
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -547,5 +588,6 @@ int main() {
   TestRecordCrossOver();
   TestCrossOverCanonicalizesInheritedRoutingValues();
   TestCrossOverSynthesizesMissingTransferScaffold();
+  TestDohControlsArePreservedButNotInvented();
   return 0;
 }

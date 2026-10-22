@@ -48,6 +48,7 @@ int LegacyFuzzerTestOneInput(const uint8_t *data, size_t size)
 
   /* Have to set all fields to zero before getting to the terminate function */
   memset(&fuzz, 0, sizeof(FUZZ_DATA));
+  fuzz_doh_server_init(&fuzz);
 
   if(size < sizeof(TLV_RAW)) {
     /* Not enough data for a single TLV - don't continue */
@@ -100,6 +101,8 @@ int LegacyFuzzerTestOneInput(const uint8_t *data, size_t size)
 
   /* Run the transfer. */
   fuzz_handle_transfer(&fuzz);
+  FV_PRINTF(&fuzz, "FUZZ: transfer done, wrote %zu bytes\n",
+            fuzz.written_data);
 
 EXIT_LABEL:
 
@@ -147,6 +150,7 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
 
   /* Initialize the fuzz data. */
   memset(fuzz, 0, sizeof(FUZZ_DATA));
+  fuzz_doh_server_init(fuzz);
 
   /* Create an easy handle. This will have all of the settings configured on
      it. */
@@ -273,8 +277,11 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
   /* Set the .netrc file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_NETRC_FILE, FUZZ_NETRC_FILE_PATH));
 
-  /* Time out requests quickly. */
-  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS, 200L));
+  /* Time out requests quickly. A loopback DoH probe needs a little more room
+     for the harness listener to run, but the transfer loop's stall detection
+     still bounds inputs that make no progress. */
+  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_TIMEOUT_MS,
+                        fuzz->doh.enabled ? 2000L : 200L));
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_SERVER_RESPONSE_TIMEOUT, 1L));
 
   /* Can enable verbose mode by having the environment variable FUZZ_VERBOSE. */
@@ -282,9 +289,46 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
   }
 
-  /* Force resolution of all addresses to a specific IP address. */
-  fuzz->connect_to_list = curl_slist_append(NULL, "::127.0.1.127:");
-  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_TO, fuzz->connect_to_list));
+  /* The verbose DoH lane enables curl's DoH feature tracing globally and
+     installs a no-op debug callback. That makes infof() evaluate its
+     arguments, exercising doh_type2name()/doh_strerror(), while keeping the
+     trace off stderr. The callback and debug data are inherited by the
+     internal DoH handle. */
+  if(fuzz->doh_verbose) {
+    (void)curl_global_trace("doh");
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
+    FTRY(curl_easy_setopt(fuzz->easy,
+                          CURLOPT_DEBUGFUNCTION,
+                          fuzz_doh_debug_callback));
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGDATA, fuzz));
+  }
+
+  /* Force resolution of all addresses to a specific IP address. DoH loopback
+     inputs must leave the hostname unresolved so the probe actually runs;
+     the resolver answer then supplies the loopback address. */
+  if(!fuzz->doh.enabled) {
+    fuzz->connect_to_list = curl_slist_append(NULL, "::127.0.1.127:");
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_TO, fuzz->connect_to_list));
+  }
+
+  /* Point CURLOPT_DOH_URL at the harness-owned loopback responder. The
+     internal DoH easy handle opens a real socket, so this is the only way to
+     let a probe complete without changing curl. */
+  if(fuzz->doh.enabled) {
+    if(fuzz_doh_server_start(fuzz) == 0) {
+      FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DOH_URL, fuzz->doh.url));
+    }
+    else {
+      /* Loopback is unavailable in this environment; run without DoH rather
+         than failing an input for an infrastructure limitation. Restore the
+         CONNECT_TO guard so a hostname cannot fall through to system DNS. */
+      fuzz->doh.enabled = 0;
+      fuzz->connect_to_list = curl_slist_append(NULL, "::127.0.1.127:");
+      if(fuzz->connect_to_list)
+        FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_TO,
+                              fuzz->connect_to_list));
+    }
+  }
 
   /* Limit the protocols in use by this fuzzer. */
   FTRY(fuzz_set_allowed_protocols(fuzz));
@@ -300,6 +344,8 @@ EXIT_LABEL:
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz)
 {
   int ii;
+
+  fuzz_doh_server_stop(fuzz);
 
   fuzz_free((void **)&fuzz->postfields);
 
@@ -434,6 +480,8 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       }
     }
 
+    fuzz_doh_server_add_fds(fuzz, &fdread, &fdwrite, &maxfd);
+
     /* Work out what file descriptors need work. */
     rc = fuzz_select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
 
@@ -443,9 +491,12 @@ int fuzz_handle_transfer(FUZZ_DATA *fuzz)
       break;
     }
 
+    int server_data_sent = 0;
+    if(rc > 0 && fuzz_doh_server_service(fuzz, &fdread, &fdwrite))
+      server_data_sent = 1;
+
     /* Check to see if a server file descriptor is readable. If it is,
        then send the next response from the fuzzing data. */
-    int server_data_sent = 0;
     for(ii = 0; ii < FUZZ_NUM_CONNECTIONS; ii++) {
       if(sman[ii]->fd_state == FUZZ_SOCK_OPEN &&
          FD_ISSET(sman[ii]->fd, &fdread)) {

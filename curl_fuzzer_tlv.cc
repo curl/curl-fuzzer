@@ -333,6 +333,31 @@ int fuzz_parse_tlv(FUZZ_DATA *fuzz, TLV *tlv)
                   CURLOPT_MAX_RECV_SPEED_LARGE);
     FU32TLV_OFF_T(fuzz, TLV_TYPE_TIMEVALUE_LARGE, CURLOPT_TIMEVALUE_LARGE);
 
+    /* Harness-owned loopback DoH responder. A non-empty DOH_URL alone makes
+       every probe fail in the sandbox; these records let a seed opt into a
+       reachable local endpoint and choose the response it serves. */
+    case TLV_TYPE_DOH_LOOPBACK:
+      fuzz->doh.enabled = 1;
+      break;
+
+    case TLV_TYPE_DOH_RESPONSE:
+      fuzz->doh.response = tlv->value;
+      fuzz->doh.response_len = tlv->length;
+      break;
+
+    case TLV_TYPE_DOH_HTTP_STATUS:
+      if(tlv->length >= 4)
+        fuzz->doh.http_status = to_u32(tlv->value);
+      else if(tlv->length >= 1)
+        fuzz->doh.http_status = tlv->value[0];
+      break;
+
+    case TLV_TYPE_VERBOSE:
+      /* Enable verbose tracing with a no-op debug callback so infof()
+         arguments (notably the DoH status/error strings) are evaluated. */
+      fuzz->doh_verbose = 1;
+      break;
+
     /* Define a set of singleton TLVs - they can only have their value set once
        and all follow the same pattern. */
     FSINGLETONTLV(fuzz, TLV_TYPE_URL, CURLOPT_URL);
