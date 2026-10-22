@@ -116,10 +116,10 @@ def test_smtp_upload_translates_to_mail_rcpt_and_upload_script() -> None:
     assert 'on_readable: "250 OK\\r\\n"' in rendered
 
 
-def test_smtps_url_is_skipped_because_proto_has_no_implicit_tls_scheme() -> None:
+def test_smtps_url_translates_to_the_implicit_tls_scheme() -> None:
     rendered = render_textproto(
         "seed", convert_stream(tlv(BaseType.TYPE_URL, b"smtps://127.0.0.1/"))
     )
 
-    assert "# skipped TLV CURLOPT_URL" in rendered
-    assert "scheme:" not in rendered
+    assert "scheme: SCHEME_SMTPS" in rendered
+    assert 'host_path: "127.0.0.1/"' in rendered
