@@ -37,6 +37,11 @@ static_assert(TLV_TYPE_DNS_INTERFACE == 129,
 static_assert(TLV_TYPE_PRE_PROXY == 149,
               "legacy routing TLV IDs changed");
 static_assert(TLV_TYPE_ECH == 161, "legacy string TLV range changed");
+static_assert(TLV_TYPE_DOH_LOOPBACK == 162,
+              "legacy DoH loopback TLV IDs changed");
+static_assert(TLV_TYPE_DOH_HTTP_STATUS == 164,
+              "legacy DoH status TLV IDs changed");
+static_assert(TLV_TYPE_VERBOSE == 165, "legacy DoH verbose TLV ID changed");
 static_assert(TLV_TYPE_PORT == 200, "legacy integer TLV range changed");
 static_assert(TLV_TYPE_TCP_KEEPCNT == 293,
               "legacy integer TLV range changed");
@@ -258,6 +263,17 @@ bool IsLatencySensitiveStringType(uint16_t type) {
   return CanonicalRoutingValueImpl(type) != nullptr;
 }
 
+/** Identifies harness-owned DoH control records.
+ *
+ * These are preserved when inherited from a seed but are never invented or
+ * substituted into unrelated inputs. A randomly injected loopback flag would
+ * turn ordinary transfers into real loopback DoH clients and distort the
+ * mutation policy for the rest of the corpus.
+ */
+bool IsDohControlType(uint16_t type) {
+  return type >= 162 && type <= 165;
+}
+
 /** Identifies non-range-based options whose payload is exactly one u32. */
 bool IsTopLevelU32Type(uint16_t type) {
   switch(type) {
@@ -307,6 +323,13 @@ TypeInfo GetTypeInfo(uint16_t type) {
    * their parser cases are disabled. */
   if(type >= 100 && type <= 161)
     return {ValueKind::kString, false};
+  /* Harness-owned DoH controls. 162 enables the loopback responder, 163
+     carries an optional raw DNS response body, and 164/165 are numeric flags
+     (HTTP status and verbose tracing). */
+  if(type == 163)
+    return {ValueKind::kBytes, false};
+  if(type >= 162 && type <= 165)
+    return {ValueKind::kU32, false};
   if(type >= 200 && type <= 293 && type != 212)
     return {ValueKind::kU32, false};
   if(type >= 300 && type <= 312)
@@ -769,6 +792,8 @@ uint16_t PickInsertType(const ParsedInput &parsed, Random *random) {
                                     sizeof(kCoreTypes) /
                                     sizeof(kCoreTypes[0]))];
     const TypeInfo info = GetTypeInfo(type);
+    if(IsDohControlType(type))
+      continue;
     if(info.repeatable || !HasType(parsed, type))
       return type;
   }
@@ -823,7 +848,7 @@ size_t EraseRecord(uint8_t *data, size_t size, const ParsedInput &parsed,
   const size_t start = random->Index(parsed.count);
   for(size_t n = 0; n < parsed.count; ++n) {
     const Record &record = parsed.records[(start + n) % parsed.count];
-    if(IsRequiredType(record.type))
+    if(IsRequiredType(record.type) || IsDohControlType(record.type))
       continue;
     std::memmove(data + record.offset, data + record.end_offset(),
                  size - record.end_offset());
@@ -888,14 +913,16 @@ size_t ChangeRecordType(uint8_t *data, size_t size,
   const size_t start = random->Index(parsed.count);
   for(size_t n = 0; n < parsed.count; ++n) {
     const Record &record = parsed.records[(start + n) % parsed.count];
-    if(IsRequiredType(record.type))
+    if(IsRequiredType(record.type) || IsDohControlType(record.type))
       continue;
     const TypeInfo original = GetTypeInfo(record.type);
 
     for(size_t attempt = 0; attempt < kKnownTopLevelTypeCount; ++attempt) {
       const uint16_t replacement = RandomKnownType(random);
       const TypeInfo candidate = GetTypeInfo(replacement);
-      if(replacement != record.type && candidate.kind == original.kind &&
+      if(replacement != record.type &&
+         !IsDohControlType(replacement) &&
+         candidate.kind == original.kind &&
          !IsLatencySensitiveStringType(replacement) &&
          (candidate.repeatable || !HasType(parsed, replacement))) {
         WriteU16(data + record.offset, replacement);

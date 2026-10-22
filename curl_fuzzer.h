@@ -20,6 +20,8 @@
  *
  ***************************************************************************/
 #include <inttypes.h>
+#include <stdio.h>
+#include <sys/select.h>
 #include <curl/curl.h>
 #include "testinput.h"
 
@@ -143,6 +145,16 @@
 #define TLV_TYPE_REDIR_PROTOCOLS_STR 159
 #define TLV_TYPE_HAPROXY_CLIENT_IP 160
 #define TLV_TYPE_ECH 161
+
+/* DoH loopback responder controls. The legacy harness cannot install its
+   socketpair mocks on curl's internal DoH easy handle, so these TLVs point
+   CURLOPT_DOH_URL at a real loopback listener owned by the harness. The
+   listener answers the probe POST with a synthesized DNS response, or with
+   TLV_TYPE_DOH_RESPONSE verbatim when that record is present. */
+#define TLV_TYPE_DOH_LOOPBACK 162
+#define TLV_TYPE_DOH_RESPONSE 163
+#define TLV_TYPE_DOH_HTTP_STATUS 164
+#define TLV_TYPE_VERBOSE 165
 
 #define TLV_TYPE_PORT 200
 #define TLV_TYPE_LOW_SPEED_LIMIT 201
@@ -306,6 +318,11 @@
 /* Number of connections allowed to be opened */
 #define FUZZ_NUM_CONNECTIONS            2
 
+/* Bounds for the harness-owned loopback DoH responder. */
+#define FUZZ_DOH_MAX_CONNECTIONS        4
+#define FUZZ_DOH_REQUEST_SIZE           2048
+#define FUZZ_DOH_RESPONSE_SIZE          4096
+
 typedef enum fuzz_sock_state {
   FUZZ_SOCK_CLOSED,
   FUZZ_SOCK_OPEN,
@@ -379,6 +396,48 @@ typedef struct fuzz_socket_manager
 
 } FUZZ_SOCKET_MANAGER;
 
+typedef enum fuzz_doh_conn_state
+{
+  FUZZ_DOH_CONN_FREE,
+  FUZZ_DOH_CONN_READING,
+  FUZZ_DOH_CONN_WRITING
+} FUZZ_DOH_CONN_STATE;
+
+/**
+ * One accepted connection to the harness-owned loopback DoH responder.
+ */
+typedef struct fuzz_doh_conn
+{
+  curl_socket_t fd;
+  FUZZ_DOH_CONN_STATE state;
+
+  size_t request_len;
+  size_t response_len;
+  size_t response_off;
+
+  unsigned char request[FUZZ_DOH_REQUEST_SIZE];
+  unsigned char response[FUZZ_DOH_RESPONSE_SIZE];
+
+} FUZZ_DOH_CONN;
+
+/**
+ * Harness-owned plaintext HTTP server used as a DoH endpoint. libcurl creates
+ * the internal DoH easy handle itself and does not copy the socketpair mocks
+ * from the user transfer, so a real loopback listener is the only way to let
+ * the probe obtain a response without changing curl.
+ */
+typedef struct fuzz_doh_server
+{
+  curl_socket_t listener;
+  int enabled;
+  unsigned int http_status;
+  const uint8_t *response;
+  size_t response_len;
+  char url[128];
+  FUZZ_DOH_CONN conns[FUZZ_DOH_MAX_CONNECTIONS];
+
+} FUZZ_DOH_SERVER;
+
 /**
  * Data local to a fuzzing run.
  */
@@ -430,6 +489,12 @@ typedef struct fuzz_data
      protocols (FTP) use two sockets. */
   FUZZ_SOCKET_MANAGER sockman[FUZZ_NUM_CONNECTIONS];
 
+  /* Loopback DoH responder, enabled by TLV_TYPE_DOH_LOOPBACK. */
+  FUZZ_DOH_SERVER doh;
+
+  /* Enable verbose tracing (and a no-op debug callback) for DoH coverage. */
+  int doh_verbose;
+
   /* Verbose mode. */
   int verbose;
 
@@ -444,6 +509,21 @@ int fuzz_initialize_fuzz_data(FUZZ_DATA *fuzz,
 int fuzz_set_easy_options(FUZZ_DATA *fuzz);
 void fuzz_terminate_fuzz_data(FUZZ_DATA *fuzz);
 void fuzz_free(void **ptr);
+void fuzz_doh_server_init(FUZZ_DATA *fuzz);
+int fuzz_doh_server_start(FUZZ_DATA *fuzz);
+void fuzz_doh_server_stop(FUZZ_DATA *fuzz);
+void fuzz_doh_server_add_fds(FUZZ_DATA *fuzz,
+                             fd_set *readfds,
+                             fd_set *writefds,
+                             int *maxfd);
+int fuzz_doh_server_service(FUZZ_DATA *fuzz,
+                            fd_set *readfds,
+                            fd_set *writefds);
+int fuzz_doh_debug_callback(CURL *handle,
+                            curl_infotype type,
+                            char *data,
+                            size_t size,
+                            void *userptr);
 curl_socket_t fuzz_open_socket(void *ptr,
                                curlsocktype purpose,
                                struct curl_sockaddr *address);
