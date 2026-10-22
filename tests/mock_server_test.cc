@@ -1228,10 +1228,10 @@ void TestTransferSessionRejectsUnsafeReconfiguration() {
              scenario, proto_fuzzer::ScenarioRunMode::kDeepHttpCoverage),
          "session rejected parser preparation before initialization");
   Expect(transfer.Initialize(), "session could not allocate easy");
-  transfer.ApplyBaseline(scenario.scheme());
+  transfer.ApplyBaseline(scenario);
   Expect(transfer.ResetConfiguration(),
          "session rejected reset before installing callback owners");
-  transfer.ApplyBaseline(scenario.scheme());
+  transfer.ApplyBaseline(scenario);
   Expect(!transfer.PrepareInputFiles(
              scenario, proto_fuzzer::ScenarioRunMode::kDeepHttpCoverage),
          "session allowed replacement of potentially retained file paths");
@@ -1265,7 +1265,7 @@ void TestTransferSessionCleansIncompleteSharedTransfers() {
     {
       proto_fuzzer::TransferSession transfer;
       Expect(transfer.Initialize(), "incomplete session could not allocate easy");
-      transfer.ApplyBaseline(scenario.scheme());
+      transfer.ApplyBaseline(scenario);
       (void)curl_easy_setopt(transfer.easy(), CURLOPT_URL,
                             "http://session.test/incomplete");
       server.Install(transfer.easy());
