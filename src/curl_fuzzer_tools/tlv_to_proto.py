@@ -219,8 +219,7 @@ def render_textproto(source_name: str, data: ProtoOutput) -> str:
         lines.append(f"host_path: {escape_bytes(data.host_path)}")
     lines.extend(data.options)
 
-    for rcpt in data.mail_rcpt:
-        lines.append(f"mail_rcpt: {escape_bytes(rcpt)}")
+    lines.extend(f"mail_rcpt: {escape_bytes(rcpt)}" for rcpt in data.mail_rcpt)
     if data.upload_data is not None:
         lines.append("upload {")
         lines.append(f"  data: {escape_bytes(data.upload_data)}")
