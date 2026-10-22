@@ -255,6 +255,12 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 {
   int rc = 0;
 
+  /* Reset curl's global trace configuration so every input starts from a known
+     off baseline. curl_global_trace() only changes the components it names, so
+     without this a prior input's "all" leaks into later inputs that request a
+     subset, making coverage depend on corpus order. */
+  (void)curl_global_trace("-all");
+
   /* Existing seeds and direct reproducers bypass the custom mutator. Close
      that path before any transfer can resolve a corpus-provided endpoint. */
   FTRY(fuzz_finalize_routing_options(fuzz));
@@ -368,6 +374,10 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
 
     (void)curl_global_trace(trace_config);
     FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_VERBOSE, 1L));
+    /* This lane must reach the direct-write path, so drop any debug callback a
+       DoH (TLV 165) or trace (TLV 166) record may have installed earlier. */
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGFUNCTION, NULL));
+    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_DEBUGDATA, NULL));
     if(devnull != NULL) {
       FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_STDERR, devnull));
     }

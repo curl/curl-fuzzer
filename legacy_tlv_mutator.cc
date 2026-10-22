@@ -441,9 +441,11 @@ bool HasType(const ParsedInput &parsed, uint16_t type) {
 }
 
 /* The supported top-level IDs form compact ranges with five intentional
- * holes. Mapping an ordinal avoids a 224-entry table while keeping selection
- * uniform and O(1). */
-constexpr size_t kKnownTopLevelTypeCount = 224;
+ * holes (14, 15, 51, 212, 322). The DoH controls 162-165 are preserved but
+ * never invented, so they stay out of the mapping; the trace controls 166-167
+ * are harness policy and are inventable. Mapping an ordinal avoids a 226-entry
+ * table while keeping selection uniform and O(1). */
+constexpr size_t kKnownTopLevelTypeCount = 226;
 
 /**
  * Maps a dense selection ordinal to a legal top-level legacy type ID.
@@ -464,6 +466,12 @@ uint16_t TypeFromOrdinal(size_t ordinal) {
   if(ordinal < 62)
     return static_cast<uint16_t>(100 + ordinal);
   ordinal -= 62;
+
+  /* Trace controls 166/167 are harness policy rather than CURLOPT values and
+     are safe to invent; the DoH controls 162-165 remain excluded. */
+  if(ordinal < 2)
+    return static_cast<uint16_t>(166 + ordinal);
+  ordinal -= 2;
 
   if(ordinal < 93) {
     uint16_t type = static_cast<uint16_t>(200 + ordinal);
@@ -683,6 +691,7 @@ ByteView DefaultValue(uint16_t type, ValueKind kind) {
   static const uint8_t kOneByte[] = {'A'};
   static const uint8_t kHeader[] = "X-Fuzz: 1";
   static const uint8_t kRecipient[] = "a@b";
+  static const uint8_t kTraceAll[] = "all";
   static const uint8_t kMime[] = {
       0, 14, 0, 0, 0, 1, 'n',
       0, 15, 0, 0, 0, 1, 'v'};
@@ -700,6 +709,11 @@ ByteView DefaultValue(uint16_t type, ValueKind kind) {
     return {kHeader, sizeof(kHeader) - 1};
   if(type == 11)
     return {kRecipient, sizeof(kRecipient) - 1};
+  /* A freshly invented trace record should actually enable tracing. "all"
+     reaches every per-feature formatter without emitting output because the
+     harness installs a silent debug callback. */
+  if(type == 166)
+    return {kTraceAll, sizeof(kTraceAll) - 1};
   const char *routing_value = CanonicalRoutingValueImpl(type);
   if(routing_value)
     return {reinterpret_cast<const uint8_t *>(routing_value),
@@ -792,7 +806,7 @@ uint16_t PickInsertType(const ParsedInput &parsed, Random *random) {
 
   static constexpr uint16_t kCoreTypes[] = {
       1, 2, 17, 6, 8, 11, 13, 16, 27, 28, 29, 30, 40, 48, 49,
-      52, 53, 54, 200, 214, 222, 227, 240, 258, 262, 280};
+      52, 53, 54, 166, 167, 200, 214, 222, 227, 240, 258, 262, 280};
 
   for(size_t attempt = 0; attempt < 64; ++attempt) {
     const uint16_t type = random->OneIn(2)

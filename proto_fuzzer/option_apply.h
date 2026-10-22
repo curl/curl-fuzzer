@@ -22,6 +22,8 @@
 
 namespace proto_fuzzer {
 
+void ResetGlobalTrace();
+
 struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids = false,
                                         const std::string& trace_config = {});
 

@@ -67,12 +67,14 @@ void EnableDebugHttpTransportMetadata() {
   (void)configured;
 }
 
-void EnableTraceIds() {
-  static const bool enabled = curl_global_trace("+LIB-IDS") == CURLE_OK;
-  (void)enabled;
-}
+void EnableTraceIds() { (void)curl_global_trace("+LIB-IDS"); }
 
 }  // namespace
+
+/// Reset curl's global trace configuration to a known off baseline. Called once
+/// per input so a previous scenario's "all" (or any subset it left enabled)
+/// cannot leak into the next input's trace selection.
+void ResetGlobalTrace() { (void)curl_global_trace("-all"); }
 
 /// Apply deterministic routing, timeout, output, and persistence defaults.
 /// Call before applying scenario options. `scheme` identifies the dedicated
