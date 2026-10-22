@@ -1751,6 +1751,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/option_model.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/socks4_mock_server.cc
+        proto_fuzzer/smtp_mock_server.cc
         proto_fuzzer/mock_server.cc
         proto_fuzzer/mock_server_base.cc
         proto_fuzzer/multi_socket_driver.cc
@@ -1966,6 +1967,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_telnet)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ftp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_tftp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_smtp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
@@ -2001,6 +2003,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/ftp/*.textproto)
     file(GLOB TFTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/tftp/*.textproto)
+    file(GLOB SMTP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/smtp/*.textproto)
     file(GLOB GOPHER_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/gopher/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -2209,6 +2213,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_ftp ${FTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_tftp_corpus
         curl_fuzzer_proto_tftp ${TFTP_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_smtp_corpus
+        curl_fuzzer_proto_smtp ${SMTP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_gopher_corpus
         curl_fuzzer_proto_gopher ${GOPHER_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
@@ -2250,6 +2256,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_telnet_corpus)
     add_dependencies(curl_fuzzer_proto_ftp curl_fuzzer_proto_ftp_corpus)
     add_dependencies(curl_fuzzer_proto_tftp curl_fuzzer_proto_tftp_corpus)
+    add_dependencies(curl_fuzzer_proto_smtp curl_fuzzer_proto_smtp_corpus)
     add_dependencies(curl_fuzzer_proto_gopher curl_fuzzer_proto_gopher_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
@@ -2661,6 +2668,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(ftp_mock_server_test
             tests/ftp_mock_server_test.cc
             proto_fuzzer/ftp_mock_server.cc)
+        curl_add_proto_peer_test(smtp_mock_server_test
+            tests/smtp_mock_server_test.cc
+            proto_fuzzer/smtp_mock_server.cc)
 
         if(BUILD_HTTP3_VARIANT)
             add_executable(http3_mock_server_test

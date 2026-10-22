@@ -26,6 +26,7 @@ using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_TFTP;
+using curl::fuzzer::proto::SCHEME_SMTP;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
@@ -378,7 +379,8 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kSocks4,        TargetProfile::kResolver,
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kFastGopher,
+      TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
+      TargetProfile::kFastGopher,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -593,7 +595,8 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kApi,
+      TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
+      TargetProfile::kApi,
       TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
@@ -617,6 +620,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
       TargetProfile::kFastWebSocket, TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,       TargetProfile::kFastTftp,
+      TargetProfile::kFastSmtp,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -850,6 +854,80 @@ void TestFastFtpPolicy() {
          "fast FTP policy retained a resolving active-mode address");
   Expect(scenario.options(3).uint_value() == 1,
          "fast FTP policy did not canonicalize the EPRT selector");
+}
+
+void TestFastSmtpPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path("untrusted.invalid:2525/client.test?query#fragment");
+  scenario.add_request_headers("X-Ignored: smtp");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_upload()->set_data("mail body sentinel");
+  scenario.mutable_connection()->add_on_readable("250 reply");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxMailRecipients + 2;
+       ++index) {
+    scenario.add_mail_rcpt("recipient-" + std::to_string(index) +
+                           "@example.test");
+  }
+  scenario.set_mail_rcpt(
+      0, std::string(proto_fuzzer::scenario_limits::kMaxMailRecipientBytes +
+                     32,
+                     'r'));
+
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *upload = scenario.add_options();
+  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload->set_bool_value(true);
+  auto *from = scenario.add_options();
+  from->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_FROM);
+  from->set_string_value("sender@example.test");
+  auto *allow_fails = scenario.add_options();
+  allow_fails->set_option_id(
+      curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS);
+  allow_fails->set_uint_value(7);
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastSmtp);
+
+  Expect(scenario.scheme() == SCHEME_SMTP,
+         "fast SMTP policy did not force SMTP");
+  Expect(scenario.host_path() == "smtp.test/client.test?query#fragment",
+         "fast SMTP policy did not preserve the EHLO path suffix");
+  Expect(scenario.request_headers_size() == 0 &&
+             scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+             scenario.subsequent_connections_size() == 0,
+         "fast SMTP policy retained another protocol's shape");
+  Expect(scenario.has_upload() &&
+             scenario.upload().data() == "mail body sentinel",
+         "fast SMTP policy removed the callback-backed message body");
+  Expect(scenario.connection().on_readable(0) == "250 reply" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast SMTP policy changed replies or retained stream-only controls");
+  Expect(static_cast<std::size_t>(scenario.mail_rcpt_size()) ==
+             proto_fuzzer::scenario_limits::kMaxMailRecipients,
+         "fast SMTP policy exceeded its recipient budget");
+  Expect(scenario.mail_rcpt(0).size() ==
+             proto_fuzzer::scenario_limits::kMaxMailRecipientBytes,
+         "fast SMTP policy left an oversized recipient");
+  Expect(scenario.options_size() == 3,
+         "fast SMTP policy retained a non-SMTP option");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_UPLOAD &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_MAIL_FROM &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS,
+         "fast SMTP policy changed retained option order");
+  Expect(scenario.options(1).string_value() == "sender@example.test" &&
+             scenario.options(2).bool_value(),
+         "fast SMTP policy lost the mail envelope option values");
 }
 
 void TestFastTftpPolicy() {
@@ -1421,6 +1499,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
+      TargetProfile::kFastSmtp,
       TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1510,6 +1589,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
+      TargetProfile::kFastSmtp,
       TargetProfile::kApi,
       TargetProfile::kTiming,
   };
@@ -1677,6 +1757,8 @@ void TestProfileRunModes() {
          "fast FTP profile does not authorize the two-channel peer");
   Expect(RunModeFor(TargetProfile::kFastTftp) == ScenarioRunMode::kTftpCoverage,
          "fast TFTP profile does not authorize the UDP peer");
+  Expect(RunModeFor(TargetProfile::kFastSmtp) == ScenarioRunMode::kSmtpCoverage,
+         "fast SMTP profile does not authorize the single-connection peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -1740,6 +1822,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
+      TargetProfile::kFastSmtp,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -1787,6 +1870,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
+      TargetProfile::kFastSmtp,
       TargetProfile::kFastGopher,
       TargetProfile::kSocks4,
       TargetProfile::kResolver,
@@ -2141,6 +2225,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
+      TargetProfile::kFastSmtp,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2238,6 +2323,7 @@ int main() {
   TestFastTelnetPolicy();
   TestFastFtpPolicy();
   TestFastTftpPolicy();
+  TestFastSmtpPolicy();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();

@@ -87,6 +87,8 @@ struct RequestBuildStats {
   std::size_t resolve_entries = 0;
   /// Number of CURLOPT_TELNETOPTIONS entries retained.
   std::size_t telnet_options = 0;
+  /// Number of SMTP recipients retained in the CURLOPT_MAIL_RCPT list.
+  std::size_t mail_rcpt = 0;
   /// Number of top-level and nested curl_mimepart objects constructed.
   std::size_t mime_parts = 0;
   /// Number of per-part header entries transferred to curl MIME ownership.
@@ -130,6 +132,7 @@ class ScenarioRequestData {
   CurlSlistPtr request_headers_;
   CurlSlistPtr resolve_entries_;
   CurlSlistPtr telnet_options_;
+  CurlSlistPtr mail_rcpt_;
   CurlMimePtr mime_post_;
   UploadScriptState upload_state_;
   bool upload_callbacks_installed_;

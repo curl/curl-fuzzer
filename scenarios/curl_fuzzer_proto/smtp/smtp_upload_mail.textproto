@@ -1,0 +1,24 @@
+# Complete SMTP mail upload. The URL path is the EHLO client domain in this
+# curl revision; the envelope recipients come from CURLOPT_MAIL_RCPT.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/client.test"
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 54 }
+options { option_id: CURLOPT_MAIL_FROM string_value: "sender@example.test" }
+options { option_id: CURLOPT_FORBID_REUSE bool_value: true }
+mail_rcpt: "recipient@example.test"
+upload {
+  data: "Subject: fuzz\r\n\r\nfirst line\r\n.leading dot\r\nlast line\r\n"
+  read_sizes: 7
+  read_sizes: 11
+  read_sizes: 9
+}
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250 8BITMIME\r\n"
+  on_readable: "250 sender accepted\r\n"
+  on_readable: "250 recipient accepted\r\n"
+  on_readable: "354 send the message\r\n"
+  on_readable: "250 message queued\r\n"
+  on_readable: "221 bye\r\n"
+}

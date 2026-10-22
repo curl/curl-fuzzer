@@ -24,6 +24,7 @@ EXPECTED_PROTO_TARGETS = frozenset(
         "curl_fuzzer_proto_h2_proxy",
         "curl_fuzzer_proto_socks4",
         "curl_fuzzer_proto_resolver",
+        "curl_fuzzer_proto_smtp",
         "curl_fuzzer_proto_http",
         "curl_fuzzer_proto_http2",
         "curl_fuzzer_proto_http3",

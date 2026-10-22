@@ -184,6 +184,22 @@ void CanonicalizeFtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("ftp.test" + host_path.substr(suffix_start));
 }
 
+/// Keep the SMTP lane inside a parseable authority while leaving the URL path
+/// mutation-controlled. In this curl revision the path is the EHLO argument
+/// (the client's announced domain), not the envelope recipient; recipients
+/// arrive through Scenario.mail_rcpt. Preserving the suffix still exercises
+/// EHLO parsing, while a fixed host avoids spending iterations on URL failures
+/// before curl sends its first command.
+void CanonicalizeSmtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("smtp.test/client.test");
+    return;
+  }
+  scenario->set_host_path("smtp.test" + host_path.substr(suffix_start));
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -417,6 +433,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_TFTP:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
+    case curl::fuzzer::proto::SCHEME_SMTP:
     default:
       return false;
   }
@@ -881,6 +898,8 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   for (auto& connection : *scenario->mutable_subsequent_connections()) {
     BoundConnectionShape(&connection);
   }
+  BoundStringValues(scenario->mutable_mail_rcpt(), scenario_limits::kMaxMailRecipients,
+                    scenario_limits::kMaxMailRecipientBytes);
   BoundFileInputs(scenario);
 }
 
@@ -1097,6 +1116,39 @@ bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// peer can actually advance.
 void RetainFtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFtpOption); }
 
+/// Return whether an option can change the single-connection SMTP exchange.
+/// The peer owns routing and timeouts; this list retains the mail envelope,
+/// authentication, and upload shape. STARTTLS remains exclusive to TLS lanes,
+/// and CURLOPT_FORBID_REUSE is excluded because its graceful-shutdown path
+/// spends up to a second waiting for QUIT on every fuzzed error.
+bool IsSmtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
+    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_MAIL_FROM:
+    case curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the SMTP target's general option budget focused on mail-envelope and
+/// authentication states its command-aware peer can advance.
+void RetainSmtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsSmtpOption); }
+
 /// Return whether an option affects TFTP request construction, option
 /// negotiation, transfer direction, or bounded body delivery. TFTP has no
 /// connection reuse or stream-level controls, so retaining those settings
@@ -1199,10 +1251,11 @@ void CanonicalizeTftpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
-/// Identify options introduced for FTP/TFTP so existing fixed lanes do not
-/// silently inherit dead mutations when the shared generated manifest grows.
-/// Generic options retained by the FTP/TFTP allowlists are deliberately absent
-/// here because they remain useful to HTTP, WebSocket, API, or timing targets.
+/// Identify options introduced for FTP/TFTP/SMTP so existing fixed lanes do
+/// not silently inherit dead mutations when the shared generated manifest
+/// grows. Generic options retained by those protocol allowlists are
+/// deliberately absent here because they remain useful to HTTP, WebSocket,
+/// API, or timing targets.
 bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_APPEND:
@@ -1218,6 +1271,8 @@ bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
     case curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE:
     case curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS:
+    case curl::fuzzer::proto::CURLOPT_MAIL_FROM:
+    case curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS:
     case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
     case curl::fuzzer::proto::CURLOPT_WILDCARDMATCH:
       return true;
@@ -1228,8 +1283,8 @@ bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
-/// Remove FTP/TFTP-only options while preserving the relative order of every
-/// generic option an existing fixed target already consumed.
+/// Remove FTP/TFTP/SMTP-only options while preserving the relative order of
+/// every generic option an existing fixed target already consumed.
 void RemoveFileTransferOnlyOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(
       scenario, [](curl::fuzzer::proto::CurlOptionId option_id) { return !IsFileTransferOnlyOption(option_id); });
@@ -1362,6 +1417,20 @@ void RemoveIgnoredTftpShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+/// Retain the single command-aligned control script and optional upload body
+/// consumed by the SMTP peer. SMTP cannot open follow-on sockets, and HTTP
+/// headers, TELNET negotiation, API plans, and stream-only connection controls
+/// have no representation in its exchange. MIME remains meaningful because
+/// curl can serialize it as the DATA body.
+void RemoveIgnoredSmtpShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 void RemoveIgnoredGopherShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_subsequent_connections();
   scenario->clear_request_headers();
@@ -1487,6 +1556,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile != TargetProfile::kResolver) {
     scenario->clear_resolve_entries();
     scenario->clear_happy_eyeballs();
+  }
+
+  // SMTP's schema-native recipient list has no meaning in another protocol's
+  // exchange. Clearing it before early returns keeps other fixed lanes from
+  // carrying inert envelope work.
+  if (profile != TargetProfile::kFastSmtp) {
+    scenario->clear_mail_rcpt();
   }
 
   // Anonymous parser files add syscalls and line parsing that belong only in
@@ -1634,6 +1710,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastSmtp) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_SMTP);
+    RemoveIgnoredSmtpShape(scenario);
+    RetainSmtpOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeSmtpAuthority(scenario);
+    return;
+  }
+
   if (profile == TargetProfile::kFastGopher) {
     scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
                              ? curl::fuzzer::proto::SCHEME_GOPHERS
@@ -1698,6 +1783,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastTelnet:
     case TargetProfile::kFastFtp:
     case TargetProfile::kFastTftp:
+    case TargetProfile::kFastSmtp:
     case TargetProfile::kFastGopher:
       // Protocol-specific early-return paths selected their scheme above.
       return;
@@ -1805,6 +1891,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
     case TargetProfile::kFastFtp:
     case TargetProfile::kFastTftp:
+    case TargetProfile::kFastSmtp:
     case TargetProfile::kFastGopher:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.

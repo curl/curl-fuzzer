@@ -31,6 +31,7 @@ HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
         "curl_fuzzer_proto_telnet",
         "curl_fuzzer_proto_ftp",
         "curl_fuzzer_proto_tftp",
+        "curl_fuzzer_proto_smtp",
         "curl_fuzzer_proto_api",
         "curl_fuzzer_proto_multi",
         "curl_fuzzer_proto_timing",

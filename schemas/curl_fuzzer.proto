@@ -147,6 +147,12 @@ message Scenario {
   // than one connection attempt can be in flight. Other lanes clear this
   // field, and empty/false preserves ordinary single-address resolution.
   bool happy_eyeballs = 27;
+  // CURLOPT_MAIL_RCPT is a curl_slist whose strings must outlive the transfer,
+  // so it cannot use the scalar SetOption path. Each entry is one SMTP
+  // recipient address. Keeping the list schema-native lets mutations vary the
+  // RCPT TO sequence, multi-recipient failures, and CURLOPT_MAIL_RCPT_
+  // ALLOWFAILS together. Non-SMTP target policies clear this field.
+  repeated bytes mail_rcpt = 28;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -616,6 +622,7 @@ enum Scheme {
   SCHEME_TFTP = 7;
   SCHEME_GOPHER = 8;
   SCHEME_GOPHERS = 9;
+  SCHEME_SMTP = 10;
 }
 
 message SetOption {
@@ -774,6 +781,8 @@ enum CurlOptionId {
   CURLOPT_IGNORE_CONTENT_LENGTH = 136;
   CURLOPT_INFILESIZE_LARGE = 30115;
   CURLOPT_KEEP_SENDING_ON_ERROR = 245;
+  CURLOPT_MAIL_FROM = 10186;
+  CURLOPT_MAIL_RCPT_ALLOWFAILS = 290;
   CURLOPT_MAXAGE_CONN = 288;
   CURLOPT_MAXFILESIZE_LARGE = 30117;
   CURLOPT_MAXLIFETIME_CONN = 314;
