@@ -1834,8 +1834,12 @@ void TestHappyEyeballsAdvancesSubsequentScripts() {
 
   Expect(result == CURLE_OK,
          "redirect did not complete against subsequent_connections[0]");
-  Expect(server.accepted_peer_count() >= 2,
-         "redirect did not open a second serving connection");
+  // Exactly two accepted connections: the 302 then the followed 200. The old
+  // script-window bug replayed the 302 for the first six accepts, producing a
+  // seven-connection redirect chain that still reached CURLE_OK, so ">= 2"
+  // would not catch the regression.
+  Expect(server.accepted_peer_count() == 2,
+         "redirect accepted the wrong number of serving connections");
 
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);
