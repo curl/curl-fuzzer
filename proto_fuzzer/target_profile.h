@@ -46,7 +46,7 @@ enum class TargetProfile {
   kFastFtp,
   /// Exercise packet-preserving TFTP exchanges over the loopback UDP peer.
   kFastTftp,
-  /// Exercise single-connection SMTP mail transfers through the control peer.
+  /// Exercise single-connection SMTP and implicit-TLS SMTPS mail transfers.
   kFastSmtp,
   /// Exercise single-connection IMAP mailbox transfers through the control peer.
   kFastImap,
@@ -94,7 +94,8 @@ enum class ScenarioRunMode {
   kFtpCoverage,
   /// Drive TFTP through its datagram-preserving loopback peer.
   kTftpCoverage,
-  /// Drive SMTP through its command-aware control peer, including DATA body.
+  /// Drive SMTP or SMTPS through its command-aware control peer, including the
+  /// DATA body exchange.
   kSmtpCoverage,
   /// Drive IMAP through its command-aware control peer, including literals.
   kImapCoverage,

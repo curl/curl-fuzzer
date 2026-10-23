@@ -189,15 +189,18 @@ void CanonicalizeFtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
 /// (the client's announced domain), not the envelope recipient; recipients
 /// arrive through Scenario.mail_rcpt. Preserving the suffix still exercises
 /// EHLO parsing, while a fixed host avoids spending iterations on URL failures
-/// before curl sends its first command.
+/// before curl sends its first command. Implicit-TLS inputs use the checked-in
+/// certificate's tls.test name so the verified handshake can complete before
+/// the same command exchange runs.
 void CanonicalizeSmtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_SMTPS ? "tls.test" : "smtp.test";
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path("smtp.test/client.test");
+    scenario->set_host_path(std::string(host) + "/client.test");
     return;
   }
-  scenario->set_host_path("smtp.test" + host_path.substr(suffix_start));
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
 /// Keep the IMAP lane inside a parseable authority while retaining every URL
@@ -480,6 +483,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
     case curl::fuzzer::proto::SCHEME_SMTP:
+    case curl::fuzzer::proto::SCHEME_SMTPS:
     default:
       return false;
   }
@@ -1636,6 +1640,9 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
       return curl::fuzzer::proto::SCHEME_WS;
+    case curl::fuzzer::proto::SCHEME_SMTP:
+    case curl::fuzzer::proto::SCHEME_SMTPS:
+      return curl::fuzzer::proto::SCHEME_SMTP;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:
@@ -1898,7 +1905,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastSmtp) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_SMTP);
+    // The legacy target and its structured replacement both service plaintext
+    // SMTP and implicit-TLS SMTPS through one command/reply parser. Preserve an
+    // explicitly supplied SMTPS scheme so the seed and mutations can select the
+    // TLS peer; every other scheme falls back to the historical plaintext lane.
+    const auto scheme = scenario->scheme();
+    scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_SMTPS ? curl::fuzzer::proto::SCHEME_SMTPS
+                                                                     : curl::fuzzer::proto::SCHEME_SMTP);
     RemoveIgnoredSmtpShape(scenario);
     RetainSmtpOptions(scenario);
     BoundScenarioShape(scenario);

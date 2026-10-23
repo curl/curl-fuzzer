@@ -153,6 +153,15 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "550 data rejected" in rejected
     assert "354" not in rejected
 
+    smtps = (smtp_root / "smtps_upload_mail.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "scheme: SCHEME_SMTPS" in smtps
+    assert 'host_path: "tls.test/client.test"' in smtps
+    assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in smtps
+    assert "354 send the message" in smtps
+    assert "250 message queued" in smtps
+
 
 def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     """Keep tagless status replies paired with literal and multi-line bodies."""

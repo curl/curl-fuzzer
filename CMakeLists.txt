@@ -1734,6 +1734,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         list(APPEND PROTO_FUZZER_TLS_SOURCES
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
+            proto_fuzzer/smtps_mock_server.cc
             proto_fuzzer/tls_mock_server.cc
             proto_fuzzer/tls_test_credential_cache.cc
             proto_fuzzer/tls_websocket_mock_server.cc)
@@ -2449,6 +2450,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/option_apply.cc
             proto_fuzzer/option_model.cc
             proto_fuzzer/request_data.cc
+            proto_fuzzer/smtp_mock_server.cc
             proto_fuzzer/target_policy.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
@@ -2701,6 +2703,54 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(mqtt_mock_server_test
             tests/mqtt_mock_server_test.cc
             proto_fuzzer/mqtt_mock_server.cc)
+
+        # The SMTPS peer needs the in-process OpenSSL carrier in addition to
+        # the plaintext SMTP implementation. Keep this executable separate so
+        # the TLS-free SMTP test remains available on builds without OpenSSL.
+        if(TARGET openssl_external)
+            add_executable(smtps_mock_server_test
+                tests/smtps_mock_server_test.cc
+                proto_fuzzer/smtps_mock_server.cc
+                proto_fuzzer/smtp_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC})
+            target_compile_features(smtps_mock_server_test PRIVATE cxx_std_17)
+            target_compile_options(smtps_mock_server_test PRIVATE ${COMMON_FLAGS})
+            target_compile_definitions(smtps_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(smtps_mock_server_test PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include)
+            target_link_libraries(smtps_mock_server_test PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m)
+            target_link_options(smtps_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(smtps_mock_server_test
+                ${FUZZ_DEPS}
+                openssl_external
+                zlib_external
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME smtps_mock_server_test
+                COMMAND smtps_mock_server_test)
+            set_tests_properties(smtps_mock_server_test PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests smtps_mock_server_test)
+        endif()
 
         if(BUILD_HTTP3_VARIANT)
             add_executable(http3_mock_server_test

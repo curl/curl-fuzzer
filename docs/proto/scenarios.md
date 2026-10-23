@@ -70,6 +70,23 @@ Other peers intentionally give those fields narrower meanings:
   follow-on connections as data streams.
 - TFTP preserves packet boundaries: the initial response and each readable
   chunk are separate datagrams.
+- SMTP uses the primary connection as command-aligned replies. The initial
+  response is the 220 greeting, each readable chunk answers the next command,
+  and after a 354 DATA reply the peer drains the dot-stuffed message body up to
+  its `\r\n.\r\n` end marker before releasing the final 250. Envelope
+  recipients come from the schema-native `mail_rcpt` list because
+  `CURLOPT_MAIL_RCPT` is a `curl_slist`; the URL path supplies curl's EHLO
+  domain rather than the recipient in current libcurl. An `SCHEME_SMTPS`
+  scenario runs the identical exchange over implicit TLS; its fixed authority
+  is `tls.test`, matching the checked-in trust anchor, and the handshake carries
+  no ALPN extension.
+- IMAP uses the primary connection as command-aligned replies. The initial
+  response is the `* OK` greeting, each readable chunk answers the next
+  command, and a status line beginning with `OK`, `NO`, `BAD`, or `PREAUTH`
+  receives curl's generated command tag. A `{N}` literal copies the next N
+  bytes verbatim, so FETCH bodies and their tagged completion can share one
+  chunk. An accepted APPEND continuation drains exactly the announced literal
+  size.
 - POP3 also uses command-aligned replies, but its `+OK`/`-ERR` status lines
   need no rewriting. Multi-line CAPA, LIST, and RETR replies include their
   terminating dot line and are written unchanged.
