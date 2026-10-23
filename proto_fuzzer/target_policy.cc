@@ -1441,7 +1441,6 @@ void RetainPop3Options(curl::fuzzer::proto::Scenario* scenario) { RetainMatching
 bool IsDictOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
     case curl::fuzzer::proto::CURLOPT_CRLF:
     case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
     case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
@@ -1945,6 +1944,11 @@ void RemoveIgnoredDictShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveApiOnlyShape(scenario);
   RemoveMultiOnlyShape(scenario);
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+  // curl writes CLIENT, one lookup command, and QUIT in a single send, then
+  // reads an EOF-framed body. The peer consumes only the first non-CLIENT
+  // reply chunk and half-closes, so any later chunk is permanently dead work
+  // the mutator keeps rediscovering.
+  TrimRepeated(scenario->mutable_connection()->mutable_on_readable(), 1);
 }
 
 /// Retain the one binary server script and the scalar publish payload. MQTT

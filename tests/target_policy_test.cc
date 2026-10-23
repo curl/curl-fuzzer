@@ -1462,6 +1462,8 @@ void TestFastDictPolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_upload()->set_data("ignored upload");
   scenario.mutable_connection()->add_on_readable("150 dict reply");
+  scenario.mutable_connection()->add_on_readable("250 ok");
+  scenario.mutable_connection()->add_on_readable("221 bye");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
 
@@ -1489,19 +1491,24 @@ void TestFastDictPolicy() {
              scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
              scenario.subsequent_connections_size() == 0,
          "fast DICT policy retained work its download-only peer cannot use");
-  Expect(scenario.connection().on_readable(0) == "150 dict reply" &&
+  Expect(scenario.connection().on_readable_size() == 1 &&
+             scenario.connection().on_readable(0) == "150 dict reply" &&
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
-         "fast DICT policy changed replies or retained stream-only controls");
-  Expect(scenario.options_size() == 3,
+         "fast DICT policy changed replies, kept unreachable chunks, or "
+         "retained stream-only controls");
+  Expect(scenario.options_size() == 2,
          "fast DICT policy retained a non-DICT option");
   Expect(scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_USERNAME &&
              scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
+                 curl::fuzzer::proto::CURLOPT_PASSWORD,
          "fast DICT policy changed retained option order");
+  for (const auto &option : scenario.options()) {
+    Expect(option.option_id() != curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
+           "fast DICT policy retained CURLOPT_CUSTOMREQUEST, which curl's "
+           "DICT handler never reads");
+  }
 }
 
 void TestNonDictPoliciesClearDictScheme() {
