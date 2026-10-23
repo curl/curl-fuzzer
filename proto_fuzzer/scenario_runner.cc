@@ -23,6 +23,7 @@
 #include "proto_fuzzer/imap_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
+#include "proto_fuzzer/mqtt_mock_server.h"
 #include "proto_fuzzer/multi_transfer_runner.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/pop3_mock_server.h"
@@ -108,6 +109,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "imap";
     case curl::fuzzer::proto::SCHEME_POP3:
       return "pop3";
+    case curl::fuzzer::proto::SCHEME_MQTT:
+      return "mqtt";
     case curl::fuzzer::proto::SCHEME_GOPHER:
       return "gopher";
     case curl::fuzzer::proto::SCHEME_GOPHERS:
@@ -251,6 +254,15 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<Pop3MockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_MQTT:
+      // MQTT reuses the stream socketpair but speaks a binary packet grammar
+      // with server-initiated packets. Only the dedicated lane may
+      // reinterpret an append-only scheme value that historical corpus
+      // inputs could carry.
+      if (mode == ScenarioRunMode::kMqttCoverage) {
+        return std::make_unique<MqttMockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -288,6 +300,13 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
   if (auto* pop3 = dynamic_cast<Pop3MockServer*>(mock)) {
     const volatile std::size_t pop3_observation[] = {pop3->control_transcript().size(), pop3->uploaded_data().size()};
     (void)pop3_observation;
+  }
+
+  if (auto* mqtt = dynamic_cast<MqttMockServer*>(mock)) {
+    const volatile std::size_t mqtt_observation[] = {mqtt->packet_transcript().size(), mqtt->packet_count(),
+                                                     mqtt->publish_count(), mqtt->subscribe_count(),
+                                                     mqtt->published_payload().size()};
+    (void)mqtt_observation;
   }
 
   if (auto* websocket = dynamic_cast<WebSocketMockServer*>(mock)) {

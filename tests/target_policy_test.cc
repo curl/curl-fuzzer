@@ -24,6 +24,7 @@ using curl::fuzzer::proto::Scenario;
 using curl::fuzzer::proto::SCHEME_FTP;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
+using curl::fuzzer::proto::SCHEME_MQTT;
 using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_SMTP;
@@ -383,6 +384,7 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastGopher,
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
+      TargetProfile::kFastMqtt,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -601,6 +603,7 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kApi,
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kApi,
+      TargetProfile::kFastMqtt,
       TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
@@ -626,6 +629,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastFtp,       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
       TargetProfile::kFastImap,      TargetProfile::kFastPop3,
+      TargetProfile::kFastMqtt,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1090,6 +1094,85 @@ void TestFastPop3Policy() {
              scenario.options(3).option_id() ==
                  curl::fuzzer::proto::CURLOPT_DIRLISTONLY,
          "fast POP3 policy changed retained option order");
+}
+
+void TestFastMqttPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path(
+      "untrusted.invalid:1883/sensors/kitchen?query#fragment");
+  scenario.add_request_headers("X-Ignored: mqtt");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.mutable_upload()->set_data("callback upload");
+  scenario.mutable_connection()->add_on_readable("server packet");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *payload = scenario.add_options();
+  payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
+  payload->set_string_value("hello mqtt");
+  auto *credentials = scenario.add_options();
+  credentials->set_option_id(curl::fuzzer::proto::CURLOPT_USERPWD);
+  credentials->set_string_value("fuzz:secret");
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastMqtt);
+
+  Expect(scenario.scheme() == SCHEME_MQTT,
+         "fast MQTT policy did not force MQTT");
+  Expect(scenario.host_path() == "mqtt.test/sensors/kitchen?query#fragment",
+         "fast MQTT policy did not retain the publish topic suffix");
+  Expect(scenario.subsequent_connections_size() == 0 &&
+             scenario.request_headers_size() == 0 &&
+             !scenario.has_mime_post() && scenario.telnet_options_size() == 0 &&
+             !scenario.has_api_plan() && !scenario.has_upload(),
+         "fast MQTT policy retained another protocol's shape");
+  Expect(scenario.connection().on_readable(0) == "server packet" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast MQTT policy changed server packets or retained stream-only "
+         "controls");
+  Expect(scenario.options_size() == 2,
+         "fast MQTT policy retained a non-MQTT option");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_POSTFIELDS &&
+             scenario.options(0).string_value() == "hello mqtt",
+         "fast MQTT policy removed the publish payload");
+  Expect(scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERPWD &&
+             scenario.options(1).string_value() == "fuzz:secret",
+         "fast MQTT policy changed retained option order or credentials");
+}
+
+void TestNonMqttPoliciesClearMqttScheme() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
+      TargetProfile::kFastFtp,  TargetProfile::kTiming,
+      TargetProfile::kApi,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("mqtt.test/topic");
+    scenario.set_scheme(SCHEME_MQTT);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.scheme() != SCHEME_MQTT,
+           "a non-MQTT policy retained the MQTT scheme");
+  }
+
+  Scenario compatibility;
+  compatibility.set_host_path("mqtt.test/topic");
+  compatibility.set_scheme(SCHEME_MQTT);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.scheme() == SCHEME_MQTT,
+         "compatibility unexpectedly rewrote the MQTT scheme");
 }
 
 void TestResolverPolicy() {
@@ -1619,6 +1702,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastSmtp,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
+      TargetProfile::kFastMqtt,
       TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1711,6 +1795,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastSmtp,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
+      TargetProfile::kFastMqtt,
       TargetProfile::kApi,
       TargetProfile::kTiming,
   };
@@ -1884,6 +1969,8 @@ void TestProfileRunModes() {
          "fast IMAP profile does not authorize the tagged control peer");
   Expect(RunModeFor(TargetProfile::kFastPop3) == ScenarioRunMode::kPop3Coverage,
          "fast POP3 profile does not authorize the control peer");
+  Expect(RunModeFor(TargetProfile::kFastMqtt) == ScenarioRunMode::kMqttCoverage,
+         "fast MQTT profile does not authorize the packet-aware peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -1950,6 +2037,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastSmtp,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
+      TargetProfile::kFastMqtt,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2000,6 +2088,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastSmtp,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
+      TargetProfile::kFastMqtt,
       TargetProfile::kFastGopher,
       TargetProfile::kSocks4,
       TargetProfile::kResolver,
@@ -2357,6 +2446,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastSmtp,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
+      TargetProfile::kFastMqtt,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2457,6 +2547,8 @@ int main() {
   TestFastSmtpPolicy();
   TestFastImapPolicy();
   TestFastPop3Policy();
+  TestFastMqttPolicy();
+  TestNonMqttPoliciesClearMqttScheme();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();

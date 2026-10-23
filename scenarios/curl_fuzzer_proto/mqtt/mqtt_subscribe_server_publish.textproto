@@ -1,0 +1,13 @@
+# MQTT subscribe exchange with a server-initiated PUBLISH and a clean server
+# DISCONNECT. The peer synthesizes SUBACK from curl's packet id, then releases
+# each on_readable chunk as one opaque server packet.
+scheme: SCHEME_MQTT
+host_path: "mqtt.test/sensors/kitchen"
+connection {
+  # CONNACK: 0x20, remaining length 2, session-present 0, return code 0.
+  initial_response: "\040\002\000\000"
+  # PUBLISH (0x30), remaining length 27, topic length 15, topic, payload.
+  on_readable: "\060\033\000\017sensors/kitchenhello mqtt"
+  # Server DISCONNECT (0xE0) with a zero remaining length.
+  on_readable: "\340\000"
+}
