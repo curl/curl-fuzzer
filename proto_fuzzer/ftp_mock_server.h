@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/incoming_data_observer.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/scenario_limits.h"
 
@@ -34,10 +35,12 @@ namespace proto_fuzzer {
 /// subsequent_connections prefix as data streams. Passive transfers use
 /// socketpairs; active transfers let curl create a loopback listener and have
 /// the mock connect to it after observing the generated PORT/EPRT command.
-/// All work remains
+/// Both directions are observed after transport decoding, so a subclass can
+/// replace every socketpair with a TLS carrier without changing the FTP state
+/// machine. All work remains
 /// in-process and non-waiting so malformed scripts terminate by operation
 /// budget or EOF rather than by curl's FTP response timeout.
-class FtpMockServer final : public MockServerBase {
+class FtpMockServer : public MockServerBase, public IncomingDataObserver {
  public:
   FtpMockServer();
 
@@ -50,6 +53,24 @@ class FtpMockServer final : public MockServerBase {
   std::size_t opened_data_connection_count() const;
 
  protected:
+  // Create one transport for the control or a passive data connection.
+  // Implicit-TLS subclasses override this factory while retaining the FTP
+  // command parser and data-channel bookkeeping.
+  virtual std::unique_ptr<MockConnection> CreateConnection();
+
+  // Report whether PORT/EPRT listeners can be created on the real loopback
+  // stack. TLS peers whose data channels only exist as wrapped socketpairs
+  // return false so curl's active-mode socket request fails boundedly instead
+  // of leaving an unusable plaintext listener.
+  virtual bool SupportsActiveMode() const;
+
+  // Release every server-owned transport and active descriptor. Derived
+  // classes call this before destroying a transport object that their
+  // connections borrow.
+  void ReleaseConnections();
+
+  void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
+
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
 
@@ -68,8 +89,10 @@ class FtpMockServer final : public MockServerBase {
 
   /// One passive or active socket and its borrowed script must outlive the control
   /// command that starts it. A fixed array keeps protobuf repetition from
-  /// turning into an unbounded collection of live descriptors.
-  struct DataChannel {
+  /// turning into an unbounded collection of live descriptors. Each channel
+  /// also observes decoded client bytes so a TLS upload is captured after
+  /// decryption rather than as ciphertext from the raw socket.
+  struct DataChannel : public IncomingDataObserver {
     /// Scenario-owned bytes remain stable throughout the synchronous drive.
     const curl::fuzzer::proto::Connection* script = nullptr;
     /// The server half stays owned after curl receives the client fd.
@@ -81,6 +104,10 @@ class FtpMockServer final : public MockServerBase {
     bool transfer_started = false;
     /// Upload peers are drained on every outer-loop turn.
     bool upload = false;
+    /// Decoded bytes curl has sent on this channel since the last drain.
+    std::string incoming_data;
+
+    void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
   };
 
   void ResetForScenario(const curl::fuzzer::proto::Scenario& scenario);
@@ -89,7 +116,7 @@ class FtpMockServer final : public MockServerBase {
 
   bool ServiceControlConnection();
 
-  bool ServiceUploadConnections();
+  bool ServiceDataConnections();
 
   void HandleControlCommand(std::string_view command);
 

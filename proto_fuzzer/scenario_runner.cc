@@ -39,6 +39,7 @@
 #include "proto_fuzzer/websocket_mock_server.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include "proto_fuzzer/ftps_mock_server.h"
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/imaps_mock_server.h"
@@ -108,6 +109,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "telnet";
     case curl::fuzzer::proto::SCHEME_FTP:
       return "ftp";
+    case curl::fuzzer::proto::SCHEME_FTPS:
+      return "ftps";
     case curl::fuzzer::proto::SCHEME_TFTP:
       return "tftp";
     case curl::fuzzer::proto::SCHEME_SMTP:
@@ -248,6 +251,17 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       if (mode == ScenarioRunMode::kFtpCoverage) {
         return std::make_unique<FtpMockServer>();
       }
+      return nullptr;
+    case curl::fuzzer::proto::SCHEME_FTPS:
+      // Implicit TLS shares the FTP lane, parser, and bounded data-channel
+      // budget with the plaintext scheme; only the transport factory and the
+      // passive-only restriction differ. Keep it gated on the same run mode so
+      // no other target can turn an appended enum value into a TLS exchange.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kFtpCoverage) {
+        return std::make_unique<FtpsMockServer>();
+      }
+#endif
       return nullptr;
     case curl::fuzzer::proto::SCHEME_TFTP:
       // TFTP changes the callback transport from a preconnected stream to a
@@ -425,6 +439,13 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  if (auto* ftps = dynamic_cast<FtpsMockServer*>(mock)) {
+    const volatile std::size_t ftps_observation[] = {ftps->completed_handshake_count(),
+                                                     static_cast<std::size_t>(ftps->negotiated_tls_version()),
+                                                     ftps->negotiated_alpn().size()};
+    (void)ftps_observation;
+  }
+
   if (auto* smtps = dynamic_cast<SmtpsMockServer*>(mock)) {
     const volatile std::size_t smtps_observation[] = {smtps->completed_handshake_count(),
                                                       static_cast<std::size_t>(smtps->negotiated_tls_version()),

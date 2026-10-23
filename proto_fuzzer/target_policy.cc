@@ -175,14 +175,17 @@ void CanonicalizeTftpAuthority(curl::fuzzer::proto::Scenario* scenario) {
 /// path segment and wildcard under mutation control. CONNECT_TO already
 /// confines networking, but rejecting malformed authorities before USER/PWD
 /// would waste the control/data peer this target uniquely provides.
+/// Implicit-TLS inputs use the checked-in certificate's tls.test name so every
+/// control and data handshake can be verified before the same exchange runs.
 void CanonicalizeFtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_FTPS ? "tls.test" : "ftp.test";
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path("ftp.test/file");
+    scenario->set_host_path(std::string(host) + "/file");
     return;
   }
-  scenario->set_host_path("ftp.test" + host_path.substr(suffix_start));
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
 /// Keep the SMTP lane inside a parseable authority while leaving the URL path
@@ -560,6 +563,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     case curl::fuzzer::proto::SCHEME_TELNET:
     case curl::fuzzer::proto::SCHEME_FTP:
+    case curl::fuzzer::proto::SCHEME_FTPS:
     case curl::fuzzer::proto::SCHEME_TFTP:
     case curl::fuzzer::proto::SCHEME_IMAP:
     case curl::fuzzer::proto::SCHEME_IMAPS:
@@ -1209,9 +1213,10 @@ void RetainCheapTelnetOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(scenario, &IsCheapTelnetOption);
 }
 
-/// Return whether an option can change a plaintext FTP transfer serviced by
-/// the bounded control/data peer. Active mode is confined to the mock's
-/// loopback listener; FTPS settings remain omitted until that peer speaks TLS.
+/// Return whether an option can change an FTP transfer serviced by the
+/// bounded control/data peer. Active mode is confined to the mock's loopback
+/// listener; the implicit-TLS lane removes those selectors because its data
+/// channels are wrapped socketpairs rather than dialable TCP listeners.
 bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_APPEND:
@@ -1254,6 +1259,17 @@ bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// Keep the FTP target's general option budget focused on states its passive
 /// peer can actually advance.
 void RetainFtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFtpOption); }
+
+/// Remove active-mode selectors from the implicit-TLS FTP lane. FTPS data
+/// channels must carry TLS, but curl's PORT/EPRT path expects a real loopback
+/// TCP listener that the socketpair-wrapped TLS peer cannot provide, so those
+/// scenarios stay on EPSV/PASV. Removing the options here keeps LPM from
+/// spending mutations on a transfer mode this lane deliberately rejects.
+void RemoveFtpActiveModeOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario, [](curl::fuzzer::proto::CurlOptionId option_id) {
+    return option_id != curl::fuzzer::proto::CURLOPT_FTPPORT && option_id != curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT;
+  });
+}
 
 /// Return whether an option can change a local file:// transfer without
 /// turning it into a write. Upload and append controls are deliberately
@@ -2042,8 +2058,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile == TargetProfile::kCompatibility) {
     // The original target's existing corpus predates profile splitting. A
     // no-op here makes the type safe to pass around while its binary continues
-    // to omit postprocessor registration altogether. The append-only FTP/TFTP
-    // scheme values do not justify rewriting historical mixed-lane inputs.
+    // to omit postprocessor registration altogether. The append-only FTP/FTPS
+    // and TFTP scheme values do not justify rewriting historical mixed-lane
+    // inputs.
     return;
   }
 
@@ -2083,6 +2100,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
   if (profile != TargetProfile::kFastRtsp) {
     RemoveRtspOnlyOptions(scenario);
+  }
+
+  // FTPS is append-only too. Only the fixed FTP lane may turn one of its
+  // scenarios into a TLS-wrapped control/data exchange.
+  if (profile != TargetProfile::kFastFtp && scenario->scheme() == curl::fuzzer::proto::SCHEME_FTPS) {
+    scenario->clear_scheme();
   }
 
   // Accepted server push adds a harness-owned easy handle and therefore
@@ -2258,9 +2281,18 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastFtp) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+    // The same lane services plaintext FTP and implicit-TLS FTPS through one
+    // command/data parser. Preserve an explicitly supplied FTPS scheme so the
+    // seed and mutations can select the TLS peer; every other scheme falls
+    // back to the historical plaintext lane.
+    const auto scheme = scenario->scheme();
+    const bool implicit_tls = scheme == curl::fuzzer::proto::SCHEME_FTPS;
+    scenario->set_scheme(implicit_tls ? curl::fuzzer::proto::SCHEME_FTPS : curl::fuzzer::proto::SCHEME_FTP);
     RemoveIgnoredFtpShape(scenario);
     RetainFtpOptions(scenario);
+    if (implicit_tls) {
+      RemoveFtpActiveModeOptions(scenario);
+    }
     CanonicalizeFtpOptionModes(scenario);
     BoundScenarioShape(scenario);
     CanonicalizeFtpAuthority(scenario);

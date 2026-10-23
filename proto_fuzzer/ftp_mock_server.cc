@@ -47,7 +47,43 @@ FtpMockServer::FtpMockServer()
 /// its client fds. Loopback peers are unique_ptr-owned transports; the out-of-line
 /// destructor also permits MockConnection to remain forward-declared in the
 /// header.
-FtpMockServer::~FtpMockServer() { CloseActiveDescriptors(); }
+FtpMockServer::~FtpMockServer() { ReleaseConnections(); }
+
+/// Create the default plaintext transport for the control and passive data
+/// connections. The implicit-TLS FTPS subclass overrides this factory while
+/// retaining the command parser and channel bookkeeping.
+/// @return A new socketpair-backed connection.
+std::unique_ptr<MockConnection> FtpMockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
+
+/// Plain FTP can create and publish a real loopback listener for PORT/EPRT.
+/// Subclasses that only expose wrapped socketpairs override this to keep the
+/// active-mode request from producing an unusable plaintext endpoint.
+/// @return true for the plaintext FTP peer.
+bool FtpMockServer::SupportsActiveMode() const { return true; }
+
+/// Retain decoded client bytes for the control parser. Data channels install
+/// their own observer so upload bodies are routed without mixing them into the
+/// command stream.
+/// @param data First decoded byte.
+/// @param size Number of bytes available at `data`.
+void FtpMockServer::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  pending_control_bytes_.append(reinterpret_cast<const char*>(data), size);
+}
+
+/// Append decoded bytes from one passive data channel. The bytes are captured
+/// only while the channel is an upload; download channels still drain their
+/// transport but discard any unexpected client payload after decoding.
+/// @param data First decoded byte.
+/// @param size Number of bytes available at `data`.
+void FtpMockServer::DataChannel::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  incoming_data.append(reinterpret_cast<const char*>(data), size);
+}
 
 /// Expose the bounded command capture from the most recent drive so tests can
 /// verify FTP states without coupling assertions to curl debug output. The
@@ -66,15 +102,24 @@ const std::string& FtpMockServer::uploaded_data() const { return uploaded_data_;
 /// @return Number of bounded data scripts assigned to a transfer socket.
 std::size_t FtpMockServer::opened_data_connection_count() const { return next_data_script_; }
 
-/// Reset every borrowed pointer, descriptor, parser cursor, and observable
-/// capture before borrowing the next Scenario. A server can be reused serially,
-/// but no connection or response cursor is meaningful across easy-handle drives.
-void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenario) {
+/// Close every server-owned transport before the borrowed scenario or a
+/// subclass transport disappears. The out-of-line definition keeps
+/// MockConnection complete here while the header only forward-declares it.
+void FtpMockServer::ReleaseConnections() {
   CloseActiveDescriptors();
   control_connection_.reset();
   for (DataChannel& channel : data_channels_) {
     channel.connection.reset();
-    channel.active_fd = -1;
+    channel.incoming_data.clear();
+  }
+}
+
+/// Reset every borrowed pointer, descriptor, parser cursor, and observable
+/// capture before borrowing the next Scenario. A server can be reused serially,
+/// but no connection or response cursor is meaningful across easy-handle drives.
+void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenario) {
+  ReleaseConnections();
+  for (DataChannel& channel : data_channels_) {
     channel.script = nullptr;
     channel.transfer_started = false;
     channel.upload = false;
@@ -207,11 +252,12 @@ curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_
   }
 
   if (!control_opened_) {
-    control_connection_ = std::make_unique<MockConnection>();
-    if (!control_connection_->ok()) {
+    control_connection_ = CreateConnection();
+    if (!control_connection_ || !control_connection_->ok()) {
       control_connection_.reset();
       return CURL_SOCKET_BAD;
     }
+    control_connection_->SetIncomingDataObserver(this);
 
     ApplyScriptBackpressure(control_connection_.get(), scenario_->connection());
     const std::string& greeting = scenario_->connection().initial_response();
@@ -228,6 +274,14 @@ curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_
   }
 
   if (UsesActiveMode()) {
+    // A TLS peer owns only wrapped socketpairs, so it cannot hand curl a real
+    // listener that its data TLS server could later answer. Reject the request
+    // immediately: the target policy already removes CURLOPT_FTPPORT, and this
+    // guard keeps direct callers on a bounded failure instead of an unusable
+    // plaintext data channel.
+    if (!SupportsActiveMode()) {
+      return CURL_SOCKET_BAD;
+    }
     return OpenActiveListener(address);
   }
 
@@ -239,12 +293,13 @@ curl_socket_t FtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_
 
   DataChannel& channel = data_channels_[next_data_script_];
   channel.script = &scenario_->subsequent_connections(static_cast<int>(next_data_script_));
-  channel.connection = std::make_unique<MockConnection>();
-  if (!channel.connection->ok()) {
+  channel.connection = CreateConnection();
+  if (!channel.connection || !channel.connection->ok()) {
     channel.connection.reset();
     channel.script = nullptr;
     return CURL_SOCKET_BAD;
   }
+  channel.connection->SetIncomingDataObserver(&channel);
 
   ApplyScriptBackpressure(channel.connection.get(), *channel.script);
   ++next_data_script_;
@@ -627,8 +682,8 @@ bool FtpMockServer::ServiceControlConnection() {
   }
 
   const std::size_t size_before_read = pending_control_bytes_.size();
-  control_connection_->ReadAvailable(&pending_control_bytes_);
-  bool made_progress = pending_control_bytes_.size() != size_before_read;
+  const std::size_t transport_progress = control_connection_->DrainIncoming();
+  bool made_progress = pending_control_bytes_.size() != size_before_read || transport_progress != 0;
 
   std::size_t consumed = 0;
   while (consumed < pending_control_bytes_.size()) {
@@ -646,31 +701,44 @@ bool FtpMockServer::ServiceControlConnection() {
 
   if (consumed != 0) {
     pending_control_bytes_.erase(0, consumed);
+    // Replies queued while handling a command must reach the wire before the
+    // next curl transition. FTP performs its final transfer-reply read inside
+    // curl_multi_perform, so a deferred TLS record would turn a completed
+    // download or upload into a control-response timeout.
+    const std::size_t flush_progress = control_connection_->DrainIncoming();
+    made_progress = made_progress || flush_progress != 0;
   }
   return made_progress;
 }
 
-/// Drain uploads into a temporary buffer so data beyond the observable cap is
-/// still removed from the socket. This keeps curl's progress independent of
-/// how much a unit test chooses to retain.
-/// @return true when curl produced at least one data byte.
-bool FtpMockServer::ServiceUploadConnections() {
+/// Advance every data transport so a TLS handshake and queued response records
+/// make progress even when no upload is active. Decoded upload bytes are
+/// appended by each channel's observer and copied into a temporary capture so
+/// data beyond the observable cap is still removed from the transport. This
+/// keeps curl's progress independent of how much a unit test chooses to retain.
+/// @return true when a transport or captured upload advanced.
+bool FtpMockServer::ServiceDataConnections() {
   bool made_progress = false;
   for (std::size_t index = 0; index < next_data_script_; ++index) {
     DataChannel& channel = data_channels_[index];
-    if (!channel.upload || (channel.connection == nullptr && channel.active_fd < 0)) {
+    if (channel.connection != nullptr) {
+      const std::size_t transport_progress = channel.connection->DrainIncoming();
+      made_progress = made_progress || transport_progress != 0;
+      if (channel.upload && !channel.incoming_data.empty()) {
+        CapturePrefix(channel.incoming_data, kMaxCapturedUploadBytes, &uploaded_data_);
+        channel.incoming_data.clear();
+        made_progress = true;
+      }
       continue;
     }
 
-    std::string bytes;
-    if (channel.connection != nullptr) {
-      channel.connection->ReadAvailable(&bytes);
-    } else {
+    if (channel.upload && channel.active_fd >= 0) {
+      std::string bytes;
       (void)ReadActiveBytes(channel.active_fd, &bytes);
-    }
-    if (!bytes.empty()) {
-      CapturePrefix(bytes, kMaxCapturedUploadBytes, &uploaded_data_);
-      made_progress = true;
+      if (!bytes.empty()) {
+        CapturePrefix(bytes, kMaxCapturedUploadBytes, &uploaded_data_);
+        made_progress = true;
+      }
     }
   }
   return made_progress;
@@ -727,7 +795,7 @@ void FtpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto:
 
     bool made_progress = still_running != running_before;
     made_progress = ServiceControlConnection() || made_progress;
-    made_progress = ServiceUploadConnections() || made_progress;
+    made_progress = ServiceDataConnections() || made_progress;
     if (made_progress) {
       idle_iterations = 0;
     } else {
@@ -738,7 +806,7 @@ void FtpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto:
   // The final perform may have emitted upload or control bytes immediately
   // before marking the transfer done. Drain/capture them before cleanup.
   (void)ServiceControlConnection();
-  (void)ServiceUploadConnections();
+  (void)ServiceDataConnections();
   FinishConnections(still_running == 0 && result == CURLM_OK);
   scenario_ = nullptr;
 }

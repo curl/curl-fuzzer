@@ -23,6 +23,7 @@ namespace {
 using curl::fuzzer::proto::Scenario;
 using curl::fuzzer::proto::SCHEME_DICT;
 using curl::fuzzer::proto::SCHEME_FTP;
+using curl::fuzzer::proto::SCHEME_FTPS;
 using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
@@ -878,6 +879,73 @@ void TestFastFtpPolicy() {
          "fast FTP policy retained a resolving active-mode address");
   Expect(scenario.options(3).uint_value() == 1,
          "fast FTP policy did not canonicalize the EPRT selector");
+}
+
+void TestFastFtpsPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_scheme(SCHEME_FTPS);
+  scenario.set_host_path("untrusted.invalid:990/secure.bin?query#fragment");
+  scenario.add_request_headers("X-Ignored: ftps");
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_connection()->add_on_readable("control reply");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("data");
+
+  auto *use_epsv = scenario.add_options();
+  use_epsv->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV);
+  use_epsv->set_bool_value(true);
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+  auto *use_eprt = scenario.add_options();
+  use_eprt->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT);
+  use_eprt->set_uint_value(1);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFtp);
+
+  Expect(scenario.scheme() == SCHEME_FTPS,
+         "fast FTP lane did not preserve an explicit FTPS scheme");
+  Expect(scenario.host_path() == "tls.test/secure.bin?query#fragment",
+         "fast FTP lane did not give FTPS the certifiable authority");
+  Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
+             scenario.telnet_options_size() == 0 && !scenario.has_api_plan(),
+         "fast FTP lane retained another protocol's shape in FTPS");
+  Expect(scenario.connection().on_readable(0) == "control reply" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast FTP lane changed the FTPS control script");
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV,
+         "fast FTP lane retained an active-mode selector in FTPS");
+}
+
+void TestNonFtpPoliciesClearFtpsScheme() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
+      TargetProfile::kFastSmtp, TargetProfile::kFastRtsp,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("tls.test/secure.bin");
+    scenario.set_scheme(SCHEME_FTPS);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.scheme() != SCHEME_FTPS,
+           "a non-FTP policy retained the FTPS scheme");
+  }
+
+  Scenario compatibility;
+  compatibility.set_host_path("tls.test/secure.bin");
+  compatibility.set_scheme(SCHEME_FTPS);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.scheme() == SCHEME_FTPS,
+         "compatibility unexpectedly rewrote the FTPS input");
 }
 
 void TestFastFilePolicy() {
@@ -3075,6 +3143,8 @@ int main() {
   TestFastSecureWebSocketPolicy();
   TestFastTelnetPolicy();
   TestFastFtpPolicy();
+  TestFastFtpsPolicy();
+  TestNonFtpPoliciesClearFtpsScheme();
   TestFastFilePolicy();
   TestNonFilePoliciesClearFileScheme();
   TestFastTftpPolicy();

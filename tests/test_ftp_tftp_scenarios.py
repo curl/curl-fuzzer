@@ -110,6 +110,25 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
         assert all(token in scenario for token in tokens), name
 
 
+def test_ftps_seeds_pair_tls_data_and_protection() -> None:
+    """Keep PBSZ/PROT, control handshake, and data payload in command order."""
+    assert "SCHEME_FTPS = 23;" in SCENARIO_SCHEMA.read_text(encoding="utf-8")
+    ftp_root = SCENARIO_ROOT / "ftp"
+    retr = (ftp_root / "ftps_epsv_retr.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_FTPS" in retr
+    assert 'host_path: "tls.test/file.bin"' in retr
+    assert "200 PBSZ accepted" in retr
+    assert "200 PROT accepted" in retr
+    assert "229 Entering Extended Passive Mode" in retr
+    assert "150 opening secure data connection" in retr
+    assert 'initial_response: "secret over tls"' in retr
+    assert "CURLOPT_FTPPORT" not in retr
+
+    rejected = (ftp_root / "ftps_prot_rejected.textproto").read_text(encoding="utf-8")
+    assert "500 PROT unsupported" in rejected
+    assert "150 " not in rejected
+
+
 def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
     """Protect OACK/DATA/ACK sequences mutation is unlikely to rediscover."""
     expected_tokens = {
@@ -153,9 +172,7 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "550 data rejected" in rejected
     assert "354" not in rejected
 
-    smtps = (smtp_root / "smtps_upload_mail.textproto").read_text(
-        encoding="utf-8"
-    )
+    smtps = (smtp_root / "smtps_upload_mail.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_SMTPS" in smtps
     assert 'host_path: "tls.test/client.test"' in smtps
     assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in smtps

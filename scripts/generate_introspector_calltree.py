@@ -18,6 +18,7 @@ SOURCE_PATHS = (
     "tests/http3_mock_server_test.cc",
     "tests/tftp_mock_server_test.cc",
     "tests/ftp_mock_server_test.cc",
+    "tests/ftps_mock_server_test.cc",
     "tests/smtp_mock_server_test.cc",
     "tests/imap_mock_server_test.cc",
     "tests/pop3_mock_server_test.cc",

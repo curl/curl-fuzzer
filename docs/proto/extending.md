@@ -37,9 +37,10 @@ entries, and bounded anonymous parser files.
 Keep filename-backed cookie, Alt-Svc, and HSTS options out of `SetOption`; the
 baseline owns their fixed `/dev/null` sinks, while the enum exposes only their
 in-memory controls. `CURLOPT_FTPPORT` and `CURLOPT_FTP_USE_EPRT` are safe
-because the FTP peer confines active listeners to loopback. FTPS and the
-slist-backed QUOTE options need protocol-specific transport and ownership
-before they can join this surface. The TFTP controls reuse the schema's upload
+because the plaintext FTP peer confines active listeners to loopback; the
+implicit-TLS FTPS lane removes them and supports passive data channels only.
+The slist-backed QUOTE options still need protocol-specific ownership before
+they can join this surface. The TFTP controls reuse the schema's upload
 body and size fields to exercise option negotiation and raw RRQ/WRQ creation.
 
 Some scalar options still need correlated seeds. The HTTP Message Signature

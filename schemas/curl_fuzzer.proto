@@ -645,6 +645,10 @@ enum Scheme {
   // factory differs. Keep this append-only for the compatibility target's
   // historical inputs.
   SCHEME_MQTTS = 22;
+  // Implicit-TLS FTP shares the FTP peer and passive data-channel budget with
+  // SCHEME_FTP. It is append-only so the compatibility target keeps its
+  // historical raw-wire interpretation of inputs that predate this lane.
+  SCHEME_FTPS = 23;
 }
 
 message SetOption {
