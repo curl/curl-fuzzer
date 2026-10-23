@@ -11,8 +11,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
-#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -25,113 +23,27 @@ namespace proto_fuzzer {
 /// Begin without a borrowed protobuf or open socketpair. RunLoop borrows a
 /// Scenario only for the synchronous DriveScenario call in which socket
 /// callbacks can run.
-SmtpMockServer::SmtpMockServer()
-    : scenario_(nullptr),
-      control_reply_count_(0),
-      next_control_reply_(0),
-      recipient_count_(0),
-      rcpt_command_count_(0),
-      draining_body_(false),
-      control_opened_(false) {}
+SmtpMockServer::SmtpMockServer() : recipient_count_(0), rcpt_command_count_(0) {}
 
 /// Release the server-owned socketpair half after curl has returned its client
 /// descriptor. The out-of-line destructor keeps MockConnection's complete type
 /// local to this translation unit.
 SmtpMockServer::~SmtpMockServer() = default;
 
-/// Expose the bounded command capture from the most recent drive so tests can
-/// verify SMTP states without coupling assertions to curl debug output.
-/// @return A prefix of complete control commands, including line endings.
-const std::string& SmtpMockServer::control_transcript() const { return control_transcript_; }
-
-/// Expose a bounded prefix of the DATA body while continuing to drain every
-/// client byte, so test observability cannot create backpressure.
-/// @return Body bytes curl sent during the most recent DATA phase, including
-///         the terminating "\r\n.\r\n" marker.
-const std::string& SmtpMockServer::uploaded_data() const { return uploaded_data_; }
-
-/// Reset every borrowed pointer, descriptor, parser cursor, and observable
-/// capture before borrowing the next Scenario.
-/// @param scenario Scenario whose Connection supplies the greeting and replies.
-void SmtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenario) {
-  connection_.reset();
-  scenario_ = &scenario;
-  control_reply_count_ = std::min<std::size_t>(scenario_limits::kMaxResponseChunks,
-                                               static_cast<std::size_t>(scenario.connection().on_readable_size()));
-  next_control_reply_ = 0;
-  recipient_count_ =
-      std::min<std::size_t>(scenario_limits::kMaxMailRecipients, static_cast<std::size_t>(scenario.mail_rcpt_size()));
-  rcpt_command_count_ = 0;
-  pending_control_bytes_.clear();
-  control_transcript_.clear();
-  uploaded_data_.clear();
-  draining_body_ = false;
-  control_opened_ = false;
-}
-
-/// Apply bounded transport knobs when creating the scripted socket. Target
-/// policies normally clear SMTP backpressure, but direct corpus replay must
-/// retain deterministic, well-defined behavior.
-/// @param connection Peer receiving the socket settings.
-/// @param script Connection script carrying optional backpressure values.
-void SmtpMockServer::ApplyScriptBackpressure(MockConnection* connection,
-                                             const curl::fuzzer::proto::Connection& script) {
-  if (connection == nullptr) {
-    return;
-  }
-
-  const std::uint32_t int_max = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
-  const auto& backpressure = script.backpressure();
-  const int receive_buffer = static_cast<int>(std::min(backpressure.recv_buf_bytes(), int_max));
-  connection->ApplyBackpressure(receive_buffer, static_cast<std::size_t>(backpressure.drain_limit()));
-}
-
 /// Create the default plaintext transport for the SMTP exchange. The SMTPS
 /// subclass overrides this factory while retaining the command/reply parser.
 /// @return A new socketpair-backed connection.
 std::unique_ptr<MockConnection> SmtpMockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
 
-/// Append decoded application bytes to the pending parser buffer. The outer
-/// service loop drains this buffer after every transport call, so it remains
-/// bounded by the scenario's command and upload budgets.
-/// @param data First decoded byte.
-/// @param size Number of bytes available at `data`.
-void SmtpMockServer::ObserveIncomingData(const unsigned char* data, std::size_t size) {
-  if (data == nullptr || size == 0) {
-    return;
-  }
-  pending_control_bytes_.append(reinterpret_cast<const char*>(data), size);
-}
-
-/// Create the single control socketpair and queue the server greeting. SMTP
-/// never opens a second application socket, so any later request is rejected
-/// rather than silently replacing the live peer.
-/// @param purpose Socket role requested by curl.
-/// @param address Unused stream destination metadata required by the callback
-///                signature.
-/// @return Client descriptor for the control channel, or CURL_SOCKET_BAD.
-curl_socket_t SmtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl_sockaddr* /*address*/) {
-  if (scenario_ == nullptr || purpose != CURLSOCKTYPE_IPCXN || control_opened_) {
-    return CURL_SOCKET_BAD;
-  }
-
-  connection_ = CreateConnection();
-  if (!connection_ || !connection_->ok()) {
-    connection_.reset();
-    return CURL_SOCKET_BAD;
-  }
-  connection_->SetIncomingDataObserver(this);
-
-  ApplyScriptBackpressure(connection_.get(), scenario_->connection());
-  const std::string& greeting = scenario_->connection().initial_response();
-  if (!greeting.empty() &&
-      !connection_->WriteAll(reinterpret_cast<const unsigned char*>(greeting.data()), greeting.size())) {
-    connection_.reset();
-    return CURL_SOCKET_BAD;
-  }
-
-  control_opened_ = true;
-  return connection_->take_client_fd();
+/// Reset SMTP's recipient bookkeeping for a new drive. The shared base has
+/// already cleared the transport, reply cursor, transcript, upload capture,
+/// and any in-flight body phase.
+void SmtpMockServer::ResetProtocolState() {
+  const curl::fuzzer::proto::Scenario* script = scenario();
+  recipient_count_ = script == nullptr ? 0
+                                       : std::min<std::size_t>(scenario_limits::kMaxMailRecipients,
+                                                               static_cast<std::size_t>(script->mail_rcpt_size()));
+  rcpt_command_count_ = 0;
 }
 
 /// Return whether the effective option list enables curl's
@@ -139,11 +51,12 @@ curl_socket_t SmtpMockServer::HandleOpenSocket(curlsocktype purpose, struct curl
 /// setopt calls are legal and libcurl keeps the last value.
 /// @return true when recipient errors may be followed by another RCPT TO.
 bool SmtpMockServer::AllowsRecipientFailures() const {
-  if (scenario_ == nullptr) {
+  const curl::fuzzer::proto::Scenario* script = scenario();
+  if (script == nullptr) {
     return false;
   }
-  for (int index = scenario_->options_size() - 1; index >= 0; --index) {
-    const auto& option = scenario_->options(index);
+  for (int index = script->options_size() - 1; index >= 0; --index) {
+    const auto& option = script->options(index);
     if (option.option_id() != curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS) {
       continue;
     }
@@ -156,61 +69,6 @@ bool SmtpMockServer::AllowsRecipientFailures() const {
     return false;
   }
   return false;
-}
-
-/// Retain only a bounded prefix for assertions. Parsing and draining continue
-/// against the full transport bytes, so reaching the cap cannot change curl's
-/// behavior or manufacture socket backpressure.
-/// @param source Newly observed bytes.
-/// @param limit Maximum retained destination size.
-/// @param destination Capture buffer receiving the available prefix.
-void SmtpMockServer::CapturePrefix(std::string_view source, std::size_t limit, std::string* destination) {
-  if (destination == nullptr || destination->size() >= limit) {
-    return;
-  }
-  const std::size_t available = limit - destination->size();
-  destination->append(source.data(), std::min(source.size(), available));
-}
-
-/// Remove SMTP's optional leading horizontal whitespace and return just the
-/// verb without allocating. Arguments remain untouched because only curl, not
-/// the mock harness, should interpret fuzzed addresses and commands.
-/// @param command Complete command line.
-/// @return View of its first non-whitespace token.
-std::string_view SmtpMockServer::CommandVerb(std::string_view command) {
-  std::size_t begin = 0;
-  while (begin < command.size() && (command[begin] == ' ' || command[begin] == '\t')) {
-    ++begin;
-  }
-
-  std::size_t end = begin;
-  while (end < command.size() && command[end] != ' ' && command[end] != '\t' && command[end] != '\r' &&
-         command[end] != '\n') {
-    ++end;
-  }
-  return command.substr(begin, end - begin);
-}
-
-/// Fold only ASCII lowercase command letters. SMTP verbs are ASCII tokens, so
-/// locale-aware case conversion would add state and undefined signed-char
-/// behavior without accepting anything curl can legitimately send.
-/// @param verb Parsed command token.
-/// @param expected_uppercase Literal uppercase command name.
-/// @return true when the verbs are equal ignoring ASCII case.
-bool SmtpMockServer::VerbEquals(std::string_view verb, std::string_view expected_uppercase) {
-  if (verb.size() != expected_uppercase.size()) {
-    return false;
-  }
-  for (std::size_t index = 0; index < verb.size(); ++index) {
-    unsigned char actual = static_cast<unsigned char>(verb[index]);
-    if (actual >= 'a' && actual <= 'z') {
-      actual = static_cast<unsigned char>(actual - 'a' + 'A');
-    }
-    if (actual != static_cast<unsigned char>(expected_uppercase[index])) {
-      return false;
-    }
-  }
-  return true;
 }
 
 /// Scan complete lines because a legal SMTP response fragment may start with
@@ -240,38 +98,6 @@ int SmtpMockServer::FirstReplyCode(std::string_view response) {
   return -1;
 }
 
-/// Return the next command-aligned response within the shared response-count
-/// budget. Empty strings still advance the cursor: they are meaningful
-/// truncation mutations for ordinary command states.
-/// @return Scenario-owned reply, or nullptr after the bounded prefix.
-const std::string* SmtpMockServer::NextControlReply() {
-  if (scenario_ == nullptr || next_control_reply_ >= control_reply_count_) {
-    return nullptr;
-  }
-  return &scenario_->connection().on_readable(static_cast<int>(next_control_reply_++));
-}
-
-/// Keep failed peer writes local to the mock. Response cursors must still
-/// advance after curl closes early, otherwise a replacement socket could see
-/// a reply intended for an earlier command.
-/// @param bytes Response fragment to queue.
-/// @return true when the complete fragment was queued.
-bool SmtpMockServer::WriteControlBytes(std::string_view bytes) {
-  return bytes.empty() || (connection_ != nullptr &&
-                           connection_->WriteAll(reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size()));
-}
-
-/// Consume the reply that follows the DATA body. Curl's smtp_done() enters a
-/// blocking POSTDATA wait after uploading, so the peer must queue this reply as
-/// soon as it accepts DATA. The fuzzed 250 (or error) still decides curl's
-/// outcome; a missing script leaves the transfer to the bounded idle budget
-/// and the final half-close.
-/// @return true when a queued reply was successfully written.
-bool SmtpMockServer::WriteNextReply() {
-  const std::string* response = NextControlReply();
-  return response == nullptr ? false : WriteControlBytes(*response);
-}
-
 /// Advance one reply for every complete command. A successful DATA reply
 /// switches the parser into body-draining mode. The reply that follows DATA is
 /// queued immediately: curl's smtp_done() runs a blocking POSTDATA wait inside
@@ -280,7 +106,7 @@ bool SmtpMockServer::WriteNextReply() {
 /// transfer reply, keeps that wait deterministic without changing the order
 /// curl observes (354 first, then the post-body response).
 /// @param command One newline-terminated command from curl.
-void SmtpMockServer::HandleControlCommand(std::string_view command) {
+void SmtpMockServer::HandleLine(std::string_view command) {
   const std::string* response = NextControlReply();
   if (response == nullptr) {
     return;
@@ -289,10 +115,10 @@ void SmtpMockServer::HandleControlCommand(std::string_view command) {
   const int response_code = FirstReplyCode(*response);
   (void)WriteControlBytes(*response);
 
-  const std::string_view verb = CommandVerb(command);
-  if (VerbEquals(verb, "DATA")) {
+  const std::string_view verb = FirstToken(command);
+  if (TokenEquals(verb, "DATA")) {
     if (response_code == 354) {
-      draining_body_ = true;
+      BeginMarkerBody(kEndOfBody);
       (void)WriteNextReply();
     } else if (response_code > 0) {
       // curl treats every non-354 DATA reply as terminal. Pre-queue the
@@ -302,7 +128,7 @@ void SmtpMockServer::HandleControlCommand(std::string_view command) {
     return;
   }
 
-  if (VerbEquals(verb, "RCPT")) {
+  if (TokenEquals(verb, "RCPT")) {
     ++rcpt_command_count_;
   }
 
@@ -311,122 +137,18 @@ void SmtpMockServer::HandleControlCommand(std::string_view command) {
   // be followed by another recipient, so those replies must not consume the
   // shutdown reply. Everything else can safely see a queued 221 next.
   const bool final_rcpt_error =
-      VerbEquals(verb, "RCPT") && (rcpt_command_count_ >= recipient_count_ || !AllowsRecipientFailures());
+      TokenEquals(verb, "RCPT") && (rcpt_command_count_ >= recipient_count_ || !AllowsRecipientFailures());
   const bool terminal_error =
-      response_code >= 400 && !VerbEquals(verb, "EHLO") && (!VerbEquals(verb, "RCPT") || final_rcpt_error);
+      response_code >= 400 && !TokenEquals(verb, "EHLO") && (!TokenEquals(verb, "RCPT") || final_rcpt_error);
   if (terminal_error) {
     (void)WriteControlBytes(kShutdownReply);
   }
 }
 
-/// Advance the carrier without waiting, then process all complete command lines
-/// already decoded into the pending buffer. A plaintext connection yields raw
-/// socket bytes; a TLS carrier completes its handshake and yields decrypted
-/// application bytes through ObserveIncomingData. After an accepted DATA
-/// command the same buffer is interpreted as message body until "\r\n.\r\n" is
-/// observed.
-/// @return true when bytes, transport state, or a command/reply cursor advanced.
-bool SmtpMockServer::ServiceControlConnection() {
-  if (connection_ == nullptr) {
-    return false;
-  }
-
-  const std::size_t size_before_read = pending_control_bytes_.size();
-  const std::size_t transport_progress = connection_->DrainIncoming();
-  bool made_progress = pending_control_bytes_.size() != size_before_read || transport_progress != 0;
-
-  std::size_t consumed = 0;
-  while (consumed < pending_control_bytes_.size()) {
-    if (draining_body_) {
-      const std::size_t eob = pending_control_bytes_.find(kEndOfBody.data(), consumed, kEndOfBody.size());
-      if (eob == std::string::npos) {
-        break;
-      }
-      const std::size_t body_end = eob + kEndOfBody.size();
-      CapturePrefix(std::string_view(pending_control_bytes_.data() + consumed, body_end - consumed),
-                    kMaxCapturedUploadBytes, &uploaded_data_);
-      consumed = body_end;
-      draining_body_ = false;
-      made_progress = true;
-      continue;
-    }
-
-    const std::size_t newline = pending_control_bytes_.find('\n', consumed);
-    if (newline == std::string::npos) {
-      break;
-    }
-    const std::size_t command_size = newline - consumed + 1;
-    const std::string_view command(pending_control_bytes_.data() + consumed, command_size);
-    CapturePrefix(command, kMaxCapturedControlBytes, &control_transcript_);
-    HandleControlCommand(command);
-    consumed += command_size;
-    made_progress = true;
-  }
-
-  if (consumed != 0) {
-    pending_control_bytes_.erase(0, consumed);
-  }
-  return made_progress;
-}
-
-/// Prepare cleanup while the mock can still write to curl's control socket.
-/// Always queue a 221: even an unfinished transfer can enter curl's graceful
-/// shutdown after a protocol error, and SMTP's blocking QUIT read has a
-/// one-second timeout when no reply is available. The synthetic reply is only
-/// a liveness guard; any real scripted response already consumed by curl still
-/// determines the transfer result.
-void SmtpMockServer::FinishConnections() {
-  if (connection_ != nullptr) {
-    (void)WriteControlBytes(kShutdownReply);
-    connection_->ShutdownWrite();
-  }
-}
-
-/// Give curl's graceful shutdown one last chance to emit QUIT while the peer
-/// still owns its read half, then release the multi as the base class would.
-/// The matching 221 was already queued by FinishConnections.
-/// @param multi Detached multi handle whose connection cache may be shutting
-///              the protocol connection down.
-void SmtpMockServer::HandleDetachedMulti(CurlMultiPtr multi) {
-  multi.reset();
-  (void)ServiceControlConnection();
-}
-/// Alternate curl transitions with immediate peer service until the transfer
-/// completes or deterministic idle/operation caps win. No select(), poll(), or
-/// sleep is needed: every transport is in-process, and malformed scripts are
-/// terminated by half-close after the bounded loop.
-/// @param multi Multi handle containing `easy`.
-/// @param easy Easy handle already installed on this mock.
-/// @param scenario Control script to borrow.
-void SmtpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
-  (void)easy;
-  ResetForScenario(scenario);
-
-  int still_running = 1;
-  int idle_iterations = 0;
-  int drive_iterations = 0;
-  CURLMcode result = CURLM_OK;
-  while (still_running && idle_iterations < kMaxIdleIterations && drive_iterations++ < kMaxDriveIterations) {
-    const int running_before = still_running;
-    result = curl_multi_perform(multi, &still_running);
-    if (result != CURLM_OK) {
-      break;
-    }
-
-    bool made_progress = still_running != running_before;
-    made_progress = ServiceControlConnection() || made_progress;
-    if (made_progress) {
-      idle_iterations = 0;
-    } else {
-      ++idle_iterations;
-    }
-  }
-
-  // The final perform may have emitted the last command or body bytes
-  // immediately before marking the transfer done. Drain them before cleanup.
-  (void)ServiceControlConnection();
-  FinishConnections();
-  scenario_ = nullptr;
-}
+/// Queue a 221 before the shared transport half-closes. SMTP's blocking QUIT
+/// read has a one-second timeout when no reply is available, so even an
+/// unfinished transfer gets a liveness reply; any real scripted response
+/// already consumed by curl still determines the transfer result.
+void SmtpMockServer::QueueShutdownReply() { (void)WriteControlBytes(kShutdownReply); }
 
 }  // namespace proto_fuzzer

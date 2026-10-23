@@ -1751,6 +1751,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/imap_mock_server.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/option_model.cc
+        proto_fuzzer/pingpong_mock_server.cc
         proto_fuzzer/pop3_mock_server.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/socks4_mock_server.cc
@@ -2449,6 +2450,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/transfer_session.cc
             proto_fuzzer/option_apply.cc
             proto_fuzzer/option_model.cc
+            proto_fuzzer/pingpong_mock_server.cc
             proto_fuzzer/request_data.cc
             proto_fuzzer/smtp_mock_server.cc
             proto_fuzzer/target_policy.cc
@@ -2655,6 +2657,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 proto_fuzzer/multi_socket_driver.cc
                 proto_fuzzer/option_apply.cc
                 proto_fuzzer/option_model.cc
+                proto_fuzzer/pingpong_mock_server.cc
                 proto_fuzzer/request_data.cc
                 proto_fuzzer/ws_frame.cc
                 ${GEN_PB_CC}
@@ -2719,6 +2722,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 proto_fuzzer/multi_socket_driver.cc
                 proto_fuzzer/option_apply.cc
                 proto_fuzzer/option_model.cc
+                proto_fuzzer/pingpong_mock_server.cc
                 proto_fuzzer/request_data.cc
                 proto_fuzzer/ws_frame.cc
                 ${GEN_PB_CC})
