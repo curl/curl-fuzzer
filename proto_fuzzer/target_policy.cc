@@ -1674,8 +1674,8 @@ void CanonicalizeRtspOptionModes(curl::fuzzer::proto::Scenario* scenario) {
         // stream data, which the request-aligned peer never emits. Fold it
         // onto the default OPTIONS like zero and out-of-range values so every
         // retained request still issues a scripted exchange.
-        const bool supported = value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST &&
-                               value != CURL_RTSPREQ_RECEIVE;
+        const bool supported =
+            value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST && value != CURL_RTSPREQ_RECEIVE;
         option.set_uint_value(supported ? value : CURL_RTSPREQ_OPTIONS);
         break;
       }

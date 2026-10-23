@@ -27,6 +27,7 @@
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/ipfs_url.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/target_policy.h"
@@ -1877,6 +1878,39 @@ void TestTimingLaneReachesCurlForPeerlessSchemes() {
   }
 }
 
+/// A mutable IPFS/IPNS suffix may end in "/../..". curl's tool_ipfs.c
+/// normalizes the user path before prepending "/ipfs/<cid>", so the gateway
+/// namespace survives; mirror that ordering and assert the actual request
+/// line, not just the policy output.
+void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
+  constexpr const char* kCid =
+      "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
+  const std::string url = proto_fuzzer::BuildIpfsGatewayUrl(
+      curl::fuzzer::proto::SCHEME_IPFS, std::string(kCid) + "/../../evil");
+  Expect(url == std::string("http://127.0.1.127:8080/ipfs/") + kCid + "/evil",
+         "IPFS gateway rewrite let dot segments climb out of the CID "
+         "namespace");
+
+  proto_fuzzer::CurlSlistPtr connect_to;
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr, "IPFS gateway test could not allocate easy");
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str());
+  RequestCapturingServer server;
+  server.Install(easy.get());
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("127.0.1.127:8080/ipfs/" + std::string(kCid) + "/evil");
+  scenario.mutable_connection()->add_on_readable(
+      "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+  (void)server.DriveScenario(easy.get(), scenario);
+  Expect(server.request().find("GET /ipfs/" + std::string(kCid) + "/evil") !=
+             std::string::npos,
+         "IPFS transcript lost the gateway namespace under dot segments");
+  easy.reset();
+}
+
 } // namespace
 
 int main() {
@@ -1928,5 +1962,6 @@ int main() {
   TestHappyEyeballsRacesMultipleAddresses();
   TestHappyEyeballsAdvancesSubsequentScripts();
   TestTimingLaneReachesCurlForPeerlessSchemes();
+  TestIpfsGatewayPreservesNamespaceUnderDotSegments();
   return 0;
 }

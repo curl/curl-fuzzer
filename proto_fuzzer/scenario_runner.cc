@@ -22,6 +22,7 @@
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/imap_mock_server.h"
+#include "proto_fuzzer/ipfs_url.h"
 #include "proto_fuzzer/ldap_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
@@ -61,12 +62,6 @@ namespace {
 
 constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
 constexpr std::size_t kMaxResultHeaders = 16;
-// libcurl has no ipfs:// handler: curl's command-line tool rewrites those
-// schemes onto an HTTP gateway before configuring its easy handle. Mirror that
-// rewrite against a fixed loopback authority. CONNECT_TO and OPENSOCKET still
-// confine the resulting HTTP GET to the in-process MockServer, so no gateway
-// process, DNS lookup, or external port is involved.
-constexpr char kIpfsGatewayBaseUrl[] = "http://127.0.1.127:8080";
 /// Probe each public getinfo return family and the response-header API after
 /// curl has settled the transfer. Applications commonly inspect these APIs,
 /// but a harness that only drives I/O leaves their type dispatch and
@@ -169,7 +164,7 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
 /// @return Effective URL before CONNECT_TO and OPENSOCKET confinement.
 std::string ScenarioUrl(const curl::fuzzer::proto::Scenario& scenario, const char* prefix) {
   if (scenario.scheme() == curl::fuzzer::proto::SCHEME_IPFS || scenario.scheme() == curl::fuzzer::proto::SCHEME_IPNS) {
-    return std::string(kIpfsGatewayBaseUrl) + "/" + prefix + "/" + scenario.host_path();
+    return BuildIpfsGatewayUrl(scenario.scheme(), scenario.host_path());
   }
   return std::string(prefix) + "://" + scenario.host_path();
 }

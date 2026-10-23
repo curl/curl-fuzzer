@@ -1755,6 +1755,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/happy_eyeballs_mock_server.cc
         proto_fuzzer/h2_runtime.cc
         proto_fuzzer/imap_mock_server.cc
+        proto_fuzzer/ipfs_url.cc
         proto_fuzzer/ldap_mock_server.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/option_model.cc
@@ -2493,6 +2494,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/request_data.cc
             proto_fuzzer/smtp_mock_server.cc
             proto_fuzzer/imap_mock_server.cc
+            proto_fuzzer/ipfs_url.cc
             proto_fuzzer/pop3_mock_server.cc
             proto_fuzzer/mqtt_mock_server.cc
             proto_fuzzer/ldap_mock_server.cc
