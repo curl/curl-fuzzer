@@ -1,0 +1,15 @@
+# CURLOPT_SASL_IR places the PLAIN payload on the AUTH command instead of
+# waiting for a 334 continuation.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/initial.test"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN" }
+options { option_id: CURLOPT_SASL_IR bool_value: true }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250-AUTH PLAIN\r\n250 8BITMIME\r\n"
+  on_readable: "235 2.7.0 authentication succeeded\r\n"
+  on_readable: "214 smtp.test help\r\n"
+  on_readable: "221 bye\r\n"
+}

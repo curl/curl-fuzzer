@@ -1,0 +1,11 @@
+# A legacy server can reject EHLO while accepting HELO. Curl must finish the
+# protocol connect before issuing the default no-upload HELP command.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/legacy.test"
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "500 EHLO unavailable\r\n"
+  on_readable: "250 smtp.test greets client\r\n"
+  on_readable: "214 smtp.test help\r\n"
+  on_readable: "221 bye\r\n"
+}

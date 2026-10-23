@@ -179,6 +179,47 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "354 send the message" in smtps
     assert "250 message queued" in smtps
 
+    cram = (smtp_root / "smtp_auth_cram_md5_mail.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5"' in cram
+    assert "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UuZXhhbXBsZS5uZXQ+" in cram
+    assert "235 2.7.0 authentication succeeded" in cram
+    assert "354 send the message" in cram
+    assert "250 message queued" in cram
+
+    fallback = (smtp_root / "smtp_auth_cram_fallback.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "AUTH CRAM-MD5 PLAIN" in fallback
+    assert 'on_readable: "334 !\\r\\n"' in fallback
+    assert "501 authentication exchange cancelled" in fallback
+    assert 'on_readable: "334 \\r\\n"' in fallback
+    assert "235 2.7.0 authentication succeeded" in fallback
+
+    plain_ir = (smtp_root / "smtp_auth_plain_sasl_ir.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain_ir
+    assert "CURLOPT_SASL_IR bool_value: true" in plain_ir
+    assert "250-AUTH PLAIN" in plain_ir
+
+    helo = (smtp_root / "smtp_ehlo_helo_fallback.textproto").read_text(encoding="utf-8")
+    assert "500 EHLO unavailable" in helo
+    assert "250 smtp.test greets client" in helo
+    assert "214 smtp.test help" in helo
+
+    expn = (smtp_root / "smtp_custom_expn.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_CUSTOMREQUEST string_value: "EXPN"' in expn
+    assert 'mail_rcpt: "list@example.test"' in expn
+    assert "CURLOPT_UPLOAD" not in expn
+    assert "250 member@example.test" in expn
+
+    unavailable = (smtp_root / "smtp_auth_unavailable_ntlm.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM"' in unavailable
+    assert "250-AUTH NTLM" in unavailable
+    assert "235" not in unavailable
+
 
 def test_dict_seeds_keep_lookup_paths_and_response_terminators() -> None:
     """Keep DICT commands URL-derived and responses in one body chunk."""

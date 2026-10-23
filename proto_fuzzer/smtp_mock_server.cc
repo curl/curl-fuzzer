@@ -23,7 +23,7 @@ namespace proto_fuzzer {
 /// Begin without a borrowed protobuf or open socketpair. RunLoop borrows a
 /// Scenario only for the synchronous DriveScenario call in which socket
 /// callbacks can run.
-SmtpMockServer::SmtpMockServer() : recipient_count_(0), rcpt_command_count_(0) {}
+SmtpMockServer::SmtpMockServer() : recipient_count_(0), rcpt_command_count_(0), auth_exchange_active_(false) {}
 
 /// Release the server-owned socketpair half after curl has returned its client
 /// descriptor. The out-of-line destructor keeps MockConnection's complete type
@@ -44,6 +44,7 @@ void SmtpMockServer::ResetProtocolState() {
                                        : std::min<std::size_t>(scenario_limits::kMaxMailRecipients,
                                                                static_cast<std::size_t>(script->mail_rcpt_size()));
   rcpt_command_count_ = 0;
+  auth_exchange_active_ = false;
 }
 
 /// Return whether the effective option list enables curl's
@@ -107,6 +108,9 @@ int SmtpMockServer::FirstReplyCode(std::string_view response) {
 /// curl observes (354 first, then the post-body response).
 /// @param command One newline-terminated command from curl.
 void SmtpMockServer::HandleLine(std::string_view command) {
+  const std::string_view verb = FirstToken(command);
+  const bool is_auth_continuation_reply = auth_exchange_active_;
+
   const std::string* response = NextControlReply();
   if (response == nullptr) {
     return;
@@ -115,7 +119,20 @@ void SmtpMockServer::HandleLine(std::string_view command) {
   const int response_code = FirstReplyCode(*response);
   (void)WriteControlBytes(*response);
 
-  const std::string_view verb = FirstToken(command);
+  if (TokenEquals(verb, "AUTH")) {
+    // A 334 reply is the only wire-visible distinction between SMTP AUTH and
+    // a mutation-selected custom command that happens to start with AUTH.
+    auth_exchange_active_ = response_code == 334;
+  } else if (is_auth_continuation_reply) {
+    if (TokenEquals(verb, "*")) {
+      // Curl accepts the cancellation reply before trying another enabled
+      // SASL mechanism, so the exchange remains active across this error.
+      auth_exchange_active_ = true;
+    } else if (response_code != 334) {
+      auth_exchange_active_ = false;
+    }
+  }
+
   if (TokenEquals(verb, "DATA")) {
     if (response_code == 354) {
       BeginMarkerBody(kEndOfBody);
@@ -133,13 +150,14 @@ void SmtpMockServer::HandleLine(std::string_view command) {
   }
 
   // A terminal command error is followed by curl's blocking QUIT during
-  // teardown. EHLO errors fall back to HELO, and an early RCPT error may still
-  // be followed by another recipient, so those replies must not consume the
-  // shutdown reply. Everything else can safely see a queued 221 next.
+  // teardown. EHLO errors fall back to HELO, an early RCPT error may still be
+  // followed by another recipient, and a failed AUTH exchange can cancel and
+  // retry another mechanism. Those replies must not consume the shutdown
+  // reply. Everything else can safely see a queued 221 next.
   const bool final_rcpt_error =
       TokenEquals(verb, "RCPT") && (rcpt_command_count_ >= recipient_count_ || !AllowsRecipientFailures());
-  const bool terminal_error =
-      response_code >= 400 && !TokenEquals(verb, "EHLO") && (!TokenEquals(verb, "RCPT") || final_rcpt_error);
+  const bool terminal_error = response_code >= 400 && !TokenEquals(verb, "EHLO") && !is_auth_continuation_reply &&
+                              (!TokenEquals(verb, "RCPT") || final_rcpt_error);
   if (terminal_error) {
     (void)WriteControlBytes(kShutdownReply);
   }
