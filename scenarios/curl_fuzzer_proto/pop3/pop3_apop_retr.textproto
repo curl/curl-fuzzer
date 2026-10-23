@@ -1,0 +1,13 @@
+# Select APOP explicitly. The greeting's RFC-822-style token is hashed with
+# the configured password before curl retrieves the message.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP" }
+connection {
+  initial_response: "+OK pop3.test ready <id@host>\r\n"
+  on_readable: "+OK capabilities\r\n.\r\n"
+  on_readable: "+OK authentication succeeded\r\n"
+  on_readable: "+OK 17 octets\r\nHello from POP3\r\n.\r\n"
+}
