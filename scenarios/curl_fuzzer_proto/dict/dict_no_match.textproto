@@ -1,0 +1,10 @@
+# DICT lookup that finds no match. The server still terminates the response
+# with the RFC 2229 dot line; the credentials exercise DICT's authentication
+# option handling even though this server never challenges them.
+scheme: SCHEME_DICT
+host_path: "dict.test/d:missing"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  on_readable: "552 no match\r\n.\r\n"
+}

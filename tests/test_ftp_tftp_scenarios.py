@@ -163,6 +163,23 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "250 message queued" in smtps
 
 
+def test_dict_seeds_keep_lookup_paths_and_response_terminators() -> None:
+    """Keep DICT commands URL-derived and responses in one body chunk."""
+    dict_root = SCENARIO_ROOT / "dict"
+    define = (dict_root / "dict_define_word.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_DICT" in define
+    assert 'host_path: "dict.test/d:word"' in define
+    assert "150 1 definitions retrieved" in define
+    assert "151 " in define
+    assert "\\r\\n.\\r\\n" in define
+
+    no_match = (dict_root / "dict_no_match.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_DICT" in no_match
+    assert 'host_path: "dict.test/d:missing"' in no_match
+    assert 'CURLOPT_USERNAME string_value: "fuzz"' in no_match
+    assert "552 no match" in no_match
+
+
 def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     """Keep tagless status replies paired with literal and multi-line bodies."""
     imap_root = SCENARIO_ROOT / "imap"
