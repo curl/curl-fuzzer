@@ -1,0 +1,16 @@
+# Discover PLAIN through the root DSE, send its SASL initial response, then
+# complete the ordinary URL-derived search without consuming this entry during
+# mechanism discovery.
+scheme: SCHEME_LDAP
+host_path: "ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)"
+options { option_id: CURLOPT_USERNAME string_value: "cn=admin,dc=example,dc=com" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN" }
+options { option_id: CURLOPT_SASL_AUTHZID string_value: "authorization-id" }
+options { option_id: CURLOPT_SASL_IR bool_value: true }
+connection {
+  # LDAPMessage { messageID 2, searchResEntry {
+  #   objectName "dc=example,dc=com", attributes { cn: fuzz,
+  #   objectClass: top, person } } }
+  on_readable: "\060\106\002\001\002\144\101\004\021\144\143\075\145\170\141\155\160\154\145\054\144\143\075\143\157\155\060\054\060\014\004\002\143\156\061\006\004\004\146\165\172\172\060\034\004\013\157\142\152\145\143\164\103\154\141\163\163\061\015\004\003\164\157\160\004\006\160\145\162\163\157\156"
+}

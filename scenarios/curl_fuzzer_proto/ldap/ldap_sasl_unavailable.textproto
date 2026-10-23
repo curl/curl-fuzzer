@@ -1,0 +1,8 @@
+# Ask for a mechanism the bounded peer does not advertise. Discovery must
+# finish with CURLE_LOGIN_DENIED without sending a bind or starting a data
+# search.
+scheme: SCHEME_LDAP
+host_path: "ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)"
+options { option_id: CURLOPT_USERNAME string_value: "cn=admin,dc=example,dc=com" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=LOGIN" }

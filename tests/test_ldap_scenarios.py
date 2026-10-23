@@ -24,10 +24,31 @@ def test_ldap_schema_exposes_bind_credentials() -> None:
         "CURLOPT_USERNAME",
         "CURLOPT_PASSWORD",
         "CURLOPT_USERPWD",
+        "CURLOPT_LOGIN_OPTIONS",
+        "CURLOPT_SASL_AUTHZID",
+        "CURLOPT_SASL_IR",
     } <= _supported_options()
     schema = SCENARIO_SCHEMA.read_text(encoding="utf-8")
     assert "SCHEME_LDAP = 17;" in schema
     assert "SCHEME_LDAPS = 18;" in schema
+
+
+def test_ldap_sasl_seed_pairs_mechanism_discovery_with_search() -> None:
+    """The SASL seed must select PLAIN and retain a data-search response."""
+    sasl = (SCENARIO_ROOT / "ldap_sasl_plain_search.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "scheme: SCHEME_LDAP" in sasl
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in sasl
+    assert 'CURLOPT_SASL_AUTHZID string_value: "authorization-id"' in sasl
+    assert "CURLOPT_SASL_IR bool_value: true" in sasl
+    assert 'on_readable: "\\060\\106\\002\\001\\002\\144' in sasl
+
+    unavailable = (SCENARIO_ROOT / "ldap_sasl_unavailable.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=LOGIN"' in unavailable
+    assert "on_readable:" not in unavailable
 
 
 def test_ldap_success_seed_pairs_bind_with_search_entry() -> None:

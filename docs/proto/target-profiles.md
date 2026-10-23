@@ -29,7 +29,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
 | `curl_fuzzer_proto_file` | `file://` URL parsing with a fuzz-controlled authority and suffix, pinned to `/dev/null`. There is no network peer; bounded uploads exercise the local write path only against that fixed sink. |
-| `curl_fuzzer_proto_ldap` | Single-connection BER/ASN.1 LDAP simple bind and search through OpenLDAP, with a scripted bind reply, scripted search-result entries, and a synthesized search completion. `SCHEME_LDAPS` runs the identical exchange over implicit TLS against the in-process OpenSSL peer. |
+| `curl_fuzzer_proto_ldap` | Single-connection BER/ASN.1 LDAP simple or SASL PLAIN bind and search through OpenLDAP, including bounded root-DSE mechanism discovery, a scripted bind reply, scripted search-result entries, and synthesized search completion. `SCHEME_LDAPS` runs the identical exchange over implicit TLS against the in-process OpenSSL peer. |
 | `curl_fuzzer_proto_rtsp` | Single-connection, request-aligned RTSP method/CSeq exchanges, SDP response bodies, and PLAY responses with interleaved RTP packets. |
 | `curl_fuzzer_proto_ipfs` | `ipfs://` and `ipns://` gateway rewrites as ordinary HTTP GETs against the in-process HTTP peer, with a pinned CID/name and a mutation-controlled gateway path. |
 | `curl_fuzzer_proto_api` | Easy, share, multi, URL, connect-only, pause/resume, and typed result API lifecycles described by `api_plan`. |

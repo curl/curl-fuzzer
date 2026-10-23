@@ -1739,6 +1739,15 @@ void TestFastLdapPolicy() {
   auto *password = scenario.add_options();
   password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
   password->set_string_value("secret");
+  auto *login_options = scenario.add_options();
+  login_options->set_option_id(curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS);
+  login_options->set_string_value("AUTH=PLAIN");
+  auto *authzid = scenario.add_options();
+  authzid->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_AUTHZID);
+  authzid->set_string_value("authorization-id");
+  auto *sasl_ir = scenario.add_options();
+  sasl_ir->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_IR);
+  sasl_ir->set_bool_value(true);
   auto *ftp_port = scenario.add_options();
   ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
   ftp_port->set_string_value("untrusted.invalid");
@@ -1765,18 +1774,27 @@ void TestFastLdapPolicy() {
              scenario.connection().server_frames_size() == 0,
          "fast LDAP policy changed the scripted bind/search bytes or retained "
          "stream-only controls");
-  Expect(scenario.options_size() == 3,
+  Expect(scenario.options_size() == 6,
          "fast LDAP policy retained a non-LDAP option");
   Expect(scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_USERNAME &&
              scenario.options(1).option_id() ==
                  curl::fuzzer::proto::CURLOPT_PASSWORD &&
              scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
+             scenario.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_SASL_AUTHZID &&
+             scenario.options(4).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_SASL_IR &&
+             scenario.options(5).option_id() ==
                  curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE,
          "fast LDAP policy changed retained option order");
   Expect(scenario.options(0).string_value() == "cn=admin,dc=example,dc=com" &&
-             scenario.options(1).string_value() == "secret",
-         "fast LDAP policy lost the simple-bind credentials");
+             scenario.options(1).string_value() == "secret" &&
+             scenario.options(2).string_value() == "AUTH=PLAIN" &&
+             scenario.options(3).string_value() == "authorization-id" &&
+             scenario.options(4).bool_value(),
+         "fast LDAP policy lost the SASL-bind configuration");
 }
 
 void TestNonLdapPoliciesClearLdapScheme() {

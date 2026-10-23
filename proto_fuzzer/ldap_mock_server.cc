@@ -26,6 +26,7 @@ namespace {
 
 // RFC 4511 protocol operation tags used by this peer.
 constexpr unsigned char kSequenceTag = 0x30;
+constexpr unsigned char kBooleanTag = 0x01;
 constexpr unsigned char kIntegerTag = 0x02;
 constexpr unsigned char kEnumeratedTag = 0x0a;
 constexpr unsigned char kOctetStringTag = 0x04;
@@ -33,9 +34,15 @@ constexpr unsigned char kUnbindRequest = 0x42;
 constexpr unsigned char kBindRequest = 0x60;
 constexpr unsigned char kBindResponse = 0x61;
 constexpr unsigned char kSearchRequest = 0x63;
+constexpr unsigned char kSearchResultEntry = 0x64;
 constexpr unsigned char kSearchResultDone = 0x65;
 constexpr unsigned char kAbandonRequest = 0x50;
+constexpr unsigned char kSetTag = 0x31;
+constexpr unsigned char kPresentFilter = 0x87;
 constexpr int kLdapSuccess = 0;
+constexpr std::string_view kObjectClass = "objectclass";
+constexpr std::string_view kSupportedSaslMechanisms = "supportedSASLMechanisms";
+constexpr std::string_view kPlainMechanism = "PLAIN";
 
 unsigned char ByteAt(std::string_view bytes, std::size_t index) { return static_cast<unsigned char>(bytes[index]); }
 
@@ -50,6 +57,7 @@ LdapMockServer::LdapMockServer()
       next_server_chunk_(0),
       bind_request_count_(0),
       search_request_count_(0),
+      mechanism_search_request_count_(0),
       unbind_request_count_(0),
       server_message_count_(0),
       scripted_message_count_(0),
@@ -89,6 +97,9 @@ std::size_t LdapMockServer::bind_request_count() const { return bind_request_cou
 
 /// @return Number of searchRequest messages observed.
 std::size_t LdapMockServer::search_request_count() const { return search_request_count_; }
+
+/// @return Number of root-DSE supportedSASLMechanisms searches observed.
+std::size_t LdapMockServer::mechanism_search_request_count() const { return mechanism_search_request_count_; }
 
 /// @return Number of unbindRequest messages observed.
 std::size_t LdapMockServer::unbind_request_count() const { return unbind_request_count_; }
@@ -166,10 +177,50 @@ LdapMockServer::ParseResult LdapMockServer::ParseTlv(std::string_view bytes, std
   return ParseResult::kComplete;
 }
 
+/// Recognize the exact root-DSE query emitted by oldap_perform_mechs. A plain
+/// substring check would let a mutation-controlled data search for the same
+/// attribute consume the peer-owned setup response, so every BER field that
+/// distinguishes the fixed discovery request is checked fail closed. Routing
+/// also requires the pre-bind state because a later data search can be byte
+/// identical to this query.
+/// @param value Value bytes of a searchRequest protocol operation.
+/// @return true only for the supportedSASLMechanisms root-DSE query.
+bool LdapMockServer::IsSaslMechanismSearch(std::string_view value) {
+  std::size_t cursor = 0;
+  TlvView field;
+  const auto parse_field = [&value, &cursor](unsigned char tag, TlvView* parsed) {
+    if (ParseTlv(value, cursor, parsed) != ParseResult::kComplete || parsed->tag != tag) {
+      return false;
+    }
+    cursor = parsed->value_offset + parsed->value_length;
+    return true;
+  };
+  const auto is_zero = [&value](const TlvView& parsed) {
+    return parsed.value_length == 1 && ByteAt(value, parsed.value_offset) == 0;
+  };
+
+  if (!parse_field(kOctetStringTag, &field) || field.value_length != 0 || !parse_field(kEnumeratedTag, &field) ||
+      !is_zero(field) || !parse_field(kEnumeratedTag, &field) || !is_zero(field) || !parse_field(kIntegerTag, &field) ||
+      !is_zero(field) || !parse_field(kIntegerTag, &field) || !is_zero(field) || !parse_field(kBooleanTag, &field) ||
+      !is_zero(field) || !parse_field(kPresentFilter, &field) ||
+      value.substr(field.value_offset, field.value_length) != kObjectClass || !parse_field(kSequenceTag, &field) ||
+      cursor != value.size()) {
+    return false;
+  }
+
+  const std::size_t attributes_end = field.value_offset + field.value_length;
+  TlvView attribute;
+  if (ParseTlv(value, field.value_offset, &attribute) != ParseResult::kComplete || attribute.tag != kOctetStringTag ||
+      attribute.value_offset + attribute.value_length != attributes_end) {
+    return false;
+  }
+  return value.substr(attribute.value_offset, attribute.value_length) == kSupportedSaslMechanisms;
+}
+
 /// Decode an LDAPMessage envelope: SEQUENCE { messageID INTEGER, protocolOp }.
-/// The peer only needs the integer id and the outer operation tag; the
-/// operation body remains opaque so every malformed variant still reaches
-/// OpenLDAP's own BER parser after the peer has relayed server bytes.
+/// The peer needs the integer id and outer operation tag. Search bodies remain
+/// opaque except for exact classification of OpenLDAP's fixed mechanism query,
+/// so mutation-controlled data searches still reach OpenLDAP's BER parser.
 /// @param bytes Buffer beginning at the message's first tag byte.
 /// @param message Receives the decoded envelope fields.
 /// @return kComplete, kNeedMore, or kInvalid.
@@ -219,6 +270,8 @@ LdapMockServer::ParseResult LdapMockServer::ParseMessage(std::string_view bytes,
   message->op_tag = operation.tag;
   message->message_id = message_id;
   message->total_length = outer.total_length;
+  message->sasl_mechanism_query = operation.tag == kSearchRequest &&
+                                  IsSaslMechanismSearch(bytes.substr(operation.value_offset, operation.value_length));
   return ParseResult::kComplete;
 }
 
@@ -311,6 +364,37 @@ void LdapMockServer::BuildResultMessage(std::uint32_t message_id, unsigned char 
   AppendTlv(out, kSequenceTag, content);
 }
 
+/// Encode a root-DSE searchResEntry advertising the one deterministic SASL
+/// mechanism that the in-process peer can complete without external state.
+/// @param message_id Mechanism-search request id to echo.
+/// @param out Receives the complete LDAPMessage.
+void LdapMockServer::BuildSaslMechanismsEntry(std::uint32_t message_id, std::string* out) {
+  if (out == nullptr) {
+    return;
+  }
+
+  std::string values;
+  AppendTlv(&values, kOctetStringTag, kPlainMechanism);
+
+  std::string attribute;
+  AppendTlv(&attribute, kOctetStringTag, kSupportedSaslMechanisms);
+  AppendTlv(&attribute, kSetTag, values);
+
+  std::string attributes;
+  AppendTlv(&attributes, kSequenceTag, attribute);
+
+  std::string entry;
+  AppendTlv(&entry, kOctetStringTag, std::string_view());
+  AppendTlv(&entry, kSequenceTag, attributes);
+
+  std::string content;
+  AppendBerInteger(&content, message_id);
+  AppendTlv(&content, kSearchResultEntry, entry);
+
+  out->clear();
+  AppendTlv(out, kSequenceTag, content);
+}
+
 /// Replace the messageID of a complete LDAPMessage. Scripted server bytes are
 /// mutation-controlled and may not know OpenLDAP's per-connection counter, so
 /// this keeps a valid seed meaningful without rewriting the operation body.
@@ -375,6 +459,7 @@ void LdapMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scena
   next_server_chunk_ = 0;
   bind_request_count_ = 0;
   search_request_count_ = 0;
+  mechanism_search_request_count_ = 0;
   unbind_request_count_ = 0;
   server_message_count_ = 0;
   scripted_message_count_ = 0;
@@ -505,6 +590,24 @@ void LdapMockServer::HandleSearchRequest(std::uint32_t message_id) {
   next_server_chunk_ = 0;
 }
 
+/// Answer OpenLDAP's root-DSE SASL discovery search before the ordinary bind
+/// and URL-derived search. Keeping this response peer-owned prevents mutable
+/// search-result scripts from being consumed by the setup query.
+/// @param message_id Mechanism-search request id to echo.
+void LdapMockServer::HandleMechanismSearchRequest(std::uint32_t message_id) {
+  ++search_request_count_;
+  ++mechanism_search_request_count_;
+
+  std::string entry;
+  BuildSaslMechanismsEntry(message_id, &entry);
+  (void)WriteServerBytes(entry);
+
+  std::string done;
+  BuildResultMessage(message_id, kSearchResultDone, kLdapSuccess, &done);
+  ++synthesized_done_count_;
+  (void)WriteServerBytes(done);
+}
+
 /// Route one complete client message. Unknown protocol operations are consumed
 /// without a reply, matching LDAP's asymmetry: only bind and search expect
 /// responses, while unbind/abandon are fire-and-forget.
@@ -516,7 +619,11 @@ void LdapMockServer::HandleClientMessage(const MessageView& message) {
       return;
 
     case kSearchRequest:
-      HandleSearchRequest(message.message_id);
+      if (message.sasl_mechanism_query && bind_request_count_ == 0 && mechanism_search_request_count_ == 0) {
+        HandleMechanismSearchRequest(message.message_id);
+      } else {
+        HandleSearchRequest(message.message_id);
+      }
       return;
 
     case kUnbindRequest:
