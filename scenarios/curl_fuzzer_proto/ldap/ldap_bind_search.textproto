@@ -1,0 +1,14 @@
+# Complete LDAP bind + search. The peer answers the simple bind with a
+# synthesized successful bindResponse, forwards the scripted searchResEntry
+# (renumbering it to the search request's message id), then synthesizes a
+# successful searchResDone. OpenLDAP formats the entry as LDIF for curl.
+scheme: SCHEME_LDAP
+host_path: "ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)"
+options { option_id: CURLOPT_USERNAME string_value: "cn=admin,dc=example,dc=com" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  # LDAPMessage { messageID 2, searchResEntry {
+  #   objectName "dc=example,dc=com",
+  #   attributes { cn: fuzz, objectClass: top, person } } }
+  on_readable: "\060\106\002\001\002\144\101\004\021\144\143\075\145\170\141\155\160\154\145\054\144\143\075\143\157\155\060\054\060\014\004\002\143\156\061\006\004\004\146\165\172\172\060\034\004\013\157\142\152\145\143\164\103\154\141\163\163\061\015\004\003\164\157\160\004\006\160\145\162\163\157\156"
+}

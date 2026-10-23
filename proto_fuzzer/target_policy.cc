@@ -289,6 +289,22 @@ void CanonicalizeFileAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path(canonical);
 }
 
+/// Pin the LDAP directory authority while retaining the complete URL suffix.
+/// In this curl revision OpenLDAP parses the base DN, attributes, scope, and
+/// filter from the URL path (`/dn?attrs?scope?filter`); CURLOPT_CUSTOMREQUEST
+/// is not consulted. A default base DN makes newly generated inputs reach the
+/// bind/search peer, and dropping any userinfo component keeps OpenLDAP's
+/// strict URL parser from rejecting credentials it only accepts separately.
+void CanonicalizeLdapAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("ldap.test/dc=example,dc=com");
+    return;
+  }
+  scenario->set_host_path("ldap.test" + host_path.substr(suffix_start));
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -1418,6 +1434,32 @@ bool IsMqttOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// publish-mode states its packet-aware peer can advance.
 void RetainMqttOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsMqttOption); }
 
+/// Return whether an option can change the single-connection LDAP exchange.
+/// The base DN, attributes, scope, and filter come from the URL path, and
+/// OpenLDAP's simple bind takes its DN/password from the credential options.
+/// CURLOPT_CUSTOMREQUEST is deliberately absent: this curl revision's
+/// OpenLDAP handler ignores it. Upload, HTTP, and transfer-shape controls would
+/// add option work that the LDAP state machine never consumes.
+bool IsLdapOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the LDAP target's option budget focused on bind credentials and the
+/// bounded download path its BER-aware peer can advance.
+void RetainLdapOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsLdapOption); }
+
 /// Decode an integral oneof locally before the generated option canonicalizer
 /// runs. Protocol mode bounds are policy, not setopt mechanics: folding them
 /// here keeps nearly every mutation on a real FTP/TFTP state while the shared
@@ -1760,6 +1802,22 @@ void RemoveIgnoredFileShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveMultiOnlyShape(scenario);
 }
 
+/// Retain the scripted bind reply and BER search-result messages consumed by
+/// the LDAP peer. LDAP cannot open follow-on sockets, and HTTP headers, MIME,
+/// upload state, and TELNET negotiation have no representation in its
+/// exchange. The primary connection's initial_response is the bind reply, so
+/// unlike the file-transfer and mail lanes it must survive pruning.
+void RemoveIgnoredLdapShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  scenario->clear_upload();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -1863,6 +1921,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // filesystem selector from a corpus input; only the dedicated lane may run
   // the peerless file:// path.
   if (profile != TargetProfile::kFastFile && scenario->scheme() == curl::fuzzer::proto::SCHEME_FILE) {
+    scenario->clear_scheme();
+  }
+
+  // LDAP is append-only too. Only the fixed BER lane may turn one of its
+  // scripted bind/search exchanges into a live OpenLDAP session.
+  if (profile != TargetProfile::kFastLdap && scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAP) {
     scenario->clear_scheme();
   }
 
@@ -2129,6 +2193,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastLdap) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_LDAP);
+    RemoveIgnoredLdapShape(scenario);
+    RetainLdapOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeLdapAuthority(scenario);
+    return;
+  }
+
   // Select the lane's scheme before applying scheme-sensitive upload bounds.
   // The scheme field is itself mutable, so bounding first could accidentally
   // give an HTTP/WS case TELNET's smaller payload budget merely because that
@@ -2189,6 +2262,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastDict:
     case TargetProfile::kFastGopher:
     case TargetProfile::kFastFile:
+    case TargetProfile::kFastLdap:
       // Protocol-specific early-return paths selected their scheme above.
       return;
   }
@@ -2302,6 +2376,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastDict:
     case TargetProfile::kFastGopher:
     case TargetProfile::kFastFile:
+    case TargetProfile::kFastLdap:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.
       return;

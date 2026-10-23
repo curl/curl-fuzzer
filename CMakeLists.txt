@@ -1750,6 +1750,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/happy_eyeballs_mock_server.cc
         proto_fuzzer/h2_runtime.cc
         proto_fuzzer/imap_mock_server.cc
+        proto_fuzzer/ldap_mock_server.cc
         proto_fuzzer/option_apply.cc
         proto_fuzzer/option_model.cc
         proto_fuzzer/pingpong_mock_server.cc
@@ -1980,6 +1981,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_dict)
     curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
     curl_add_proto_fuzzer(curl_fuzzer_proto_file)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ldap)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
@@ -2028,6 +2030,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/gopher/*.textproto)
     file(GLOB FILE_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/file/*.textproto)
+    file(GLOB LDAP_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/ldap/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/api/*.textproto)
     file(GLOB MULTI_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -2248,6 +2252,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_gopher ${GOPHER_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_file_corpus
         curl_fuzzer_proto_file ${FILE_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_ldap_corpus
+        curl_fuzzer_proto_ldap ${LDAP_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
         curl_fuzzer_proto_api ${API_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_multi_corpus
@@ -2294,6 +2300,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_dict curl_fuzzer_proto_dict_corpus)
     add_dependencies(curl_fuzzer_proto_gopher curl_fuzzer_proto_gopher_corpus)
     add_dependencies(curl_fuzzer_proto_file curl_fuzzer_proto_file_corpus)
+    add_dependencies(curl_fuzzer_proto_ldap curl_fuzzer_proto_ldap_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
@@ -2722,6 +2729,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(dict_mock_server_test
             tests/dict_mock_server_test.cc
             proto_fuzzer/dict_mock_server.cc)
+        curl_add_proto_peer_test(ldap_mock_server_test
+            tests/ldap_mock_server_test.cc
+            proto_fuzzer/ldap_mock_server.cc)
 
         # The SMTPS peer needs the in-process OpenSSL carrier in addition to
         # the plaintext SMTP implementation. Keep this executable separate so
