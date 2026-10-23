@@ -175,6 +175,12 @@ Mutator probes exercise framing, routing, capacity limits, and crossover on
 local byte buffers. They perform no transfers and cover the custom-mutator ABI
 adapters that corpus replay normally skips.
 
+The structured `curl_fuzzer_proto_api` coverage/introspection build also runs
+the curl API probes once during initialization, with a first-callback fallback
+for standalone runners. Those probes reuse the live proto curl runtime; global
+cleanup is deferred until process exit. Retaining the legacy target alongside
+this migration allows source replay to measure parity before deletion.
+
 Pass `-c /path/to/curl` to cover a local curl checkout. The manual `Coverage`
 GitHub Actions workflow publishes the same reports and reuses a public-corpus
 cache keyed by ISO week.

@@ -246,6 +246,12 @@ void TestCurlCallbackReinitialization() {
 
 int main() {
   Expect(faults::InitializeCurl(), "allocator callbacks were not installed");
+  Expect(faults::CurlInitializationSucceeded(),
+         "allocator setup did not retain its global initialization");
+  Expect(faults::ClaimCurlInitializationReference(),
+         "allocator global reference could not be claimed");
+  Expect(!faults::ClaimCurlInitializationReference(),
+         "allocator global reference was claimed more than once");
   TestBoundedOrdinalPlan();
   TestAllocatorContracts();
   TestDisarmAndReset();
