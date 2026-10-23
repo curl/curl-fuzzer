@@ -21,6 +21,17 @@ def _write_source(root: Path, name: str, contents: str) -> Path:
     return source
 
 
+def test_cmake_coverage_uses_atomic_profile_updates() -> None:
+    cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+    coverage_flags = cmake.split("if(ENABLE_COVERAGE)", maxsplit=1)[1].split(
+        "endif()", maxsplit=1
+    )[0]
+
+    assert "-fprofile-instr-generate" in coverage_flags
+    assert "-fcoverage-mapping" in coverage_flags
+    assert "-fprofile-update=atomic" in coverage_flags
+
+
 @pytest.fixture
 def coverage_fixture(
     tmp_path: Path,
@@ -148,6 +159,7 @@ def coverage_fixture(
             "-std=c++17",
             "-fprofile-instr-generate",
             "-fcoverage-mapping",
+            "-fprofile-update=atomic",
             *map(str, sources),
             "-o",
             str(build / target),

@@ -18,16 +18,32 @@ import platform
 import re
 import resource
 import shutil
+import socket
 import statistics
 import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TypeVar
 
+from .coverage_parity import (
+    TARGET_NAME_RE,
+    CoverageParityError,
+    CoverageUniverse,
+    DuplicateJsonKeyError,
+    ParityManifest,
+    evaluate_parity,
+    load_parity_manifest,
+    strict_json_loads,
+    validate_baseline_corpora,
+    validate_live_inventory,
+    validate_manifest_progression,
+    validate_source_identity,
+)
 from .fuzzer_corpus import (
     CorpusError,
     CorpusSnapshotBuilder,
@@ -82,6 +98,21 @@ MANAGED_FUZZER_ARGS = (
     "-seed=",
     "-timeout=",
 )
+REPLAY_COUNTER_NAMES = (
+    "attempted",
+    "completed",
+    "timed_out",
+    "input_errors",
+    "path_errors",
+)
+DEFAULT_COVERAGE_WALL_TIMEOUT = 300
+DEFAULT_COVERAGE_INPUT_TIMEOUT = 25
+PARITY_COVERAGE_WALL_TIMEOUT = 7200
+LLVM_COVERAGE_COUNTER_SATURATION = (1 << 63) - 1
+COVERAGE_REPLAY_SANITIZER_ENVIRONMENT: dict[str, str | None] = {
+    "ASAN_OPTIONS": "detect_leaks=0",
+    "LSAN_OPTIONS": None,
+}
 
 EVENT_RE = re.compile(
     r"^#(?P<units>\d+)\s+"
@@ -200,6 +231,26 @@ def _curl_relative_path(filename: str, source_root: Path) -> str | None:
     return relative.as_posix()
 
 
+def _validated_coverage_count(value: object, *, subject: str) -> int:
+    """Validate one llvm-cov execution count without coercion."""
+    if type(value) is not int:
+        raise MeasurementError(
+            f"llvm-cov export contained a non-integer {subject}: {value!r}"
+        )
+    if value < 0:
+        raise MeasurementError(
+            f"llvm-cov export contained a negative {subject}: {value}"
+        )
+    if value >= LLVM_COVERAGE_COUNTER_SATURATION:
+        raise MeasurementError(
+            "llvm-cov export contained a saturated or out-of-range "
+            f"{subject}: {value}; "
+            f"expected less than INT64_MAX "
+            f"({LLVM_COVERAGE_COUNTER_SATURATION})"
+        )
+    return value
+
+
 def parse_source_coverage_export(
     document: object, source_root: Path
 ) -> SourceCoverageIndex:
@@ -243,8 +294,11 @@ def parse_source_coverage_export(
 
             function_key = (anchor, name)
             functions.add(function_key)
-            function_count = raw_function.get("count")
-            if isinstance(function_count, (int, float)) and function_count > 0:
+            function_count = _validated_coverage_count(
+                raw_function.get("count"),
+                subject=f"function count for {name!r} at {anchor}",
+            )
+            if function_count > 0:
                 covered_functions.add(function_key)
 
             raw_regions = raw_function.get("regions")
@@ -253,7 +307,8 @@ def parse_source_coverage_export(
             for raw_region in raw_regions:
                 if not isinstance(raw_region, list) or len(raw_region) < 6:
                     continue
-                coordinates = raw_region[:5]
+                coordinates = raw_region[:4]
+                raw_count = raw_region[4]
                 file_id = raw_region[5]
                 if (
                     not all(isinstance(value, int) for value in coordinates)
@@ -271,7 +326,14 @@ def parse_source_coverage_export(
                 region_file = normalized_filenames[file_id]
                 if region_file is None:
                     continue
-                start_line, start_column, end_line, end_column, count = coordinates
+                start_line, start_column, end_line, end_column = coordinates
+                location = (
+                    f"{region_file}:{start_line}:{start_column}-{end_line}:{end_column}"
+                )
+                count = _validated_coverage_count(
+                    raw_count,
+                    subject=f"ordinary region count for {name!r} at {location}",
+                )
                 region_key = (
                     region_file,
                     name,
@@ -417,10 +479,30 @@ def _target_pairs(
         pairs.append(TargetPair(baseline, candidate))
     if not pairs:
         pairs = [TargetPair(target, target) for target in DEFAULT_TARGETS]
+    for pair in pairs:
+        for target in (pair.baseline_target, pair.candidate_target):
+            if TARGET_NAME_RE.fullmatch(target) is None:
+                raise MeasurementError(
+                    f"invalid target name {target!r}; expected only letters, "
+                    "digits, and underscores"
+                )
     labels = [pair.label for pair in pairs]
     if len(labels) != len(set(labels)):
         raise MeasurementError("selected targets produce duplicate comparison labels")
     return tuple(pairs)
+
+
+def _binary_path(binary_dir: Path, target: str) -> Path:
+    """Resolve a validated binary name as a direct child of its build directory."""
+    if TARGET_NAME_RE.fullmatch(target) is None:
+        raise MeasurementError(f"invalid target name: {target!r}")
+    directory = binary_dir.resolve()
+    binary = (directory / target).resolve()
+    if binary.parent != directory:
+        raise MeasurementError(
+            f"fuzzer binary must be a direct child of {directory}: {binary}"
+        )
+    return binary
 
 
 def _run_environment() -> dict[str, str]:
@@ -459,6 +541,60 @@ def _resource_usage() -> tuple[float, float]:
 def _count_corpus(path: Path) -> tuple[int, int]:
     sizes = [item.stat().st_size for item in path.iterdir() if item.is_file()]
     return len(sizes), sum(sizes)
+
+
+def _persist_snapshot(
+    builder: CorpusSnapshotBuilder,
+    metadata: dict[str, object],
+    destination_root: Path,
+    variant: str,
+    target: str,
+) -> dict[str, object]:
+    """Retain one deterministic, native-format corpus snapshot."""
+    corpus_sha = metadata.get("sha256")
+    if not isinstance(corpus_sha, str):
+        raise MeasurementError(f"corpus metadata for {variant}/{target} has no hash")
+    destination_root.mkdir(parents=True, exist_ok=True)
+    archive = destination_root / f"{variant}-{target}-{corpus_sha}.zip"
+    pending = archive.with_suffix(".zip.tmp")
+    if pending.exists():
+        pending.unlink()
+    builder.write_zip(pending)
+    os.replace(pending, archive)
+    artifact = _artifact_metadata(archive, "corpus snapshot")
+    artifact.update(
+        {
+            "content_sha256": corpus_sha,
+            "input_count": metadata.get("count"),
+            "content_bytes": metadata.get("bytes"),
+        }
+    )
+    return artifact
+
+
+def _build_snapshot(
+    *,
+    target: str,
+    binary_dir: Path,
+    destination: Path,
+    corpus_root: Path,
+    public_corpus_root: Path | None,
+    overrides: dict[str, list[Path]],
+) -> tuple[CorpusSnapshotBuilder, dict[str, object]]:
+    builder = CorpusSnapshotBuilder(destination)
+    sources = resolve_corpus_sources(
+        target,
+        binary_dir,
+        corpus_root,
+        public_corpus_root,
+        overrides,
+    )
+    for source in sources:
+        builder.add(source)
+    metadata = builder.metadata()
+    if metadata["count"] == 0:
+        raise MeasurementError(f"corpus for {target} is empty")
+    return builder, metadata
 
 
 def _managed_command(
@@ -520,7 +656,7 @@ def _run_once(
     shutil.copytree(snapshot, corpus)
     initial_count, initial_bytes = _count_corpus(corpus)
 
-    binary = (variant.binary_dir / binary_target).resolve()
+    binary = _binary_path(variant.binary_dir, binary_target)
     command = _managed_command(
         binary,
         corpus,
@@ -921,6 +1057,150 @@ def _command_failure(label: str, result: subprocess.CompletedProcess[str]) -> st
     return f"{label} exited with status {result.returncode}{suffix}"
 
 
+def _artifact_metadata(
+    path: Path, label: str, *, require_nonempty: bool = True
+) -> dict[str, object]:
+    """Require an artifact and return its durable identity."""
+    try:
+        size = path.stat().st_size
+        digest = sha256_file(path)
+    except OSError as error:
+        raise MeasurementError(f"could not read {label} {path}: {error}") from error
+    if require_nonempty and size <= 0:
+        raise MeasurementError(f"{label} is empty: {path}")
+    return {"path": str(path), "bytes": size, "sha256": digest}
+
+
+def _require_nonempty_artifact(path: Path, label: str) -> None:
+    """Check artifact existence and size without hashing a pending file."""
+    try:
+        size = path.stat().st_size
+    except OSError as error:
+        raise MeasurementError(f"could not read {label} {path}: {error}") from error
+    if size <= 0:
+        raise MeasurementError(f"{label} is empty: {path}")
+
+
+def _coverage_target_root(
+    artifact_root: Path, variant_name: str, target_name: str
+) -> Path:
+    """Create a contained replay directory without following child symlinks."""
+    if any(
+        not part or Path(part).name != part or part in {".", ".."}
+        for part in (variant_name, target_name)
+    ):
+        raise MeasurementError("unsafe source coverage artifact path")
+    if artifact_root.is_symlink():
+        raise MeasurementError(
+            f"source coverage artifact root must not be a symlink: {artifact_root}"
+        )
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    resolved_root = artifact_root.resolve()
+    variant_root = resolved_root / variant_name
+    if variant_root.is_symlink():
+        raise MeasurementError(
+            f"source coverage variant directory must not be a symlink: {variant_root}"
+        )
+    variant_root.mkdir(exist_ok=True)
+    resolved_variant = variant_root.resolve()
+    if resolved_variant.parent != resolved_root:
+        raise MeasurementError("source coverage variant directory escaped its root")
+    target_root = resolved_variant / target_name
+    if target_root.is_symlink():
+        raise MeasurementError(
+            f"source coverage target directory must not be a symlink: {target_root}"
+        )
+    target_root.mkdir(exist_ok=True)
+    resolved_target = target_root.resolve()
+    if resolved_target.parent != resolved_variant:
+        raise MeasurementError("source coverage target directory escaped its root")
+    return resolved_target
+
+
+def _source_coverage_artifact_roots(log_root: Path) -> tuple[Path, Path]:
+    """Create contained non-symlink roots before retaining coverage artifacts."""
+    if log_root.is_symlink():
+        raise MeasurementError(f"log directory must not be a symlink: {log_root}")
+    log_root.mkdir(parents=True, exist_ok=True)
+    resolved_log_root = log_root.resolve()
+    source_root = resolved_log_root / "source-coverage"
+    if source_root.is_symlink():
+        raise MeasurementError(
+            f"source coverage artifact root must not be a symlink: {source_root}"
+        )
+    source_root.mkdir(exist_ok=True)
+    resolved_source_root = source_root.resolve()
+    if resolved_source_root.parent != resolved_log_root:
+        raise MeasurementError(
+            "source coverage artifact root escaped the log directory"
+        )
+    corpus_root = resolved_source_root / "corpora"
+    if corpus_root.is_symlink():
+        raise MeasurementError(
+            f"source coverage corpus directory must not be a symlink: {corpus_root}"
+        )
+    corpus_root.mkdir(exist_ok=True)
+    resolved_corpus_root = corpus_root.resolve()
+    if resolved_corpus_root.parent != resolved_source_root:
+        raise MeasurementError("source coverage corpus directory escaped its root")
+    return resolved_source_root, resolved_corpus_root
+
+
+def _clear_coverage_artifacts(target_root: Path) -> None:
+    """Remove prior replay outputs without following symlinked leaves."""
+    for pattern in (
+        "*.profraw",
+        "*.profdata",
+        "*.export.json",
+        "*.tmp",
+        "replay-status.json",
+        "replay.log",
+    ):
+        for stale in target_root.glob(pattern):
+            if stale.is_file() or stale.is_symlink():
+                stale.unlink()
+
+
+def _read_replay_status(path: Path, expected_inputs: int) -> dict[str, int]:
+    """Validate exact standalone-runner completion counters."""
+    if expected_inputs <= 0:
+        raise MeasurementError("coverage replay requires a nonempty corpus")
+    try:
+        document = strict_json_loads(path.read_text(encoding="utf-8"))
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        DuplicateJsonKeyError,
+    ) as error:
+        raise MeasurementError(
+            f"could not read replay status {path}: {error}"
+        ) from error
+    if not isinstance(document, dict) or set(document) != set(REPLAY_COUNTER_NAMES):
+        raise MeasurementError(
+            f"replay status {path} must contain exactly: "
+            + ", ".join(REPLAY_COUNTER_NAMES)
+        )
+    counters: dict[str, int] = {}
+    for name in REPLAY_COUNTER_NAMES:
+        value = document.get(name)
+        if type(value) is not int or value < 0:
+            raise MeasurementError(
+                f"replay status {path} field {name} must be a nonnegative integer"
+            )
+        counters[name] = value
+    if (
+        counters["attempted"] != expected_inputs
+        or counters["completed"] != expected_inputs
+        or any(counters[name] for name in ("timed_out", "input_errors", "path_errors"))
+    ):
+        raise MeasurementError(
+            f"incomplete coverage replay for {path}: expected {expected_inputs}, "
+            f"got {counters}"
+        )
+    return counters
+
+
 def _measure_coverage_target(
     *,
     variant: Variant,
@@ -928,27 +1208,44 @@ def _measure_coverage_target(
     binary_target: str,
     source_root: Path,
     snapshot: Path,
+    snapshot_artifact: dict[str, object],
+    expected_inputs: int,
     artifact_root: Path,
     environment: dict[str, str],
     wall_timeout: int,
+    input_timeout: int,
+    expected_binary_sha256: str,
     llvm_profdata: Path,
     llvm_cov: Path,
 ) -> tuple[dict[str, object], SourceCoverageIndex]:
     """Replay one fixed corpus and export curl-only source coverage."""
-    binary = (variant.binary_dir / binary_target).resolve()
+    binary = _binary_path(variant.binary_dir, binary_target)
     _validate_coverage_binary(binary)
     safe_label = target_label.replace("=>", "-vs-")
-    target_root = artifact_root / variant.name / safe_label
-    target_root.mkdir(parents=True, exist_ok=True)
-    for pattern in ("*.profraw", "*.profdata", "*.export.json", "*.tmp"):
-        for stale in target_root.glob(pattern):
-            if stale.is_file():
-                stale.unlink()
+    target_root = _coverage_target_root(artifact_root, variant.name, safe_label)
+    _clear_coverage_artifacts(target_root)
 
     log_path = target_root / "replay.log"
+    status_path = target_root / "replay-status.json"
     profile_pattern = target_root / f"{binary_target}-%p.profraw"
     replay_environment = environment.copy()
+    for name in (
+        "LLVM_PROFILE_FILE",
+        "FUZZ_REPLAY_STATUS_FILE",
+        "FUZZ_TIMEOUT_SECS",
+        *COVERAGE_REPLAY_SANITIZER_ENVIRONMENT,
+    ):
+        replay_environment.pop(name, None)
     replay_environment["LLVM_PROFILE_FILE"] = str(profile_pattern)
+    replay_environment["FUZZ_REPLAY_STATUS_FILE"] = str(status_path)
+    replay_environment["FUZZ_TIMEOUT_SECS"] = str(input_timeout)
+    replay_environment.update(
+        {
+            name: value
+            for name, value in COVERAGE_REPLAY_SANITIZER_ENVIRONMENT.items()
+            if value is not None
+        }
+    )
     command = [str(binary), str(snapshot)]
     with log_path.open("w", encoding="utf-8") as log_file:
         try:
@@ -976,6 +1273,9 @@ def _measure_coverage_target(
             f"{replay.returncode}; see {log_path}"
         )
 
+    counters = _read_replay_status(status_path, expected_inputs)
+    status_artifact = _artifact_metadata(status_path, "coverage replay status")
+
     raw_profiles = sorted(target_root.glob("*.profraw"))
     if not raw_profiles:
         raise MeasurementError(
@@ -983,6 +1283,9 @@ def _measure_coverage_target(
             "file; rebuild it with -fprofile-instr-generate and "
             "-fcoverage-mapping"
         )
+    raw_profile_artifacts = [
+        _artifact_metadata(path, "raw coverage profile") for path in raw_profiles
+    ]
 
     profile = target_root / f"{binary_target}.profdata"
     merge_command = [
@@ -1013,6 +1316,7 @@ def _measure_coverage_target(
                 f"llvm-profdata merge for {variant.name}/{binary_target}", merge
             )
         )
+    profile_artifact = _artifact_metadata(profile, "merged coverage profile")
 
     export_path = target_root / f"{binary_target}.export.json"
     pending_export = target_root / f"{binary_target}.export.json.tmp"
@@ -1048,24 +1352,42 @@ def _measure_coverage_target(
                 f"llvm-cov export for {variant.name}/{binary_target}", error_result
             )
         )
-    os.replace(pending_export, export_path)
+    _require_nonempty_artifact(pending_export, "LLVM coverage export")
+    try:
+        os.replace(pending_export, export_path)
+    except OSError as error:
+        raise MeasurementError(
+            f"could not retain LLVM coverage export {export_path}: {error}"
+        ) from error
+    export_artifact = _artifact_metadata(export_path, "LLVM coverage export")
     try:
         export_document = json.loads(export_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise MeasurementError(
             f"could not parse llvm-cov export for {variant.name}/{binary_target}: "
             f"{error}"
         ) from error
     index = parse_source_coverage_export(export_document, source_root)
+    binary_artifact = _artifact_metadata(binary, "coverage replay binary")
+    if binary_artifact["sha256"] != expected_binary_sha256:
+        raise MeasurementError(
+            f"coverage replay binary changed during measurement: {binary}"
+        )
     metadata: dict[str, object] = {
-        "binary": str(binary),
+        "binary": binary_artifact,
         "binary_target": binary_target,
-        "binary_sha256": sha256_file(binary),
         "replay_command": [str(binary), "<corpus>"],
-        "replay_log": str(log_path),
-        "raw_profiles": [str(path) for path in raw_profiles],
-        "profile": str(profile),
-        "export": str(export_path),
+        "input_timeout_seconds": input_timeout,
+        "expected_inputs": expected_inputs,
+        "replay_counters": counters,
+        "replay_status": status_artifact,
+        "replay_log": _artifact_metadata(
+            log_path, "coverage replay log", require_nonempty=False
+        ),
+        "corpus": snapshot_artifact,
+        "raw_profiles": raw_profile_artifacts,
+        "profile": profile_artifact,
+        "export": export_artifact,
         "summary": _source_coverage_summary(index),
     }
     return metadata, index
@@ -1078,41 +1400,119 @@ def _measure_source_coverage(
     source_identities: dict[str, dict[str, object]],
     target_pairs: Sequence[TargetPair],
     snapshots: dict[tuple[str, str], Path],
+    snapshot_metadata: dict[tuple[str, str], dict[str, object]],
+    snapshot_artifacts: dict[tuple[str, str], dict[str, object]],
     artifact_root: Path,
     environment: dict[str, str],
     wall_timeout: int,
+    input_timeout: int,
     llvm_profdata: Path,
     llvm_cov: Path,
     tool_versions: dict[str, str],
-) -> dict[str, object]:
+) -> tuple[dict[str, object], SourceCoverageIndex, SourceCoverageIndex]:
     """Measure and compare fixed-corpus curl source coverage per target."""
     variant_documents: dict[str, object] = {}
     indexes: dict[str, dict[str, SourceCoverageIndex]] = {}
+    measurement_cache: dict[
+        tuple[str, str, str, str, str],
+        tuple[str, dict[str, object], SourceCoverageIndex],
+    ] = {}
+    expected_unique_measurements = sum(
+        len({pair.target_for(variant.name) for pair in target_pairs})
+        for variant in variants
+    )
+    total_expected = 0
+    total_attempted = 0
+    total_completed = 0
     for variant in variants:
         target_documents: dict[str, object] = {}
+        measurement_documents: dict[str, object] = {}
         target_indexes: dict[str, SourceCoverageIndex] = {}
-        for target_pair in target_pairs:
-            target_label = target_pair.label
-            binary_target = target_pair.target_for(variant.name)
+        ordered_targets = tuple(
+            dict.fromkeys(pair.target_for(variant.name) for pair in target_pairs)
+        )
+        target_measurements: dict[str, str] = {}
+        for binary_target in ordered_targets:
+            binary = _binary_path(variant.binary_dir, binary_target)
+            binary_sha_value = _artifact_metadata(binary, "coverage replay binary").get(
+                "sha256"
+            )
+            if not isinstance(binary_sha_value, str):
+                raise MeasurementError(
+                    f"missing binary SHA-256 for {variant.name}/{binary_target}"
+                )
+            binary_sha = binary_sha_value
+            corpus = snapshot_metadata[(variant.name, binary_target)]
+            corpus_sha = corpus.get("sha256")
+            if not isinstance(corpus_sha, str):
+                raise MeasurementError(
+                    f"missing corpus SHA-256 for {variant.name}/{binary_target}"
+                )
+            source_sha = source_identities[variant.name].get("sha256")
+            if not isinstance(source_sha, str):
+                raise MeasurementError(
+                    f"missing source SHA-256 for {variant.name}/{binary_target}"
+                )
+            cache_key = (
+                variant.name,
+                binary_target,
+                binary_sha,
+                corpus_sha,
+                source_sha,
+            )
+            cached = measurement_cache.get(cache_key)
+            if cached is not None:
+                measurement_id, metadata, index = cached
+                target_measurements[binary_target] = measurement_id
+                target_indexes[binary_target] = index
+                continue
+
+            identity = json.dumps(cache_key, separators=(",", ":"))
+            measurement_id = hashlib.sha256(identity.encode()).hexdigest()
             print(
-                f"==> {target_label} {variant.name} ({binary_target}) "
-                "fixed-corpus source coverage",
+                f"==> {variant.name}/{binary_target} fixed-corpus source coverage",
                 flush=True,
             )
+            expected = corpus.get("count")
+            if type(expected) is not int or expected <= 0:
+                raise MeasurementError(
+                    f"invalid corpus count for {variant.name}/{binary_target}"
+                )
             metadata, index = _measure_coverage_target(
                 variant=variant,
-                target_label=target_label,
+                target_label=f"{binary_target}-{measurement_id[:16]}",
                 binary_target=binary_target,
                 source_root=source_roots[variant.name],
-                snapshot=snapshots[(target_label, variant.name)],
+                snapshot=snapshots[(variant.name, binary_target)],
+                snapshot_artifact=snapshot_artifacts[(variant.name, binary_target)],
+                expected_inputs=expected,
                 artifact_root=artifact_root,
                 environment=environment,
                 wall_timeout=wall_timeout,
+                input_timeout=input_timeout,
+                expected_binary_sha256=binary_sha,
                 llvm_profdata=llvm_profdata,
                 llvm_cov=llvm_cov,
             )
-            target_documents[target_label] = metadata
-            target_indexes[target_label] = index
+            metadata["measurement_id"] = measurement_id
+            measurement_cache[cache_key] = (measurement_id, metadata, index)
+            measurement_documents[measurement_id] = metadata
+            target_measurements[binary_target] = measurement_id
+            target_indexes[binary_target] = index
+            counters = metadata["replay_counters"]
+            if not isinstance(counters, dict):
+                raise MeasurementError("internal replay counter metadata is invalid")
+            total_expected += expected
+            total_attempted += int(counters["attempted"])
+            total_completed += int(counters["completed"])
+
+        for target_pair in target_pairs:
+            binary_target = target_pair.target_for(variant.name)
+            measurement_id = target_measurements[binary_target]
+            target_documents[target_pair.label] = {
+                "binary_target": binary_target,
+                "measurement_id": measurement_id,
+            }
         aggregate = _merge_source_coverage(target_indexes.values())
         indexes[variant.name] = target_indexes
         variant_documents[variant.name] = {
@@ -1120,21 +1520,29 @@ def _measure_source_coverage(
             "curl_source_dir": str(source_roots[variant.name]),
             "source_identity": source_identities[variant.name],
             "targets": target_documents,
+            "measurements": measurement_documents,
             "aggregate": _source_coverage_summary(aggregate),
         }
+
+    if len(measurement_cache) != expected_unique_measurements:
+        raise MeasurementError(
+            "internal source replay accounting mismatch: expected "
+            f"{expected_unique_measurements} unique target executions, got "
+            f"{len(measurement_cache)}"
+        )
 
     baseline_indexes = indexes["baseline"]
     candidate_indexes = indexes["candidate"]
     target_comparisons = {
         target_pair.label: compare_source_coverage(
-            baseline_indexes[target_pair.label],
-            candidate_indexes[target_pair.label],
+            baseline_indexes[target_pair.baseline_target],
+            candidate_indexes[target_pair.candidate_target],
         )
         for target_pair in target_pairs
     }
     baseline_aggregate = _merge_source_coverage(baseline_indexes.values())
     candidate_aggregate = _merge_source_coverage(candidate_indexes.values())
-    return {
+    document: dict[str, object] = {
         "method": "fixed-corpus llvm-cov export over curl lib/ and src/",
         "tools": {
             "llvm_profdata": {
@@ -1147,6 +1555,12 @@ def _measure_source_coverage(
             },
         },
         "variants": variant_documents,
+        "replay_totals": {
+            "unique_measurements": len(measurement_cache),
+            "expected_inputs": total_expected,
+            "attempted": total_attempted,
+            "completed": total_completed,
+        },
         "comparison": {
             "targets": target_comparisons,
             "aggregate": compare_source_coverage(
@@ -1154,6 +1568,7 @@ def _measure_source_coverage(
             ),
         },
     }
+    return document, baseline_aggregate, candidate_aggregate
 
 
 def _print_source_coverage(document: dict[str, object]) -> None:
@@ -1188,9 +1603,8 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--baseline-dir",
-        required=True,
         type=Path,
-        help="directory containing the baseline libFuzzer binaries",
+        help="directory containing the baseline production libFuzzer binaries",
     )
     parser.add_argument(
         "--candidate-dir",
@@ -1300,8 +1714,44 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--coverage-wall-timeout",
         type=int,
-        default=300,
-        help="outer timeout for each fixed-corpus coverage replay",
+        default=argparse.SUPPRESS,
+        help=(
+            "outer timeout for each fixed-corpus coverage replay; defaults to "
+            "300s, or 7200s in parity-manifest mode"
+        ),
+    )
+    parser.add_argument(
+        "--coverage-input-timeout",
+        type=int,
+        default=argparse.SUPPRESS,
+        help=(
+            "per-input timeout exported to standalone coverage runners; "
+            "defaults to 25s, or the immutable manifest value in parity mode"
+        ),
+    )
+    parser.add_argument(
+        "--source-only",
+        action="store_true",
+        help="run deterministic source replay without timed libFuzzer benchmarks",
+    )
+    parser.add_argument(
+        "--parity-manifest",
+        type=Path,
+        help="immutable function-parity manifest to bind and ratchet",
+    )
+    parser.add_argument(
+        "--previous-parity-manifest",
+        type=Path,
+        help=(
+            "trusted prior manifest used to reject immutable baseline changes "
+            "and resolved-gap removals"
+        ),
+    )
+    parser.add_argument(
+        "--target-inventory",
+        type=Path,
+        default=REPO_ROOT / "scripts" / "fuzz_targets",
+        help="repository target inventory validated in parity-manifest mode",
     )
     parser.add_argument(
         "--llvm-profdata",
@@ -1313,7 +1763,12 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default="llvm-cov",
         help="llvm-cov executable name or path",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not hasattr(args, "coverage_wall_timeout"):
+        args.coverage_wall_timeout = None
+    if not hasattr(args, "coverage_input_timeout"):
+        args.coverage_input_timeout = None
+    return args
 
 
 def _validate_args(args: argparse.Namespace) -> None:
@@ -1321,11 +1776,21 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise MeasurementError("--seconds, --timeout, and --repeats must be positive")
     if args.wall_timeout is not None and args.wall_timeout <= 0:
         raise MeasurementError("--wall-timeout must be positive")
-    if args.coverage_wall_timeout <= 0:
+    if args.coverage_wall_timeout is not None and args.coverage_wall_timeout <= 0:
         raise MeasurementError("--coverage-wall-timeout must be positive")
+    if args.coverage_input_timeout is not None and args.coverage_input_timeout <= 0:
+        raise MeasurementError("--coverage-input-timeout must be positive")
     if args.cpu is not None and args.cpu < 0:
         raise MeasurementError("--cpu must not be negative")
-    if args.target_pair and args.candidate_dir is None:
+    if args.source_only and args.compare_libfuzzer_counters:
+        raise MeasurementError(
+            "--source-only is incompatible with --compare-libfuzzer-counters"
+        )
+    if not args.source_only and args.baseline_dir is None:
+        raise MeasurementError(
+            "--baseline-dir is required unless --source-only is used"
+        )
+    if args.target_pair and not args.source_only and args.candidate_dir is None:
         raise MeasurementError("--target-pair requires --candidate-dir")
     if args.compare_libfuzzer_counters and args.candidate_dir is None:
         raise MeasurementError("--compare-libfuzzer-counters requires --candidate-dir")
@@ -1341,9 +1806,36 @@ def _validate_args(args: argparse.Namespace) -> None:
                 "source coverage comparison requires both "
                 "--coverage-baseline-dir and --coverage-candidate-dir"
             )
-        if args.candidate_dir is None:
+        if not args.source_only and args.candidate_dir is None:
             raise MeasurementError(
                 "source coverage comparison requires --candidate-dir"
+            )
+    if args.source_only and (
+        args.coverage_baseline_dir is None or args.coverage_candidate_dir is None
+    ):
+        raise MeasurementError(
+            "--source-only requires --coverage-baseline-dir and "
+            "--coverage-candidate-dir"
+        )
+    if args.parity_manifest is not None and (
+        args.coverage_baseline_dir is None or args.coverage_candidate_dir is None
+    ):
+        raise MeasurementError(
+            "--parity-manifest requires both coverage build directories"
+        )
+    if args.previous_parity_manifest is not None and args.parity_manifest is None:
+        raise MeasurementError("--previous-parity-manifest requires --parity-manifest")
+    if args.parity_manifest is not None and args.previous_parity_manifest is None:
+        raise MeasurementError(
+            "--parity-manifest requires a trusted --previous-parity-manifest"
+        )
+    if args.parity_manifest is not None:
+        baseline_coverage = args.coverage_baseline_dir.resolve()
+        candidate_coverage = args.coverage_candidate_dir.resolve()
+        if baseline_coverage != candidate_coverage:
+            raise MeasurementError(
+                "--parity-manifest requires baseline and candidate coverage "
+                "targets from the same build directory"
             )
     for argument in args.fuzzer_arg:
         if not argument.startswith("-"):
@@ -1354,21 +1846,300 @@ def _validate_args(args: argparse.Namespace) -> None:
             )
 
 
+def _resolve_coverage_replay_settings(
+    args: argparse.Namespace, parity_manifest: ParityManifest | None
+) -> None:
+    """Apply generic defaults or bind parity replay settings to the manifest."""
+    if parity_manifest is None:
+        if args.coverage_wall_timeout is None:
+            args.coverage_wall_timeout = DEFAULT_COVERAGE_WALL_TIMEOUT
+        if args.coverage_input_timeout is None:
+            args.coverage_input_timeout = DEFAULT_COVERAGE_INPUT_TIMEOUT
+        return
+
+    expected_input_timeout = parity_manifest.replay_input_timeout_seconds
+    if args.coverage_input_timeout is None:
+        args.coverage_input_timeout = expected_input_timeout
+    elif args.coverage_input_timeout != expected_input_timeout:
+        raise MeasurementError(
+            "--coverage-input-timeout does not match the parity manifest: "
+            f"expected {expected_input_timeout}"
+        )
+    if (
+        COVERAGE_REPLAY_SANITIZER_ENVIRONMENT
+        != parity_manifest.replay_sanitizer_environment
+    ):
+        raise MeasurementError(
+            "coverage replay sanitizer environment does not match the parity manifest"
+        )
+    if args.coverage_wall_timeout is None:
+        args.coverage_wall_timeout = PARITY_COVERAGE_WALL_TIMEOUT
+
+
+def _validate_parity_socket_capability(
+    socketpair_factory: Callable[
+        [int, int], tuple[socket.socket, socket.socket]
+    ] = socket.socketpair,
+) -> None:
+    """Fail before replay when local protocol peers cannot exchange bytes."""
+    payload = b"curl-fuzzer-parity-preflight"
+    try:
+        sender, receiver = socketpair_factory(socket.AF_UNIX, socket.SOCK_STREAM)
+        with sender, receiver:
+            sender.sendall(payload)
+            received = bytearray()
+            while len(received) < len(payload):
+                chunk = receiver.recv(len(payload) - len(received))
+                if not chunk:
+                    break
+                received.extend(chunk)
+    except OSError as error:
+        raise MeasurementError(
+            "parity source replay requires local AF_UNIX socket send/receive "
+            f"capability; the preflight failed: {error}. Run the comparison in "
+            "an execution environment that permits local socket I/O; completed "
+            "callback counts alone do not prove protocol execution"
+        ) from error
+    if bytes(received) != payload:
+        raise MeasurementError(
+            "parity source replay local AF_UNIX socket preflight returned "
+            f"{len(received)} of {len(payload)} bytes; completed callback counts "
+            "alone do not prove protocol execution"
+        )
+
+
+def _validate_output_separation(
+    args: argparse.Namespace,
+    output: Path,
+    log_root: Path,
+    corpus_sources: Iterable[Path],
+) -> None:
+    """Keep result and retained-artifact writes disjoint from all inputs."""
+    raw_corpus_sources = tuple(corpus_sources)
+    directory_inputs = (
+        args.corpus_root,
+        args.public_corpus_root,
+        args.baseline_curl_source_dir,
+        args.candidate_curl_source_dir,
+    )
+    for raw_directory in directory_inputs:
+        if raw_directory is None:
+            continue
+        directory = raw_directory.resolve()
+        if output == directory or output.is_relative_to(directory):
+            raise MeasurementError(
+                f"--output must not be inside an input directory: {directory}"
+            )
+
+    coverage_directories = (
+        args.coverage_baseline_dir,
+        args.coverage_candidate_dir,
+    )
+    inferred_source_paths: set[Path] = set()
+    for raw_coverage_directory in coverage_directories:
+        if raw_coverage_directory is None:
+            continue
+        coverage_directory = raw_coverage_directory.resolve()
+        inferred_sources = (
+            (coverage_directory / "curl" / "src" / "curl_external").resolve(),
+            (
+                coverage_directory / "curl_external-prefix" / "src" / "curl_external"
+            ).resolve(),
+        )
+        inferred_source_paths.update(inferred_sources)
+        if any(output.is_relative_to(source) for source in inferred_sources):
+            raise MeasurementError(
+                "--output must not be inside an inferred curl source directory"
+            )
+
+    file_inputs = (
+        args.parity_manifest,
+        args.previous_parity_manifest,
+        args.target_inventory,
+    )
+    for raw_file in file_inputs:
+        if raw_file is not None and output == raw_file.resolve():
+            raise MeasurementError(
+                f"--output must not overwrite an input file: {raw_file.resolve()}"
+            )
+
+    for raw_source in raw_corpus_sources:
+        source = raw_source.resolve()
+        if output == source or (source.is_dir() and output.is_relative_to(source)):
+            raise MeasurementError(
+                f"--output must not overwrite a corpus input: {source}"
+            )
+
+    resolved_tools: list[Path] = []
+    for command in (args.llvm_profdata, args.llvm_cov):
+        tool = Path(command).expanduser()
+        found = shutil.which(command)
+        resolved_tool = (
+            Path(found).resolve()
+            if found is not None
+            else tool.resolve()
+            if tool.is_absolute() or "/" in command or "\\" in command
+            else None
+        )
+        if resolved_tool is not None:
+            resolved_tools.append(resolved_tool)
+            if output == resolved_tool:
+                raise MeasurementError(
+                    f"--output must not overwrite an LLVM tool: {resolved_tool}"
+                )
+
+    build_directories = (
+        args.baseline_dir,
+        args.candidate_dir,
+        args.coverage_baseline_dir,
+        args.coverage_candidate_dir,
+    )
+    for raw_directory in build_directories:
+        if raw_directory is None:
+            continue
+        directory = raw_directory.resolve()
+        if output.parent == directory:
+            raise MeasurementError(
+                f"--output must not be a direct child of a build directory: {directory}"
+            )
+
+    resolved_build_directories = {
+        raw_path.resolve() for raw_path in build_directories if raw_path is not None
+    }
+    protected_paths = {
+        output,
+        *(
+            raw_path.resolve()
+            for raw_path in (*directory_inputs, *file_inputs)
+            if raw_path is not None
+        ),
+        *(raw_source.resolve() for raw_source in raw_corpus_sources),
+        *inferred_source_paths,
+        *resolved_tools,
+    }
+    artifact_roots = {
+        log_root,
+        (log_root / "source-coverage").resolve(),
+    }
+    for artifact_root in artifact_roots:
+        for protected in protected_paths:
+            if (
+                artifact_root == protected
+                or artifact_root.is_relative_to(protected)
+                or protected.is_relative_to(artifact_root)
+            ):
+                raise MeasurementError(
+                    "--log-dir and its artifact roots must not overlap an "
+                    f"input, output, build, or tool path: {artifact_root} and "
+                    f"{protected}"
+                )
+        for build_directory in resolved_build_directories:
+            overlaps_build = (
+                artifact_root == build_directory
+                or artifact_root.is_relative_to(build_directory)
+                or build_directory.is_relative_to(artifact_root)
+            )
+            implicit_sibling_inside_build = (
+                args.log_dir is None
+                and artifact_root.is_relative_to(build_directory)
+                and output.is_relative_to(build_directory)
+            )
+            if overlaps_build and not implicit_sibling_inside_build:
+                raise MeasurementError(
+                    "--log-dir and its artifact roots must not overlap an "
+                    f"input, output, build, or tool path: {artifact_root} and "
+                    f"{build_directory}"
+                )
+
+
+def _raw_corpus_input_paths(values: Iterable[str]) -> list[Path]:
+    """Extract possible corpus paths before validating mapping syntax."""
+    paths: list[Path] = []
+    for value in values:
+        _, separator, raw_path = value.partition("=")
+        if separator and raw_path:
+            paths.append(Path(raw_path))
+    return paths
+
+
+def _remove_stale_output(output: Path) -> None:
+    try:
+        output.unlink(missing_ok=True)
+    except OSError as error:
+        raise MeasurementError(
+            f"could not remove stale result {output}: {error}"
+        ) from error
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the requested measurements and return a process status."""
     args = _parse_args(argv if argv is not None else sys.argv[1:])
     try:
+        raw_output = args.output
+        if raw_output.is_symlink():
+            raise MeasurementError(f"output must not be a symlink: {raw_output}")
+        output = raw_output.resolve()
+        raw_log_root = (
+            args.log_dir
+            if args.log_dir is not None
+            else output.parent / f"{output.stem}-logs"
+        )
+        if raw_log_root.is_symlink():
+            raise MeasurementError(
+                f"log directory must not be a symlink: {raw_log_root}"
+            )
+        log_root = raw_log_root.resolve()
+        _validate_output_separation(
+            args,
+            output,
+            log_root,
+            _raw_corpus_input_paths(args.corpus),
+        )
+        _remove_stale_output(output)
         _validate_args(args)
-        target_pairs = _target_pairs(args.targets, args.target_pair)
-        target_labels = tuple(pair.label for pair in target_pairs)
-        variants = [Variant("baseline", args.baseline_dir.resolve())]
-        if args.candidate_dir is not None:
-            variants.append(Variant("candidate", args.candidate_dir.resolve()))
         overrides = parse_corpus_mappings(args.corpus)
+        parity_manifest: ParityManifest | None = None
+        previous_parity_manifest: ParityManifest | None = None
+        if args.parity_manifest is not None:
+            parity_manifest = load_parity_manifest(args.parity_manifest)
+        _resolve_coverage_replay_settings(args, parity_manifest)
+        if parity_manifest is not None:
+            validate_live_inventory(parity_manifest, args.target_inventory)
+            if args.previous_parity_manifest is not None:
+                previous_parity_manifest = load_parity_manifest(
+                    args.previous_parity_manifest
+                )
+                validate_manifest_progression(previous_parity_manifest, parity_manifest)
+            _validate_parity_socket_capability()
+        if parity_manifest is not None and not args.targets and not args.target_pair:
+            target_pairs = tuple(
+                TargetPair(baseline, candidate)
+                for baseline, candidate in parity_manifest.target_pairs
+            )
+        else:
+            target_pairs = _target_pairs(args.targets, args.target_pair)
+        if (
+            parity_manifest is not None
+            and tuple(
+                (pair.baseline_target, pair.candidate_target) for pair in target_pairs
+            )
+            != parity_manifest.target_pairs
+        ):
+            raise MeasurementError(
+                "selected target mapping does not match --parity-manifest"
+            )
+        target_labels = tuple(pair.label for pair in target_pairs)
+        variants: list[Variant] = []
+        if not args.source_only:
+            if args.baseline_dir is None:
+                raise MeasurementError("missing --baseline-dir")
+            variants.append(Variant("baseline", args.baseline_dir.resolve()))
+            if args.candidate_dir is not None:
+                variants.append(Variant("candidate", args.candidate_dir.resolve()))
         selected_binary_targets = {
-            pair.target_for(variant.name)
+            target
             for pair in target_pairs
-            for variant in variants
+            for target in (pair.baseline_target, pair.candidate_target)
         }
         unknown_overrides = set(overrides).difference(selected_binary_targets)
         if unknown_overrides:
@@ -1377,24 +2148,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 + ", ".join(sorted(unknown_overrides))
             )
 
-        output = args.output.resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
-        log_root = (
-            args.log_dir.resolve()
-            if args.log_dir is not None
-            else output.parent / f"{output.stem}-logs"
-        )
         log_root.mkdir(parents=True, exist_ok=True)
         environment = _run_environment()
 
         for variant in variants:
-            for target_pair in target_pairs:
-                binary_target = target_pair.target_for(variant.name)
+            for binary_target in dict.fromkeys(
+                pair.target_for(variant.name) for pair in target_pairs
+            ):
                 _validate_fuzzer(
-                    (variant.binary_dir / binary_target).resolve(), environment
+                    _binary_path(variant.binary_dir, binary_target), environment
                 )
 
         source_coverage_enabled = args.coverage_baseline_dir is not None
+        source_coverage_root: Path | None = None
+        source_corpus_artifact_root: Path | None = None
+        if source_coverage_enabled:
+            (
+                source_coverage_root,
+                source_corpus_artifact_root,
+            ) = _source_coverage_artifact_roots(log_root)
         coverage_variants: list[Variant] = []
         source_roots: dict[str, Path] = {}
         source_identities: dict[str, dict[str, object]] = {}
@@ -1433,6 +2206,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "and region coordinates are comparable only for identical "
                     "curl sources"
                 )
+            if parity_manifest is not None:
+                validate_source_identity(parity_manifest, source_identities["baseline"])
             llvm_profdata = _resolve_tool(args.llvm_profdata, "llvm-profdata")
             llvm_cov = _resolve_tool(args.llvm_cov, "llvm-cov")
             tool_versions = {
@@ -1440,124 +2215,254 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "llvm_cov": _tool_version(llvm_cov, "llvm-cov"),
             }
             for coverage_variant in coverage_variants:
-                for target_pair in target_pairs:
-                    binary_target = target_pair.target_for(coverage_variant.name)
+                for binary_target in dict.fromkeys(
+                    pair.target_for(coverage_variant.name) for pair in target_pairs
+                ):
                     _validate_coverage_binary(
-                        (coverage_variant.binary_dir / binary_target).resolve()
+                        _binary_path(coverage_variant.binary_dir, binary_target)
                     )
 
         runs: list[dict[str, object]] = []
         corpus_metadata: dict[str, dict[str, object]] = {}
         source_coverage_document: dict[str, object] | None = None
+        parity_result: dict[str, object] | None = None
+        parity_binding_failed = False
         wall_timeout = args.wall_timeout or max(60, args.seconds * 4 + 30)
 
         with tempfile.TemporaryDirectory(prefix="curl-fuzzer-measure-") as raw_temp:
             temporary_root = Path(raw_temp)
             snapshot_root = temporary_root / "snapshots"
             run_root = temporary_root / "runs"
-            snapshots: dict[tuple[str, str], Path] = {}
-            for target_pair in target_pairs:
-                target_label = target_pair.label
-                safe_label = target_label.replace("=>", "-vs-")
-                if target_pair.baseline_target == target_pair.candidate_target:
-                    binary_target = target_pair.baseline_target
-                    snapshot = snapshot_root / safe_label / "shared"
-                    builder = CorpusSnapshotBuilder(snapshot)
-                    sources = resolve_corpus_sources(
-                        binary_target,
-                        variants[0].binary_dir,
-                        args.corpus_root.resolve(),
-                        args.public_corpus_root.resolve()
-                        if args.public_corpus_root is not None
-                        else None,
-                        overrides,
-                    )
-                    for source in sources:
-                        builder.add(source)
-                    metadata = builder.metadata()
-                    if metadata["count"] == 0:
-                        raise MeasurementError(f"corpus for {binary_target} is empty")
-                    corpus_metadata[target_label] = metadata
-                    for variant in variants:
-                        snapshots[(target_label, variant.name)] = snapshot
-                else:
-                    pair_metadata: dict[str, object] = {
-                        "baseline_target": target_pair.baseline_target,
-                        "candidate_target": target_pair.candidate_target,
-                    }
-                    for variant in variants:
-                        binary_target = target_pair.target_for(variant.name)
-                        snapshot = snapshot_root / safe_label / variant.name
-                        builder = CorpusSnapshotBuilder(snapshot)
-                        sources = resolve_corpus_sources(
-                            binary_target,
-                            variant.binary_dir,
-                            args.corpus_root.resolve(),
-                            args.public_corpus_root.resolve()
-                            if args.public_corpus_root is not None
-                            else None,
-                            overrides,
-                        )
-                        for source in sources:
-                            builder.add(source)
-                        metadata = builder.metadata()
-                        if metadata["count"] == 0:
-                            raise MeasurementError(
-                                f"corpus for {binary_target} is empty"
-                            )
-                        pair_metadata[variant.name] = metadata
-                        snapshots[(target_label, variant.name)] = snapshot
-                    corpus_metadata[target_label] = pair_metadata
+            corpus_root = args.corpus_root.resolve()
+            public_corpus_root = (
+                args.public_corpus_root.resolve()
+                if args.public_corpus_root is not None
+                else None
+            )
 
-                for repeat in range(args.repeats):
-                    seed = args.seed_base + repeat
-                    ordered_variants = (
-                        variants if repeat % 2 == 0 else list(reversed(variants))
-                    )
-                    for variant in ordered_variants:
-                        binary_target = target_pair.target_for(variant.name)
-                        print(
-                            f"==> {target_label} {variant.name} "
-                            f"({binary_target}) "
-                            f"repeat {repeat + 1}/{args.repeats}, seed {seed}",
-                            flush=True,
+            timed_snapshots: dict[tuple[str, str], Path] = {}
+            if not args.source_only:
+                for target_pair in target_pairs:
+                    target_label = target_pair.label
+                    safe_label = target_label.replace("=>", "-vs-")
+                    if target_pair.baseline_target == target_pair.candidate_target:
+                        binary_target = target_pair.baseline_target
+                        snapshot = snapshot_root / "timed" / safe_label / "shared"
+                        _, metadata = _build_snapshot(
+                            target=binary_target,
+                            binary_dir=variants[0].binary_dir,
+                            destination=snapshot,
+                            corpus_root=corpus_root,
+                            public_corpus_root=public_corpus_root,
+                            overrides=overrides,
                         )
-                        run = _run_once(
-                            variant=variant,
-                            target_label=target_label,
-                            binary_target=binary_target,
-                            snapshot=snapshots[(target_label, variant.name)],
-                            run_root=run_root,
-                            log_root=log_root,
-                            seed=seed,
-                            repeat=repeat,
-                            seconds=args.seconds,
-                            timeout=args.timeout,
-                            wall_timeout=wall_timeout,
-                            cpu=args.cpu,
-                            extra_args=args.fuzzer_arg,
-                            environment=environment,
+                        corpus_metadata[target_label] = metadata
+                        for variant in variants:
+                            timed_snapshots[(target_label, variant.name)] = snapshot
+                    else:
+                        pair_metadata: dict[str, object] = {
+                            "baseline_target": target_pair.baseline_target,
+                            "candidate_target": target_pair.candidate_target,
+                        }
+                        for variant in variants:
+                            binary_target = target_pair.target_for(variant.name)
+                            snapshot = (
+                                snapshot_root / "timed" / safe_label / variant.name
+                            )
+                            _, metadata = _build_snapshot(
+                                target=binary_target,
+                                binary_dir=variant.binary_dir,
+                                destination=snapshot,
+                                corpus_root=corpus_root,
+                                public_corpus_root=public_corpus_root,
+                                overrides=overrides,
+                            )
+                            pair_metadata[variant.name] = metadata
+                            timed_snapshots[(target_label, variant.name)] = snapshot
+                        corpus_metadata[target_label] = pair_metadata
+
+                    for repeat in range(args.repeats):
+                        seed = args.seed_base + repeat
+                        ordered_variants = (
+                            variants if repeat % 2 == 0 else list(reversed(variants))
                         )
-                        runs.append(run)
-                        if run["status"] != "ok":
-                            print(f"    FAILED: {run['failure']}", file=sys.stderr)
+                        for variant in ordered_variants:
+                            binary_target = target_pair.target_for(variant.name)
+                            print(
+                                f"==> {target_label} {variant.name} "
+                                f"({binary_target}) repeat {repeat + 1}/"
+                                f"{args.repeats}, seed {seed}",
+                                flush=True,
+                            )
+                            run = _run_once(
+                                variant=variant,
+                                target_label=target_label,
+                                binary_target=binary_target,
+                                snapshot=timed_snapshots[(target_label, variant.name)],
+                                run_root=run_root,
+                                log_root=log_root,
+                                seed=seed,
+                                repeat=repeat,
+                                seconds=args.seconds,
+                                timeout=args.timeout,
+                                wall_timeout=wall_timeout,
+                                cpu=args.cpu,
+                                extra_args=args.fuzzer_arg,
+                                environment=environment,
+                            )
+                            runs.append(run)
+                            if run["status"] != "ok":
+                                print(f"    FAILED: {run['failure']}", file=sys.stderr)
 
             if source_coverage_enabled:
                 if llvm_profdata is None or llvm_cov is None:
                     raise MeasurementError("LLVM coverage tools were not initialized")
-                source_coverage_document = _measure_source_coverage(
+                if source_coverage_root is None or source_corpus_artifact_root is None:
+                    raise MeasurementError(
+                        "source coverage artifact roots were not initialized"
+                    )
+                coverage_snapshots: dict[tuple[str, str], Path] = {}
+                coverage_metadata: dict[tuple[str, str], dict[str, object]] = {}
+                coverage_artifacts: dict[tuple[str, str], dict[str, object]] = {}
+                for coverage_variant in coverage_variants:
+                    ordered_targets = tuple(
+                        dict.fromkeys(
+                            pair.target_for(coverage_variant.name)
+                            for pair in target_pairs
+                        )
+                    )
+                    for binary_target in ordered_targets:
+                        key = (coverage_variant.name, binary_target)
+                        shared_source_corpus = any(
+                            pair.baseline_target == pair.candidate_target
+                            and pair.baseline_target == binary_target
+                            for pair in target_pairs
+                        )
+                        if (
+                            coverage_variant.name == "candidate"
+                            and shared_source_corpus
+                        ):
+                            baseline_key = ("baseline", binary_target)
+                            coverage_snapshots[key] = coverage_snapshots[baseline_key]
+                            coverage_metadata[key] = coverage_metadata[baseline_key]
+                            coverage_artifacts[key] = coverage_artifacts[baseline_key]
+                            continue
+                        snapshot = (
+                            snapshot_root
+                            / "coverage"
+                            / coverage_variant.name
+                            / binary_target
+                        )
+                        corpus_binary_dir = coverage_variant.binary_dir
+                        if not args.source_only:
+                            speed_variant = next(
+                                variant
+                                for variant in variants
+                                if variant.name == coverage_variant.name
+                            )
+                            corpus_binary_dir = speed_variant.binary_dir
+                            if shared_source_corpus:
+                                corpus_binary_dir = variants[0].binary_dir
+                        builder, metadata = _build_snapshot(
+                            target=binary_target,
+                            binary_dir=corpus_binary_dir,
+                            destination=snapshot,
+                            corpus_root=corpus_root,
+                            public_corpus_root=public_corpus_root,
+                            overrides=overrides,
+                        )
+                        coverage_snapshots[key] = snapshot
+                        coverage_metadata[key] = metadata
+                        coverage_artifacts[key] = _persist_snapshot(
+                            builder,
+                            metadata,
+                            source_corpus_artifact_root,
+                            coverage_variant.name,
+                            binary_target,
+                        )
+
+                if args.source_only:
+                    for target_pair in target_pairs:
+                        corpus_metadata[target_pair.label] = {
+                            "baseline_target": target_pair.baseline_target,
+                            "candidate_target": target_pair.candidate_target,
+                            "baseline": coverage_metadata[
+                                ("baseline", target_pair.baseline_target)
+                            ],
+                            "candidate": coverage_metadata[
+                                ("candidate", target_pair.candidate_target)
+                            ],
+                        }
+
+                baseline_corpora: dict[str, dict[str, object]] | None = None
+                if parity_manifest is not None:
+                    baseline_corpora = {
+                        target: coverage_metadata[("baseline", target)]
+                        for target in parity_manifest.baseline_inventory
+                    }
+                    validate_baseline_corpora(parity_manifest, baseline_corpora)
+
+                (
+                    source_coverage_document,
+                    baseline_aggregate,
+                    candidate_aggregate,
+                ) = _measure_source_coverage(
                     variants=coverage_variants,
                     source_roots=source_roots,
                     source_identities=source_identities,
                     target_pairs=target_pairs,
-                    snapshots=snapshots,
-                    artifact_root=log_root / "source-coverage",
+                    snapshots=coverage_snapshots,
+                    snapshot_metadata=coverage_metadata,
+                    snapshot_artifacts=coverage_artifacts,
+                    artifact_root=source_coverage_root,
                     environment=environment,
                     wall_timeout=args.coverage_wall_timeout,
+                    input_timeout=args.coverage_input_timeout,
                     llvm_profdata=llvm_profdata,
                     llvm_cov=llvm_cov,
                     tool_versions=tool_versions,
                 )
+                if parity_manifest is not None:
+                    if baseline_corpora is None:
+                        raise MeasurementError(
+                            "baseline corpus identities were not initialized"
+                        )
+                    try:
+                        parity_result = evaluate_parity(
+                            parity_manifest,
+                            source_identity=source_identities["baseline"],
+                            target_pairs=tuple(
+                                (pair.baseline_target, pair.candidate_target)
+                                for pair in target_pairs
+                            ),
+                            baseline_corpora=baseline_corpora,
+                            baseline=CoverageUniverse(
+                                functions=baseline_aggregate.covered_functions,
+                                regions=baseline_aggregate.covered_regions,
+                            ),
+                            candidate=CoverageUniverse(
+                                functions=candidate_aggregate.covered_functions,
+                                regions=candidate_aggregate.covered_regions,
+                            ),
+                        )
+                    except CoverageParityError as error:
+                        parity_binding_failed = True
+                        parity_result = {
+                            "manifest": str(parity_manifest.path),
+                            "manifest_sha256": parity_manifest.sha256,
+                            "immutable_baseline_sha256": (
+                                parity_manifest.immutable_baseline_sha256
+                            ),
+                            "gate_scope": parity_manifest.gate_scope,
+                            "retirement_eligible": (
+                                parity_manifest.retirement_eligible
+                            ),
+                            "status": "invalid",
+                            "error": {
+                                "kind": "binding",
+                                "message": str(error),
+                            },
+                        }
 
         summaries = _summaries(runs, variants, target_labels)
         comparable_counter_labels = (
@@ -1574,19 +2479,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             variant.name: {
                 target_pair.label: {
                     "target": target_pair.target_for(variant.name),
-                    "path": str(
-                        (
-                            variant.binary_dir / target_pair.target_for(variant.name)
-                        ).resolve()
+                    **_artifact_metadata(
+                        _binary_path(
+                            variant.binary_dir,
+                            target_pair.target_for(variant.name),
+                        ),
+                        "libFuzzer binary",
                     ),
-                    "sha256": sha256_file(
-                        (
-                            variant.binary_dir / target_pair.target_for(variant.name)
-                        ).resolve()
-                    ),
-                    "bytes": (variant.binary_dir / target_pair.target_for(variant.name))
-                    .stat()
-                    .st_size,
                 }
                 for target_pair in target_pairs
             }
@@ -1597,10 +2496,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             if hasattr(os, "sched_getaffinity")
             else None
         )
+        if args.source_only:
+            measurement_scope = "source-only"
+        elif source_coverage_enabled:
+            measurement_scope = "benchmark-and-source"
+        else:
+            measurement_scope = "benchmark"
         result_document = {
-            "schema_version": 3,
+            "schema_version": 4,
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "repository_revision": _git_revision(),
+            "measurement_scope": measurement_scope,
             "host": {
                 "platform": platform.platform(),
                 "python": platform.python_version(),
@@ -1628,8 +2534,36 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "cpu": args.cpu,
                 "fuzzer_args": args.fuzzer_arg,
                 "compare_libfuzzer_counters": args.compare_libfuzzer_counters,
+                "source_only": args.source_only,
                 "source_coverage": source_coverage_enabled,
                 "coverage_wall_timeout": args.coverage_wall_timeout,
+                "coverage_input_timeout": args.coverage_input_timeout,
+                "coverage_replay_sanitizer_environment": dict(
+                    COVERAGE_REPLAY_SANITIZER_ENVIRONMENT
+                ),
+                "parity_manifest": (
+                    {
+                        "path": str(parity_manifest.path),
+                        "sha256": parity_manifest.sha256,
+                        "baseline_id": parity_manifest.baseline_id,
+                        "immutable_baseline_sha256": (
+                            parity_manifest.immutable_baseline_sha256
+                        ),
+                        "gate_scope": parity_manifest.gate_scope,
+                        "retirement_eligible": parity_manifest.retirement_eligible,
+                    }
+                    if parity_manifest is not None
+                    else None
+                ),
+                "previous_parity_manifest": (
+                    {
+                        "path": str(previous_parity_manifest.path),
+                        "sha256": previous_parity_manifest.sha256,
+                        "baseline_id": previous_parity_manifest.baseline_id,
+                    }
+                    if previous_parity_manifest is not None
+                    else None
+                ),
             },
             "binaries": binary_metadata,
             "corpora": corpus_metadata,
@@ -1639,18 +2573,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         if source_coverage_document is not None:
             result_document["source_coverage"] = source_coverage_document
+        if parity_result is not None:
+            result_document["parity"] = parity_result
         output.write_text(
             json.dumps(result_document, indent=2) + "\n", encoding="utf-8"
         )
 
-        print()
-        _print_summary(summaries, args.repeats)
-        _print_comparisons(comparisons)
+        if not args.source_only:
+            print()
+            _print_summary(summaries, args.repeats)
+            _print_comparisons(comparisons)
         if source_coverage_document is not None:
             _print_source_coverage(source_coverage_document)
         print(f"\nJSON: {output}")
         print(f"Logs: {log_root}")
 
+        if parity_binding_failed:
+            print(
+                "function-parity evidence did not bind to the manifest; "
+                "see the JSON result",
+                file=sys.stderr,
+            )
+            return 2
         failures = [run for run in runs if run["status"] != "ok"]
         if failures:
             print(
@@ -1658,8 +2602,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        if parity_result is not None and parity_result.get("status") != "passed":
+            print(
+                "function-parity ratchet failed; see the JSON result",
+                file=sys.stderr,
+            )
+            return 1
         return 0
-    except (CorpusError, MeasurementError) as error:
+    except (
+        CorpusError,
+        CoverageParityError,
+        MeasurementError,
+        OSError,
+        UnicodeError,
+        zipfile.BadZipFile,
+        zipfile.LargeZipFile,
+    ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
