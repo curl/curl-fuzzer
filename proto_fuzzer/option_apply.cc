@@ -175,6 +175,8 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
+    case curl::fuzzer::proto::SCHEME_IPFS:
+    case curl::fuzzer::proto::SCHEME_IPNS:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       break;

@@ -68,6 +68,9 @@ enum class TargetProfile {
   /// Exercise RTSP request/response exchanges and interleaved RTP delivery
   /// through the request-aligned stream peer.
   kFastRtsp,
+  /// Exercise curl's ipfs:// and ipns:// gateway rewrite as an ordinary HTTP
+  /// GET against the in-process HTTP peer.
+  kFastIpfs,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
   /// Exercise several easy handles through one shared multi handle.
@@ -142,6 +145,7 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
   switch (profile) {
     case TargetProfile::kFastHttp:
     case TargetProfile::kFastTelnet:
+    case TargetProfile::kFastIpfs:
       return ScenarioRunMode::kFastProtocol;
 
     case TargetProfile::kApi:

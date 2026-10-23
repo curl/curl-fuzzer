@@ -27,6 +27,8 @@ using curl::fuzzer::proto::SCHEME_FTPS;
 using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
+using curl::fuzzer::proto::SCHEME_IPFS;
+using curl::fuzzer::proto::SCHEME_IPNS;
 using curl::fuzzer::proto::SCHEME_LDAP;
 using curl::fuzzer::proto::SCHEME_IMAP;
 using curl::fuzzer::proto::SCHEME_IMAPS;
@@ -399,6 +401,7 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
       TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -620,6 +623,7 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastPop3,      TargetProfile::kApi,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
       TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
@@ -647,6 +651,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastImap,      TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
       TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1779,6 +1784,105 @@ void TestNonRtspPoliciesClearRtspSchemeAndOptions() {
          "compatibility unexpectedly rewrote the RTSP input");
 }
 
+void TestFastIpfsPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path("untrusted.invalid:8080/ignored/path?query#fragment");
+  scenario.add_request_headers("X-Gateway: retained");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.mutable_upload()->set_data("upload");
+  scenario.mutable_connection()->add_on_readable("gateway response");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("redirect");
+
+  auto *useragent = scenario.add_options();
+  useragent->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
+  useragent->set_string_value("curl-fuzzer-ipfs");
+  auto *range = scenario.add_options();
+  range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
+  range->set_string_value("bytes=0-3");
+  auto *http_version = scenario.add_options();
+  http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastIpfs);
+
+  Expect(scenario.scheme() == SCHEME_IPFS,
+         "fast IPFS policy did not select IPFS by default");
+  Expect(scenario.host_path().rfind(
+             "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+             "/ignored/path?query#fragment",
+             0) == 0,
+         "fast IPFS policy did not pin the CID and retain the gateway suffix");
+  Expect(scenario.subsequent_connections_size() == 0 &&
+             !scenario.has_mime_post() && !scenario.has_upload() &&
+             scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+             !scenario.has_multi_plan(),
+         "fast IPFS policy retained another protocol's shape");
+  Expect(scenario.request_headers_size() == 1 &&
+             scenario.request_headers(0) == "X-Gateway: retained",
+         "fast IPFS policy discarded a usable request header");
+  Expect(scenario.connection().on_readable(0) == "gateway response" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast IPFS policy changed the gateway response script");
+  Expect(scenario.options_size() == 3 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERAGENT &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RANGE &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_HTTP_VERSION &&
+             scenario.options(2).uint_value() <= CURL_HTTP_VERSION_2TLS,
+         "fast IPFS policy retained a non-HTTP option or an unusable "
+         "HTTP version");
+
+  Scenario ipns;
+  ipns.set_scheme(SCHEME_IPNS);
+  ipns.set_host_path("untrusted.invalid/site/");
+  NormalizeScenarioForTarget(&ipns, TargetProfile::kFastIpfs);
+  Expect(
+      ipns.scheme() == SCHEME_IPNS &&
+          ipns.host_path().rfind(
+              "k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8"
+              "/site/",
+              0) == 0,
+      "fast IPFS policy did not preserve the IPNS namespace and suffix");
+}
+
+void TestNonIpfsPoliciesClearIpfsScheme() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
+      TargetProfile::kFastFtp,  TargetProfile::kFastSmtp,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path(
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/path");
+    scenario.set_scheme(SCHEME_IPFS);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.scheme() != SCHEME_IPFS,
+           "a non-IPFS policy retained the IPFS scheme");
+  }
+
+  Scenario compatibility;
+  compatibility.set_host_path(
+      "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/path");
+  compatibility.set_scheme(SCHEME_IPNS);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.scheme() == SCHEME_IPNS,
+         "compatibility unexpectedly rewrote the IPNS input");
+}
+
 void TestResolverPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:8080/path?query#fragment");
@@ -2331,6 +2435,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
       TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -2428,6 +2533,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
       TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kApi,
       TargetProfile::kTiming,
   };
@@ -2611,6 +2717,9 @@ void TestProfileRunModes() {
          "fast LDAP profile does not authorize the BER-aware peer");
   Expect(RunModeFor(TargetProfile::kFastRtsp) == ScenarioRunMode::kRtspCoverage,
          "fast RTSP profile does not authorize the request-aligned peer");
+  Expect(RunModeFor(TargetProfile::kFastIpfs) ==
+             ScenarioRunMode::kFastProtocol,
+         "fast IPFS profile does not use the in-process HTTP peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -2682,6 +2791,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
       TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2737,6 +2847,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
       TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kFastGopher,
       TargetProfile::kSocks4,
       TargetProfile::kResolver,
@@ -3099,6 +3210,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
       TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -3213,6 +3325,8 @@ int main() {
   TestFastLdapsPolicy();
   TestFastRtspPolicy();
   TestNonRtspPoliciesClearRtspSchemeAndOptions();
+  TestFastIpfsPolicy();
+  TestNonIpfsPoliciesClearIpfsScheme();
   TestFastSmtpsPolicy();
   TestFastImapsPolicy();
   TestFastPop3sPolicy();

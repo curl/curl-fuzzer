@@ -1,0 +1,10 @@
+# curl has no ipfs:// handler: its command-line tool rewrites the URL to
+# <gateway>/ipfs/<cid><path> and performs an ordinary HTTP GET. The structured
+# lane mirrors that rewrite against the in-process HTTP peer, so this seed
+# reaches curl's HTTP response parser with a gateway-shaped request target.
+scheme: SCHEME_IPFS
+host_path: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/index.html"
+options { option_id: CURLOPT_USERAGENT string_value: "curl-fuzzer-ipfs" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 18\r\nETag: \"bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi\"\r\nCache-Control: public, max-age=29030400, immutable\r\n\r\nipfs gateway body\n"
+}

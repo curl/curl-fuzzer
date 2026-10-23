@@ -150,6 +150,13 @@ Other peers intentionally give those fields narrower meanings:
   (`$`, channel, 16-bit length, payload). `CURLOPT_RTSP_REQUEST` selects the
   method, and the response's own CSeq stays mutation-controlled so mismatches
   reach curl's `CURLE_RTSP_CSEQ_ERROR` path.
+- IPFS and IPNS are gateway schemes rather than wire protocols. libcurl has no
+  `ipfs://` handler; curl's command-line tool rewrites `ipfs://<cid>` and
+  `ipns://<name>` to `<gateway>/ipfs/<cid>` or `<gateway>/ipns/<name>` before
+  issuing an ordinary HTTP request. The structured lane mirrors that rewrite
+  against a fixed loopback gateway and the in-process HTTP peer. `host_path`
+  holds a pinned CID/name followed by the mutation-controlled gateway path,
+  query, and fragment; the runner prepends the gateway authority.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

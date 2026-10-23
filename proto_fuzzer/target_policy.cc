@@ -37,6 +37,12 @@ constexpr std::uint32_t kMinBackpressureBufferBytes = 2048;
 constexpr std::uint32_t kMaxBackpressureBufferBytes = 4096;
 constexpr std::uint32_t kMaxDrainBytesPerIteration = 1024;
 
+// A default, bounded identifier keeps newly generated inputs on the gateway's
+// /ipfs/ or /ipns/ namespace. The path, query, and fragment after it stay
+// mutation-controlled.
+constexpr char kDefaultIpfsCid[] = "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
+constexpr char kDefaultIpnsName[] = "k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8";
+
 /// Remove a repeated-field suffix that the runtime would ignore. Doing this
 /// in LPM's postprocessor matters for speed as well as memory: otherwise later
 /// mutations keep rediscovering and editing objects that cannot reach curl.
@@ -336,6 +342,26 @@ void CanonicalizeRtspAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("rtsp.test" + host_path.substr(suffix_start));
 }
 
+/// Pin the IPFS/IPNS identifier while preserving the gateway path, query, and
+/// fragment. curl's command-line tool rewrites these schemes to an HTTP
+/// gateway request; the structured lane performs that same rewrite inside the
+/// runner, so the identifier has no local meaning beyond selecting the
+/// /ipfs/<cid> or /ipns/<name> namespace. A default identifier makes newly
+/// generated inputs reach the HTTP peer, while the bounded suffix retains the
+/// fuzz-controlled request target.
+void CanonicalizeIpfsAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  std::string canonical = scenario->scheme() == curl::fuzzer::proto::SCHEME_IPNS ? kDefaultIpnsName : kDefaultIpfsCid;
+  if (suffix_start != std::string::npos) {
+    canonical += host_path.substr(suffix_start);
+  }
+  if (canonical.size() > scenario_limits::kMaxIpfsHostPathBytes) {
+    canonical.resize(scenario_limits::kMaxIpfsHostPathBytes);
+  }
+  scenario->set_host_path(canonical);
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -561,6 +587,8 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
+    case curl::fuzzer::proto::SCHEME_IPFS:
+    case curl::fuzzer::proto::SCHEME_IPNS:
       return true;
 
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
@@ -1176,6 +1204,14 @@ void RetainMatchingOptions(curl::fuzzer::proto::Scenario* scenario, Predicate pr
 void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(scenario, &IsCheapHttpOption);
 }
+
+/// IPFS and IPNS are rewritten to an ordinary gateway GET before curl runs, so
+/// the gateway lane can consume the same cheap HTTP request controls as the
+/// fast HTTP lane. Gateway selection and TLS policy remain harness-owned.
+bool IsIpfsOption(curl::fuzzer::proto::CurlOptionId option_id) { return IsCheapHttpOption(option_id); }
+
+/// Keep the gateway lane's option budget on request-level HTTP behavior.
+void RetainIpfsOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsIpfsOption); }
 
 /// Compact the option list before its shared cap so irrelevant TLS, WebSocket,
 /// and file-transfer entries cannot crowd out origin traffic mutations.
@@ -1976,6 +2012,17 @@ void RemoveIgnoredRtspShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(connection);
 }
 
+/// Retain the shapes an ordinary gateway GET can consume. The IPFS/IPNS lane
+/// runs through the same HTTP mock as the fast HTTP lane, so raw response
+/// chunks, request headers, and HTTP options stay meaningful while MIME,
+/// uploads, structured frames, and follow-on sockets are removed.
+void RemoveIgnoredIpfsShape(curl::fuzzer::proto::Scenario* scenario) {
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveTelnetOnlyShape(scenario);
+  RemoveDeepHttpShape(scenario);
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -2109,6 +2156,14 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // FTPS is append-only too. Only the fixed FTP lane may turn one of its
   // scenarios into a TLS-wrapped control/data exchange.
   if (profile != TargetProfile::kFastFtp && scenario->scheme() == curl::fuzzer::proto::SCHEME_FTPS) {
+    scenario->clear_scheme();
+  }
+
+  // IPFS/IPNS are append-only as well. Their identifiers and gateway paths
+  // would be inert in every other fixed lane, so clear the selector before
+  // the lane-specific early paths install their own scheme.
+  if (profile != TargetProfile::kFastIpfs && (scenario->scheme() == curl::fuzzer::proto::SCHEME_IPFS ||
+                                              scenario->scheme() == curl::fuzzer::proto::SCHEME_IPNS)) {
     scenario->clear_scheme();
   }
 
@@ -2425,6 +2480,19 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastIpfs) {
+    // Preserve an explicitly selected IPNS name; every other pre-policy value
+    // falls back to the historical IPFS lane so one binary covers both.
+    scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_IPNS ? curl::fuzzer::proto::SCHEME_IPNS
+                                                                                : curl::fuzzer::proto::SCHEME_IPFS);
+    RemoveIgnoredIpfsShape(scenario);
+    RetainIpfsOptions(scenario);
+    CanonicalizeFastHttpVersion(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeIpfsAuthority(scenario);
+    return;
+  }
+
   // Select the lane's scheme before applying scheme-sensitive upload bounds.
   // The scheme field is itself mutable, so bounding first could accidentally
   // give an HTTP/WS case TELNET's smaller payload budget merely because that
@@ -2487,6 +2555,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastFile:
     case TargetProfile::kFastLdap:
     case TargetProfile::kFastRtsp:
+    case TargetProfile::kFastIpfs:
       // Protocol-specific early-return paths selected their scheme above.
       return;
   }
@@ -2602,6 +2671,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastFile:
     case TargetProfile::kFastLdap:
     case TargetProfile::kFastRtsp:
+    case TargetProfile::kFastIpfs:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.
       return;

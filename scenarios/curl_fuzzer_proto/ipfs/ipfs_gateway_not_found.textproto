@@ -1,0 +1,9 @@
+# Gateways report an unknown CID or unresolvable IPNS name as an HTTP status.
+# FAILONERROR turns the response into a completed transfer error after curl has
+# parsed the status line and headers.
+scheme: SCHEME_IPFS
+host_path: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/missing"
+options { option_id: CURLOPT_FAILONERROR bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\nX-Ipfs-Path: /ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/missing\r\n\r\n"
+}

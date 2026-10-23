@@ -1,0 +1,9 @@
+# IPNS uses the same gateway exchange but the rewritten namespace is /ipns/.
+# The seed exercises the mutable resolver-style name path plus an ordinary
+# gateway response carrying IPNS cache metadata.
+scheme: SCHEME_IPNS
+host_path: "k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8/site/index.html"
+options { option_id: CURLOPT_USERAGENT string_value: "curl-fuzzer-ipns" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 18\r\nX-Ipns-Path: /ipns/k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8/site/index.html\r\n\r\nipns gateway body\n"
+}

@@ -651,6 +651,12 @@ enum Scheme {
   // SCHEME_FTP. It is append-only so the compatibility target keeps its
   // historical raw-wire interpretation of inputs that predate this lane.
   SCHEME_FTPS = 23;
+  // IPFS and IPNS are content-addressing schemes that curl's command-line
+  // tool rewrites onto an HTTP gateway. The structured lane performs the same
+  // rewrite against its in-process HTTP peer, so these values still describe
+  // an ordinary gateway GET rather than a new wire protocol.
+  SCHEME_IPFS = 24;
+  SCHEME_IPNS = 25;
 }
 
 message SetOption {
