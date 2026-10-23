@@ -17,6 +17,7 @@
 #include <string>
 
 #include "proto_fuzzer/api_lifecycle.h"
+#include "proto_fuzzer/dict_mock_server.h"
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
@@ -114,6 +115,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "mqtt";
     case curl::fuzzer::proto::SCHEME_SMTPS:
       return "smtps";
+    case curl::fuzzer::proto::SCHEME_DICT:
+      return "dict";
     case curl::fuzzer::proto::SCHEME_GOPHER:
       return "gopher";
     case curl::fuzzer::proto::SCHEME_GOPHERS:
@@ -266,6 +269,14 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<MqttMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_DICT:
+      // DICT sends its command sequence in one write and reads an EOF-framed
+      // text body. Only the dedicated lane may reinterpret an append-only
+      // scheme value that historical inputs could carry.
+      if (mode == ScenarioRunMode::kDictCoverage) {
+        return std::make_unique<DictMockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_SMTPS:
       // Implicit TLS shares the SMTP lane, parser, and command budget with the
       // plaintext scheme; only the transport factory differs. Keep it gated on
@@ -321,6 +332,11 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                      mqtt->publish_count(), mqtt->subscribe_count(),
                                                      mqtt->published_payload().size()};
     (void)mqtt_observation;
+  }
+
+  if (auto* dict = dynamic_cast<DictMockServer*>(mock)) {
+    const volatile std::size_t dict_observation[] = {dict->control_transcript().size(), dict->uploaded_data().size()};
+    (void)dict_observation;
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)

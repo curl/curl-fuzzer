@@ -1742,6 +1742,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/allocation_fault_injection.cc
         proto_fuzzer/api_lifecycle.cc
+        proto_fuzzer/dict_mock_server.cc
         proto_fuzzer/fuzzer_main.cc
         proto_fuzzer/ftp_mock_server.cc
         proto_fuzzer/h2_cleartext_mock_server.cc
@@ -1976,6 +1977,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_imap)
     curl_add_proto_fuzzer(curl_fuzzer_proto_pop3)
     curl_add_proto_fuzzer(curl_fuzzer_proto_mqtt)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_dict)
     curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
@@ -2019,6 +2021,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/pop3/*.textproto)
     file(GLOB MQTT_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/mqtt/*.textproto)
+    file(GLOB DICT_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/dict/*.textproto)
     file(GLOB GOPHER_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/gopher/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -2235,6 +2239,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_pop3 ${POP3_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_mqtt_corpus
         curl_fuzzer_proto_mqtt ${MQTT_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_dict_corpus
+        curl_fuzzer_proto_dict ${DICT_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_gopher_corpus
         curl_fuzzer_proto_gopher ${GOPHER_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
@@ -2280,6 +2286,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_imap curl_fuzzer_proto_imap_corpus)
     add_dependencies(curl_fuzzer_proto_pop3 curl_fuzzer_proto_pop3_corpus)
     add_dependencies(curl_fuzzer_proto_mqtt curl_fuzzer_proto_mqtt_corpus)
+    add_dependencies(curl_fuzzer_proto_dict curl_fuzzer_proto_dict_corpus)
     add_dependencies(curl_fuzzer_proto_gopher curl_fuzzer_proto_gopher_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
@@ -2706,6 +2713,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(mqtt_mock_server_test
             tests/mqtt_mock_server_test.cc
             proto_fuzzer/mqtt_mock_server.cc)
+        curl_add_proto_peer_test(dict_mock_server_test
+            tests/dict_mock_server_test.cc
+            proto_fuzzer/dict_mock_server.cc)
 
         # The SMTPS peer needs the in-process OpenSSL carrier in addition to
         # the plaintext SMTP implementation. Keep this executable separate so

@@ -97,6 +97,16 @@ Other peers intentionally give those fields narrower meanings:
   packets are delimited by MQTT's fixed header and base-128 remaining length,
   not by newlines; the URL path becomes the publish/subscribe topic and
   `CURLOPT_POSTFIELDS` supplies the publish payload.
+- DICT uses the primary connection for one request/response exchange. curl
+  writes a `CLIENT` identification line, a command derived from the URL path
+  (`DEFINE` from `/d:word`, `MATCH` from `/match:word:db`, `SHOW` from
+  `/show:db`, or a raw command with colons replaced by spaces), and `QUIT` in a
+  single send. It then reads the response as an unframed text stream, so the
+  first non-`CLIENT`/non-`QUIT` `on_readable` entry is the complete body and
+  the peer half-closes after writing it. Include the RFC 2229 `.\r\n`
+  terminator in the seed when a well-formed body is desired; curl does not
+  parse it and treats EOF as end-of-transfer. `initial_response` is normally
+  empty because DICT has no server greeting.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

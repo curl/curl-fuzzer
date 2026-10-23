@@ -32,6 +32,7 @@ constexpr char kSmtpProtocolAllowed[] = "smtp,smtps";
 constexpr char kImapProtocolAllowed[] = "imap";
 constexpr char kPop3ProtocolAllowed[] = "pop3";
 constexpr char kMqttProtocolAllowed[] = "mqtt";
+constexpr char kDictProtocolAllowed[] = "dict";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
 constexpr char kVerboseEnvVar[] = "FUZZ_VERBOSE";
@@ -143,6 +144,9 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       break;
     case curl::fuzzer::proto::SCHEME_MQTT:
       direct_protocols = kMqttProtocolAllowed;
+      break;
+    case curl::fuzzer::proto::SCHEME_DICT:
+      direct_protocols = kDictProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_GOPHER:
       direct_protocols = "gopher";

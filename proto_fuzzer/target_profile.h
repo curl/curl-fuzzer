@@ -55,6 +55,8 @@ enum class TargetProfile {
   /// Exercise binary MQTT CONNECT/PUBLISH/SUBSCRIBE exchanges through the
   /// packet-aware single-socket peer.
   kFastMqtt,
+  /// Exercise line-based DICT lookups through the raw stream peer.
+  kFastDict,
   /// Exercise Gopher selectors through the bounded stream peer.
   kFastGopher,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
@@ -103,6 +105,9 @@ enum class ScenarioRunMode {
   kPop3Coverage,
   /// Drive MQTT through its packet-aware single-socket peer.
   kMqttCoverage,
+  /// Drive DICT lookups through its command-aware stream peer and EOF-framed
+  /// response body.
+  kDictCoverage,
   /// Drive Gopher through the bounded stream peer.
   kGopherCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
@@ -169,6 +174,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastMqtt:
       return ScenarioRunMode::kMqttCoverage;
+
+    case TargetProfile::kFastDict:
+      return ScenarioRunMode::kDictCoverage;
 
     case TargetProfile::kFastGopher:
       return ScenarioRunMode::kGopherCoverage;

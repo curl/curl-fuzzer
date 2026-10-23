@@ -627,6 +627,7 @@ enum Scheme {
   SCHEME_POP3 = 12;
   SCHEME_MQTT = 13;
   SCHEME_SMTPS = 14;
+  SCHEME_DICT = 15;
 }
 
 message SetOption {

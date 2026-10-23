@@ -1,0 +1,8 @@
+# Complete DICT DEFINE lookup. curl writes CLIENT, DEFINE, and QUIT together,
+# then reads an unstyled text body until the peer half-closes. The seed keeps
+# the RFC 2229 status, definition, and dot terminator in one response chunk.
+scheme: SCHEME_DICT
+host_path: "dict.test/d:word"
+connection {
+  on_readable: "150 1 definitions retrieved\r\n151 \"word\" dictd \"fuzz database\"\r\nA fuzzed definition.\r\n.\r\n"
+}

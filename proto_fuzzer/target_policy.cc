@@ -246,6 +246,22 @@ void CanonicalizeMqttAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("mqtt.test" + host_path.substr(suffix_start));
 }
 
+/// Pin the DICT server authority while retaining every lookup selector in the
+/// URL path. In curl's DICT handler the path after the leading slash is the
+/// complete command: `/d:word`, `/match:word:db`, `/show:db`, or a raw command
+/// with colons becoming spaces. A default DEFINE keeps newly generated inputs
+/// reaching the command peer instead of stopping at URL validation, while an
+/// explicit path (including a bare `/`) continues to select the other states.
+void CanonicalizeDictAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("dict.test/d:word");
+    return;
+  }
+  scenario->set_host_path("dict.test" + host_path.substr(suffix_start));
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -484,6 +500,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_GOPHERS:
     case curl::fuzzer::proto::SCHEME_SMTP:
     case curl::fuzzer::proto::SCHEME_SMTPS:
+    case curl::fuzzer::proto::SCHEME_DICT:
     default:
       return false;
   }
@@ -1254,6 +1271,33 @@ bool IsPop3Option(curl::fuzzer::proto::CurlOptionId option_id) {
 /// LIST/RETR command selection.
 void RetainPop3Options(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsPop3Option); }
 
+/// Return whether an option affects DICT request construction. DICT is
+/// download-only and takes its command from the URL path; authentication,
+/// response sizing, and the handful of transfer-mode controls are the only
+/// meaningful scalar inputs.
+bool IsDictOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the DICT target's general option budget focused on command and
+/// credential state its stream peer can advance.
+void RetainDictOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsDictOption); }
+
 /// Return whether an option affects TFTP request construction, option
 /// negotiation, transfer direction, or bounded body delivery. TFTP has no
 /// connection reuse or stream-level controls, so retaining those settings
@@ -1606,6 +1650,20 @@ void RemoveIgnoredGopherShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+/// Retain only the command-aligned control script. DICT is a download-only
+/// protocol: upload state, MIME bodies, HTTP headers, and follow-on sockets
+/// cannot reach its state machine.
+void RemoveIgnoredDictShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  scenario->clear_upload();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+}
+
 /// Retain the one binary server script and the scalar publish payload. MQTT
 /// cannot open follow-on sockets, does not use HTTP headers or MIME, and takes
 /// its publish body from CURLOPT_POSTFIELDS rather than curl's read callback.
@@ -1651,6 +1709,7 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_IMAP:
     case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_MQTT:
+    case curl::fuzzer::proto::SCHEME_DICT:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return curl::fuzzer::proto::SCHEME_HTTP;
@@ -1709,6 +1768,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // paths install their own scheme. Compatibility returned above and keeps
   // historical unknown-field semantics.
   if (profile != TargetProfile::kFastMqtt && scenario->scheme() == curl::fuzzer::proto::SCHEME_MQTT) {
+    scenario->clear_scheme();
+  }
+
+  // DICT is append-only too. Only the dedicated lane may reinterpret a lookup
+  // script; every other fixed lane clears the selector before installing its
+  // own scheme.
+  if (profile != TargetProfile::kFastDict && scenario->scheme() == curl::fuzzer::proto::SCHEME_DICT) {
     scenario->clear_scheme();
   }
 
@@ -1946,6 +2012,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastDict) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_DICT);
+    RemoveIgnoredDictShape(scenario);
+    RetainDictOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeDictAuthority(scenario);
+    return;
+  }
+
   if (profile == TargetProfile::kFastGopher) {
     scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
                              ? curl::fuzzer::proto::SCHEME_GOPHERS
@@ -2014,6 +2089,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastImap:
     case TargetProfile::kFastPop3:
     case TargetProfile::kFastMqtt:
+    case TargetProfile::kFastDict:
     case TargetProfile::kFastGopher:
       // Protocol-specific early-return paths selected their scheme above.
       return;
@@ -2125,6 +2201,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastImap:
     case TargetProfile::kFastPop3:
     case TargetProfile::kFastMqtt:
+    case TargetProfile::kFastDict:
     case TargetProfile::kFastGopher:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.
