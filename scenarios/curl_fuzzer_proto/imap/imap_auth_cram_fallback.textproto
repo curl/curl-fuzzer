@@ -1,0 +1,17 @@
+# An invalid CRAM-MD5 challenge makes curl send `*`, consume the tagged NO,
+# and retry with PLAIN. Both continuation exchanges must keep their own tagged
+# AUTHENTICATE command before the mailbox transfer can continue.
+scheme: SCHEME_IMAP
+host_path: "imap.test/INBOX;UID=1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "* OK imap.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1 AUTH=CRAM-MD5 AUTH=PLAIN\r\nOK CAPABILITY completed\r\n"
+  on_readable: "+ !\r\n"
+  on_readable: "NO AUTH exchange cancelled by client\r\n"
+  on_readable: "+ \r\n"
+  on_readable: "OK AUTHENTICATE completed\r\n"
+  on_readable: "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n"
+  on_readable: "* 1 FETCH (BODY[] {17}\r\nHello from IMAP\r\nOK FETCH completed\r\n"
+}

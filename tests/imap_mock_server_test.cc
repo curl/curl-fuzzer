@@ -6,7 +6,9 @@
 
 #include <curl/curl.h>
 
+#include <initializer_list>
 #include <string>
+#include <string_view>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -81,6 +83,26 @@ void AddLoginOptions(Scenario *scenario) {
   password->set_string_value("secret");
 }
 
+void AddStringOption(Scenario *scenario,
+                     curl::fuzzer::proto::CurlOptionId option_id,
+                     std::string_view value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_string_value(std::string(value));
+}
+
+void ExpectTranscriptOrder(
+    const std::string &transcript,
+    std::initializer_list<std::string_view> expected_lines,
+    const char *message) {
+  std::size_t position = 0;
+  for (const std::string_view expected : expected_lines) {
+    const std::size_t found = transcript.find(expected, position);
+    Expect(found != std::string::npos, message);
+    position = found + expected.size();
+  }
+}
+
 void AddGreetingAndCapability(Scenario *scenario) {
   auto *connection = scenario->mutable_connection();
   connection->set_initial_response("* OK imap.test ready\r\n");
@@ -140,8 +162,7 @@ void TestAppendDrainsAnnouncedLiteral() {
   connection->add_on_readable("+ Ready for literal\r\n");
   connection->add_on_readable("OK APPEND completed\r\n");
 
-  const ImapRunResult result =
-      RunScenario(scenario, "imap://imap.test/INBOX");
+  const ImapRunResult result = RunScenario(scenario, "imap://imap.test/INBOX");
   Expect(result.code == CURLE_OK, "IMAP APPEND did not complete");
   Expect(result.transcript.find("APPEND INBOX") != std::string::npos &&
              result.transcript.find("{17}\r\n") != std::string::npos,
@@ -161,14 +182,109 @@ void TestLoginDenialIsTerminal() {
   scenario.mutable_connection()->add_on_readable(
       "NO [AUTHENTICATIONFAILED] invalid credentials\r\n");
 
-  const ImapRunResult result =
-      RunScenario(scenario, "imap://imap.test/INBOX");
+  const ImapRunResult result = RunScenario(scenario, "imap://imap.test/INBOX");
   Expect(result.code == CURLE_LOGIN_DENIED,
          "IMAP LOGIN denial did not produce a login error");
   Expect(result.transcript.find("LOGIN fuzz secret\r\n") != std::string::npos,
          "IMAP denial scenario never issued LOGIN");
   Expect(result.body.empty(),
          "IMAP denial scenario unexpectedly produced a body");
+}
+
+void TestPlainAuthenticationPreservesTagAcrossContinuation() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
+  scenario.set_host_path("imap.test/INBOX;UID=1");
+  AddLoginOptions(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=PLAIN");
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SASL_AUTHZID,
+                  "authorization-id");
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("* OK imap.test ready\r\n");
+  connection->add_on_readable(
+      "* CAPABILITY IMAP4rev1 AUTH=PLAIN\r\nOK CAPABILITY completed\r\n");
+  connection->add_on_readable("* OK authentication continues\r\n+ \r\n");
+  connection->add_on_readable("OK AUTHENTICATE completed\r\n");
+  connection->add_on_readable(
+      "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n");
+  connection->add_on_readable(
+      "* 1 FETCH (BODY[] {17}\r\nHello from IMAP\r\nOK FETCH completed\r\n");
+
+  const ImapRunResult result =
+      RunScenario(scenario, "imap://imap.test/INBOX;UID=1");
+  Expect(result.code == CURLE_OK,
+         "IMAP AUTH PLAIN continuation did not complete");
+  Expect(result.body == kMessageBody,
+         "IMAP AUTH PLAIN continuation produced the wrong body");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE PLAIN\r\n",
+       "YXV0aG9yaXphdGlvbi1pZABmdXp6AHNlY3JldA==\r\n", "SELECT INBOX\r\n",
+       "UID FETCH 1 BODY[]\r\n", "LOGOUT\r\n"},
+      "IMAP AUTH PLAIN transcript was incomplete or out of order");
+}
+
+void TestOauthBearerErrorUsesMultipleContinuationRounds() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
+  scenario.set_host_path("imap.test/INBOX");
+  AddLoginOptions(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=OAUTHBEARER");
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER,
+                  "invalid-token");
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("* OK imap.test ready\r\n");
+  connection->add_on_readable("* CAPABILITY IMAP4rev1 AUTH=OAUTHBEARER\r\n"
+                              "OK CAPABILITY completed\r\n");
+  connection->add_on_readable("+ \r\n");
+  connection->add_on_readable("+ eyJzdGF0dXMiOiJpbnZhbGlkX3Rva2VuIn0=\r\n");
+  connection->add_on_readable("NO Authentication failed\r\n");
+
+  const ImapRunResult result = RunScenario(scenario, "imap://imap.test/INBOX");
+  Expect(result.code == CURLE_LOGIN_DENIED,
+         "IMAP OAUTHBEARER continuation error did not reject the login");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE OAUTHBEARER\r\n", "\r\nAQ==\r\n"},
+      "IMAP OAUTHBEARER transcript did not acknowledge the second "
+      "continuation");
+  Expect(result.transcript.find("SELECT ") == std::string::npos,
+         "IMAP OAUTHBEARER denial unexpectedly selected a mailbox");
+}
+
+void TestInvalidCramChallengeFallsBackToPlain() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
+  scenario.set_host_path("imap.test/INBOX;UID=1");
+  AddLoginOptions(&scenario);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("* OK imap.test ready\r\n");
+  connection->add_on_readable(
+      "* CAPABILITY IMAP4rev1 AUTH=CRAM-MD5 AUTH=PLAIN\r\n"
+      "OK CAPABILITY completed\r\n");
+  connection->add_on_readable("+ !\r\n");
+  connection->add_on_readable("NO AUTH exchange cancelled by client\r\n");
+  connection->add_on_readable("+ \r\n");
+  connection->add_on_readable("OK AUTHENTICATE completed\r\n");
+  connection->add_on_readable(
+      "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n");
+  connection->add_on_readable(
+      "* 1 FETCH (BODY[] {17}\r\nHello from IMAP\r\nOK FETCH completed\r\n");
+
+  const ImapRunResult result =
+      RunScenario(scenario, "imap://imap.test/INBOX;UID=1");
+  Expect(result.code == CURLE_OK,
+         "IMAP did not fall back from CRAM-MD5 to PLAIN");
+  Expect(result.body == kMessageBody,
+         "IMAP CRAM-MD5 fallback produced the wrong body");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE CRAM-MD5\r\n", "*\r\n",
+       "AUTHENTICATE PLAIN\r\n", "AGZ1enoAc2VjcmV0\r\n", "SELECT INBOX\r\n",
+       "UID FETCH 1 BODY[]\r\n", "LOGOUT\r\n"},
+      "IMAP CRAM-MD5 fallback transcript was incomplete or out of order");
 }
 
 } // namespace
@@ -180,6 +296,9 @@ int main() {
   TestFetchLiteralAndTaggedCompletion();
   TestAppendDrainsAnnouncedLiteral();
   TestLoginDenialIsTerminal();
+  TestPlainAuthenticationPreservesTagAcrossContinuation();
+  TestOauthBearerErrorUsesMultipleContinuationRounds();
+  TestInvalidCramChallengeFallsBackToPlain();
   curl_global_cleanup();
   return 0;
 }

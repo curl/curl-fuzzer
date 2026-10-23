@@ -220,9 +220,33 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     denied = (imap_root / "imap_login_denied.textproto").read_text(encoding="utf-8")
     assert "NO [AUTHENTICATIONFAILED] invalid credentials" in denied
 
-    imaps = (imap_root / "imaps_login_fetch.textproto").read_text(
+    plain = (imap_root / "imap_auth_plain_continuation.textproto").read_text(
         encoding="utf-8"
     )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain
+    assert 'CURLOPT_SASL_AUTHZID string_value: "authorization-id"' in plain
+    assert "* OK authentication continues\\r\\n+ \\r\\n" in plain
+    assert "OK AUTHENTICATE completed" in plain
+    assert "OK FETCH completed" in plain
+
+    oauth = (imap_root / "imap_auth_oauthbearer_error.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=OAUTHBEARER"' in oauth
+    assert 'CURLOPT_XOAUTH2_BEARER string_value: "invalid-token"' in oauth
+    assert oauth.count('on_readable: "+') == 2
+    assert "NO Authentication failed" in oauth
+
+    fallback = (imap_root / "imap_auth_cram_fallback.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "AUTH=CRAM-MD5 AUTH=PLAIN" in fallback
+    assert 'on_readable: "+ !\\r\\n"' in fallback
+    assert "NO AUTH exchange cancelled by client" in fallback
+    assert "OK AUTHENTICATE completed" in fallback
+    assert "OK FETCH completed" in fallback
+
+    imaps = (imap_root / "imaps_login_fetch.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_IMAPS" in imaps
     assert 'host_path: "tls.test/INBOX;UID=1"' in imaps
     assert "OK LOGIN completed" in imaps
@@ -240,9 +264,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "+OK 17 octets" in retr
     assert "Hello from POP3" in retr
 
-    pop3s = (pop3_root / "pop3s_retr_message.textproto").read_text(
-        encoding="utf-8"
-    )
+    pop3s = (pop3_root / "pop3s_retr_message.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_POP3S" in pop3s
     assert 'host_path: "tls.test/1"' in pop3s
     assert "+OK pass accepted" in pop3s
