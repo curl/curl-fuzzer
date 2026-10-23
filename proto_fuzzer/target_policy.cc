@@ -2247,7 +2247,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // Keep the opt-in out of fixed lanes whose driver cannot honor that timing
   // contract; compatibility returned above and preserves its wire input.
   if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
-      profile != TargetProfile::kFastPop3) {
+      profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp) {
     scenario->clear_probe_multi_pollset();
   }
 

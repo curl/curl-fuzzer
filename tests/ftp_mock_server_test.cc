@@ -6,7 +6,10 @@
 
 #include <curl/curl.h>
 
+#include <cstdlib>
+#include <iostream>
 #include <string>
+#include <string_view>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -36,7 +39,18 @@ struct FtpRunResult {
   std::string transcript;
   std::string uploaded;
   std::size_t data_connections = 0;
+  std::size_t active_pollset_probes = 0;
 };
+
+void ExpectTranscript(const FtpRunResult &result, std::string_view expected,
+                      const char *message) {
+  if (result.transcript != expected) {
+    std::cerr << message << "\nExpected:\n"
+              << expected << "Actual:\n"
+              << result.transcript;
+    std::exit(1);
+  }
+}
 
 FtpRunResult RunScenario(const Scenario &scenario, const char *url) {
   FtpRunResult result;
@@ -64,6 +78,7 @@ FtpRunResult RunScenario(const Scenario &scenario, const char *url) {
   result.transcript = server.control_transcript();
   result.uploaded = server.uploaded_data();
   result.data_connections = server.opened_data_connection_count();
+  result.active_pollset_probes = server.active_pollset_probe_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -101,6 +116,8 @@ void TestEpsvDownloadAndFinalReply() {
          "FTP download did not issue EPSV");
   Expect(result.transcript.find("RETR file.bin\r\n") != std::string::npos,
          "FTP download did not issue RETR");
+  Expect(result.active_pollset_probes == 0,
+         "FTP default path unexpectedly issued a pollset probe");
 }
 
 void TestEpsvFailureFallsBackToPasv() {
@@ -224,6 +241,83 @@ void TestCustomListingCommandReceivesPassiveData() {
          "CURLOPT_CUSTOMREQUEST did not replace the listing command");
 }
 
+void AddWildcardListingReplies(Scenario *scenario) {
+  AddLoginAndPwdReplies(scenario);
+  auto *control = scenario->mutable_connection();
+  control->add_on_readable("250 changed to pub\r\n");
+  control->add_on_readable(
+      "229 Entering Extended Passive Mode (|||12345|)\r\n");
+  control->add_on_readable("200 ASCII type selected\r\n");
+  control->add_on_readable("150 opening listing\r\n");
+  control->add_on_readable("226 listing complete\r\n");
+  control->add_on_readable(
+      "229 Entering Extended Passive Mode (|||12346|)\r\n");
+  control->add_on_readable("200 binary type selected\r\n");
+  control->add_on_readable("150 opening match.txt\r\n");
+  control->add_on_readable("226 file complete\r\n");
+
+  auto *wildcard = scenario->add_options();
+  wildcard->set_option_id(curl::fuzzer::proto::CURLOPT_WILDCARDMATCH);
+  wildcard->set_bool_value(true);
+}
+
+void TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch() {
+  Scenario scenario;
+  scenario.set_probe_multi_pollset(true);
+  AddWildcardListingReplies(&scenario);
+  scenario.add_subsequent_connections()->set_initial_response(
+      "lrwxrwxrwx 1 ftp ftp 9 Apr 27 11:01 link.txt -> match.txt\r\n"
+      "-rw-r--r-- 1 ftp ftp 5 Apr 27 11:01 match.txt\r\n");
+  scenario.add_subsequent_connections()->set_initial_response("match");
+
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/pub/*.txt");
+  Expect(result.code == CURLE_OK,
+         "UNIX symlink wildcard listing did not complete");
+  Expect(result.body == "match",
+         "UNIX symlink listing did not retrieve the regular match");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "CWD pub\r\n"
+                   "EPSV\r\n"
+                   "TYPE A\r\n"
+                   "LIST\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "RETR match.txt\r\n",
+                   "UNIX symlink parser did not skip only the symlink");
+  Expect(result.active_pollset_probes != 0,
+         "FTP opt-in did not probe a live protocol pollset");
+}
+
+void TestWildcardWindowsListingRetrievesMatch() {
+  Scenario scenario;
+  AddWildcardListingReplies(&scenario);
+  scenario.add_subsequent_connections()->set_initial_response(
+      "04-27-26  11:01AM                  5 match.txt\r\n");
+  scenario.add_subsequent_connections()->set_initial_response("match");
+
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/pub/*.txt");
+  Expect(result.code == CURLE_OK, "Windows wildcard listing did not complete");
+  Expect(result.body == "match",
+         "Windows listing did not retrieve the matching file");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "CWD pub\r\n"
+                   "EPSV\r\n"
+                   "TYPE A\r\n"
+                   "LIST\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "RETR match.txt\r\n",
+                   "Windows parser did not drive the exact LIST/RETR flow");
+  Expect(result.active_pollset_probes == 0,
+         "FTP default wildcard path unexpectedly issued a pollset probe");
+}
+
 void TestExplicitEmptyCompletionExposesControlEof() {
   Scenario scenario;
   AddLoginAndPwdReplies(&scenario);
@@ -316,6 +410,8 @@ int main() {
   TestMalformed229EpsvIsTerminal();
   TestUploadIsDrainedWithoutLosingControlChannel();
   TestCustomListingCommandReceivesPassiveData();
+  TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch();
+  TestWildcardWindowsListingRetrievesMatch();
   TestExplicitEmptyCompletionExposesControlEof();
   TestActiveDownload(true);
   TestActiveDownload(false);
