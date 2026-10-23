@@ -12,6 +12,9 @@ namespace full_coverage {
 /** Exercise public compatibility helpers without performing a transfer. */
 void ExercisePublicApiCoverage();
 
+/** Exercise the same helpers while a caller-owned curl runtime is active. */
+void ExercisePublicApiCoverageWithInitializedCurl();
+
 }  // namespace full_coverage
 
 #endif  // FULL_COVERAGE_PUBLIC_API_H_

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -43,6 +44,10 @@ thread_local ThreadState state;
 std::once_flag initialize_once;
 /// Remember whether the initialization probe reached the installed callbacks.
 bool callbacks_active = false;
+/// Remember whether this module owns one successful curl global initialization.
+bool curl_initialized = false;
+/// Transfer that one initialization reference to at most one lifecycle owner.
+std::atomic<bool> curl_initialization_claimed{false};
 
 /// Fold a positive ordinal into the bounded one-based allocation range.
 /// @param ordinal Requested allocation attempt number; zero disables the entry.
@@ -117,6 +122,7 @@ bool InitializeCurl() noexcept {
                              internal::Calloc) != CURLE_OK) {
       return;
     }
+    curl_initialized = true;
 
     state.armed = true;
     char* probe = curl_escape("allocator callback probe", 0);
@@ -134,6 +140,28 @@ bool InitializeCurl() noexcept {
 bool ReinitializeCurl() noexcept {
   return curl_global_init_mem(CURL_GLOBAL_ALL, internal::Malloc, internal::Free, internal::Realloc, internal::Strdup,
                               internal::Calloc) == CURLE_OK;
+}
+
+/// Report whether InitializeCurl owns a successful global initialization.
+/// This is distinct from its return value: allocation callbacks can be
+/// unavailable even though curl_global_init_mem itself succeeded.
+bool CurlInitializationSucceeded() noexcept {
+  (void)InitializeCurl();
+  return curl_initialized;
+}
+
+/// Claim ownership of InitializeCurl's retained global reference exactly once.
+/// A failed initialization has no reference to claim, and a reference remains
+/// claimed after cleanup because initialize_once cannot create it again.
+/// @return true only for the caller that acquires the retained reference.
+bool ClaimCurlInitializationReference() noexcept {
+  (void)InitializeCurl();
+  if (!curl_initialized) {
+    return false;
+  }
+  bool expected = false;
+  return curl_initialization_claimed.compare_exchange_strong(expected, true, std::memory_order_relaxed,
+                                                             std::memory_order_relaxed);
 }
 
 /// Store a bounded, sorted, unique allocation plan for the calling thread.

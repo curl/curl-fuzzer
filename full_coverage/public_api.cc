@@ -98,11 +98,8 @@ void ExerciseLegacyForms()
 
 }  // namespace
 
-void ExercisePublicApiCoverage()
+void ExercisePublicApiCoverageWithInitializedCurl()
 {
-  if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
-    return;
-
   char buffer[4096];
   curl_msnprintf(buffer, sizeof(buffer),
                 "%+08d %i %u %#o %#x %#X %ld %lu %lld %llu %%",
@@ -127,6 +124,14 @@ void ExercisePublicApiCoverage()
     std::fclose(stream);
 
   ExerciseLegacyForms();
+}
+
+void ExercisePublicApiCoverage()
+{
+  if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+    return;
+
+  ExercisePublicApiCoverageWithInitializedCurl();
   curl_global_cleanup();
 }
 

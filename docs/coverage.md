@@ -64,17 +64,30 @@ summary, and reuses a public-corpus cache whose key changes each ISO week.
 For controlled A/B performance and source-coverage comparisons, see
 [Benchmarking](benchmarking.md).
 
-`curl_fuzzer_full_coverage` supplements corpus replay with deterministic public
+`curl_fuzzer_proto_api` supplements corpus replay with deterministic public
 compatibility API probes, such as formatting and legacy form serialization.
-The initialization-safe probes execute once per process in coverage builds
-(`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`) and Fuzz Introspector builds
-(`SANITIZER=introspector`).
+The probes execute once per process in coverage builds (`ENABLE_COVERAGE=ON`
+or `SANITIZER=coverage`) and Fuzz Introspector builds
+(`SANITIZER=introspector`). They reuse the proto runtime's global curl
+initialization and never perform global cleanup from an input callback. The
+runtime releases its global resolver and TLS state only during process exit.
+An initialization hook covers empty-corpus merge jobs, while the first input
+callback is a fallback for standalone replay engines that omit that hook.
+
+`curl_fuzzer_full_coverage` retains the same curl probes temporarily while the
+legacy-to-proto parity gate is measured, in addition to its legacy mutator
+probe. It is not evidence that the proto lane restored those functions until a
+source-coverage replay confirms the delta.
+
+The full-coverage target's initialization-safe probes execute once per process
+in coverage builds (`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`) and Fuzz
+Introspector builds (`SANITIZER=introspector`).
 Ordinary sanitizer builds do not package this profiling helper as a fuzz
 target. The checked-in nonempty seed triggers standalone replay; the target
 ignores its contents. The libFuzzer initialization hook also runs the probes,
 because OSS-Fuzz's `-merge=1` coverage pass can have an empty saved corpus and
-therefore make no input callbacks. Keep additional bounded profiling probes in
-this target rather than creating another protocol lane.
+therefore make no input callbacks. Keep additional curl API probes in the
+structured API lane rather than creating another protocol lane.
 The legacy-mutator probe remains on the input hook because it exercises
 `LLVMFuzzerMutate`, which libFuzzer does not make usable until initialization
 has returned.
