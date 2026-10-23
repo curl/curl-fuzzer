@@ -28,7 +28,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. The same target also runs implicit-TLS `mqtts://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
-| `curl_fuzzer_proto_file` | `file://` URL parsing with a fuzz-controlled authority and suffix, pinned to a read-only `/dev/null` path. There is no network peer and uploads are removed so the lane cannot write host files. |
+| `curl_fuzzer_proto_file` | `file://` URL parsing with a fuzz-controlled authority and suffix, pinned to `/dev/null`. There is no network peer; bounded uploads exercise the local write path only against that fixed sink. |
 | `curl_fuzzer_proto_ldap` | Single-connection BER/ASN.1 LDAP simple bind and search through OpenLDAP, with a scripted bind reply, scripted search-result entries, and a synthesized search completion. `SCHEME_LDAPS` runs the identical exchange over implicit TLS against the in-process OpenSSL peer. |
 | `curl_fuzzer_proto_rtsp` | Single-connection, request-aligned RTSP method/CSeq exchanges, SDP response bodies, and PLAY responses with interleaved RTP packets. |
 | `curl_fuzzer_proto_ipfs` | `ipfs://` and `ipns://` gateway rewrites as ordinary HTTP GETs against the in-process HTTP peer, with a pinned CID/name and a mutation-controlled gateway path. |
@@ -74,10 +74,10 @@ IPFS/IPNS, TELNET, Gopher, and FILE prune fields that their specialized peers
 (or, for FILE, the peerless local reader) cannot observe. The IPFS/IPNS lane
 rewrites both schemes to a `/ipfs/<cid>` or `/ipns/<name>` HTTP path on a fixed
 loopback gateway before the request reaches the ordinary HTTP peer. The FILE
-lane additionally replaces the URL path with `/dev/null` and removes upload
-state; the authority, query, and fragment remain
-mutation-controlled so URL parsing still has fuzzing value without granting
-access to host files.
+lane additionally replaces the URL path with `/dev/null`. It retains bounded
+upload state and can write only to that fixed sink; the authority, query, and
+fragment remain mutation-controlled so URL parsing still has fuzzing value
+without granting access to host files.
 
 The fixed SMTP, IMAP, POP3, FTP/FTPS, and MQTT/MQTTS profiles retain
 `probe_multi_pollset`; every other fixed profile currently clears it. The flag

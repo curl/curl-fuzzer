@@ -170,6 +170,22 @@ std::string ScenarioUrl(const curl::fuzzer::proto::Scenario& scenario, const cha
   return std::string(prefix) + "://" + scenario.host_path();
 }
 
+/// Confirm that FILE normalization replaced the complete opened path. This is
+/// a runtime backstop for direct callers: even if target postprocessing is
+/// accidentally bypassed, neither download nor upload may name a host file.
+/// @param host_path FILE URL authority/path without the scheme prefix.
+/// @return True only for `[authority]/dev/null` plus an optional query or
+///         fragment.
+bool HasCanonicalFilePath(const std::string& host_path) {
+  constexpr char kFilePath[] = "/dev/null";
+  const std::size_t path_start = host_path.find('/');
+  if (path_start == std::string::npos || host_path.compare(path_start, sizeof(kFilePath) - 1, kFilePath) != 0) {
+    return false;
+  }
+  const std::size_t suffix_start = path_start + sizeof(kFilePath) - 1;
+  return suffix_start == host_path.size() || host_path[suffix_start] == '?' || host_path[suffix_start] == '#';
+}
+
 /// Pick the peer implementation authorized by both protocol and target mode.
 /// The compatibility target must keep its historical raw-wire interpretation
 /// of secure schemes, while dedicated TLS lanes expose decrypted application
@@ -592,6 +608,9 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   if (scenario.scheme() == curl::fuzzer::proto::SCHEME_FILE && !file_lane) {
     return 0;
   }
+  if (file_lane && !HasCanonicalFilePath(scenario.host_path())) {
+    return 0;
+  }
 
   std::unique_ptr<MockServerBase> mock = MakeMockServerForScenario(scenario, mode);
   if (!mock && !file_lane) {
@@ -621,10 +640,13 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   transfer.ConfigureAltSvcRouting(scenario.host_path());
 
   if (file_lane) {
-    // The file:// handler reads the pinned /dev/null target (or rejects a
-    // mutated authority) synchronously and never opens a socket, so no mock
-    // peer or request-data callbacks exist to drive. The baseline's short
-    // timeout still bounds the transfer.
+    // The file:// handler reads or writes the pinned /dev/null target (or
+    // rejects a mutated authority) synchronously and never opens a socket.
+    // Install the bounded request-data owner before perform so retained upload
+    // options consume Scenario.upload through curl's read callback instead of
+    // falling back to stdin. The baseline's short timeout still bounds the
+    // transfer.
+    (void)transfer.InstallRequestData(scenario);
     const CURLcode transfer_result = curl_easy_perform(easy);
     (void)transfer_result;
     ProbeTransferResults(easy);
