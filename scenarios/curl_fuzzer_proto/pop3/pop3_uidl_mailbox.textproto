@@ -1,0 +1,9 @@
+# Request the multi-line UIDL form for the complete mailbox.
+scheme: SCHEME_POP3
+host_path: "pop3.test/"
+options { option_id: CURLOPT_CUSTOMREQUEST string_value: "UIDL" }
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nUSER\r\n.\r\n"
+  on_readable: "+OK unique ids follow\r\n1 whqtswO00QHEf7kmZ\r\n2 QhdPYR:00WBw1Ph7x7\r\n.\r\n"
+}

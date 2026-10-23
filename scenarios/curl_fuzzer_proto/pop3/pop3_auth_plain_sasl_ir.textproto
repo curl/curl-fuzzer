@@ -1,0 +1,14 @@
+# Put the PLAIN response on the AUTH line through CURLOPT_SASL_IR, then prove
+# authentication completion by retrieving a message.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN" }
+options { option_id: CURLOPT_SASL_IR bool_value: true }
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nSASL PLAIN\r\nUSER\r\n.\r\n"
+  on_readable: "+OK authentication succeeded\r\n"
+  on_readable: "+OK 17 octets\r\nHello from POP3\r\n.\r\n"
+}

@@ -321,3 +321,54 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
 
     rejected = (pop3_root / "pop3_user_denied.textproto").read_text(encoding="utf-8")
     assert "-ERR no such user" in rejected
+
+    cram = (pop3_root / "pop3_auth_cram_md5_retr.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5"' in cram
+    assert "SASL CRAM-MD5" in cram
+    assert "PDE4OTYuNjk3MTcwOTUy" in cram
+    assert "+OK authentication succeeded" in cram
+
+    fallback = (pop3_root / "pop3_auth_cram_fallback.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "SASL CRAM-MD5 PLAIN" in fallback
+    assert 'on_readable: "+ !\\r\\n"' in fallback
+    assert "-ERR authentication exchange cancelled" in fallback
+    assert 'on_readable: "+ \\r\\n"' in fallback
+
+    plain_ir = (pop3_root / "pop3_auth_plain_sasl_ir.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain_ir
+    assert "CURLOPT_SASL_IR bool_value: true" in plain_ir
+    assert "SASL PLAIN" in plain_ir
+
+    apop = (pop3_root / "pop3_apop_retr.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP"' in apop
+    assert "<id@host>" in apop
+    assert "+OK authentication succeeded" in apop
+
+    apop_denied = (pop3_root / "pop3_apop_denied.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP"' in apop_denied
+    assert "-ERR invalid digest" in apop_denied
+
+    unavailable = (pop3_root / "pop3_auth_unavailable_ntlm.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM"' in unavailable
+    assert "SASL NTLM" in unavailable
+    assert "+OK authentication succeeded" not in unavailable
+
+    uidl = (pop3_root / "pop3_uidl_mailbox.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_CUSTOMREQUEST string_value: "UIDL"' in uidl
+    assert "+OK unique ids follow" in uidl
+    assert "whqtswO00QHEf7kmZ" in uidl
+
+    top = (pop3_root / "pop3_top_long_dot_stuffed.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_CUSTOMREQUEST string_value: "TOP 1 0"' in top
+    assert "CURLOPT_BUFFERSIZE uint_value: 1024" in top
+    assert "..dot-stuffed\\r\\n" in top
+    assert "...two-leading-dots\\r\\n.\\r\\n" in top
+    assert top.count("A" * 80) >= 16

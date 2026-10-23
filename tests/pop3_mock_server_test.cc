@@ -6,7 +6,11 @@
 
 #include <curl/curl.h>
 
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <string>
+#include <string_view>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -81,6 +85,39 @@ void AddLoginOptions(Scenario *scenario) {
   password->set_string_value("secret");
 }
 
+void AddStringOption(Scenario *scenario,
+                     curl::fuzzer::proto::CurlOptionId option_id,
+                     std::string_view value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_string_value(std::string(value));
+}
+
+void AddBoolOption(Scenario *scenario,
+                   curl::fuzzer::proto::CurlOptionId option_id, bool value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_bool_value(value);
+}
+
+void AddUintOption(Scenario *scenario,
+                   curl::fuzzer::proto::CurlOptionId option_id,
+                   std::uint64_t value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_uint_value(value);
+}
+
+void ExpectTranscript(const Pop3RunResult &result, std::string_view expected,
+                      const char *message) {
+  if (result.transcript != expected) {
+    std::cerr << message << "\nExpected:\n"
+              << expected << "Actual:\n"
+              << result.transcript;
+    std::exit(1);
+  }
+}
+
 void AddGreetingAndCapability(Scenario *scenario) {
   auto *connection = scenario->mutable_connection();
   connection->set_initial_response("+OK pop3.test ready\r\n");
@@ -97,8 +134,7 @@ void TestRetrMultilineMessage() {
   auto *connection = scenario.mutable_connection();
   connection->add_on_readable("+OK user accepted\r\n");
   connection->add_on_readable("+OK pass accepted\r\n");
-  connection->add_on_readable(
-      "+OK 17 octets\r\nHello from POP3\r\n.\r\n");
+  connection->add_on_readable("+OK 17 octets\r\nHello from POP3\r\n.\r\n");
 
   const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
   Expect(result.code == CURLE_OK, "POP3 RETR did not complete");
@@ -155,6 +191,202 @@ void TestUserDenialIsTerminal() {
          "POP3 denial scenario unexpectedly produced a body");
 }
 
+void TestCramMd5AuthenticationAndRetrieval() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  AddLoginOptions(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=CRAM-MD5");
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable(
+      "+OK capabilities\r\nSASL CRAM-MD5\r\nUSER\r\n.\r\n");
+  connection->add_on_readable(
+      "+ PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UuZXhhbXBsZS5uZXQ+\r\n");
+  connection->add_on_readable("+OK authentication succeeded\r\n");
+  connection->add_on_readable("+OK 17 octets\r\nHello from POP3\r\n.\r\n");
+
+  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
+  Expect(result.code == CURLE_OK, "POP3 CRAM-MD5 retrieval did not complete");
+  ExpectTranscript(
+      result,
+      "CAPA\r\n"
+      "AUTH CRAM-MD5\r\n"
+      "ZnV6eiBhYmI3ZGU0OWM1OGRhMTQxNjg2NmJiYzU2NmI3ZTU4NQ==\r\n"
+      "RETR 1\r\n"
+      "QUIT\r\n",
+      "POP3 CRAM-MD5 transcript differed from the complete auth and RETR "
+      "exchange");
+  Expect(result.body == kMessageBody,
+         "POP3 CRAM-MD5 retrieval produced the wrong body");
+}
+
+void TestInvalidCramChallengeFallsBackToPlain() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  AddLoginOptions(&scenario);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable(
+      "+OK capabilities\r\nSASL CRAM-MD5 PLAIN\r\nUSER\r\n.\r\n");
+  connection->add_on_readable("+ !\r\n");
+  connection->add_on_readable("-ERR authentication exchange cancelled\r\n");
+  connection->add_on_readable("+ \r\n");
+  connection->add_on_readable("+OK authentication succeeded\r\n");
+  connection->add_on_readable("+OK 17 octets\r\nHello from POP3\r\n.\r\n");
+
+  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
+  Expect(result.code == CURLE_OK,
+         "POP3 did not fall back from malformed CRAM-MD5 to PLAIN");
+  ExpectTranscript(
+      result,
+      "CAPA\r\n"
+      "AUTH CRAM-MD5\r\n"
+      "*\r\n"
+      "AUTH PLAIN\r\n"
+      "AGZ1enoAc2VjcmV0\r\n"
+      "RETR 1\r\n"
+      "QUIT\r\n",
+      "POP3 CRAM-MD5 fallback transcript was incomplete or out of order");
+  Expect(result.body == kMessageBody,
+         "POP3 CRAM-MD5 fallback returned the wrong body");
+}
+
+void TestPlainAuthenticationUsesSaslInitialResponse() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  AddLoginOptions(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=PLAIN");
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SASL_IR, true);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable(
+      "+OK capabilities\r\nSASL PLAIN\r\nUSER\r\n.\r\n");
+  connection->add_on_readable("+OK authentication succeeded\r\n");
+  connection->add_on_readable("+OK 17 octets\r\nHello from POP3\r\n.\r\n");
+
+  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
+  Expect(result.code == CURLE_OK,
+         "POP3 AUTH PLAIN with SASL-IR did not complete");
+  ExpectTranscript(result,
+                   "CAPA\r\n"
+                   "AUTH PLAIN AGZ1enoAc2VjcmV0\r\n"
+                   "RETR 1\r\n"
+                   "QUIT\r\n",
+                   "POP3 SASL-IR transcript did not keep the PLAIN payload "
+                   "on the AUTH command");
+}
+
+void TestApopAuthenticationAndDenial() {
+  Scenario success;
+  success.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  success.set_host_path("pop3.test/1");
+  AddLoginOptions(&success);
+  AddStringOption(&success, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=+APOP");
+  auto *success_connection = success.mutable_connection();
+  success_connection->set_initial_response("+OK pop3.test ready <id@host>\r\n");
+  success_connection->add_on_readable("+OK capabilities\r\n.\r\n");
+  success_connection->add_on_readable("+OK authentication succeeded\r\n");
+  success_connection->add_on_readable(
+      "+OK 17 octets\r\nHello from POP3\r\n.\r\n");
+
+  const Pop3RunResult success_result =
+      RunScenario(success, "pop3://pop3.test/1");
+  Expect(success_result.code == CURLE_OK,
+         "POP3 APOP retrieval did not complete");
+  ExpectTranscript(success_result,
+                   "CAPA\r\n"
+                   "APOP fuzz 29c9a05ed81d1bad79e3da0823968960\r\n"
+                   "RETR 1\r\n"
+                   "QUIT\r\n",
+                   "POP3 APOP success transcript was incomplete or used the "
+                   "wrong timestamp digest");
+
+  Scenario denied;
+  denied.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  denied.set_host_path("pop3.test/1");
+  AddLoginOptions(&denied);
+  AddStringOption(&denied, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=+APOP");
+  auto *denied_connection = denied.mutable_connection();
+  denied_connection->set_initial_response("+OK pop3.test ready <id@host>\r\n");
+  denied_connection->add_on_readable("+OK capabilities\r\n.\r\n");
+  denied_connection->add_on_readable("-ERR invalid digest\r\n");
+
+  const Pop3RunResult denied_result = RunScenario(denied, "pop3://pop3.test/1");
+  Expect(denied_result.code == CURLE_LOGIN_DENIED,
+         "POP3 APOP denial did not produce a login error");
+  ExpectTranscript(denied_result,
+                   "CAPA\r\n"
+                   "APOP fuzz 29c9a05ed81d1bad79e3da0823968960\r\n",
+                   "POP3 APOP denial issued unexpected commands");
+  Expect(denied_result.body.empty(),
+         "POP3 APOP denial unexpectedly produced a body");
+}
+
+void TestDisabledAuthenticationMechanismIsRejected() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  AddLoginOptions(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=NTLM");
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable("+OK capabilities\r\nSASL NTLM\r\nUSER\r\n.\r\n");
+
+  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
+  Expect(result.code == CURLE_LOGIN_DENIED,
+         "POP3 disabled NTLM mechanism was not rejected");
+  ExpectTranscript(result, "CAPA\r\n",
+                   "POP3 unavailable-mechanism path issued an unexpected "
+                   "AUTH or command");
+}
+
+void TestUidlAndTopMultilineBoundaries() {
+  Scenario uidl;
+  uidl.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  uidl.set_host_path("pop3.test/");
+  AddStringOption(&uidl, curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST, "UIDL");
+  AddGreetingAndCapability(&uidl);
+  uidl.mutable_connection()->add_on_readable(
+      "+OK unique ids follow\r\n1 whqtswO00QHEf7kmZ\r\n"
+      "2 QhdPYR:00WBw1Ph7x7\r\n.\r\n");
+
+  const Pop3RunResult uidl_result = RunScenario(uidl, "pop3://pop3.test/");
+  Expect(uidl_result.code == CURLE_OK,
+         "POP3 UIDL mailbox request did not complete");
+  ExpectTranscript(uidl_result, "CAPA\r\nUIDL\r\nQUIT\r\n",
+                   "POP3 UIDL transcript was incomplete or out of order");
+  Expect(uidl_result.body == "1 whqtswO00QHEf7kmZ\r\n2 QhdPYR:00WBw1Ph7x7\r\n",
+         "POP3 UIDL returned the wrong multiline body");
+
+  Scenario top;
+  top.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  top.set_host_path("pop3.test/");
+  AddStringOption(&top, curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST, "TOP 1 0");
+  AddUintOption(&top, curl::fuzzer::proto::CURLOPT_BUFFERSIZE, 1024);
+  AddGreetingAndCapability(&top);
+  const std::string long_line(1300, 'A');
+  top.mutable_connection()->add_on_readable(
+      "+OK top follows\r\n..dot-stuffed\r\n" + long_line +
+      "\r\n...two-leading-dots\r\n.\r\n");
+
+  const Pop3RunResult top_result = RunScenario(top, "pop3://pop3.test/");
+  Expect(top_result.code == CURLE_OK,
+         "POP3 TOP boundary response did not complete");
+  ExpectTranscript(top_result, "CAPA\r\nTOP 1 0\r\nQUIT\r\n",
+                   "POP3 TOP transcript was incomplete or out of order");
+  Expect(top_result.body ==
+             ".dot-stuffed\r\n" + long_line + "\r\n..two-leading-dots\r\n",
+         "POP3 TOP did not preserve long-body boundaries and dot unstuffing");
+}
+
 } // namespace
 
 int main() {
@@ -164,6 +396,12 @@ int main() {
   TestRetrMultilineMessage();
   TestListMultilineMailbox();
   TestUserDenialIsTerminal();
+  TestCramMd5AuthenticationAndRetrieval();
+  TestInvalidCramChallengeFallsBackToPlain();
+  TestPlainAuthenticationUsesSaslInitialResponse();
+  TestApopAuthenticationAndDenial();
+  TestDisabledAuthenticationMechanismIsRejected();
+  TestUidlAndTopMultilineBoundaries();
   curl_global_cleanup();
   return 0;
 }
