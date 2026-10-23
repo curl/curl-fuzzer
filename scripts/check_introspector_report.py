@@ -31,6 +31,7 @@ EXPECTED_PROTO_TARGETS = frozenset(
         "curl_fuzzer_proto_dict",
         "curl_fuzzer_proto_file",
         "curl_fuzzer_proto_ldap",
+        "curl_fuzzer_proto_rtsp",
         "curl_fuzzer_proto_http",
         "curl_fuzzer_proto_http2",
         "curl_fuzzer_proto_http3",

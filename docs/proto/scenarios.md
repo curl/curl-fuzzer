@@ -122,6 +122,14 @@ Other peers intentionally give those fields narrower meanings:
   search; otherwise the peer synthesizes one. The URL path carries the base DN,
   attributes, scope, and filter, because this curl revision's OpenLDAP handler
   does not consult `CURLOPT_CUSTOMREQUEST`.
+- RTSP is request-aligned and has no server greeting. The peer consumes each
+  request start line and header block, releases the next `on_readable` entry
+  only after the terminating empty line, and drains any announced
+  `Content-Length` body exactly. A response chunk may carry the status line,
+  headers, an SDP/parameter body, and RFC 2326 interleaved RTP frames
+  (`$`, channel, 16-bit length, payload). `CURLOPT_RTSP_REQUEST` selects the
+  method, and the response's own CSeq stays mutation-controlled so mismatches
+  reach curl's `CURLE_RTSP_CSEQ_ERROR` path.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

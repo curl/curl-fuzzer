@@ -1,0 +1,10 @@
+# DESCRIBE returns a bounded SDP description. The request line uses the
+# explicit stream URI, and the peer releases the single response only after the
+# blank line that terminates the request header block.
+scheme: SCHEME_RTSP
+host_path: "rtsp.test/twister/video"
+options { option_id: CURLOPT_RTSP_REQUEST uint_value: 2 }
+options { option_id: CURLOPT_RTSP_STREAM_URI string_value: "rtsp://rtsp.test/twister/video" }
+connection {
+  on_readable: "RTSP/1.0 200 OK\r\nCSeq: 1\r\nContent-Type: application/sdp\r\nContent-Length: 95\r\n\r\nv=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=curl-fuzzer\r\nt=0 0\r\na=control:rtsp://rtsp.test/twister/video\r\n"
+}

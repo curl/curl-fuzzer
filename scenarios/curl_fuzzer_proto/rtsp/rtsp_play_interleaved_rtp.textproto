@@ -1,0 +1,12 @@
+# PLAY with a Session and Range header, followed by one RFC 2326 interleaved
+# RTP packet on channel 0. The Transport response header installs channels 0-1,
+# so curl accepts the packet after parsing the (empty) response body.
+scheme: SCHEME_RTSP
+host_path: "rtsp.test/stream"
+options { option_id: CURLOPT_RTSP_REQUEST uint_value: 5 }
+options { option_id: CURLOPT_RTSP_SESSION_ID string_value: "12345678" }
+options { option_id: CURLOPT_RTSP_STREAM_URI string_value: "rtsp://rtsp.test/stream" }
+options { option_id: CURLOPT_RANGE string_value: "npt=0.000-" }
+connection {
+  on_readable: "RTSP/1.0 200 OK\r\nCSeq: 1\r\nSession: 12345678\r\nRange: npt=0.000-\r\nTransport: RTP/AVP/TCP;unicast;interleaved=0-1\r\nContent-Length: 0\r\n\r\n$\000\000\014\200\340\000\001\000\000\000\000\000\000\000\001"
+}

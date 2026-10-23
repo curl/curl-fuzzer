@@ -15,6 +15,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include "proto_fuzzer/option_model.h"
@@ -303,6 +304,21 @@ void CanonicalizeLdapAuthority(curl::fuzzer::proto::Scenario* scenario) {
     return;
   }
   scenario->set_host_path("ldap.test" + host_path.substr(suffix_start));
+}
+
+/// Pin the RTSP peer's authority while preserving the path, query, and
+/// fragment. curl builds its request stream URI from CURLOPT_RTSP_STREAM_URI
+/// (defaulting to "*"), but the URL still has to parse before the dedicated
+/// request/response peer can be reached. A default stream path keeps newly
+/// generated scenarios representative rather than spending them on URL errors.
+void CanonicalizeRtspAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("rtsp.test/stream");
+    return;
+  }
+  scenario->set_host_path("rtsp.test" + host_path.substr(suffix_start));
 }
 
 /// Put every handle in the multi lane on one origin so connection limits,
@@ -1460,6 +1476,47 @@ bool IsLdapOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// bounded download path its BER-aware peer can advance.
 void RetainLdapOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsLdapOption); }
 
+/// Return whether an option can change curl's RTSP request construction,
+/// response handling, authentication, or bounded entity body. Redirect and
+/// connection-reuse controls are deliberately excluded: the peer services one
+/// request at a time and refuses follow-on sockets.
+bool IsRtspOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING:
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_COPYPOSTFIELDS:
+    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
+    case curl::fuzzer::proto::CURLOPT_HTTPAUTH:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
+    case curl::fuzzer::proto::CURLOPT_RANGE:
+    case curl::fuzzer::proto::CURLOPT_REFERER:
+    case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
+    case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST:
+    case curl::fuzzer::proto::CURLOPT_RTSP_SERVER_CSEQ:
+    case curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID:
+    case curl::fuzzer::proto::CURLOPT_RTSP_STREAM_URI:
+    case curl::fuzzer::proto::CURLOPT_RTSP_TRANSPORT:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_USERAGENT:
+    case curl::fuzzer::proto::CURLOPT_USERNAME:
+    case curl::fuzzer::proto::CURLOPT_USERPWD:
+    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Compact the RTSP option prefix so unrelated HTTP/TLS controls cannot crowd
+/// method selection, stream metadata, credentials, and the bounded body out of
+/// the shared option budget.
+void RetainRtspOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsRtspOption); }
+
 /// Decode an integral oneof locally before the generated option canonicalizer
 /// runs. Protocol mode bounds are policy, not setopt mechanics: folding them
 /// here keeps nearly every mutation on a real FTP/TFTP state while the shared
@@ -1537,6 +1594,31 @@ void CanonicalizeTftpOptionModes(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Fold the RTSP request selector onto curl's documented 1..11 domain so
+/// random uint64 mutations still issue a method instead of failing setopt
+/// validation. A zero or out-of-range value becomes the default OPTIONS.
+/// Sequence overrides are clamped to curl's int range; zero remains meaningful
+/// because curl rewrites it to its default on connect.
+void CanonicalizeRtspOptionModes(curl::fuzzer::proto::Scenario* scenario) {
+  for (auto& option : *scenario->mutable_options()) {
+    switch (option.option_id()) {
+      case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST: {
+        const std::uint64_t value = IntegralMutationValue(option);
+        option.set_uint_value(value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST ? value
+                                                                                         : CURL_RTSPREQ_OPTIONS);
+        break;
+      }
+      case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
+      case curl::fuzzer::proto::CURLOPT_RTSP_SERVER_CSEQ:
+        option.set_uint_value(std::min<std::uint64_t>(IntegralMutationValue(option),
+                                                      static_cast<std::uint64_t>(std::numeric_limits<int>::max())));
+        break;
+      default:
+        break;
+    }
+  }
+}
+
 /// Identify options introduced for FTP/TFTP/SMTP so existing fixed lanes do
 /// not silently inherit dead mutations when the shared generated manifest
 /// grows. Generic options retained by those protocol allowlists are
@@ -1574,6 +1656,34 @@ bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
 void RemoveFileTransferOnlyOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(
       scenario, [](curl::fuzzer::proto::CurlOptionId option_id) { return !IsFileTransferOnlyOption(option_id); });
+}
+
+/// Identify options that only the RTSP peer interprets. Other fixed lanes
+/// would apply them to handles whose protocol driver never reads the values, so
+/// keeping them would spend mutation and setopt work without changing a
+/// transfer.
+bool IsRtspOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
+    case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST:
+    case curl::fuzzer::proto::CURLOPT_RTSP_SERVER_CSEQ:
+    case curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID:
+    case curl::fuzzer::proto::CURLOPT_RTSP_STREAM_URI:
+    case curl::fuzzer::proto::CURLOPT_RTSP_TRANSPORT:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Remove RTSP-only options from lanes that cannot reach curl's RTSP request
+/// builder. The compatibility target returns before this helper so historical
+/// unknown-field semantics stay unchanged.
+void RemoveRtspOnlyOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario,
+                        [](curl::fuzzer::proto::CurlOptionId option_id) { return !IsRtspOnlyOption(option_id); });
 }
 
 /// Remove the stateful shapes assigned to the deep HTTP target. This happens
@@ -1818,6 +1928,23 @@ void RemoveIgnoredLdapShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+/// Retain the request-aligned control script and the fields curl serializes
+/// into an RTSP request. Custom request headers, upload/postfields bodies for
+/// ANNOUNCE and SET_PARAMETER, and MIME-free options stay meaningful. RTSP has
+/// no server greeting, cannot consume follow-on stream scripts, and does not
+/// use MIME bodies, so those shapes are removed before general bounds.
+void RemoveIgnoredRtspShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_subsequent_connections();
+  scenario->clear_mime_post();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+
+  auto* connection = scenario->mutable_connection();
+  connection->clear_initial_response();
+  RemoveUnusedFileTransferConnectionShape(connection);
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -1928,6 +2055,16 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // scripted bind/search exchanges into a live OpenLDAP session.
   if (profile != TargetProfile::kFastLdap && scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAP) {
     scenario->clear_scheme();
+  }
+
+  // RTSP is append-only too. Keep its selector away from every fixed lane
+  // that cannot service a request-aligned RTSP exchange, and drop its
+  // protocol-only options before those lanes compact their own allowlists.
+  if (profile != TargetProfile::kFastRtsp && scenario->scheme() == curl::fuzzer::proto::SCHEME_RTSP) {
+    scenario->clear_scheme();
+  }
+  if (profile != TargetProfile::kFastRtsp) {
+    RemoveRtspOnlyOptions(scenario);
   }
 
   // Accepted server push adds a harness-owned easy handle and therefore
@@ -2202,6 +2339,16 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastRtsp) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_RTSP);
+    RemoveIgnoredRtspShape(scenario);
+    RetainRtspOptions(scenario);
+    CanonicalizeRtspOptionModes(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeRtspAuthority(scenario);
+    return;
+  }
+
   // Select the lane's scheme before applying scheme-sensitive upload bounds.
   // The scheme field is itself mutable, so bounding first could accidentally
   // give an HTTP/WS case TELNET's smaller payload budget merely because that
@@ -2263,6 +2410,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastGopher:
     case TargetProfile::kFastFile:
     case TargetProfile::kFastLdap:
+    case TargetProfile::kFastRtsp:
       // Protocol-specific early-return paths selected their scheme above.
       return;
   }
@@ -2377,6 +2525,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastGopher:
     case TargetProfile::kFastFile:
     case TargetProfile::kFastLdap:
+    case TargetProfile::kFastRtsp:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.
       return;

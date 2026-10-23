@@ -58,6 +58,7 @@ def test_generate_calltree_uses_only_the_curated_sources(tmp_path: Path) -> None
         "tests/mqtt_mock_server_test.cc",
         "tests/dict_mock_server_test.cc",
         "tests/ldap_mock_server_test.cc",
+        "tests/rtsp_mock_server_test.cc",
         "tests/smtps_mock_server_test.cc",
         "fuzzer_entrypoints/curl_fuzzer_proto_multi.cc",
         "proto_fuzzer/fuzzer_main.cc",

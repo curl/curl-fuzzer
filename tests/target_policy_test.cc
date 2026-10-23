@@ -28,6 +28,7 @@ using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_LDAP;
 using curl::fuzzer::proto::SCHEME_MQTT;
+using curl::fuzzer::proto::SCHEME_RTSP;
 using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_SMTP;
@@ -390,7 +391,7 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
-      TargetProfile::kFastLdap,
+      TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -611,7 +612,7 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kApi,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
-      TargetProfile::kFastLdap,
+      TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
       TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
@@ -638,7 +639,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastSmtp,      TargetProfile::kFastFile,
       TargetProfile::kFastImap,      TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
-      TargetProfile::kFastLdap,
+      TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1478,6 +1479,119 @@ void TestNonLdapPoliciesClearLdapScheme() {
          "compatibility unexpectedly rewrote the LDAP scheme");
 }
 
+void TestFastRtspPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path(
+      "untrusted.invalid:554/twister/video?query#fragment");
+  scenario.add_request_headers("Require: gzip");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.mutable_upload()->set_data("descriptor body");
+  scenario.mutable_upload()->set_terminal(
+      curl::fuzzer::proto::UPLOAD_TERMINAL_PAUSE);
+  scenario.mutable_connection()->add_on_readable("control reply");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+
+  auto *request = scenario.add_options();
+  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+  request->set_uint_value(0);
+  auto *stream = scenario.add_options();
+  stream->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID);
+  stream->set_string_value("12345678");
+  auto *range = scenario.add_options();
+  range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
+  range->set_string_value("npt=0.000-");
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *cseq = scenario.add_options();
+  cseq->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ);
+  cseq->set_uint_value(std::numeric_limits<std::uint64_t>::max());
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastRtsp);
+
+  Expect(scenario.scheme() == SCHEME_RTSP,
+         "fast RTSP policy did not force RTSP");
+  Expect(scenario.host_path() == "rtsp.test/twister/video?query#fragment",
+         "fast RTSP policy did not pin the authority and retain the path");
+  Expect(scenario.subsequent_connections_size() == 0 &&
+             !scenario.has_mime_post() &&
+             scenario.telnet_options_size() == 0 &&
+             !scenario.has_api_plan() && !scenario.has_multi_plan(),
+         "fast RTSP policy retained another protocol's shape");
+  Expect(scenario.request_headers_size() == 1 &&
+             scenario.request_headers(0) == "Require: gzip",
+         "fast RTSP policy discarded a usable custom request header");
+  Expect(scenario.has_upload() &&
+             scenario.upload().terminal() ==
+                 curl::fuzzer::proto::UPLOAD_TERMINAL_EOF,
+         "fast RTSP policy changed the bounded request body state");
+  Expect(scenario.connection().on_readable(0) == "control reply" &&
+             scenario.connection().initial_response().empty() &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast RTSP policy changed the request-aligned reply script");
+  Expect(scenario.options_size() == 4,
+         "fast RTSP policy retained a non-RTSP option");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RTSP_REQUEST &&
+             scenario.options(0).uint_value() == CURL_RTSPREQ_OPTIONS,
+         "fast RTSP policy did not fold an invalid method onto OPTIONS");
+  Expect(scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID &&
+             scenario.options(1).string_value() == "12345678",
+         "fast RTSP policy removed the session id");
+  Expect(scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RANGE &&
+             scenario.options(2).string_value() == "npt=0.000-",
+         "fast RTSP policy removed the PLAY range");
+  Expect(scenario.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ &&
+             scenario.options(3).uint_value() ==
+                 static_cast<std::uint64_t>(std::numeric_limits<int>::max()),
+         "fast RTSP policy did not clamp the client sequence override");
+}
+
+void TestNonRtspPoliciesClearRtspSchemeAndOptions() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
+      TargetProfile::kFastFtp,  TargetProfile::kFastSmtp,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("rtsp.test/stream");
+    scenario.set_scheme(SCHEME_RTSP);
+    auto *request = scenario.add_options();
+    request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+    request->set_uint_value(CURL_RTSPREQ_DESCRIBE);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.scheme() != SCHEME_RTSP,
+           "a non-RTSP policy retained the RTSP scheme");
+    Expect(scenario.options_size() == 0,
+           "a non-RTSP policy retained an RTSP-only option");
+  }
+
+  Scenario compatibility;
+  compatibility.set_host_path("rtsp.test/stream");
+  compatibility.set_scheme(SCHEME_RTSP);
+  auto *request = compatibility.add_options();
+  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+  request->set_uint_value(CURL_RTSPREQ_DESCRIBE);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.scheme() == SCHEME_RTSP &&
+             compatibility.options_size() == 1,
+         "compatibility unexpectedly rewrote the RTSP input");
+}
+
 void TestResolverPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:8080/path?query#fragment");
@@ -2014,6 +2128,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,
       TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -2110,6 +2225,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,
       TargetProfile::kApi,
       TargetProfile::kTiming,
   };
@@ -2291,6 +2407,8 @@ void TestProfileRunModes() {
          "fast FILE profile does not authorize its peerless local reader");
   Expect(RunModeFor(TargetProfile::kFastLdap) == ScenarioRunMode::kLdapCoverage,
          "fast LDAP profile does not authorize the BER-aware peer");
+  Expect(RunModeFor(TargetProfile::kFastRtsp) == ScenarioRunMode::kRtspCoverage,
+         "fast RTSP profile does not authorize the request-aligned peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -2361,6 +2479,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2415,6 +2534,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,
       TargetProfile::kFastGopher,
       TargetProfile::kSocks4,
       TargetProfile::kResolver,
@@ -2776,6 +2896,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2884,6 +3005,8 @@ int main() {
   TestNonDictPoliciesClearDictScheme();
   TestFastLdapPolicy();
   TestNonLdapPoliciesClearLdapScheme();
+  TestFastRtspPolicy();
+  TestNonRtspPoliciesClearRtspSchemeAndOptions();
   TestFastSmtpsPolicy();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();

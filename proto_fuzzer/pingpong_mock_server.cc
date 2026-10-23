@@ -78,6 +78,17 @@ void PingpongMockServer::BeginLiteralBody(std::size_t length) {
   body_terminator_remaining_ = 2;
 }
 
+/// Enter exact-length body mode. Exactly `length` bytes are captured and no
+/// terminator is consumed, so the next byte after the body starts the next
+/// command. A zero length completes immediately.
+/// @param length Announced body byte count.
+void PingpongMockServer::BeginExactBody(std::size_t length) {
+  body_mode_ = BodyMode::kExact;
+  body_marker_.clear();
+  body_length_remaining_ = length;
+  body_terminator_remaining_ = 0;
+}
+
 /// Append decoded application bytes to the pending parser buffer. The outer
 /// service loop drains this buffer after every transport call, so it remains
 /// bounded by the scenario's command and upload budgets.
@@ -295,6 +306,25 @@ bool PingpongMockServer::ServiceControlConnection() {
       made_progress = true;
       HandleBodyComplete();
       continue;
+    }
+
+    if (body_mode_ == BodyMode::kExact) {
+      const std::size_t available = pending_control_bytes_.size() - consumed;
+      const std::size_t take = std::min(available, body_length_remaining_);
+      CapturePrefix(std::string_view(pending_control_bytes_.data() + consumed, take), kMaxCapturedUploadBytes,
+                    &uploaded_data_);
+      consumed += take;
+      body_length_remaining_ -= take;
+      if (take != 0) {
+        made_progress = true;
+      }
+      if (body_length_remaining_ == 0) {
+        body_mode_ = BodyMode::kCommand;
+        made_progress = true;
+        HandleBodyComplete();
+        continue;
+      }
+      break;
     }
 
     if (body_mode_ == BodyMode::kLiteral) {

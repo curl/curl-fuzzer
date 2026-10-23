@@ -1,0 +1,10 @@
+# A 454 response with FAILONERROR terminates the DESCRIBE transfer after the
+# request has been fully sent. The CSeq still matches, so curl reaches the
+# status-driven error path rather than the sequence-number check.
+scheme: SCHEME_RTSP
+host_path: "rtsp.test/missing"
+options { option_id: CURLOPT_RTSP_REQUEST uint_value: 2 }
+options { option_id: CURLOPT_FAILONERROR bool_value: true }
+connection {
+  on_readable: "RTSP/1.0 454 Session Not Found\r\nCSeq: 1\r\n\r\n"
+}

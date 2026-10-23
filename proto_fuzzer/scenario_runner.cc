@@ -30,6 +30,7 @@
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/pop3_mock_server.h"
 #include "proto_fuzzer/request_data.h"
+#include "proto_fuzzer/rtsp_mock_server.h"
 #include "proto_fuzzer/smtp_mock_server.h"
 #include "proto_fuzzer/socks4_mock_server.h"
 #include "proto_fuzzer/telnet_mock_server.h"
@@ -116,6 +117,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "mqtt";
     case curl::fuzzer::proto::SCHEME_LDAP:
       return "ldap";
+    case curl::fuzzer::proto::SCHEME_RTSP:
+      return "rtsp";
     case curl::fuzzer::proto::SCHEME_SMTPS:
       return "smtps";
     case curl::fuzzer::proto::SCHEME_DICT:
@@ -305,6 +308,14 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<LdapMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_RTSP:
+      // RTSP is request-aligned rather than greeting-aligned, so the
+      // dedicated lane is required to select the peer that waits for the
+      // request terminator before releasing each scripted response.
+      if (mode == ScenarioRunMode::kRtspCoverage) {
+        return std::make_unique<RtspMockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -361,6 +372,16 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                      ldap->search_request_count(), ldap->scripted_message_count(),
                                                      ldap->synthesized_done_count()};
     (void)ldap_observation;
+  }
+
+  if (auto* rtsp = dynamic_cast<RtspMockServer*>(mock)) {
+    const volatile std::size_t rtsp_observation[] = {rtsp->request_count(),
+                                                     rtsp->response_count(),
+                                                     rtsp->last_client_cseq(),
+                                                     rtsp->control_transcript().size(),
+                                                     rtsp->last_request_line().size(),
+                                                     rtsp->last_stream_uri().size()};
+    (void)rtsp_observation;
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
