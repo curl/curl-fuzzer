@@ -628,6 +628,9 @@ enum Scheme {
   SCHEME_MQTT = 13;
   SCHEME_SMTPS = 14;
   SCHEME_DICT = 15;
+  // The local-file protocol has no network peer. The dedicated lane pins the
+  // URL path to a read-only target and exercises file:// parsing only.
+  SCHEME_FILE = 16;
 }
 
 message SetOption {

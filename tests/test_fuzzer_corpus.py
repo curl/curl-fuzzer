@@ -287,6 +287,7 @@ def test_compatible_target_policy_keeps_wire_formats_aligned() -> None:
     [
         ("curl_fuzzer_proto_http_deep", True),
         ("curl_fuzzer_proto_telnet", True),
+        ("curl_fuzzer_proto_file", True),
         ("curl_fuzzer_proto_h2_proxy", False),
         ("curl_fuzzer_proto_https_h2", False),
         ("curl_fuzzer_proto_http2", False),

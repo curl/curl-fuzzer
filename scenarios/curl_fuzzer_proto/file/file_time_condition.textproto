@@ -1,0 +1,8 @@
+# Exercise the file protocol's time-condition and resume selectors. Both are
+# evaluated locally after the policy replaces the path with /dev/null.
+scheme: SCHEME_FILE
+host_path: "localhost/dev/null"
+options { option_id: CURLOPT_TIMECONDITION uint_value: 1 }
+options { option_id: CURLOPT_TIMEVALUE_LARGE uint_value: 0 }
+options { option_id: CURLOPT_RESUME_FROM_LARGE uint_value: 0 }
+options { option_id: CURLOPT_MAXFILESIZE_LARGE uint_value: 0 }

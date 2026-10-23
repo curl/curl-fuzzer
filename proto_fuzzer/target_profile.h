@@ -59,6 +59,8 @@ enum class TargetProfile {
   kFastDict,
   /// Exercise Gopher selectors through the bounded stream peer.
   kFastGopher,
+  /// Exercise file:// URL parsing against a fixed read-only local target.
+  kFastFile,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
   /// Exercise several easy handles through one shared multi handle.
@@ -110,6 +112,8 @@ enum class ScenarioRunMode {
   kDictCoverage,
   /// Drive Gopher through the bounded stream peer.
   kGopherCoverage,
+  /// Drive file:// without a peer, reading only the canonical local target.
+  kFileCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
   /// Honour MultiPlan and drive several HTTP transfers through one multi.
@@ -180,6 +184,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastGopher:
       return ScenarioRunMode::kGopherCoverage;
+
+    case TargetProfile::kFastFile:
+      return ScenarioRunMode::kFileCoverage;
 
     case TargetProfile::kCompatibility:
     case TargetProfile::kFastWebSocket:

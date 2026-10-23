@@ -107,6 +107,12 @@ Other peers intentionally give those fields narrower meanings:
   terminator in the seed when a well-formed body is desired; curl does not
   parse it and treats EOF as end-of-transfer. `initial_response` is normally
   empty because DICT has no server greeting.
+- FILE has no peer and opens the local filesystem directly. Its target policy
+  keeps the fuzz-controlled authority, query, and fragment but replaces the
+  URL path with `/dev/null`; response scripts, uploads, and socket controls are
+  removed. Mutations therefore exercise `file://` parsing and curl's local
+  range, resume, time-condition, and metadata options without reading or
+  writing an arbitrary host path.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

@@ -1,0 +1,9 @@
+# Exercise curl's local-file range, header, and conversion controls against the
+# fixed empty target. RANGE is parsed by file.c even though /dev/null is empty.
+scheme: SCHEME_FILE
+host_path: "localhost/dev/null"
+options { option_id: CURLOPT_HEADER bool_value: true }
+options { option_id: CURLOPT_RANGE string_value: "0-0" }
+options { option_id: CURLOPT_TRANSFERTEXT bool_value: true }
+options { option_id: CURLOPT_CRLF bool_value: true }
+options { option_id: CURLOPT_BUFFERSIZE uint_value: 4096 }

@@ -1,0 +1,7 @@
+# FILE has no network peer. The path is pinned to /dev/null by the target
+# policy; the authority and query/fragment bytes remain fuzz-controlled URL
+# input. NOBODY reaches curl's file metadata path without reading the target.
+scheme: SCHEME_FILE
+host_path: "localhost/dev/null"
+options { option_id: CURLOPT_NOBODY bool_value: true }
+options { option_id: CURLOPT_FILETIME bool_value: true }

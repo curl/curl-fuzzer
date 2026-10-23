@@ -28,6 +28,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. |
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
+| `curl_fuzzer_proto_file` | `file://` URL parsing with a fuzz-controlled authority and suffix, pinned to a read-only `/dev/null` path. There is no network peer and uploads are removed so the lane cannot write host files. |
 | `curl_fuzzer_proto_api` | Easy, share, multi, URL, connect-only, pause/resume, and typed result API lifecycles described by `api_plan`. |
 | `curl_fuzzer_proto_multi` | Two to four easy handles on one shared multi handle, with bounded scheduling actions, connection-cache controls, and a five-second packaged timeout. |
 | `curl_fuzzer_proto_timing` | Plain HTTP or WebSocket backpressure and timed-wait behavior; it guarantees a non-default bounded pressure configuration. |
@@ -65,8 +66,11 @@ Fast lanes clear backpressure because a single mutated value would otherwise
 move an ordinary case into a timed loop. The timing lane does the inverse and
 forces bounded pressure. Direct HTTP/3 discards the stream `Connection`;
 CONNECT-UDP mode retains it and clears direct HTTP/3 actions. FTP, TFTP,
-SMTP, IMAP, POP3, MQTT, DICT, TELNET, and Gopher prune fields that their
-specialized peers cannot observe.
+SMTP, IMAP, POP3, MQTT, DICT, TELNET, Gopher, and FILE prune fields that their
+specialized peers (or, for FILE, the peerless local reader) cannot observe.
+The FILE lane additionally replaces the URL path with `/dev/null` and removes
+upload state; the authority, query, and fragment remain mutation-controlled so
+URL parsing still has fuzzing value without granting access to host files.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
 inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would

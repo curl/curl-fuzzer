@@ -262,6 +262,33 @@ void CanonicalizeDictAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("dict.test" + host_path.substr(suffix_start));
 }
 
+/// Pin a file:// URL to a fixed, read-only local target. The path component is
+/// what libcurl opens, so retaining a fuzzed path would let a mutated input
+/// read any file visible to the fuzzer process. Keep the fuzz-controlled
+/// authority and any query/fragment so URL parsing still sees mutated bytes,
+/// but always replace the path with /dev/null. An input with no path keeps its
+/// authority and gains /dev/null, so the canonical empty-authority form is
+/// `file:///dev/null`.
+void CanonicalizeFileAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t path_start = host_path.find('/');
+  const std::size_t query_start = host_path.find_first_of("?#");
+  std::size_t authority_end = host_path.size();
+  if (path_start != std::string::npos) {
+    authority_end = std::min(authority_end, path_start);
+  }
+  if (query_start != std::string::npos) {
+    authority_end = std::min(authority_end, query_start);
+  }
+
+  std::string canonical = host_path.substr(0, authority_end);
+  canonical += "/dev/null";
+  if (query_start != std::string::npos) {
+    canonical += host_path.substr(query_start);
+  }
+  scenario->set_host_path(canonical);
+}
+
 /// Put every handle in the multi lane on one origin so connection limits,
 /// queueing, and reuse affect real transfers instead of independent hosts.
 /// Path/query/fragment bytes remain mutation-controlled.
@@ -501,6 +528,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_SMTP:
     case curl::fuzzer::proto::SCHEME_SMTPS:
     case curl::fuzzer::proto::SCHEME_DICT:
+    case curl::fuzzer::proto::SCHEME_FILE:
     default:
       return false;
   }
@@ -1183,6 +1211,42 @@ bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
 /// peer can actually advance.
 void RetainFtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFtpOption); }
 
+/// Return whether an option can change a local file:// transfer without
+/// turning it into a write. Upload and append controls are deliberately
+/// excluded: the FILE handler opens the canonical path for writing in that
+/// mode, while this lane must only observe a fixed read-only target. Range,
+/// resume, size, metadata, and conversion controls remain useful because curl
+/// implements them directly in file.c.
+bool IsFileOption(curl::fuzzer::proto::CurlOptionId option_id) {
+  switch (option_id) {
+    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
+    case curl::fuzzer::proto::CURLOPT_CRLF:
+    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
+    case curl::fuzzer::proto::CURLOPT_DISALLOW_USERNAME_IN_URL:
+    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
+    case curl::fuzzer::proto::CURLOPT_FILETIME:
+    case curl::fuzzer::proto::CURLOPT_HEADER:
+    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_NOBODY:
+    case curl::fuzzer::proto::CURLOPT_PATH_AS_IS:
+    case curl::fuzzer::proto::CURLOPT_RANGE:
+    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
+    case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
+    case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
+      return true;
+
+    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+    default:
+      return false;
+  }
+}
+
+/// Keep the FILE target's option budget on local-transfer semantics. This is
+/// also the write barrier: CURLOPT_UPLOAD, CURLOPT_APPEND, and the upload-size
+/// controls never reach the easy handle in this lane.
+void RetainFileOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFileOption); }
+
 /// Return whether an option can change the single-connection SMTP exchange.
 /// The peer owns routing and timeouts; this list retains the mail envelope,
 /// authentication, and upload shape. STARTTLS remains exclusive to TLS lanes,
@@ -1680,6 +1744,22 @@ void RemoveIgnoredMqttShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
+/// FILE has no peer and no request body, so response scripts, connection
+/// controls, MIME, uploads, and HTTP/TELNET/API state are all inert. Removing
+/// them before the general bounds keeps mutation work on the URL and the small
+/// file-transfer option set. The upload clear is a safety invariant as well as
+/// a throughput choice: file:// writes when CURLOPT_UPLOAD is set.
+void RemoveIgnoredFileShape(curl::fuzzer::proto::Scenario* scenario) {
+  scenario->clear_connection();
+  scenario->clear_subsequent_connections();
+  scenario->clear_request_headers();
+  scenario->clear_mime_post();
+  scenario->clear_upload();
+  RemoveTelnetOnlyShape(scenario);
+  RemoveApiOnlyShape(scenario);
+  RemoveMultiOnlyShape(scenario);
+}
+
 /// Preserve useful in-range mutations while folding ineffective extremes onto
 /// meaningful boundaries. Zero remains special: it disables that individual
 /// control and lets the other control provide the timing target's pressure.
@@ -1710,6 +1790,7 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_DICT:
+    case curl::fuzzer::proto::SCHEME_FILE:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return curl::fuzzer::proto::SCHEME_HTTP;
@@ -1775,6 +1856,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // script; every other fixed lane clears the selector before installing its
   // own scheme.
   if (profile != TargetProfile::kFastDict && scenario->scheme() == curl::fuzzer::proto::SCHEME_DICT) {
+    scenario->clear_scheme();
+  }
+
+  // FILE is append-only as well. Other fixed lanes must not inherit a local
+  // filesystem selector from a corpus input; only the dedicated lane may run
+  // the peerless file:// path.
+  if (profile != TargetProfile::kFastFile && scenario->scheme() == curl::fuzzer::proto::SCHEME_FILE) {
     scenario->clear_scheme();
   }
 
@@ -2032,6 +2120,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  if (profile == TargetProfile::kFastFile) {
+    scenario->set_scheme(curl::fuzzer::proto::SCHEME_FILE);
+    RemoveIgnoredFileShape(scenario);
+    RetainFileOptions(scenario);
+    BoundScenarioShape(scenario);
+    CanonicalizeFileAuthority(scenario);
+    return;
+  }
+
   // Select the lane's scheme before applying scheme-sensitive upload bounds.
   // The scheme field is itself mutable, so bounding first could accidentally
   // give an HTTP/WS case TELNET's smaller payload budget merely because that
@@ -2091,6 +2188,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastMqtt:
     case TargetProfile::kFastDict:
     case TargetProfile::kFastGopher:
+    case TargetProfile::kFastFile:
       // Protocol-specific early-return paths selected their scheme above.
       return;
   }
@@ -2203,6 +2301,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     case TargetProfile::kFastMqtt:
     case TargetProfile::kFastDict:
     case TargetProfile::kFastGopher:
+    case TargetProfile::kFastFile:
       // Their peers consume narrower raw-script shapes, pruned before general
       // bounds so ignored fields never tax these fast paths.
       return;
