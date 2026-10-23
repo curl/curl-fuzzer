@@ -209,27 +209,33 @@ void CanonicalizeSmtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
 /// the `;UID=`, `;MAILINDEX=`, `;SECTION=`, and `;PARTIAL=` selectors that
 /// choose FETCH, SEARCH, and LIST states; canonicalizing only the host avoids
 /// spending iterations on failures before curl sends its first command.
+/// Implicit-TLS inputs use the checked-in certificate's tls.test name so the
+/// verified handshake can complete before the same tagged exchange runs.
 void CanonicalizeImapAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_IMAPS ? "tls.test" : "imap.test";
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path("imap.test/INBOX");
+    scenario->set_host_path(std::string(host) + "/INBOX");
     return;
   }
-  scenario->set_host_path("imap.test" + host_path.substr(suffix_start));
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
 /// Give POP3 a mailbox with a message id by default so the lane reaches RETR
 /// rather than only LIST. The id remains mutation-controlled, and an explicit
 /// trailing slash or query continues to select the listing and error states.
+/// Implicit-TLS inputs use the checked-in certificate's tls.test name so the
+/// verified handshake can complete before the same status-line exchange runs.
 void CanonicalizePop3Authority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_POP3S ? "tls.test" : "pop3.test";
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path("pop3.test/1");
+    scenario->set_host_path(std::string(host) + "/1");
     return;
   }
-  scenario->set_host_path("pop3.test" + host_path.substr(suffix_start));
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
 /// Pin the MQTT broker authority while leaving the URL path mutation-
@@ -553,7 +559,9 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_TFTP:
     case curl::fuzzer::proto::SCHEME_IMAP:
+    case curl::fuzzer::proto::SCHEME_IMAPS:
     case curl::fuzzer::proto::SCHEME_POP3:
+    case curl::fuzzer::proto::SCHEME_POP3S:
     case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
@@ -1966,13 +1974,17 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_SMTP:
     case curl::fuzzer::proto::SCHEME_SMTPS:
       return curl::fuzzer::proto::SCHEME_SMTP;
+    case curl::fuzzer::proto::SCHEME_IMAP:
+    case curl::fuzzer::proto::SCHEME_IMAPS:
+      return curl::fuzzer::proto::SCHEME_IMAP;
+    case curl::fuzzer::proto::SCHEME_POP3:
+    case curl::fuzzer::proto::SCHEME_POP3S:
+      return curl::fuzzer::proto::SCHEME_POP3;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_TFTP:
-    case curl::fuzzer::proto::SCHEME_IMAP:
-    case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_DICT:
     case curl::fuzzer::proto::SCHEME_FILE:
@@ -2275,7 +2287,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastImap) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
+    // Preserve an explicitly supplied IMAPS scheme so seeds and mutations can
+    // select the implicit-TLS peer; every other scheme falls back to the
+    // historical plaintext lane. Both values reuse this tag-aware parser.
+    const auto scheme = scenario->scheme();
+    scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_IMAPS ? curl::fuzzer::proto::SCHEME_IMAPS
+                                                                     : curl::fuzzer::proto::SCHEME_IMAP);
     RemoveIgnoredImapShape(scenario);
     RetainImapOptions(scenario);
     BoundScenarioShape(scenario);
@@ -2284,7 +2301,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastPop3) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+    // Preserve an explicitly supplied POP3S scheme so seeds and mutations can
+    // select the implicit-TLS peer; every other scheme falls back to the
+    // historical plaintext lane. Both values reuse this status-line parser.
+    const auto scheme = scenario->scheme();
+    scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_POP3S ? curl::fuzzer::proto::SCHEME_POP3S
+                                                                     : curl::fuzzer::proto::SCHEME_POP3);
     RemoveIgnoredPop3Shape(scenario);
     RetainPop3Options(scenario);
     BoundScenarioShape(scenario);

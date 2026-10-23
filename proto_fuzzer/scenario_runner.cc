@@ -41,6 +41,8 @@
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
+#include "proto_fuzzer/imaps_mock_server.h"
+#include "proto_fuzzer/pop3s_mock_server.h"
 #include "proto_fuzzer/smtps_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #include "proto_fuzzer/tls_websocket_mock_server.h"
@@ -111,8 +113,12 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "smtp";
     case curl::fuzzer::proto::SCHEME_IMAP:
       return "imap";
+    case curl::fuzzer::proto::SCHEME_IMAPS:
+      return "imaps";
     case curl::fuzzer::proto::SCHEME_POP3:
       return "pop3";
+    case curl::fuzzer::proto::SCHEME_POP3S:
+      return "pop3s";
     case curl::fuzzer::proto::SCHEME_MQTT:
       return "mqtt";
     case curl::fuzzer::proto::SCHEME_LDAP:
@@ -296,6 +302,26 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       }
 #endif
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_IMAPS:
+      // Implicit TLS reuses the IMAP lane and tag-aware parser; only the
+      // transport factory differs. Gate it on the same fixed run mode so no
+      // other target can turn the appended enum value into a TLS exchange.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kImapCoverage) {
+        return std::make_unique<ImapsMockServer>();
+      }
+#endif
+      return nullptr;
+    case curl::fuzzer::proto::SCHEME_POP3S:
+      // Implicit TLS reuses the POP3 lane and status-line parser; only the
+      // transport factory differs. Gate it on the same fixed run mode so no
+      // other target can turn the appended enum value into a TLS exchange.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kPop3Coverage) {
+        return std::make_unique<Pop3sMockServer>();
+      }
+#endif
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_FILE:
       // FILE reads the local filesystem directly. The dedicated lane pins its
       // path to /dev/null, so there is no socket or scriptable peer to install.
@@ -390,6 +416,20 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                       static_cast<std::size_t>(smtps->negotiated_tls_version()),
                                                       smtps->negotiated_alpn().size()};
     (void)smtps_observation;
+  }
+
+  if (auto* imaps = dynamic_cast<ImapsMockServer*>(mock)) {
+    const volatile std::size_t imaps_observation[] = {imaps->completed_handshake_count(),
+                                                      static_cast<std::size_t>(imaps->negotiated_tls_version()),
+                                                      imaps->negotiated_alpn().size()};
+    (void)imaps_observation;
+  }
+
+  if (auto* pop3s = dynamic_cast<Pop3sMockServer*>(mock)) {
+    const volatile std::size_t pop3s_observation[] = {pop3s->completed_handshake_count(),
+                                                      static_cast<std::size_t>(pop3s->negotiated_tls_version()),
+                                                      pop3s->negotiated_alpn().size()};
+    (void)pop3s_observation;
   }
 #endif
 

@@ -86,10 +86,14 @@ Other peers intentionally give those fields narrower meanings:
   receives curl's generated command tag. A `{N}` literal copies the next N
   bytes verbatim, so FETCH bodies and their tagged completion can share one
   chunk. An accepted APPEND continuation drains exactly the announced literal
-  size.
+  size. An `SCHEME_IMAPS` scenario runs the identical exchange over implicit
+  TLS; its fixed authority is `tls.test`, matching the checked-in trust anchor,
+  and the handshake carries no ALPN extension.
 - POP3 also uses command-aligned replies, but its `+OK`/`-ERR` status lines
   need no rewriting. Multi-line CAPA, LIST, and RETR replies include their
-  terminating dot line and are written unchanged.
+  terminating dot line and are written unchanged. An `SCHEME_POP3S` scenario
+  runs the identical exchange over implicit TLS against the same `tls.test`
+  authority and also negotiates no ALPN protocol.
 - MQTT treats the primary connection as a binary packet stream. The initial
   response is the CONNACK, while each readable chunk is an opaque
   server-initiated packet (for example PUBLISH followed by a server

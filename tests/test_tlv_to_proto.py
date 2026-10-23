@@ -123,3 +123,21 @@ def test_smtps_url_translates_to_the_implicit_tls_scheme() -> None:
 
     assert "scheme: SCHEME_SMTPS" in rendered
     assert 'host_path: "127.0.0.1/"' in rendered
+
+
+def test_imaps_url_translates_to_the_implicit_tls_scheme() -> None:
+    rendered = render_textproto(
+        "seed", convert_stream(tlv(BaseType.TYPE_URL, b"imaps://127.0.0.1/"))
+    )
+
+    assert "scheme: SCHEME_IMAPS" in rendered
+    assert 'host_path: "127.0.0.1/"' in rendered
+
+
+def test_pop3s_url_translates_to_the_implicit_tls_scheme() -> None:
+    rendered = render_textproto(
+        "seed", convert_stream(tlv(BaseType.TYPE_URL, b"pop3s://127.0.0.1/"))
+    )
+
+    assert "scheme: SCHEME_POP3S" in rendered
+    assert 'host_path: "127.0.0.1/"' in rendered

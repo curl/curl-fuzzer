@@ -1,0 +1,16 @@
+# Complete implicit-TLS IMAPS login and FETCH. curl negotiates TLS immediately,
+# then runs the same CAPABILITY/LOGIN/SELECT/FETCH exchange as plaintext IMAP.
+# The peer still prepends the generated command tag to each `OK` line, and the
+# literal size must match the bytes between `{18}` and the tagged completion.
+# The authority matches the checked-in tls.test certificate.
+scheme: SCHEME_IMAPS
+host_path: "tls.test/INBOX;UID=1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "* OK imaps.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1\r\nOK CAPABILITY completed\r\n"
+  on_readable: "OK LOGIN completed\r\n"
+  on_readable: "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n"
+  on_readable: "* 1 FETCH (BODY[] {18}\r\nHello from IMAPS\r\nOK FETCH completed\r\n"
+}

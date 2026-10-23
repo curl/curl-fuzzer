@@ -1734,6 +1734,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         list(APPEND PROTO_FUZZER_TLS_SOURCES
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
+            proto_fuzzer/imaps_mock_server.cc
+            proto_fuzzer/pop3s_mock_server.cc
             proto_fuzzer/smtps_mock_server.cc
             proto_fuzzer/tls_mock_server.cc
             proto_fuzzer/tls_test_credential_cache.cc
@@ -2480,6 +2482,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/pingpong_mock_server.cc
             proto_fuzzer/request_data.cc
             proto_fuzzer/smtp_mock_server.cc
+            proto_fuzzer/imap_mock_server.cc
+            proto_fuzzer/pop3_mock_server.cc
             proto_fuzzer/target_policy.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
@@ -2790,6 +2794,99 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 COMMAND smtps_mock_server_test)
             set_tests_properties(smtps_mock_server_test PROPERTIES TIMEOUT 5)
             add_dependencies(fuzzer_unit_tests smtps_mock_server_test)
+
+            # The implicit-TLS IMAP peer needs the OpenSSL carrier on top of
+            # the plaintext IMAP implementation, so it gets its own executable
+            # and leaves imap_mock_server_test runnable without OpenSSL.
+            add_executable(imaps_mock_server_test
+                tests/imaps_mock_server_test.cc
+                proto_fuzzer/imaps_mock_server.cc
+                proto_fuzzer/imap_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
+                proto_fuzzer/pingpong_mock_server.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC})
+            target_compile_features(imaps_mock_server_test PRIVATE cxx_std_17)
+            target_compile_options(imaps_mock_server_test PRIVATE ${COMMON_FLAGS})
+            target_compile_definitions(imaps_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(imaps_mock_server_test PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include)
+            target_link_libraries(imaps_mock_server_test PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m)
+            target_link_options(imaps_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(imaps_mock_server_test
+                ${FUZZ_DEPS}
+                openssl_external
+                zlib_external
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME imaps_mock_server_test
+                COMMAND imaps_mock_server_test)
+            set_tests_properties(imaps_mock_server_test PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests imaps_mock_server_test)
+
+            # POP3S follows the same split: the dedicated executable links the
+            # implicit-TLS peer and the plaintext POP3 parser it extends.
+            add_executable(pop3s_mock_server_test
+                tests/pop3s_mock_server_test.cc
+                proto_fuzzer/pop3s_mock_server.cc
+                proto_fuzzer/pop3_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
+                proto_fuzzer/pingpong_mock_server.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC})
+            target_compile_features(pop3s_mock_server_test PRIVATE cxx_std_17)
+            target_compile_options(pop3s_mock_server_test PRIVATE ${COMMON_FLAGS})
+            target_compile_definitions(pop3s_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(pop3s_mock_server_test PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include)
+            target_link_libraries(pop3s_mock_server_test PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m)
+            target_link_options(pop3s_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(pop3s_mock_server_test
+                ${FUZZ_DEPS}
+                openssl_external
+                zlib_external
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME pop3s_mock_server_test
+                COMMAND pop3s_mock_server_test)
+            set_tests_properties(pop3s_mock_server_test PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests pop3s_mock_server_test)
         endif()
 
         if(BUILD_HTTP3_VARIANT)
