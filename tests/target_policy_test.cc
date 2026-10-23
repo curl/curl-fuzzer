@@ -1065,6 +1065,7 @@ void TestNonFilePoliciesClearFileScheme() {
 void TestFastSmtpPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("untrusted.invalid:2525/client.test?query#fragment");
+  scenario.set_probe_multi_pollset(true);
   scenario.add_request_headers("X-Ignored: smtp");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
@@ -1103,6 +1104,8 @@ void TestFastSmtpPolicy() {
 
   Expect(scenario.scheme() == SCHEME_SMTP,
          "fast SMTP policy did not force SMTP");
+  Expect(scenario.probe_multi_pollset(),
+         "fast SMTP policy removed its pollset-probe opt-in");
   Expect(scenario.host_path() == "smtp.test/client.test?query#fragment",
          "fast SMTP policy did not preserve the EHLO path suffix");
   Expect(scenario.request_headers_size() == 0 &&
@@ -1239,6 +1242,7 @@ void TestFastTftpPolicy() {
 void TestFastImapPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("untrusted.invalid:143/INBOX;UID=1?query#fragment");
+  scenario.set_probe_multi_pollset(true);
   scenario.add_request_headers("X-Ignored: imap");
   scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
   scenario.add_telnet_options("TTYPE=ignored");
@@ -1267,6 +1271,8 @@ void TestFastImapPolicy() {
 
   Expect(scenario.scheme() == curl::fuzzer::proto::SCHEME_IMAP,
          "fast IMAP policy did not force IMAP");
+  Expect(scenario.probe_multi_pollset(),
+         "fast IMAP policy removed its pollset-probe opt-in");
   Expect(scenario.host_path() == "imap.test/INBOX;UID=1?query#fragment",
          "fast IMAP policy did not retain the mailbox selectors");
   Expect(scenario.request_headers_size() == 0 &&
@@ -1296,6 +1302,7 @@ void TestFastImapPolicy() {
 void TestFastPop3Policy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:110/2?query");
+  scenario.set_probe_multi_pollset(true);
   scenario.add_request_headers("X-Ignored: pop3");
   scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
   scenario.add_telnet_options("TTYPE=ignored");
@@ -1324,6 +1331,8 @@ void TestFastPop3Policy() {
 
   Expect(scenario.scheme() == curl::fuzzer::proto::SCHEME_POP3,
          "fast POP3 policy did not force POP3");
+  Expect(scenario.probe_multi_pollset(),
+         "fast POP3 policy removed its pollset-probe opt-in");
   Expect(scenario.host_path() == "pop3.test/2?query",
          "fast POP3 policy did not retain the message-id path");
   Expect(scenario.request_headers_size() == 0 &&
@@ -2870,6 +2879,7 @@ void TestProfileRunModes() {
 void TestCompatibilityProfileIsNoOp() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("compatibility.example/");
+  scenario.set_probe_multi_pollset(true);
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_accept_h2_push(true);
@@ -2898,6 +2908,51 @@ void TestCompatibilityProfileIsNoOp() {
 
   Expect(scenario.SerializeAsString() == before,
          "compatibility profile changed an accumulated-corpus input");
+}
+
+void TestOnlyMailPoliciesRetainPollsetProbe() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,
+      TargetProfile::kH2Proxy,
+      TargetProfile::kSocks4,
+      TargetProfile::kResolver,
+      TargetProfile::kFastWebSocket,
+      TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,
+      TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,
+      TargetProfile::kFastMqtt,
+      TargetProfile::kFastDict,
+      TargetProfile::kFastGopher,
+      TargetProfile::kFastFile,
+      TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,
+      TargetProfile::kApi,
+      TargetProfile::kMulti,
+      TargetProfile::kTiming,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_probe_multi_pollset(true);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(!scenario.probe_multi_pollset(),
+           "a fixed non-mail policy retained pollset-probe work");
+  }
+
+  Scenario compatibility;
+  compatibility.set_probe_multi_pollset(true);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.probe_multi_pollset(),
+         "compatibility policy changed an append-only scenario field");
 }
 
 void TestAllocationFailurePlansAreCanonicalized() {
@@ -3487,6 +3542,7 @@ int main() {
   TestAllocationFailuresAvoidDanglingMimeReader();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
+  TestOnlyMailPoliciesRetainPollsetProbe();
   TestAllocationFailurePlansAreCanonicalized();
   TestNonH2OriginPoliciesDiscardAcceptedPushMode();
   TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget();

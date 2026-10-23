@@ -159,6 +159,7 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     smtp_root = SCENARIO_ROOT / "smtp"
     upload = (smtp_root / "smtp_upload_mail.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_SMTP" in upload
+    assert "probe_multi_pollset: true" in upload
     assert 'host_path: "smtp.test/client.test"' in upload
     assert "CURLOPT_UPLOAD bool_value: true" in upload
     assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in upload
@@ -242,6 +243,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     """Keep tagless status replies paired with literal and multi-line bodies."""
     imap_root = SCENARIO_ROOT / "imap"
     fetch = (imap_root / "imap_fetch_literal.textproto").read_text(encoding="utf-8")
+    assert "probe_multi_pollset: true" in fetch
     assert "scheme: SCHEME_IMAP" in fetch
     assert 'host_path: "imap.test/INBOX;UID=1"' in fetch
     assert "* CAPABILITY IMAP4rev1" in fetch
@@ -297,6 +299,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
 
     pop3_root = SCENARIO_ROOT / "pop3"
     retr = (pop3_root / "pop3_retr_message.textproto").read_text(encoding="utf-8")
+    assert "probe_multi_pollset: true" in retr
     assert "scheme: SCHEME_POP3" in retr
     assert 'host_path: "pop3.test/1"' in retr
     assert "+OK capabilities" in retr

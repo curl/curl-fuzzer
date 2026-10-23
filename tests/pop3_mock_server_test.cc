@@ -36,6 +36,7 @@ struct Pop3RunResult {
   CURLcode code = CURLE_FAILED_INIT;
   std::string body;
   std::string transcript;
+  std::size_t active_pollset_probes = 0;
 };
 
 Pop3RunResult RunScenario(const Scenario &scenario, const char *url) {
@@ -63,6 +64,7 @@ Pop3RunResult RunScenario(const Scenario &scenario, const char *url) {
     result.code = server.DriveScenario(easy.get(), scenario);
   }
   result.transcript = server.control_transcript();
+  result.active_pollset_probes = server.active_pollset_probe_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -89,6 +91,7 @@ void TestRetrMultilineMessage() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
   scenario.set_host_path("pop3.test/1");
+  scenario.set_probe_multi_pollset(true);
   AddLoginOptions(&scenario);
   AddGreetingAndCapability(&scenario);
   auto *connection = scenario.mutable_connection();
@@ -111,6 +114,8 @@ void TestRetrMultilineMessage() {
          "POP3 transfer did not issue RETR");
   Expect(result.transcript.find("QUIT\r\n") != std::string::npos,
          "POP3 teardown did not issue QUIT");
+  Expect(result.active_pollset_probes != 0,
+         "POP3 opt-in did not probe a live protocol pollset");
 }
 
 void TestListMultilineMailbox() {
@@ -127,6 +132,8 @@ void TestListMultilineMailbox() {
          "POP3 LIST produced the wrong multi-line listing");
   Expect(result.transcript.find("LIST\r\n") != std::string::npos,
          "POP3 listing did not issue LIST");
+  Expect(result.active_pollset_probes == 0,
+         "POP3 default path unexpectedly issued a pollset probe");
 }
 
 void TestUserDenialIsTerminal() {

@@ -2242,6 +2242,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_mail_rcpt();
   }
 
+  // Only these command/reply peers currently interleave zero-timeout public
+  // multi polling with immediate service of their live control connection.
+  // Keep the opt-in out of fixed lanes whose driver cannot honor that timing
+  // contract; compatibility returned above and preserves its wire input.
+  if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
+      profile != TargetProfile::kFastPop3) {
+    scenario->clear_probe_multi_pollset();
+  }
+
   // Anonymous parser files add syscalls and line parsing that belong only in
   // the deep HTTP lane. Clear them before every protocol-specific early path
   // so fast targets never pay to normalize content they cannot consume.
