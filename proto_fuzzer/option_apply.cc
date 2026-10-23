@@ -26,7 +26,7 @@ namespace {
 
 constexpr char kEventDrivenProtocolsAllowed[] = "http,https,ws,wss";
 constexpr char kTelnetProtocolAllowed[] = "telnet";
-constexpr char kFtpProtocolAllowed[] = "ftp";
+constexpr char kFtpProtocolAllowed[] = "ftp,ftps";
 constexpr char kTftpProtocolAllowed[] = "tftp";
 constexpr char kSmtpProtocolAllowed[] = "smtp,smtps";
 constexpr char kImapProtocolAllowed[] = "imap,imaps";
@@ -130,6 +130,7 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       direct_protocols = kTelnetProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_FTP:
+    case curl::fuzzer::proto::SCHEME_FTPS:
       direct_protocols = kFtpProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_TFTP:

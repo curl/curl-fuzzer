@@ -52,6 +52,7 @@ def test_generate_calltree_uses_only_the_curated_sources(tmp_path: Path) -> None
         "tests/http3_mock_server_test.cc",
         "tests/tftp_mock_server_test.cc",
         "tests/ftp_mock_server_test.cc",
+        "tests/ftps_mock_server_test.cc",
         "tests/smtp_mock_server_test.cc",
         "tests/imap_mock_server_test.cc",
         "tests/pop3_mock_server_test.cc",

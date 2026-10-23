@@ -67,7 +67,14 @@ Other peers intentionally give those fields narrower meanings:
 - TELNET preloads a bounded response before entering curl's blocking protocol
   loop.
 - FTP treats the primary connection as command-aligned control replies and
-  follow-on connections as data streams.
+  follow-on connections as data streams. An `SCHEME_FTPS` scenario runs the
+  identical command and passive-data exchange over implicit TLS: the control
+  connection and each EPSV/PASV data connection complete a verified handshake,
+  and the script must answer curl's `PBSZ 0` and `PROT P` commands after login.
+  Its fixed authority is `tls.test`, matching the checked-in trust anchor, and
+  the handshakes carry no ALPN extension. Active mode is not available in this
+  lane because it would require wrapping a real TCP listener rather than a
+  socketpair; `CURLOPT_FTPPORT` is removed from FTPS inputs.
 - TFTP preserves packet boundaries: the initial response and each readable
   chunk are separate datagrams.
 - SMTP uses the primary connection as command-aligned replies. The initial

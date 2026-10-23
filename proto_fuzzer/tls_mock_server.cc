@@ -363,7 +363,12 @@ class TlsMockConnection final : public MockConnection {
       }
       if (result != 1) {
         const int error = SSL_get_error(ssl_, result);
-        if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE && error != SSL_ERROR_ZERO_RETURN) {
+        if (error == SSL_ERROR_ZERO_RETURN) {
+          // The client sent close_notify. TLS requires a reciprocal close_notify
+          // before the orderly shutdown completes; protocols such as FTP upload
+          // wait for that completion even though the application data is done.
+          shutdown_requested_ = true;
+        } else if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
           failed_ = true;
         }
       }

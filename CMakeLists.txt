@@ -1732,6 +1732,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(PROTO_FUZZER_TLS_SOURCES)
     if(TARGET openssl_external)
         list(APPEND PROTO_FUZZER_TLS_SOURCES
+            proto_fuzzer/ftps_mock_server.cc
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
             proto_fuzzer/imaps_mock_server.cc
@@ -2472,6 +2473,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/h2_runtime.cc
+            proto_fuzzer/ftp_mock_server.cc
             proto_fuzzer/happy_eyeballs_mock_server.cc
             proto_fuzzer/mock_server.cc
             proto_fuzzer/mock_server_base.cc
@@ -2937,6 +2939,54 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 COMMAND mqtts_mock_server_test)
             set_tests_properties(mqtts_mock_server_test PROPERTIES TIMEOUT 5)
             add_dependencies(fuzzer_unit_tests mqtts_mock_server_test)
+        endif()
+
+        # The FTPS peer layers the OpenSSL carrier over both FTP connections.
+        # Keep it separate from the plaintext FTP test so builds without
+        # OpenSSL still exercise the command and data-channel state machine.
+        if(TARGET openssl_external)
+            add_executable(ftps_mock_server_test
+                tests/ftps_mock_server_test.cc
+                proto_fuzzer/ftps_mock_server.cc
+                proto_fuzzer/ftp_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC})
+            target_compile_features(ftps_mock_server_test PRIVATE cxx_std_17)
+            target_compile_options(ftps_mock_server_test PRIVATE ${COMMON_FLAGS})
+            target_compile_definitions(ftps_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(ftps_mock_server_test PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include)
+            target_link_libraries(ftps_mock_server_test PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m)
+            target_link_options(ftps_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(ftps_mock_server_test
+                ${FUZZ_DEPS}
+                openssl_external
+                zlib_external
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME ftps_mock_server_test
+                COMMAND ftps_mock_server_test)
+            set_tests_properties(ftps_mock_server_test PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests ftps_mock_server_test)
         endif()
 
         if(BUILD_HTTP3_VARIANT)

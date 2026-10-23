@@ -20,7 +20,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_wss` | Verified in-process TLS followed by the WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_telnet` | Bounded TELNET negotiation and callback-backed input against a preloaded local peer. |
-| `curl_fuzzer_proto_ftp` | Plain FTP control plus passive or loopback-confined active data connections. |
+| `curl_fuzzer_proto_ftp` | Plain FTP control plus passive or loopback-confined active data connections. The same target runs implicit-TLS `ftps://` scenarios through a verified in-process TLS peer, with both control and passive data channels wrapped and active mode deliberately unavailable. |
 | `curl_fuzzer_proto_tftp` | Packet-preserving TFTP exchanges over private loopback UDP endpoints. |
 | `curl_fuzzer_proto_smtp` | Single-connection SMTP greeting, EHLO/HELO, mail envelope, DATA body upload and EOB drain, and graceful QUIT. The same target also runs implicit-TLS `smtps://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_imap` | Single-connection IMAP greeting, CAPABILITY, LOGIN/AUTHENTICATE, SELECT, FETCH literals, APPEND uploads, and tagged completion. The same target also runs implicit-TLS `imaps://` scenarios through a verified in-process TLS peer. |

@@ -42,7 +42,8 @@ enum class TargetProfile {
   kFastSecureWebSocket,
   /// Exercise bounded TELNET negotiation and callback-backed input.
   kFastTelnet,
-  /// Exercise FTP control and passive data connections without external I/O.
+  /// Exercise FTP control and passive data connections, including implicit-TLS
+  /// FTPS, without external I/O.
   kFastFtp,
   /// Exercise packet-preserving TFTP exchanges over the loopback UDP peer.
   kFastTftp,
@@ -100,7 +101,7 @@ enum class ScenarioRunMode {
   kSocks4Coverage,
   /// Let curl resolve the origin while the socket callback still owns I/O.
   kResolverCoverage,
-  /// Drive FTP through its concurrent control/passive-data peer.
+  /// Drive FTP or FTPS through its concurrent control/passive-data peer.
   kFtpCoverage,
   /// Drive TFTP through its datagram-preserving loopback peer.
   kTftpCoverage,
