@@ -54,7 +54,10 @@ ImapMockServer::~ImapMockServer() = default;
 /// Clear the tag remembered from the previous drive. The shared base has
 /// already reset the transport, reply cursor, transcript, upload capture, and
 /// body phase.
-void ImapMockServer::ResetProtocolState() { current_tag_.clear(); }
+void ImapMockServer::ResetProtocolState() {
+  current_tag_.clear();
+  authentication_continuation_active_ = false;
+}
 
 /// Return whether a scripted line is a tagged status response. Untagged (`*`)
 /// and continuation (`+`) lines are left alone, as are already-tagged or
@@ -72,6 +75,57 @@ bool ImapMockServer::StatusLineNeedsTag(std::string_view line) {
     return false;
   }
   return space != std::string_view::npos;
+}
+
+/// Return whether a scripted response contains an IMAP continuation line.
+/// Literal bodies are skipped with the same rules as RewriteReply so their
+/// arbitrary bytes cannot start a continuation exchange.
+/// @param response Scenario-owned reply fragment.
+/// @return true when a non-literal response line begins with `+`.
+bool ImapMockServer::ResponseHasContinuation(std::string_view response) {
+  std::size_t position = 0;
+  while (position < response.size()) {
+    const std::size_t newline = response.find('\n', position);
+    const std::size_t line_end = newline == std::string_view::npos ? response.size() : newline + 1;
+    const std::string_view line = response.substr(position, line_end - position);
+    if (!line.empty() && line.front() == '+') {
+      return true;
+    }
+
+    const std::size_t literal = LiteralSize(line);
+    const std::size_t available = response.size() - line_end;
+    position = line_end + std::min(literal, available);
+  }
+  return false;
+}
+
+/// Return whether a scripted response contains a terminal status for the
+/// current tag. Literal bodies are skipped with the same rules as RewriteReply
+/// so body bytes that happen to begin with an IMAP status word cannot end
+/// authentication. Both tag-relative placeholders and an exact already-tagged
+/// line are accepted.
+/// @param response Scenario-owned reply fragment.
+/// @return true when the response completes the current tagged command.
+bool ImapMockServer::ResponseHasTaggedCompletion(std::string_view response) const {
+  std::size_t position = 0;
+  while (position < response.size()) {
+    const std::size_t newline = response.find('\n', position);
+    const std::size_t line_end = newline == std::string_view::npos ? response.size() : newline + 1;
+    const std::string_view line = response.substr(position, line_end - position);
+    const bool tag_relative = StatusLineNeedsTag(line);
+    const bool has_current_tag = !current_tag_.empty() && line.size() > current_tag_.size() &&
+                                 line.compare(0, current_tag_.size(), current_tag_) == 0 &&
+                                 line[current_tag_.size()] == ' ' &&
+                                 StatusLineNeedsTag(line.substr(current_tag_.size() + 1));
+    if (tag_relative || has_current_tag) {
+      return true;
+    }
+
+    const std::size_t literal = LiteralSize(line);
+    const std::size_t available = response.size() - line_end;
+    position = line_end + std::min(literal, available);
+  }
+  return false;
 }
 
 /// Parse a trailing IMAP literal marker such as `{42}` or `{42+}`.
@@ -216,26 +270,44 @@ std::string ImapMockServer::NextCommandTag() const {
   return current_tag_.substr(0, digits_start) + digits;
 }
 
-/// Advance one reply for every complete command. A `+` reply to APPEND enters
-/// literal-draining mode and pre-queues the next scripted reply as the final
-/// tagged completion. Curl's imap_done() waits for that completion inside
-/// curl_multi_perform, so the outer peer loop cannot provide it later.
-/// @param command One newline-terminated command from curl.
+/// Advance one reply for every complete command or AUTHENTICATE continuation.
+/// Continuation data keeps the initiating command tag until a scripted tagged
+/// status ends the exchange. A `+` reply to APPEND enters literal-draining mode
+/// and pre-queues the next scripted reply as the final tagged completion.
+/// Curl's imap_done() waits for that completion inside curl_multi_perform, so
+/// the outer peer loop cannot provide it later.
+/// @param command One newline-terminated client line from curl.
 void ImapMockServer::HandleLine(std::string_view command) {
   if (scenario() == nullptr) {
     return;
   }
 
-  current_tag_ = std::string(FirstToken(command));
+  const bool authentication_payload = authentication_continuation_active_;
+  if (!authentication_payload) {
+    current_tag_ = std::string(FirstToken(command));
+  }
 
   const std::string* response = NextControlReply();
   if (response == nullptr) {
     return;
   }
 
-  const std::string_view verb = SecondToken(command);
-  const bool continuation = !response->empty() && response->front() == '+';
+  const bool continuation = ResponseHasContinuation(*response);
+  const bool tagged_completion = ResponseHasTaggedCompletion(*response);
   (void)WriteControlBytes(RewriteReply(*response));
+
+  if (authentication_payload) {
+    if (tagged_completion) {
+      authentication_continuation_active_ = false;
+    }
+    return;
+  }
+
+  const std::string_view verb = SecondToken(command);
+  if (continuation && TokenEquals(verb, "AUTHENTICATE")) {
+    authentication_continuation_active_ = !tagged_completion;
+    return;
+  }
 
   if (!continuation || !TokenEquals(verb, "APPEND")) {
     return;
