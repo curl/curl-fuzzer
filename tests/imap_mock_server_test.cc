@@ -39,6 +39,7 @@ struct ImapRunResult {
   std::string body;
   std::string transcript;
   std::string uploaded;
+  std::size_t active_pollset_probes = 0;
 };
 
 ImapRunResult RunScenario(const Scenario &scenario, const char *url) {
@@ -67,6 +68,7 @@ ImapRunResult RunScenario(const Scenario &scenario, const char *url) {
   }
   result.transcript = server.control_transcript();
   result.uploaded = server.uploaded_data();
+  result.active_pollset_probes = server.active_pollset_probe_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -114,6 +116,7 @@ void TestFetchLiteralAndTaggedCompletion() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
   scenario.set_host_path("imap.test/INBOX;UID=1");
+  scenario.set_probe_multi_pollset(true);
   AddLoginOptions(&scenario);
   AddGreetingAndCapability(&scenario);
   auto *connection = scenario.mutable_connection();
@@ -138,6 +141,8 @@ void TestFetchLiteralAndTaggedCompletion() {
          "IMAP transfer did not issue the UID FETCH command");
   Expect(result.transcript.find("LOGOUT\r\n") != std::string::npos,
          "IMAP teardown did not issue LOGOUT");
+  Expect(result.active_pollset_probes != 0,
+         "IMAP opt-in did not probe a live protocol pollset");
 }
 
 void TestAppendDrainsAnnouncedLiteral() {
@@ -171,6 +176,8 @@ void TestAppendDrainsAnnouncedLiteral() {
          "IMAP peer did not drain the exact APPEND literal");
   Expect(result.transcript.find("LOGOUT\r\n") != std::string::npos,
          "IMAP APPEND teardown did not issue LOGOUT");
+  Expect(result.active_pollset_probes == 0,
+         "IMAP default path unexpectedly issued a pollset probe");
 }
 
 void TestLoginDenialIsTerminal() {

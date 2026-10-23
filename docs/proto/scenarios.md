@@ -39,8 +39,8 @@ The main groups of fields are:
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
-  `socks_proxy_mode`, `trace_ids`, filename-backed parser inputs, and
-  `fail_allocations`.
+  `socks_proxy_mode`, `trace_ids`, `probe_multi_pollset`, filename-backed
+  parser inputs, and `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
 contract. Its checked-in `CurlOptionId` numbers are part of the serialized
@@ -102,6 +102,12 @@ Other peers intentionally give those fields narrower meanings:
   terminating dot line and are written unchanged. An `SCHEME_POP3S` scenario
   runs the identical exchange over implicit TLS against the same `tls.test`
   authority and also negotiates no ALPN protocol.
+- SMTP, IMAP, and POP3 retain the opt-in `probe_multi_pollset` field. When it
+  is true, their shared driver calls zero-timeout `curl_multi_poll` after
+  successful perform turns while both the transfer and control connection are
+  live. This reaches the protocol pollset callbacks without delaying the
+  default false path. Other fixed target policies clear the field until their
+  custom loops can provide the same service guarantee.
 - MQTT treats the primary connection as a binary packet stream. The initial
   response is the CONNACK, while each readable chunk is an opaque
   server-initiated packet (for example PUBLISH followed by a server

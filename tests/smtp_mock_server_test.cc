@@ -34,6 +34,7 @@ struct SmtpRunResult {
   std::string body;
   std::string transcript;
   std::string uploaded;
+  std::size_t active_pollset_probes = 0;
 };
 
 size_t CollectResponse(char *contents, size_t size, size_t nmemb,
@@ -69,6 +70,7 @@ SmtpRunResult RunScenario(const Scenario &scenario, const char *url) {
   }
   result.transcript = server.control_transcript();
   result.uploaded = server.uploaded_data();
+  result.active_pollset_probes = server.active_pollset_probe_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -138,6 +140,7 @@ void TestMailUploadDrainsBody() {
   Scenario scenario;
   AddMailEnvelope(&scenario);
   AddSuccessfulReplies(&scenario);
+  scenario.set_probe_multi_pollset(true);
 
   const SmtpRunResult result =
       RunScenario(scenario, "smtp://smtp.test/fuzz.test");
@@ -154,6 +157,8 @@ void TestMailUploadDrainsBody() {
          "SMTP transfer did not enter the DATA phase");
   Expect(result.uploaded == kEscapedMailBody,
          "SMTP peer did not drain the complete dot-stuffed body and EOB");
+  Expect(result.active_pollset_probes != 0,
+         "SMTP opt-in did not probe a live protocol pollset");
 }
 
 void TestDataRejectionDoesNotEnterBodyMode() {
@@ -297,6 +302,8 @@ void TestEhloRejectionFallsBackToHelo() {
                    "QUIT\r\n",
                    "SMTP EHLO fallback transcript was incomplete or out of "
                    "order");
+  Expect(result.active_pollset_probes == 0,
+         "SMTP default path unexpectedly issued a pollset probe");
 }
 
 void TestNoUploadCustomExpnCommand() {

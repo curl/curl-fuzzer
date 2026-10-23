@@ -2,6 +2,7 @@
 # terminated by its own dot line. Curl strips dot-stuffing and detects the
 # terminator, so the peer writes this bounded script unchanged.
 scheme: SCHEME_POP3
+probe_multi_pollset: true
 host_path: "pop3.test/1"
 options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
 options { option_id: CURLOPT_PASSWORD string_value: "secret" }
