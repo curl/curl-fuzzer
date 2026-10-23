@@ -85,6 +85,10 @@ class MqttMockServer : public MockServerBase, public IncomingDataObserver {
   // Number of PUBLISH packets whose fixed-header QoS bits requested QoS 1.
   std::size_t qos1_publish_count() const;
 
+  // Number of requested zero-timeout multi-poll probes made while the most
+  // recent transfer and MQTT socket were both active.
+  std::size_t active_pollset_probe_count() const;
+
  protected:
   virtual std::unique_ptr<MockConnection> CreateConnection();
 
@@ -150,6 +154,8 @@ class MqttMockServer : public MockServerBase, public IncomingDataObserver {
   std::size_t publish_count_;
   std::size_t subscribe_count_;
   std::size_t qos1_publish_count_;
+  /// Opt-in probes made only while the transfer and MQTT socket were live.
+  std::size_t active_pollset_probe_count_;
   /// Partial fixed header or packet body retained until the next read.
   std::string pending_client_bytes_;
   /// Bounded test-facing capture of complete client packets.

@@ -79,10 +79,10 @@ state; the authority, query, and fragment remain
 mutation-controlled so URL parsing still has fuzzing value without granting
 access to host files.
 
-The fixed SMTP, IMAP, POP3, and FTP/FTPS profiles retain
+The fixed SMTP, IMAP, POP3, FTP/FTPS, and MQTT/MQTTS profiles retain
 `probe_multi_pollset`; every other fixed profile currently clears it. The flag
 adds zero-timeout public multi-poll calls only while those peers' perform loop
-has a live transfer and control socket, so ordinary false/default corpus
+has a live transfer and protocol socket, so ordinary false/default corpus
 entries do not pay for an unconditional polling syscall.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
