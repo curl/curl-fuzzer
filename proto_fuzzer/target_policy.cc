@@ -2042,9 +2042,13 @@ std::uint32_t CanonicalizeNonZero(std::uint32_t value, std::uint32_t minimum, st
   return std::max(minimum, std::min(value, maximum));
 }
 
-/// Keep the timing target on the plaintext member of the protocol family.
-/// TLS setup has its own cost profile and would obscure whether backpressure
-/// mutations are exploring curl's send/receive state machines effectively.
+/// Keep the timing target on a protocol the timing run mode can actually
+/// drive. TLS setup has its own cost profile and would obscure whether
+/// backpressure mutations are exploring curl's send/receive state machines
+/// effectively, so secure schemes fold onto their plaintext member when that
+/// member has a peer in kProtocolCoverage mode. Mail, MQTT, and the other
+/// dedicated-lane protocols have no such peer and therefore fall back to the
+/// always-served HTTP peer rather than leaving the runner without a transport.
 curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) {
   switch (scheme) {
     case curl::fuzzer::proto::SCHEME_WS:
@@ -2053,15 +2057,6 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_SMTP:
     case curl::fuzzer::proto::SCHEME_SMTPS:
       return curl::fuzzer::proto::SCHEME_SMTP;
-    case curl::fuzzer::proto::SCHEME_IMAP:
-    case curl::fuzzer::proto::SCHEME_IMAPS:
-      return curl::fuzzer::proto::SCHEME_IMAP;
-    case curl::fuzzer::proto::SCHEME_POP3:
-    case curl::fuzzer::proto::SCHEME_POP3S:
-      return curl::fuzzer::proto::SCHEME_POP3;
-    case curl::fuzzer::proto::SCHEME_MQTT:
-    case curl::fuzzer::proto::SCHEME_MQTTS:
-      return curl::fuzzer::proto::SCHEME_MQTT;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:

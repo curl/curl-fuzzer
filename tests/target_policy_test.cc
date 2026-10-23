@@ -2057,18 +2057,21 @@ void TestTimingPolicyMapsSecureSchemesToPlaintext() {
 
   Scenario imaps = ScenarioWithBackpressure(SCHEME_IMAPS, 2048, 1);
   NormalizeScenarioForTarget(&imaps, TargetProfile::kTiming);
-  Expect(imaps.scheme() == SCHEME_IMAP,
-         "timing policy did not map IMAPS to IMAP");
+  Expect(imaps.scheme() == SCHEME_HTTP,
+         "timing policy left IMAPS on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 
   Scenario pop3s = ScenarioWithBackpressure(SCHEME_POP3S, 2048, 1);
   NormalizeScenarioForTarget(&pop3s, TargetProfile::kTiming);
-  Expect(pop3s.scheme() == SCHEME_POP3,
-         "timing policy did not map POP3S to POP3");
+  Expect(pop3s.scheme() == SCHEME_HTTP,
+         "timing policy left POP3S on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 
   Scenario mqtts = ScenarioWithBackpressure(SCHEME_MQTTS, 2048, 1);
   NormalizeScenarioForTarget(&mqtts, TargetProfile::kTiming);
-  Expect(mqtts.scheme() == SCHEME_MQTT,
-         "timing policy did not map MQTTS to MQTT");
+  Expect(mqtts.scheme() == SCHEME_HTTP,
+         "timing policy left MQTTS on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 }
 
 void TestTimingPolicySuppliesBackpressureForZeroConfig() {

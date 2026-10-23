@@ -1845,6 +1845,38 @@ void TestHappyEyeballsAdvancesSubsequentScripts() {
   curl_slist_free_all(connect_to);
 }
 
+/// The timing lane folds IMAPS/POP3S/MQTTS onto HTTP because those schemes have
+/// no peer in kProtocolCoverage mode. Verify the runner then actually reaches
+/// curl instead of bailing on a null peer.
+void TestTimingLaneReachesCurlForPeerlessSchemes() {
+  for (const auto scheme : {curl::fuzzer::proto::SCHEME_IMAPS,
+                            curl::fuzzer::proto::SCHEME_POP3S,
+                            curl::fuzzer::proto::SCHEME_MQTTS}) {
+    Scenario scenario;
+    scenario.set_scheme(scheme);
+    scenario.set_host_path("timing.test/path");
+    scenario.mutable_connection()->add_on_readable(
+        "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    proto_fuzzer::NormalizeScenarioForTarget(&scenario,
+                                             proto_fuzzer::TargetProfile::kTiming);
+    Expect(scenario.scheme() == curl::fuzzer::proto::SCHEME_HTTP,
+           "timing policy left a peerless scheme in place");
+
+    proto_fuzzer::CurlSlistPtr connect_to;
+    proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+    Expect(easy != nullptr, "timing reachability test could not allocate easy");
+    connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+        easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+    (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://timing.test/path");
+    RequestCapturingServer server;
+    server.Install(easy.get());
+    (void)server.DriveScenario(easy.get(), scenario);
+    Expect(!server.request().empty(),
+           "timing lane did not reach curl after folding a peerless scheme");
+    easy.reset();
+  }
+}
+
 } // namespace
 
 int main() {
@@ -1895,5 +1927,6 @@ int main() {
   TestTelnetMaximumAmplificationCannotBlock();
   TestHappyEyeballsRacesMultipleAddresses();
   TestHappyEyeballsAdvancesSubsequentScripts();
+  TestTimingLaneReachesCurlForPeerlessSchemes();
   return 0;
 }
