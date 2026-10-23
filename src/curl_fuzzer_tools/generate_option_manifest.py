@@ -87,6 +87,7 @@ OPTION_KIND_OVERRIDES: dict[str, str] = {
     "CURLOPT_WILDCARDMATCH": "bool",
     "CURLOPT_TFTP_NO_OPTIONS": "bool",
     "CURLOPT_MAIL_RCPT_ALLOWFAILS": "bool",
+    "CURLOPT_SASL_IR": "bool",
 }
 
 VALUE_KIND_SYMBOLS: dict[str, str] = {

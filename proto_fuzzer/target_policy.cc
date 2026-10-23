@@ -1372,10 +1372,14 @@ bool IsSmtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
     case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
     case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
+    case curl::fuzzer::proto::CURLOPT_MAIL_AUTH:
     case curl::fuzzer::proto::CURLOPT_MAIL_FROM:
     case curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS:
     case curl::fuzzer::proto::CURLOPT_NOBODY:
     case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
+    case curl::fuzzer::proto::CURLOPT_SASL_IR:
     case curl::fuzzer::proto::CURLOPT_UPLOAD:
     case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
     case curl::fuzzer::proto::CURLOPT_USERNAME:
@@ -1403,8 +1407,11 @@ bool IsImapOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
     case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
     case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
+    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
     case curl::fuzzer::proto::CURLOPT_NOBODY:
     case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
+    case curl::fuzzer::proto::CURLOPT_SASL_IR:
     case curl::fuzzer::proto::CURLOPT_UPLOAD:
     case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
     case curl::fuzzer::proto::CURLOPT_USERNAME:
@@ -1431,8 +1438,11 @@ bool IsPop3Option(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
     case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
     case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
     case curl::fuzzer::proto::CURLOPT_NOBODY:
     case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
+    case curl::fuzzer::proto::CURLOPT_SASL_IR:
     case curl::fuzzer::proto::CURLOPT_USERNAME:
     case curl::fuzzer::proto::CURLOPT_USERPWD:
     case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:

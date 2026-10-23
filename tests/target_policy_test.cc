@@ -1348,6 +1348,68 @@ void TestFastPop3Policy() {
          "fast POP3 policy changed retained option order");
 }
 
+void AddMailAuthenticationOptions(Scenario *scenario) {
+  auto *login_options = scenario->add_options();
+  login_options->set_option_id(curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS);
+  login_options->set_string_value("AUTH=PLAIN");
+  auto *mail_auth = scenario->add_options();
+  mail_auth->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_AUTH);
+  mail_auth->set_string_value("sender@example.test");
+  auto *authzid = scenario->add_options();
+  authzid->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_AUTHZID);
+  authzid->set_string_value("authorization-id");
+  auto *initial_response = scenario->add_options();
+  initial_response->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_IR);
+  initial_response->set_uint_value(7);
+}
+
+void ExpectSharedMailAuthenticationOptions(const Scenario &scenario,
+                                           int expected_count) {
+  Expect(scenario.options_size() == expected_count,
+         "mail policy retained the wrong authentication option count");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
+             scenario.options(0).string_value() == "AUTH=PLAIN",
+         "mail policy lost CURLOPT_LOGIN_OPTIONS");
+  Expect(scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_SASL_AUTHZID &&
+             scenario.options(1).string_value() == "authorization-id",
+         "mail policy lost CURLOPT_SASL_AUTHZID");
+  Expect(scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_SASL_IR &&
+             scenario.options(2).bool_value(),
+         "mail policy lost CURLOPT_SASL_IR");
+}
+
+void TestMailAuthenticationOptionPolicies() {
+  Scenario smtp;
+  AddMailAuthenticationOptions(&smtp);
+  NormalizeScenarioForTarget(&smtp, TargetProfile::kFastSmtp);
+  Expect(smtp.options_size() == 4,
+         "SMTP policy removed a supported authentication option");
+  Expect(smtp.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
+             smtp.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_MAIL_AUTH &&
+             smtp.options(1).string_value() == "sender@example.test" &&
+             smtp.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_SASL_AUTHZID &&
+             smtp.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_SASL_IR &&
+             smtp.options(3).bool_value(),
+         "SMTP policy changed the authentication option contract");
+
+  Scenario imap;
+  AddMailAuthenticationOptions(&imap);
+  NormalizeScenarioForTarget(&imap, TargetProfile::kFastImap);
+  ExpectSharedMailAuthenticationOptions(imap, 3);
+
+  Scenario pop3;
+  AddMailAuthenticationOptions(&pop3);
+  NormalizeScenarioForTarget(&pop3, TargetProfile::kFastPop3);
+  ExpectSharedMailAuthenticationOptions(pop3, 3);
+}
+
 void TestFastMqttPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path(
@@ -3386,6 +3448,7 @@ int main() {
   TestFastSmtpPolicy();
   TestFastImapPolicy();
   TestFastPop3Policy();
+  TestMailAuthenticationOptionPolicies();
   TestFastMqttPolicy();
   TestFastMqttsPolicy();
   TestNonMqttPoliciesClearMqttScheme();
