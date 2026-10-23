@@ -1,0 +1,8 @@
+# Exercise URL parsing around a fuzz-controlled authority and suffix. The
+# encoded traversal segments are deliberately discarded when the policy pins
+# the opened path to /dev/null, so this input never reads a host file.
+scheme: SCHEME_FILE
+host_path: "127.0.0.1/%2e%2e/etc/passwd?download=1#fragment"
+options { option_id: CURLOPT_PATH_AS_IS bool_value: true }
+options { option_id: CURLOPT_FAILONERROR bool_value: true }
+options { option_id: CURLOPT_DISALLOW_USERNAME_IN_URL bool_value: true }

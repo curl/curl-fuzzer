@@ -1979,6 +1979,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_mqtt)
     curl_add_proto_fuzzer(curl_fuzzer_proto_dict)
     curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_file)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
@@ -2025,6 +2026,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
          ${SCENARIO_SRC_DIR}/dict/*.textproto)
     file(GLOB GOPHER_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/gopher/*.textproto)
+    file(GLOB FILE_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/file/*.textproto)
     file(GLOB API_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/api/*.textproto)
     file(GLOB MULTI_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -2243,6 +2246,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_fuzzer_proto_dict ${DICT_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_gopher_corpus
         curl_fuzzer_proto_gopher ${GOPHER_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_file_corpus
+        curl_fuzzer_proto_file ${FILE_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_api_corpus
         curl_fuzzer_proto_api ${API_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_multi_corpus
@@ -2288,6 +2293,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_mqtt curl_fuzzer_proto_mqtt_corpus)
     add_dependencies(curl_fuzzer_proto_dict curl_fuzzer_proto_dict_corpus)
     add_dependencies(curl_fuzzer_proto_gopher curl_fuzzer_proto_gopher_corpus)
+    add_dependencies(curl_fuzzer_proto_file curl_fuzzer_proto_file_corpus)
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)

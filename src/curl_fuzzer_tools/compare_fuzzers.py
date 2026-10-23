@@ -66,6 +66,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_pop3",
     "curl_fuzzer_proto_mqtt",
     "curl_fuzzer_proto_dict",
+    "curl_fuzzer_proto_file",
     "curl_fuzzer_proto_api",
     "curl_fuzzer_proto_multi",
     "curl_fuzzer_proto_timing",

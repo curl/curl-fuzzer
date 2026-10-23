@@ -121,6 +121,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "gopher";
     case curl::fuzzer::proto::SCHEME_GOPHERS:
       return "gophers";
+    case curl::fuzzer::proto::SCHEME_FILE:
+      return "file";
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -288,6 +290,10 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       }
 #endif
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_FILE:
+      // FILE reads the local filesystem directly. The dedicated lane pins its
+      // path to /dev/null, so there is no socket or scriptable peer to install.
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -393,8 +399,17 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     return 0;
   }
 
+  // FILE is the one peerless lane. Gate it on the dedicated run mode so the
+  // compatibility target cannot reinterpret the append-only enum value as a
+  // local filesystem read from an accumulated corpus entry.
+  const bool file_lane =
+      mode == ScenarioRunMode::kFileCoverage && scenario.scheme() == curl::fuzzer::proto::SCHEME_FILE;
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_FILE && !file_lane) {
+    return 0;
+  }
+
   std::unique_ptr<MockServerBase> mock = MakeMockServerForScenario(scenario, mode);
-  if (!mock) {
+  if (!mock && !file_lane) {
     return 0;
   }
 
@@ -410,13 +425,26 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   const auto configure_easy = [&] {
     transfer.ApplyBaseline(scenario);
     (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
-    mock->Install(easy);
+    if (mock) {
+      mock->Install(easy);
+    }
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
   };
   configure_easy();
   transfer.ConfigureAltSvcRouting(scenario.host_path());
+
+  if (file_lane) {
+    // The file:// handler reads the pinned /dev/null target (or rejects a
+    // mutated authority) synchronously and never opens a socket, so no mock
+    // peer or request-data callbacks exist to drive. The baseline's short
+    // timeout still bounds the transfer.
+    const CURLcode transfer_result = curl_easy_perform(easy);
+    (void)transfer_result;
+    ProbeTransferResults(easy);
+    return 0;
+  }
 
   if (mode == ScenarioRunMode::kResolverCoverage) {
     // The normal CONNECT_TO baseline deliberately bypasses DNS. This lane

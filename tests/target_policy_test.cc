@@ -23,6 +23,7 @@ namespace {
 using curl::fuzzer::proto::Scenario;
 using curl::fuzzer::proto::SCHEME_DICT;
 using curl::fuzzer::proto::SCHEME_FTP;
+using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_MQTT;
@@ -383,6 +384,7 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kFastGopher,
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
@@ -602,6 +604,7 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kApi,
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kApi,
@@ -629,7 +632,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
       TargetProfile::kFastWebSocket, TargetProfile::kFastTelnet,
       TargetProfile::kFastFtp,       TargetProfile::kFastTftp,
-      TargetProfile::kFastSmtp,
+      TargetProfile::kFastSmtp,      TargetProfile::kFastFile,
       TargetProfile::kFastImap,      TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
       TargetProfile::kApi,           TargetProfile::kMulti,
@@ -865,6 +868,114 @@ void TestFastFtpPolicy() {
          "fast FTP policy retained a resolving active-mode address");
   Expect(scenario.options(3).uint_value() == 1,
          "fast FTP policy did not canonicalize the EPRT selector");
+}
+
+void TestFastFilePolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path(
+      "filehost.test:8080/%2e%2e/etc/passwd?download=1#fragment");
+  scenario.add_request_headers("X-Ignored: file");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_multi_plan()->set_transfer_count(4);
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.mutable_upload()->set_data("must never be written");
+  scenario.mutable_connection()->set_initial_response("ignored peer script");
+  scenario.add_subsequent_connections()->set_initial_response("ignored");
+  scenario.set_cookie_file("ignored parser input");
+  scenario.add_resolve_entries("filehost.test:80:127.0.0.1");
+  scenario.set_tls_certificate_chain(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+
+  auto *upload = scenario.add_options();
+  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload->set_bool_value(true);
+  auto *append = scenario.add_options();
+  append->set_option_id(curl::fuzzer::proto::CURLOPT_APPEND);
+  append->set_bool_value(true);
+  auto *range = scenario.add_options();
+  range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
+  range->set_string_value("0-0");
+  auto *nobody = scenario.add_options();
+  nobody->set_option_id(curl::fuzzer::proto::CURLOPT_NOBODY);
+  nobody->set_bool_value(true);
+  auto *filetime = scenario.add_options();
+  filetime->set_option_id(curl::fuzzer::proto::CURLOPT_FILETIME);
+  filetime->set_bool_value(true);
+  auto *mail = scenario.add_options();
+  mail->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_FROM);
+  mail->set_string_value("sender@example.test");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFile);
+
+  Expect(scenario.scheme() == SCHEME_FILE,
+         "fast FILE policy did not force the local-file scheme");
+  Expect(scenario.host_path() ==
+             "filehost.test:8080/dev/null?download=1#fragment",
+         "fast FILE policy did not pin the path while retaining the URL "
+         "authority and suffix");
+  Expect(scenario.connection().initial_response().empty() &&
+             scenario.connection().on_readable_size() == 0 &&
+             scenario.connection().server_frames_size() == 0 &&
+             !scenario.connection().has_backpressure() &&
+             !scenario.has_upload() && !scenario.has_mime_post() &&
+             !scenario.has_api_plan() && !scenario.has_multi_plan() &&
+             scenario.subsequent_connections_size() == 0 &&
+             scenario.request_headers_size() == 0 &&
+             scenario.telnet_options_size() == 0 &&
+             scenario.resolve_entries_size() == 0 &&
+             scenario.cookie_file().empty(),
+         "fast FILE policy retained a shape the peerless lane cannot consume");
+  Expect(scenario.options_size() == 3 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RANGE &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_NOBODY &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_FILETIME,
+         "fast FILE policy retained a write or non-file option");
+  Expect(scenario.options(0).string_value() == "0-0" &&
+             scenario.options(1).bool_value() &&
+             scenario.options(2).bool_value(),
+         "fast FILE policy changed a retained local-transfer option");
+
+  Scenario bare;
+  bare.set_host_path("localhost");
+  NormalizeScenarioForTarget(&bare, TargetProfile::kFastFile);
+  Expect(bare.host_path() == "localhost/dev/null",
+         "fast FILE policy did not append the fixed path to a bare authority");
+
+  Scenario traversal;
+  traversal.set_host_path("//etc/passwd");
+  NormalizeScenarioForTarget(&traversal, TargetProfile::kFastFile);
+  Expect(traversal.host_path() == "/dev/null",
+         "fast FILE policy retained a traversal path or authority");
+}
+
+void TestNonFilePoliciesClearFileScheme() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
+      TargetProfile::kFastFtp,  TargetProfile::kTiming,
+      TargetProfile::kApi,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("localhost/etc/passwd");
+    scenario.set_scheme(SCHEME_FILE);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.scheme() != SCHEME_FILE,
+           "a non-FILE policy retained the local-file scheme");
+  }
+
+  Scenario compatibility;
+  compatibility.set_host_path("localhost/etc/passwd");
+  compatibility.set_scheme(SCHEME_FILE);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.scheme() == SCHEME_FILE,
+         "compatibility unexpectedly rewrote the FILE scheme");
 }
 
 void TestFastSmtpPolicy() {
@@ -1803,6 +1914,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
@@ -1897,6 +2009,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
@@ -2078,6 +2191,8 @@ void TestProfileRunModes() {
          "fast MQTT profile does not authorize the packet-aware peer");
   Expect(RunModeFor(TargetProfile::kFastDict) == ScenarioRunMode::kDictCoverage,
          "fast DICT profile does not authorize the command-aware peer");
+  Expect(RunModeFor(TargetProfile::kFastFile) == ScenarioRunMode::kFileCoverage,
+         "fast FILE profile does not authorize its peerless local reader");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -2142,6 +2257,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
@@ -2194,6 +2310,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
@@ -2553,6 +2670,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,
       TargetProfile::kFastImap,
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
@@ -2653,6 +2771,8 @@ int main() {
   TestFastSecureWebSocketPolicy();
   TestFastTelnetPolicy();
   TestFastFtpPolicy();
+  TestFastFilePolicy();
+  TestNonFilePoliciesClearFileScheme();
   TestFastTftpPolicy();
   TestFastSmtpPolicy();
   TestFastImapPolicy();
