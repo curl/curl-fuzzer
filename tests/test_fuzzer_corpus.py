@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import struct
 import zipfile
 from pathlib import Path
 
@@ -65,6 +66,42 @@ def test_snapshot_rejects_a_missing_source(tmp_path: Path) -> None:
 
     with pytest.raises(CorpusError, match="corpus source does not exist"):
         builder.add(tmp_path / "missing")
+
+
+def test_snapshot_wraps_unreadable_zip_member_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = tmp_path / "corpus.zip"
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("seed", b"seed")
+
+    def fail_open(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("encrypted member")
+
+    monkeypatch.setattr(zipfile.ZipFile, "open", fail_open)
+    builder = CorpusSnapshotBuilder(tmp_path / "snapshot")
+
+    with pytest.raises(CorpusError, match="could not read corpus archive"):
+        builder.add(archive)
+
+
+def test_snapshot_wraps_corrupt_compressed_payload_errors(tmp_path: Path) -> None:
+    archive = tmp_path / "corrupt.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+        output.writestr("seed", b"A" * 10_000)
+    raw = bytearray(archive.read_bytes())
+    with zipfile.ZipFile(archive) as source:
+        member = source.infolist()[0]
+    filename_length, extra_length = struct.unpack_from(
+        "<HH", raw, member.header_offset + 26
+    )
+    payload_offset = member.header_offset + 30 + filename_length + extra_length
+    raw[payload_offset : payload_offset + 2] = b"\xff\xff"
+    archive.write_bytes(raw)
+    builder = CorpusSnapshotBuilder(tmp_path / "snapshot")
+
+    with pytest.raises(CorpusError, match="could not read corpus archive"):
+        builder.add(archive)
 
 
 def test_snapshot_archive_is_stable_and_reusable(tmp_path: Path) -> None:
