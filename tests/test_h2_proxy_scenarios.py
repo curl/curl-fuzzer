@@ -9,8 +9,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_ROOT = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "h2_proxy"
 
 
-def test_h2_proxy_seeds_preserve_connect_frame_correlations() -> None:
-    """Keep valid outer frames paired with tunneled HTTP/1.1 traffic."""
+def test_h2_proxy_seeds_preserve_frame_correlations() -> None:
+    """Keep valid outer frames paired with their proxy request mode."""
     expected_tokens = {
         "h2_proxy_success.textproto": (
             "\\x00\\x00\\x00\\x04",
@@ -44,6 +44,11 @@ def test_h2_proxy_seeds_preserve_connect_frame_correlations() -> None:
             "CURLOPT_POSTFIELDS",
             "SETTINGS_INITIAL_WINDOW_SIZE=0",
             "\\x00\\xff\\xff",
+        ),
+        "h2_proxy_absolute_form.textproto": (
+            "h2_forward_proxy: true",
+            "origin.test/absolute/path?item=one",
+            "\\x01\\x05",
         ),
     }
 

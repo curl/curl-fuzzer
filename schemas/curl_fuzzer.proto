@@ -175,6 +175,12 @@ message Scenario {
   // Only the proxy transport lane retains this flag. False preserves the
   // historical SOCKS-only wire exchange.
   bool haproxy_protocol = 31;
+  // Send the H2 proxy lane's origin request directly through the proxy rather
+  // than establishing a CONNECT tunnel. curl first builds an absolute-form
+  // textual request and then translates it to HTTP/2 pseudo-headers, reaching
+  // request-target parsing that a tunneled origin-form request cannot. Other
+  // fixed lanes clear this field; false preserves existing proxy corpus bytes.
+  bool h2_forward_proxy = 32;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

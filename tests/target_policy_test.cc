@@ -270,6 +270,7 @@ void TestHttpsH2Policy() {
   scenario.mutable_upload()->set_data("upload body");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.set_h2_forward_proxy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_accept_h2_push(true);
 
@@ -308,6 +309,8 @@ void TestHttpsH2Policy() {
   Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
              !scenario.has_multi_plan(),
          "HTTPS/H2 policy retained another target's work");
+  Expect(!scenario.h2_forward_proxy(),
+         "HTTPS/H2 policy retained forward-proxy-only work");
   Expect(scenario.accept_h2_push(),
          "HTTPS/H2 policy discarded its accepted-push mode");
   Expect(scenario.options_size() == 2 &&
@@ -684,6 +687,7 @@ void TestH2ProxyPolicy() {
   scenario.mutable_upload()->set_data("upload body");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.set_h2_forward_proxy(true);
 
   scenario.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
@@ -708,9 +712,11 @@ void TestH2ProxyPolicy() {
          "HTTP/2 proxy policy removed the raw outer frame stream");
   Expect(scenario.request_headers(0) == "X-Origin: retained" &&
              scenario.has_mime_post() && scenario.has_upload(),
-         "HTTP/2 proxy policy removed state visible to the tunneled request");
+         "HTTP/2 proxy policy removed state visible to the origin request");
   Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan(),
          "HTTP/2 proxy policy retained another target's work");
+  Expect(scenario.h2_forward_proxy(),
+         "HTTP/2 proxy policy discarded direct-forwarding mode");
   Expect(scenario.options_size() == 2 &&
              scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_POST &&
@@ -2970,6 +2976,7 @@ void TestCompatibilityProfileIsNoOp() {
   scenario.set_socks_proxy_mode(
       curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME);
   scenario.set_haproxy_protocol(true);
+  scenario.set_h2_forward_proxy(true);
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_accept_h2_push(true);

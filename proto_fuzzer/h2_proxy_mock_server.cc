@@ -17,13 +17,14 @@ namespace proto_fuzzer {
 
 /// Select h2 before any connection opens; ALPN is the gate that makes curl
 /// install cf-h2-proxy rather than its HTTP/1 CONNECT implementation.
-H2ProxyMockServer::H2ProxyMockServer() : TlsMockServer(TlsApplicationProtocol::kHttp2) {}
+/// @param mode Origin request shape for the HTTP/2 proxy.
+H2ProxyMockServer::H2ProxyMockServer(H2ProxyMode mode) : TlsMockServer(TlsApplicationProtocol::kHttp2), mode_(mode) {}
 
-/// Install the socket transport and force one verified HTTPS2 proxy tunnel.
-/// The origin remains plaintext HTTP inside CONNECT so this peer can service
-/// both layers without a nested TLS state machine. Only routing and outer TLS
-/// properties are fixed: response frames, origin method, headers, and body remain
-/// scenario-controlled so mutations continue beyond proxy setup.
+/// Install the socket transport and force one verified HTTPS2 proxy. Tunnel
+/// mode keeps the plaintext HTTP origin inside CONNECT; forward mode submits
+/// that origin request directly on the HTTP/2 proxy stream. Only routing and
+/// outer TLS properties are fixed: response frames, origin method, headers,
+/// and body remain scenario-controlled so mutations continue beyond setup.
 /// @param easy Easy handle that will connect through this proxy.
 void H2ProxyMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
@@ -44,7 +45,7 @@ void H2ProxyMockServer::Install(CURL* easy) {
   (void)curl_easy_setopt(easy, CURLOPT_PROXY, kProxyUrl);
   (void)curl_easy_setopt(easy, CURLOPT_PROXYTYPE, static_cast<long>(CURLPROXY_HTTPS2));
   (void)curl_easy_setopt(easy, CURLOPT_NOPROXY, "");
-  (void)curl_easy_setopt(easy, CURLOPT_HTTPPROXYTUNNEL, 1L);
+  (void)curl_easy_setopt(easy, CURLOPT_HTTPPROXYTUNNEL, mode_ == H2ProxyMode::kTunnel ? 1L : 0L);
   (void)curl_easy_setopt(easy, CURLOPT_PROXY_CAINFO_BLOB, &trust_anchor);
   (void)curl_easy_setopt(easy, CURLOPT_PROXY_SSL_VERIFYPEER, 1L);
   (void)curl_easy_setopt(easy, CURLOPT_PROXY_SSL_VERIFYHOST, 0L);

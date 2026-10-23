@@ -98,6 +98,32 @@ def test_stateful_seeds_complete_bounded_follow_on_exchanges() -> None:
     assert "CURLOPT_USERPWD" in auth
 
 
+def test_bearer_seed_requires_a_challenged_retry() -> None:
+    """Keep Bearer parsing behind a real 401 exchange."""
+    scenario = (HTTP_SCENARIOS / "http_auth_bearer.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "WWW-Authenticate: Bearer" in scenario
+    assert "Connection: close" in scenario
+    assert "CURLOPT_XOAUTH2_BEARER" in scenario
+    assert "subsequent_connections {" in scenario
+
+
+def test_sigv4_seeds_compute_s3_and_generic_payload_hashes() -> None:
+    """Do not let a supplied content hash bypass either signer path."""
+    s3 = (HTTP_SCENARIOS / "http_auth_aws_sigv4.textproto").read_text(encoding="utf-8")
+    service = (HTTP_SCENARIOS / "http_auth_aws_sigv4_service.textproto").read_text(
+        encoding="utf-8"
+    )
+
+    assert "aws:amz:us-east-1:s3" in s3
+    assert "CURLOPT_POSTFIELDS" in s3
+    assert "X-Amz-Content-Sha256" not in s3
+    assert "aws:amz:us-east-1:execute-api" in service
+    assert "%20" in service
+    assert "X-Amz-Content-Sha256" not in service
+
+
 def test_early_upgrade_abort_stays_in_the_timing_lane() -> None:
     """Require real upload pressure without taxing fixed fast HTTP seeds."""
     scenario = (

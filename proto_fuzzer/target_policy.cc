@@ -117,7 +117,7 @@ void CanonicalizeTlsGroupProfile(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
-/// Keep the tunneled origin parseable while retaining every path, query, and
+/// Keep the proxied origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
 /// not additional HTTP/2 proxy behavior.
@@ -1118,10 +1118,10 @@ bool IsCheapHttpOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
-/// Return whether an option can affect the HTTP/1.1 request carried inside the
-/// fixed HTTP/2 CONNECT tunnel. Proxy routing, ALPN, and TLS verification are
-/// owned by H2ProxyMockServer and must not be mutation-controlled; HTTP/2 as an
-/// inner origin protocol is also excluded because it would require a second
+/// Return whether an option can affect the origin request carried through the
+/// fixed HTTP/2 proxy. Proxy routing, ALPN, and TLS verification are owned by
+/// H2ProxyMockServer and must not be mutation-controlled; HTTP/2 as an inner
+/// tunneled origin protocol is also excluded because it would require a second
 /// frame script and obscure coverage of the outer proxy filter. Stateful HTTP
 /// options remain useful here because their wire effects traverse cf-h2-proxy.
 bool IsH2ProxyOriginOption(curl::fuzzer::proto::CurlOptionId option_id) {
@@ -2253,6 +2253,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp &&
       profile != TargetProfile::kFastMqtt && profile != TargetProfile::kProxyTransport) {
     scenario->clear_probe_multi_pollset();
+  }
+
+  // Direct forwarding changes the H2 proxy stream from CONNECT authority-form
+  // to an absolute-form origin request. No other peer implements that shape.
+  if (profile != TargetProfile::kH2Proxy) {
+    scenario->clear_h2_forward_proxy();
   }
 
   // Anonymous parser files add syscalls and line parsing that belong only in
