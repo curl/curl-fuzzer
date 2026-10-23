@@ -52,8 +52,8 @@ enum class TargetProfile {
   kFastImap,
   /// Exercise single-connection POP3 mailbox transfers through the control peer.
   kFastPop3,
-  /// Exercise binary MQTT CONNECT/PUBLISH/SUBSCRIBE exchanges through the
-  /// packet-aware single-socket peer.
+  /// Exercise binary MQTT and implicit-TLS MQTTS CONNECT/PUBLISH/SUBSCRIBE
+  /// exchanges through the packet-aware single-socket peer.
   kFastMqtt,
   /// Exercise line-based DICT lookups through the raw stream peer.
   kFastDict,
@@ -111,7 +111,7 @@ enum class ScenarioRunMode {
   kImapCoverage,
   /// Drive POP3 through its command-aware control peer, including RETR bodies.
   kPop3Coverage,
-  /// Drive MQTT through its packet-aware single-socket peer.
+  /// Drive MQTT or MQTTS through its packet-aware single-socket peer.
   kMqttCoverage,
   /// Drive DICT lookups through its command-aware stream peer and EOF-framed
   /// response body.

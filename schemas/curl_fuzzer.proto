@@ -641,6 +641,10 @@ enum Scheme {
   // append-only alongside their plaintext peers.
   SCHEME_IMAPS = 20;
   SCHEME_POP3S = 21;
+  // Implicit-TLS MQTT shares the packet-aware MQTT lane; only the transport
+  // factory differs. Keep this append-only for the compatibility target's
+  // historical inputs.
+  SCHEME_MQTTS = 22;
 }
 
 message SetOption {

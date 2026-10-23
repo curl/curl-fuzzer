@@ -42,6 +42,7 @@
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/imaps_mock_server.h"
+#include "proto_fuzzer/mqtts_mock_server.h"
 #include "proto_fuzzer/pop3s_mock_server.h"
 #include "proto_fuzzer/smtps_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
@@ -121,6 +122,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "pop3s";
     case curl::fuzzer::proto::SCHEME_MQTT:
       return "mqtt";
+    case curl::fuzzer::proto::SCHEME_MQTTS:
+      return "mqtts";
     case curl::fuzzer::proto::SCHEME_LDAP:
       return "ldap";
     case curl::fuzzer::proto::SCHEME_RTSP:
@@ -322,6 +325,17 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       }
 #endif
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_MQTTS:
+      // Implicit TLS shares the MQTT lane, packet parser, and server-packet
+      // budget with the plaintext scheme; only the transport factory differs.
+      // Keep it gated on the same fixed run mode so no other target can turn
+      // an appended enum value into a TLS exchange.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kMqttCoverage) {
+        return std::make_unique<MqttsMockServer>();
+      }
+#endif
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_FILE:
       // FILE reads the local filesystem directly. The dedicated lane pins its
       // path to /dev/null, so there is no socket or scriptable peer to install.
@@ -423,6 +437,13 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                       static_cast<std::size_t>(imaps->negotiated_tls_version()),
                                                       imaps->negotiated_alpn().size()};
     (void)imaps_observation;
+  }
+
+  if (auto* mqtts = dynamic_cast<MqttsMockServer*>(mock)) {
+    const volatile std::size_t mqtts_observation[] = {mqtts->completed_handshake_count(),
+                                                      static_cast<std::size_t>(mqtts->negotiated_tls_version()),
+                                                      mqtts->negotiated_alpn().size(), mqtts->packet_count()};
+    (void)mqtts_observation;
   }
 
   if (auto* pop3s = dynamic_cast<Pop3sMockServer*>(mock)) {
