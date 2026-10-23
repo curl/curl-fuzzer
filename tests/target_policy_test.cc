@@ -1462,6 +1462,8 @@ void TestFastDictPolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_upload()->set_data("ignored upload");
   scenario.mutable_connection()->add_on_readable("150 dict reply");
+  scenario.mutable_connection()->add_on_readable("250 ok");
+  scenario.mutable_connection()->add_on_readable("221 bye");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
 
@@ -1489,19 +1491,24 @@ void TestFastDictPolicy() {
              scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
              scenario.subsequent_connections_size() == 0,
          "fast DICT policy retained work its download-only peer cannot use");
-  Expect(scenario.connection().on_readable(0) == "150 dict reply" &&
+  Expect(scenario.connection().on_readable_size() == 1 &&
+             scenario.connection().on_readable(0) == "150 dict reply" &&
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
-         "fast DICT policy changed replies or retained stream-only controls");
-  Expect(scenario.options_size() == 3,
+         "fast DICT policy changed replies, kept unreachable chunks, or "
+         "retained stream-only controls");
+  Expect(scenario.options_size() == 2,
          "fast DICT policy retained a non-DICT option");
   Expect(scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_USERNAME &&
              scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
+                 curl::fuzzer::proto::CURLOPT_PASSWORD,
          "fast DICT policy changed retained option order");
+  for (const auto &option : scenario.options()) {
+    Expect(option.option_id() != curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
+           "fast DICT policy retained CURLOPT_CUSTOMREQUEST, which curl's "
+           "DICT handler never reads");
+  }
 }
 
 void TestNonDictPoliciesClearDictScheme() {
@@ -1747,6 +1754,27 @@ void TestFastRtspPolicy() {
              scenario.options(3).uint_value() ==
                  static_cast<std::uint64_t>(std::numeric_limits<int>::max()),
          "fast RTSP policy did not clamp the client sequence override");
+}
+
+void TestFastRtspPolicyFoldsReceiveOntoOptions() {
+  // RECEIVE issues no request and cannot reach the request-aligned peer's
+  // FinishRequest() reply path, so it must fold onto OPTIONS rather than
+  // leave a mutation that stalls before any scripted exchange.
+  Scenario scenario;
+  scenario.set_scheme(SCHEME_RTSP);
+  scenario.set_host_path("rtsp.test/stream");
+  auto *request = scenario.add_options();
+  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+  request->set_uint_value(CURL_RTSPREQ_RECEIVE);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastRtsp);
+
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RTSP_REQUEST &&
+             scenario.options(0).uint_value() == CURL_RTSPREQ_OPTIONS,
+         "fast RTSP policy retained CURL_RTSPREQ_RECEIVE instead of folding "
+         "it onto OPTIONS");
 }
 
 void TestNonRtspPoliciesClearRtspSchemeAndOptions() {
@@ -2024,23 +2052,27 @@ void TestTimingPolicyMapsSecureSchemesToPlaintext() {
 
   Scenario smtps = ScenarioWithBackpressure(SCHEME_SMTPS, 2048, 1);
   NormalizeScenarioForTarget(&smtps, TargetProfile::kTiming);
-  Expect(smtps.scheme() == SCHEME_SMTP,
-         "timing policy did not map SMTPS to SMTP");
+  Expect(smtps.scheme() == SCHEME_HTTP,
+         "timing policy left SMTPS on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 
   Scenario imaps = ScenarioWithBackpressure(SCHEME_IMAPS, 2048, 1);
   NormalizeScenarioForTarget(&imaps, TargetProfile::kTiming);
-  Expect(imaps.scheme() == SCHEME_IMAP,
-         "timing policy did not map IMAPS to IMAP");
+  Expect(imaps.scheme() == SCHEME_HTTP,
+         "timing policy left IMAPS on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 
   Scenario pop3s = ScenarioWithBackpressure(SCHEME_POP3S, 2048, 1);
   NormalizeScenarioForTarget(&pop3s, TargetProfile::kTiming);
-  Expect(pop3s.scheme() == SCHEME_POP3,
-         "timing policy did not map POP3S to POP3");
+  Expect(pop3s.scheme() == SCHEME_HTTP,
+         "timing policy left POP3S on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 
   Scenario mqtts = ScenarioWithBackpressure(SCHEME_MQTTS, 2048, 1);
   NormalizeScenarioForTarget(&mqtts, TargetProfile::kTiming);
-  Expect(mqtts.scheme() == SCHEME_MQTT,
-         "timing policy did not map MQTTS to MQTT");
+  Expect(mqtts.scheme() == SCHEME_HTTP,
+         "timing policy left MQTTS on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 }
 
 void TestTimingPolicySuppliesBackpressureForZeroConfig() {
@@ -3324,6 +3356,7 @@ int main() {
   TestNonLdapPoliciesClearLdapScheme();
   TestFastLdapsPolicy();
   TestFastRtspPolicy();
+  TestFastRtspPolicyFoldsReceiveOntoOptions();
   TestNonRtspPoliciesClearRtspSchemeAndOptions();
   TestFastIpfsPolicy();
   TestNonIpfsPoliciesClearIpfsScheme();

@@ -1441,7 +1441,6 @@ void RetainPop3Options(curl::fuzzer::proto::Scenario* scenario) { RetainMatching
 bool IsDictOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
     case curl::fuzzer::proto::CURLOPT_CRLF:
     case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
     case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
@@ -1671,8 +1670,13 @@ void CanonicalizeRtspOptionModes(curl::fuzzer::proto::Scenario* scenario) {
     switch (option.option_id()) {
       case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST: {
         const std::uint64_t value = IntegralMutationValue(option);
-        option.set_uint_value(value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST ? value
-                                                                                         : CURL_RTSPREQ_OPTIONS);
+        // RECEIVE sends no request and instead waits for server-initiated
+        // stream data, which the request-aligned peer never emits. Fold it
+        // onto the default OPTIONS like zero and out-of-range values so every
+        // retained request still issues a scripted exchange.
+        const bool supported =
+            value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST && value != CURL_RTSPREQ_RECEIVE;
+        option.set_uint_value(supported ? value : CURL_RTSPREQ_OPTIONS);
         break;
       }
       case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
@@ -1945,6 +1949,11 @@ void RemoveIgnoredDictShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveApiOnlyShape(scenario);
   RemoveMultiOnlyShape(scenario);
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+  // curl writes CLIENT, one lookup command, and QUIT in a single send, then
+  // reads an EOF-framed body. The peer consumes only the first non-CLIENT
+  // reply chunk and half-closes, so any later chunk is permanently dead work
+  // the mutator keeps rediscovering.
+  TrimRepeated(scenario->mutable_connection()->mutable_on_readable(), 1);
 }
 
 /// Retain the one binary server script and the scalar publish payload. MQTT
@@ -2033,26 +2042,19 @@ std::uint32_t CanonicalizeNonZero(std::uint32_t value, std::uint32_t minimum, st
   return std::max(minimum, std::min(value, maximum));
 }
 
-/// Keep the timing target on the plaintext member of the protocol family.
-/// TLS setup has its own cost profile and would obscure whether backpressure
-/// mutations are exploring curl's send/receive state machines effectively.
+/// Keep the timing target on a protocol the timing run mode can actually
+/// drive. TLS setup has its own cost profile and would obscure whether
+/// backpressure mutations are exploring curl's send/receive state machines
+/// effectively. Only WebSocket has a plaintext peer in kProtocolCoverage mode,
+/// so WSS folds onto WS; every other scheme — including the mail, MQTT, and
+/// file-transfer families whose peers are gated on their dedicated run modes —
+/// falls back to the always-served HTTP peer rather than leaving the runner
+/// without a transport.
 curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) {
   switch (scheme) {
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
       return curl::fuzzer::proto::SCHEME_WS;
-    case curl::fuzzer::proto::SCHEME_SMTP:
-    case curl::fuzzer::proto::SCHEME_SMTPS:
-      return curl::fuzzer::proto::SCHEME_SMTP;
-    case curl::fuzzer::proto::SCHEME_IMAP:
-    case curl::fuzzer::proto::SCHEME_IMAPS:
-      return curl::fuzzer::proto::SCHEME_IMAP;
-    case curl::fuzzer::proto::SCHEME_POP3:
-    case curl::fuzzer::proto::SCHEME_POP3S:
-      return curl::fuzzer::proto::SCHEME_POP3;
-    case curl::fuzzer::proto::SCHEME_MQTT:
-    case curl::fuzzer::proto::SCHEME_MQTTS:
-      return curl::fuzzer::proto::SCHEME_MQTT;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:
