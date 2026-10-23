@@ -102,12 +102,13 @@ Other peers intentionally give those fields narrower meanings:
   terminating dot line and are written unchanged. An `SCHEME_POP3S` scenario
   runs the identical exchange over implicit TLS against the same `tls.test`
   authority and also negotiates no ALPN protocol.
-- SMTP, IMAP, and POP3 retain the opt-in `probe_multi_pollset` field. When it
-  is true, their shared driver calls zero-timeout `curl_multi_poll` after
-  successful perform turns while both the transfer and control connection are
-  live. This reaches the protocol pollset callbacks without delaying the
-  default false path. Other fixed target policies clear the field until their
-  custom loops can provide the same service guarantee.
+- SMTP, IMAP, POP3, FTP, and FTPS retain the opt-in
+  `probe_multi_pollset` field. When it is true, their drivers call
+  zero-timeout `curl_multi_poll` after successful perform turns while both the
+  transfer and control connection are live. This reaches the protocol pollset
+  callbacks without delaying the default false path. Other fixed target
+  policies clear the field until their custom loops can provide the same
+  service guarantee.
 - MQTT treats the primary connection as a binary packet stream. The initial
   response is the CONNACK, while each readable chunk is an opaque
   server-initiated packet (for example PUBLISH followed by a server

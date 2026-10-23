@@ -103,6 +103,17 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "500 EPRT unsupported",
             "200 PORT accepted",
         ),
+        "ftp_wildcard_unix_symlink.textproto": (
+            "probe_multi_pollset: true",
+            "CURLOPT_WILDCARDMATCH bool_value: true",
+            "link.txt -> match.txt",
+            'initial_response: "match"',
+        ),
+        "ftp_wildcard_windows_list.textproto": (
+            "CURLOPT_WILDCARDMATCH bool_value: true",
+            "04-27-26  11:01AM",
+            'initial_response: "match"',
+        ),
     }
     ftp_root = SCENARIO_ROOT / "ftp"
     for name, tokens in expected_tokens.items():

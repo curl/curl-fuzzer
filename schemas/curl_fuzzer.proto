@@ -162,8 +162,9 @@ message Scenario {
   bool doh_https_rr = 29;
   // Exercise curl's public multi poll path between successful perform turns
   // while the transfer and its in-process control connection are both live.
-  // The fixed SMTP, IMAP, and POP3 lanes retain this opt-in because their
-  // custom loop can immediately service the peer; other fixed lanes clear it.
+  // The fixed SMTP, IMAP, POP3, and FTP/FTPS lanes retain this opt-in because
+  // their custom loop can immediately service the peer; other fixed lanes
+  // clear it.
   // False preserves the syscall-free historical fast path.
   bool probe_multi_pollset = 30;
 }

@@ -822,6 +822,7 @@ void TestFastTelnetPolicy() {
 
 void TestFastFtpPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("mutated.invalid:9999/a/b/file");
   scenario.add_request_headers("X-Ignored: ftp");
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
@@ -858,6 +859,8 @@ void TestFastFtpPolicy() {
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFtp);
 
   Expect(scenario.scheme() == SCHEME_FTP, "fast FTP policy did not force FTP");
+  Expect(scenario.probe_multi_pollset(),
+         "fast FTP policy removed the pollset-probe opt-in");
   Expect(scenario.host_path() == "ftp.test/a/b/file",
          "fast FTP policy did not retain only the URL path");
   Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
@@ -890,6 +893,7 @@ void TestFastFtpPolicy() {
 void TestFastFtpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_scheme(SCHEME_FTPS);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("untrusted.invalid:990/secure.bin?query#fragment");
   scenario.add_request_headers("X-Ignored: ftps");
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
@@ -913,6 +917,8 @@ void TestFastFtpsPolicy() {
 
   Expect(scenario.scheme() == SCHEME_FTPS,
          "fast FTP lane did not preserve an explicit FTPS scheme");
+  Expect(scenario.probe_multi_pollset(),
+         "fast FTP lane removed the FTPS pollset-probe opt-in");
   Expect(scenario.host_path() == "tls.test/secure.bin?query#fragment",
          "fast FTP lane did not give FTPS the certifiable authority");
   Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
@@ -2910,7 +2916,7 @@ void TestCompatibilityProfileIsNoOp() {
          "compatibility profile changed an accumulated-corpus input");
 }
 
-void TestOnlyMailPoliciesRetainPollsetProbe() {
+void TestOnlySupportedPoliciesRetainPollsetProbe() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
@@ -2924,7 +2930,6 @@ void TestOnlyMailPoliciesRetainPollsetProbe() {
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
@@ -2945,7 +2950,7 @@ void TestOnlyMailPoliciesRetainPollsetProbe() {
     NormalizeScenarioForTarget(&scenario, profile);
 
     Expect(!scenario.probe_multi_pollset(),
-           "a fixed non-mail policy retained pollset-probe work");
+           "an unsupported fixed policy retained pollset-probe work");
   }
 
   Scenario compatibility;
@@ -3542,7 +3547,7 @@ int main() {
   TestAllocationFailuresAvoidDanglingMimeReader();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
-  TestOnlyMailPoliciesRetainPollsetProbe();
+  TestOnlySupportedPoliciesRetainPollsetProbe();
   TestAllocationFailurePlansAreCanonicalized();
   TestNonH2OriginPoliciesDiscardAcceptedPushMode();
   TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget();
