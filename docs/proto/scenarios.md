@@ -135,7 +135,13 @@ Other peers intentionally give those fields narrower meanings:
   searchRequest and likewise renumbered. A scripted searchResDone ends the
   search; otherwise the peer synthesizes one. The URL path carries the base DN,
   attributes, scope, and filter, because this curl revision's OpenLDAP handler
-  does not consult `CURLOPT_CUSTOMREQUEST`.
+  does not consult `CURLOPT_CUSTOMREQUEST`. An `SCHEME_LDAPS` scenario runs the
+  identical BER exchange over implicit TLS. In this curl revision OpenLDAP
+  itself is built without TLS: `lib/openldap.c` drives curl's SSL connection
+  filter and routes OpenLDAP's sockbuf I/O through curl's send/receive
+  callbacks, so the in-process peer terminates ordinary TLS records and then
+  parses decrypted LDAPMessages. The fixed authority is `tls.test`, matching
+  the checked-in trust anchor, and the handshake carries no ALPN extension.
 - RTSP is request-aligned and has no server greeting. The peer consumes each
   request start line and header block, releases the next `on_readable` entry
   only after the terminating empty line, and drains any announced

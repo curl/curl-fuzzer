@@ -30,6 +30,7 @@ using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_LDAP;
 using curl::fuzzer::proto::SCHEME_IMAP;
 using curl::fuzzer::proto::SCHEME_IMAPS;
+using curl::fuzzer::proto::SCHEME_LDAPS;
 using curl::fuzzer::proto::SCHEME_MQTT;
 using curl::fuzzer::proto::SCHEME_MQTTS;
 using curl::fuzzer::proto::SCHEME_POP3;
@@ -1604,6 +1605,15 @@ void TestNonLdapPoliciesClearLdapScheme() {
 
     Expect(scenario.scheme() != SCHEME_LDAP,
            "a non-LDAP policy retained the LDAP scheme");
+
+    Scenario secure;
+    secure.set_host_path("tls.test/dc=example,dc=com");
+    secure.set_scheme(SCHEME_LDAPS);
+
+    NormalizeScenarioForTarget(&secure, profile);
+
+    Expect(secure.scheme() != SCHEME_LDAPS,
+           "a non-LDAP policy retained the LDAPS scheme");
   }
 
   Scenario compatibility;
@@ -1612,6 +1622,48 @@ void TestNonLdapPoliciesClearLdapScheme() {
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
   Expect(compatibility.scheme() == SCHEME_LDAP,
          "compatibility unexpectedly rewrote the LDAP scheme");
+
+  Scenario secure_compatibility;
+  secure_compatibility.set_host_path("tls.test/dc=example,dc=com");
+  secure_compatibility.set_scheme(SCHEME_LDAPS);
+  NormalizeScenarioForTarget(&secure_compatibility,
+                             TargetProfile::kCompatibility);
+  Expect(secure_compatibility.scheme() == SCHEME_LDAPS,
+         "compatibility unexpectedly rewrote the LDAPS scheme");
+}
+
+void TestFastLdapsPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_scheme(SCHEME_LDAPS);
+  scenario.set_host_path(
+      "untrusted.invalid:636/dc=example,dc=com?cn?sub?(objectclass=*)#frag");
+  scenario.add_request_headers("X-Ignored: ldaps");
+  scenario.mutable_connection()->add_on_readable("search entry");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+
+  auto *username = scenario.add_options();
+  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
+  username->set_string_value("cn=admin,dc=example,dc=com");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastLdap);
+
+  Expect(scenario.scheme() == SCHEME_LDAPS,
+         "fast LDAP lane did not preserve an explicit LDAPS scheme");
+  Expect(scenario.host_path() ==
+             "tls.test/dc=example,dc=com?cn?sub?(objectclass=*)#frag",
+         "fast LDAP lane did not give LDAPS the certifiable authority");
+  Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
+             !scenario.has_upload() && !scenario.has_api_plan(),
+         "fast LDAP lane retained another protocol's shape for LDAPS");
+  Expect(scenario.connection().on_readable(0) == "search entry" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast LDAP lane changed the LDAPS script or retained stream-only "
+         "controls");
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERNAME,
+         "fast LDAP lane retained a non-LDAP option for LDAPS");
 }
 
 void TestFastRtspPolicy() {
@@ -3158,6 +3210,7 @@ int main() {
   TestNonDictPoliciesClearDictScheme();
   TestFastLdapPolicy();
   TestNonLdapPoliciesClearLdapScheme();
+  TestFastLdapsPolicy();
   TestFastRtspPolicy();
   TestNonRtspPoliciesClearRtspSchemeAndOptions();
   TestFastSmtpsPolicy();

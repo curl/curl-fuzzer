@@ -308,14 +308,17 @@ void CanonicalizeFileAuthority(curl::fuzzer::proto::Scenario* scenario) {
 /// is not consulted. A default base DN makes newly generated inputs reach the
 /// bind/search peer, and dropping any userinfo component keeps OpenLDAP's
 /// strict URL parser from rejecting credentials it only accepts separately.
+/// Implicit-TLS inputs use the checked-in certificate's tls.test name so the
+/// verified handshake can complete before the same BER exchange runs.
 void CanonicalizeLdapAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAPS ? "tls.test" : "ldap.test";
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path("ldap.test/dc=example,dc=com");
+    scenario->set_host_path(std::string(host) + "/dc=example,dc=com");
     return;
   }
-  scenario->set_host_path("ldap.test" + host_path.substr(suffix_start));
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
 /// Pin the RTSP peer's authority while preserving the path, query, and
@@ -2086,9 +2089,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_scheme();
   }
 
-  // LDAP is append-only too. Only the fixed BER lane may turn one of its
-  // scripted bind/search exchanges into a live OpenLDAP session.
-  if (profile != TargetProfile::kFastLdap && scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAP) {
+  // LDAP and LDAPS are append-only too. Only the fixed BER lane may turn one
+  // of their scripted bind/search exchanges into a live OpenLDAP session.
+  if (profile != TargetProfile::kFastLdap && (scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAP ||
+                                              scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAPS)) {
     scenario->clear_scheme();
   }
 
@@ -2397,7 +2401,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastLdap) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_LDAP);
+    // The single LDAP target services plaintext LDAP and implicit-TLS LDAPS
+    // through one BER parser. Preserve an explicitly supplied LDAPS scheme so
+    // the seed and mutations can select the TLS peer; every other scheme falls
+    // back to the historical plaintext lane.
+    const auto scheme = scenario->scheme();
+    scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_LDAPS ? curl::fuzzer::proto::SCHEME_LDAPS
+                                                                     : curl::fuzzer::proto::SCHEME_LDAP);
     RemoveIgnoredLdapShape(scenario);
     RetainLdapOptions(scenario);
     BoundScenarioShape(scenario);
