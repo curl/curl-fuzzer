@@ -10,15 +10,11 @@
 #ifndef PROTO_FUZZER_IMAP_MOCK_SERVER_H_
 #define PROTO_FUZZER_IMAP_MOCK_SERVER_H_
 
-#include <curl/curl.h>
-
 #include <cstddef>
 #include <string>
 #include <string_view>
 
-#include "curl_fuzzer.pb.h"
-#include "proto_fuzzer/mock_server_base.h"
-#include "proto_fuzzer/scenario_limits.h"
+#include "proto_fuzzer/pingpong_mock_server.h"
 
 namespace proto_fuzzer {
 
@@ -44,7 +40,7 @@ namespace proto_fuzzer {
 /// After the peer accepts a `+` continuation it drains exactly the literal size
 /// announced by the command and pre-queues the next scripted reply as the final
 /// tagged completion, mirroring curl's blocking imap_done() wait.
-class ImapMockServer final : public MockServerBase {
+class ImapMockServer final : public PingpongMockServer {
  public:
   ImapMockServer();
 
@@ -53,41 +49,18 @@ class ImapMockServer final : public MockServerBase {
   ImapMockServer(const ImapMockServer&) = delete;
   ImapMockServer& operator=(const ImapMockServer&) = delete;
 
-  // Bounded record of complete command lines sent by curl.
-  const std::string& control_transcript() const;
-
-  // Bounded record of the APPEND literal body most recently drained.
-  const std::string& uploaded_data() const;
-
  protected:
-  curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
-                                 struct curl_sockaddr* address = nullptr) override;
+  void HandleLine(std::string_view line) override;
 
-  void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+  void ResetProtocolState() override;
 
-  void HandleDetachedMulti(CurlMultiPtr multi) override;
+  void QueueShutdownReply() override;
 
  private:
   /// Liveness reply for curl's blocking LOGOUT during teardown. IMAP requires a
   /// tagged line, so the peer predicts the next command id from the last tag it
   /// observed.
   static constexpr std::string_view kShutdownTail = " OK LOGOUT completed\r\n";
-
-  /// Cap the observable APPEND body independently of protocol draining.
-  static constexpr std::size_t kMaxCapturedControlBytes = 64 * 1024;
-  static constexpr std::size_t kMaxCapturedUploadBytes = 2 * scenario_limits::kMaxUploadBytes;
-
-  void ResetForScenario(const curl::fuzzer::proto::Scenario& scenario);
-
-  static void ApplyScriptBackpressure(MockConnection* connection, const curl::fuzzer::proto::Connection& script);
-
-  bool ServiceControlConnection();
-
-  void HandleControlCommand(std::string_view command);
-
-  const std::string* NextControlReply();
-
-  bool WriteControlBytes(std::string_view bytes);
 
   // Resolve a scripted reply into wire bytes.
   std::string RewriteReply(std::string_view response) const;
@@ -104,38 +77,8 @@ class ImapMockServer final : public MockServerBase {
   // Tag curl will use for the next command, derived from the current tag.
   std::string NextCommandTag() const;
 
-  static std::string_view CommandVerb(std::string_view command);
-
-  static std::string_view CommandTag(std::string_view command);
-
-  static bool VerbEquals(std::string_view verb, std::string_view expected_uppercase);
-
-  static void CapturePrefix(std::string_view source, std::size_t limit, std::string* destination);
-
-  void FinishConnections();
-
-  /// Borrowed only while RunLoop is active, including every socket callback.
-  const curl::fuzzer::proto::Scenario* scenario_;
-  /// Runtime-visible prefix of on_readable response fragments.
-  std::size_t control_reply_count_;
-  /// Cursor advanced once per command, plus the pre-queued APPEND completion.
-  std::size_t next_control_reply_;
-  /// Partial command or literal bytes retained until the next read.
-  std::string pending_control_bytes_;
-  /// Bounded test-facing record of complete commands sent by curl.
-  std::string control_transcript_;
-  /// Bounded test-facing prefix of drained APPEND literals.
-  std::string uploaded_data_;
   /// Tag of the command currently being answered.
   std::string current_tag_;
-  /// APPEND continuation accepted; incoming bytes are literal body content.
-  bool draining_upload_;
-  /// Literal body bytes still to drain before the terminating empty line.
-  std::size_t upload_remaining_;
-  /// Remaining bytes of the CRLF curl sends after the APPEND literal.
-  std::size_t upload_terminator_remaining_;
-  /// Prevent a second control socket from displacing the live first one.
-  bool control_opened_;
 };
 
 }  // namespace proto_fuzzer
