@@ -61,6 +61,12 @@ namespace {
 
 constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
 constexpr std::size_t kMaxResultHeaders = 16;
+// libcurl has no ipfs:// handler: curl's command-line tool rewrites those
+// schemes onto an HTTP gateway before configuring its easy handle. Mirror that
+// rewrite against a fixed loopback authority. CONNECT_TO and OPENSOCKET still
+// confine the resulting HTTP GET to the in-process MockServer, so no gateway
+// process, DNS lookup, or external port is involved.
+constexpr char kIpfsGatewayBaseUrl[] = "http://127.0.1.127:8080";
 /// Probe each public getinfo return family and the response-header API after
 /// curl has settled the transfer. Applications commonly inspect these APIs,
 /// but a harness that only drives I/O leaves their type dispatch and
@@ -134,6 +140,10 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "ldaps";
     case curl::fuzzer::proto::SCHEME_RTSP:
       return "rtsp";
+    case curl::fuzzer::proto::SCHEME_IPFS:
+      return "ipfs";
+    case curl::fuzzer::proto::SCHEME_IPNS:
+      return "ipns";
     case curl::fuzzer::proto::SCHEME_SMTPS:
       return "smtps";
     case curl::fuzzer::proto::SCHEME_DICT:
@@ -148,6 +158,20 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
     default:
       return nullptr;
   }
+}
+
+/// Build the URL curl actually receives. For IPFS/IPNS this reproduces curl's
+/// command-line gateway rewrite: `<gateway>/<protocol>/<cid-or-name><suffix>`.
+/// The gateway itself is the fixed loopback authority above; host_path already
+/// holds the canonical CID/name followed by the mutation-controlled suffix.
+/// @param scenario Scenario whose scheme and gateway path select the URL.
+/// @param prefix Scheme literal returned by SchemePrefix().
+/// @return Effective URL before CONNECT_TO and OPENSOCKET confinement.
+std::string ScenarioUrl(const curl::fuzzer::proto::Scenario& scenario, const char* prefix) {
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_IPFS || scenario.scheme() == curl::fuzzer::proto::SCHEME_IPNS) {
+    return std::string(kIpfsGatewayBaseUrl) + "/" + prefix + "/" + scenario.host_path();
+  }
+  return std::string(prefix) + "://" + scenario.host_path();
 }
 
 /// Pick the peer implementation authorized by both protocol and target mode.
@@ -384,6 +408,15 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<RtspMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_IPFS:
+    case curl::fuzzer::proto::SCHEME_IPNS:
+      // The rewrite above turns these into ordinary HTTP GETs. Only the
+      // dedicated fast lane may reinterpret an append-only scheme value, and
+      // its compatibility peer is the plaintext MockServer.
+      if (mode == ScenarioRunMode::kFastProtocol) {
+        return std::make_unique<MockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -563,7 +596,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     return 0;
   }
   CURL* easy = transfer.easy();
-  const std::string url = std::string(prefix) + "://" + scenario.host_path();
+  const std::string url = ScenarioUrl(scenario, prefix);
   const auto configure_easy = [&] {
     transfer.ApplyBaseline(scenario);
     (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());

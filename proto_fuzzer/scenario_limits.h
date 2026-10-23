@@ -84,6 +84,10 @@ inline constexpr std::size_t kMaxTotalMimeParts = 32;
 inline constexpr std::size_t kMaxMimeHeadersPerPart = 8;
 /// Metadata reaches NUL-terminated APIs, where giant suffixes add no coverage.
 inline constexpr std::size_t kMaxMetadataBytes = 4096;
+/// IPFS and IPNS inputs carry one CID/name plus a gateway path. The rewrite
+/// keeps that suffix mutation-controlled, but a bounded whole-URL budget stops
+/// LPM from growing a single identifier into a large CONNECT_TO target.
+inline constexpr std::size_t kMaxIpfsHostPathBytes = 4096;
 /// MIME payloads remain large enough to cross encoder buffer boundaries.
 inline constexpr std::size_t kMaxMimeDataBytes = 16384;
 /// Longer repeated patterns are better expressed as ordinary MIME data and

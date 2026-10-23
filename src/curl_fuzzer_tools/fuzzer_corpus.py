@@ -39,6 +39,7 @@ HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
         "curl_fuzzer_proto_file",
         "curl_fuzzer_proto_ldap",
         "curl_fuzzer_proto_rtsp",
+        "curl_fuzzer_proto_ipfs",
         "curl_fuzzer_proto_api",
         "curl_fuzzer_proto_multi",
         "curl_fuzzer_proto_timing",

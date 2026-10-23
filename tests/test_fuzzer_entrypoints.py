@@ -54,6 +54,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_file": "kFastFile",
     "curl_fuzzer_proto_ldap": "kFastLdap",
     "curl_fuzzer_proto_rtsp": "kFastRtsp",
+    "curl_fuzzer_proto_ipfs": "kFastIpfs",
     "curl_fuzzer_proto_gopher": "kFastGopher",
     "curl_fuzzer_proto_api": "kApi",
     "curl_fuzzer_proto_multi": "kMulti",
