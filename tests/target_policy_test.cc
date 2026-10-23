@@ -1756,6 +1756,27 @@ void TestFastRtspPolicy() {
          "fast RTSP policy did not clamp the client sequence override");
 }
 
+void TestFastRtspPolicyFoldsReceiveOntoOptions() {
+  // RECEIVE issues no request and cannot reach the request-aligned peer's
+  // FinishRequest() reply path, so it must fold onto OPTIONS rather than
+  // leave a mutation that stalls before any scripted exchange.
+  Scenario scenario;
+  scenario.set_scheme(SCHEME_RTSP);
+  scenario.set_host_path("rtsp.test/stream");
+  auto *request = scenario.add_options();
+  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+  request->set_uint_value(CURL_RTSPREQ_RECEIVE);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastRtsp);
+
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RTSP_REQUEST &&
+             scenario.options(0).uint_value() == CURL_RTSPREQ_OPTIONS,
+         "fast RTSP policy retained CURL_RTSPREQ_RECEIVE instead of folding "
+         "it onto OPTIONS");
+}
+
 void TestNonRtspPoliciesClearRtspSchemeAndOptions() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
@@ -3331,6 +3352,7 @@ int main() {
   TestNonLdapPoliciesClearLdapScheme();
   TestFastLdapsPolicy();
   TestFastRtspPolicy();
+  TestFastRtspPolicyFoldsReceiveOntoOptions();
   TestNonRtspPoliciesClearRtspSchemeAndOptions();
   TestFastIpfsPolicy();
   TestNonIpfsPoliciesClearIpfsScheme();

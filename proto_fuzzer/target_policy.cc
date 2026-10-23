@@ -1670,8 +1670,13 @@ void CanonicalizeRtspOptionModes(curl::fuzzer::proto::Scenario* scenario) {
     switch (option.option_id()) {
       case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST: {
         const std::uint64_t value = IntegralMutationValue(option);
-        option.set_uint_value(value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST ? value
-                                                                                         : CURL_RTSPREQ_OPTIONS);
+        // RECEIVE sends no request and instead waits for server-initiated
+        // stream data, which the request-aligned peer never emits. Fold it
+        // onto the default OPTIONS like zero and out-of-range values so every
+        // retained request still issues a scripted exchange.
+        const bool supported = value >= CURL_RTSPREQ_OPTIONS && value < CURL_RTSPREQ_LAST &&
+                               value != CURL_RTSPREQ_RECEIVE;
+        option.set_uint_value(supported ? value : CURL_RTSPREQ_OPTIONS);
         break;
       }
       case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
