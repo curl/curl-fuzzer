@@ -64,6 +64,9 @@ enum class TargetProfile {
   /// Exercise binary BER LDAP bind and search exchanges through the
   /// OpenLDAP-backed single-socket peer.
   kFastLdap,
+  /// Exercise RTSP request/response exchanges and interleaved RTP delivery
+  /// through the request-aligned stream peer.
+  kFastRtsp,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
   /// Exercise several easy handles through one shared multi handle.
@@ -120,6 +123,9 @@ enum class ScenarioRunMode {
   /// Drive LDAP through its BER-aware single-socket peer, including the bind
   /// reply and scripted search-result messages.
   kLdapCoverage,
+  /// Drive RTSP through its request-aligned control peer, including response
+  /// bodies and interleaved RTP data.
+  kRtspCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
   /// Honour MultiPlan and drive several HTTP transfers through one multi.
@@ -196,6 +202,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastLdap:
       return ScenarioRunMode::kLdapCoverage;
+
+    case TargetProfile::kFastRtsp:
+      return ScenarioRunMode::kRtspCoverage;
 
     case TargetProfile::kCompatibility:
     case TargetProfile::kFastWebSocket:

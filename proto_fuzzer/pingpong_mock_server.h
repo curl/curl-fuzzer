@@ -77,6 +77,11 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   // terminator that is not captured. Used by IMAP's {N} literal uploads.
   void BeginLiteralBody(std::size_t length);
 
+  // Consume exactly `length` bytes, capturing them, with no trailing
+  // terminator. Used by protocols such as RTSP whose announced entity body is
+  // followed immediately by the next request or by the peer's close.
+  void BeginExactBody(std::size_t length);
+
   /// Called after a body phase reached its terminator and the parser returned
   /// to command mode. The default does nothing.
   virtual void HandleBodyComplete() {}
@@ -127,6 +132,7 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
     kCommand,  ///< Splitting newline-terminated command lines.
     kMarker,   ///< Scanning for an opaque end-of-body marker.
     kLiteral,  ///< Draining an announced number of bytes, then CRLF.
+    kExact,    ///< Draining exactly an announced number of bytes.
   };
 
   // Observability must not grow with a future curl loop; these caps exceed the

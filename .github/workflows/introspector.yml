@@ -25,6 +25,7 @@ name: Fuzz Introspector
       - 'tests/mqtt_mock_server_test.cc'
       - 'tests/dict_mock_server_test.cc'
       - 'tests/ldap_mock_server_test.cc'
+      - 'tests/rtsp_mock_server_test.cc'
       - 'tests/smtps_mock_server_test.cc'
       - 'tests/tftp_mock_server_test.cc'
   pull_request:
@@ -51,6 +52,7 @@ name: Fuzz Introspector
       - 'tests/mqtt_mock_server_test.cc'
       - 'tests/dict_mock_server_test.cc'
       - 'tests/ldap_mock_server_test.cc'
+      - 'tests/rtsp_mock_server_test.cc'
       - 'tests/smtps_mock_server_test.cc'
       - 'tests/tftp_mock_server_test.cc'
   workflow_dispatch: {}

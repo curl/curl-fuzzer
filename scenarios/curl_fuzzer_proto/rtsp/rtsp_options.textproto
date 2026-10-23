@@ -1,0 +1,10 @@
+# OPTIONS is curl's default RTSP method. The peer waits for the request before
+# releasing the method list, which keeps the request/response exchange aligned
+# even though RTSP has no server greeting.
+scheme: SCHEME_RTSP
+host_path: "rtsp.test/stream"
+options { option_id: CURLOPT_RTSP_REQUEST uint_value: 1 }
+options { option_id: CURLOPT_USERAGENT string_value: "curl-fuzzer-rtsp" }
+connection {
+  on_readable: "RTSP/1.0 200 OK\r\nCSeq: 1\r\nPublic: DESCRIBE, OPTIONS, SETUP, PLAY, PAUSE, TEARDOWN, GET_PARAMETER, SET_PARAMETER\r\n\r\n"
+}

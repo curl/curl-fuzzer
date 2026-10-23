@@ -635,6 +635,7 @@ enum Scheme {
   // TLS ldaps, which follows once the TLS transport is shared with this peer.
   // Keep this append-only for the compatibility target's historical inputs.
   SCHEME_LDAP = 17;
+  SCHEME_RTSP = 19;
 }
 
 message SetOption {
@@ -811,6 +812,12 @@ enum CurlOptionId {
   CURLOPT_REFERER = 10016;
   CURLOPT_REQUEST_TARGET = 10266;
   CURLOPT_RESUME_FROM_LARGE = 30116;
+  CURLOPT_RTSP_CLIENT_CSEQ = 193;
+  CURLOPT_RTSP_REQUEST = 189;
+  CURLOPT_RTSP_SERVER_CSEQ = 194;
+  CURLOPT_RTSP_SESSION_ID = 10190;
+  CURLOPT_RTSP_STREAM_URI = 10191;
+  CURLOPT_RTSP_TRANSPORT = 10192;
   CURLOPT_SSLVERSION = 32;
   CURLOPT_SSL_CIPHER_LIST = 10083;
   CURLOPT_SSL_EC_CURVES = 10298;
