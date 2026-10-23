@@ -25,6 +25,7 @@ SOURCE_PATHS = (
     "tests/mqtt_mock_server_test.cc",
     "tests/dict_mock_server_test.cc",
     "tests/ldap_mock_server_test.cc",
+    "tests/ldaps_mock_server_test.cc",
     "tests/rtsp_mock_server_test.cc",
     "tests/smtps_mock_server_test.cc",
     "tests/imaps_mock_server_test.cc",

@@ -43,6 +43,7 @@
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/imaps_mock_server.h"
+#include "proto_fuzzer/ldaps_mock_server.h"
 #include "proto_fuzzer/mqtts_mock_server.h"
 #include "proto_fuzzer/pop3s_mock_server.h"
 #include "proto_fuzzer/smtps_mock_server.h"
@@ -129,6 +130,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "mqtts";
     case curl::fuzzer::proto::SCHEME_LDAP:
       return "ldap";
+    case curl::fuzzer::proto::SCHEME_LDAPS:
+      return "ldaps";
     case curl::fuzzer::proto::SCHEME_RTSP:
       return "rtsp";
     case curl::fuzzer::proto::SCHEME_SMTPS:
@@ -362,6 +365,17 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<LdapMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_LDAPS:
+      // Implicit TLS shares the LDAP lane, BER parser, and scripted messages
+      // with the plaintext scheme; only the transport factory differs. Keep it
+      // gated on the same fixed run mode so no other target can turn an
+      // appended enum value into a TLS exchange.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+      if (mode == ScenarioRunMode::kLdapCoverage) {
+        return std::make_unique<LdapsMockServer>();
+      }
+#endif
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_RTSP:
       // RTSP is request-aligned rather than greeting-aligned, so the
       // dedicated lane is required to select the peer that waits for the
@@ -472,6 +486,13 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                       static_cast<std::size_t>(pop3s->negotiated_tls_version()),
                                                       pop3s->negotiated_alpn().size()};
     (void)pop3s_observation;
+  }
+
+  if (auto* ldaps = dynamic_cast<LdapsMockServer*>(mock)) {
+    const volatile std::size_t ldaps_observation[] = {ldaps->completed_handshake_count(),
+                                                      static_cast<std::size_t>(ldaps->negotiated_tls_version()),
+                                                      ldaps->negotiated_alpn().size()};
+    (void)ldaps_observation;
   }
 #endif
 

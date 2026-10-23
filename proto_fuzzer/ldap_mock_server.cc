@@ -72,6 +72,18 @@ LdapMockServer::~LdapMockServer() = default;
 /// @return A prefix of complete client LDAPMessages from the most recent drive.
 const std::string& LdapMockServer::packet_transcript() const { return packet_transcript_; }
 
+/// Append one fragment after the transport has decoded it. Plaintext peers
+/// report socket bytes directly; the LDAPS peer reports decrypted application
+/// bytes, so the BER parser is independent of the carrier.
+/// @param data First byte of the fragment.
+/// @param size Number of bytes available at `data`.
+void LdapMockServer::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  pending_client_bytes_.append(reinterpret_cast<const char*>(data), size);
+}
+
 /// @return Number of bindRequest messages observed.
 std::size_t LdapMockServer::bind_request_count() const { return bind_request_count_; }
 
@@ -397,6 +409,11 @@ void LdapMockServer::ApplyScriptBackpressure(MockConnection* connection,
   connection->ApplyBackpressure(receive_buffer, static_cast<std::size_t>(backpressure.drain_limit()));
 }
 
+/// Create the default plaintext transport. The LDAPS subclass overrides this
+/// factory, which keeps every BER handling path identical across carriers.
+/// @return Newly allocated in-process socketpair peer.
+std::unique_ptr<MockConnection> LdapMockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
+
 /// Create the single LDAP socketpair. The bind reply is deliberately not
 /// queued here: LDAP is client-first, and releasing the scripted reply only
 /// after the bindRequest lets the peer rewrite its messageID to OpenLDAP's
@@ -410,11 +427,12 @@ curl_socket_t LdapMockServer::HandleOpenSocket(curlsocktype purpose, struct curl
     return CURL_SOCKET_BAD;
   }
 
-  connection_ = std::make_unique<MockConnection>();
-  if (!connection_->ok()) {
+  connection_ = CreateConnection();
+  if (!connection_ || !connection_->ok()) {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
+  connection_->SetIncomingDataObserver(this);
 
   ApplyScriptBackpressure(connection_.get(), scenario_->connection());
   socket_opened_ = true;
@@ -572,16 +590,18 @@ bool LdapMockServer::FinishSearchIfReady() {
 
 /// Read without waiting and process every complete LDAPMessage currently
 /// buffered. A message is delivered only after its outer TLV has fully
-/// arrived, so fragmentation cannot shift the parser.
-/// @return true when bytes, a message, or a response cursor advanced.
+/// arrived, so fragmentation cannot shift the parser. DrainIncoming() also
+/// advances a layered TLS carrier, and reports its handshake progress so the
+/// outer loop does not mistake useful negotiation for an idle peer.
+/// @return true when bytes, a message, or a transport state advanced.
 bool LdapMockServer::ServiceClientConnection() {
   if (connection_ == nullptr || protocol_error_ || peer_closed_) {
     return false;
   }
 
   const std::size_t size_before_read = pending_client_bytes_.size();
-  connection_->ReadAvailable(&pending_client_bytes_);
-  bool made_progress = pending_client_bytes_.size() != size_before_read;
+  const std::size_t transport_progress = connection_->DrainIncoming();
+  bool made_progress = pending_client_bytes_.size() != size_before_read || transport_progress != 0;
 
   std::size_t consumed = 0;
   int messages = 0;

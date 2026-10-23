@@ -631,10 +631,12 @@ enum Scheme {
   // The local-file protocol has no network peer. The dedicated lane pins the
   // URL path to a read-only target and exercises file:// parsing only.
   SCHEME_FILE = 16;
-  // LDAP is the OpenLDAP-backed BER lane. Value 18 is reserved for implicit-
-  // TLS ldaps, which follows once the TLS transport is shared with this peer.
-  // Keep this append-only for the compatibility target's historical inputs.
+  // LDAP is the OpenLDAP-backed BER lane. LDAPS runs the same bind/search
+  // exchange over implicit TLS, where curl's own SSL filter terminates the
+  // handshake before OpenLDAP sees any BER bytes. Keep this append-only for
+  // the compatibility target's historical inputs.
   SCHEME_LDAP = 17;
+  SCHEME_LDAPS = 18;
   SCHEME_RTSP = 19;
   // Implicit-TLS members of the existing mail lanes. They reuse the plaintext
   // command parsers and differ only in transport setup, so the labels stay

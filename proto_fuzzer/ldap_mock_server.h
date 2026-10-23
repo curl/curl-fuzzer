@@ -15,10 +15,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/incoming_data_observer.h"
 #include "proto_fuzzer/mock_server_base.h"
 
 namespace proto_fuzzer {
@@ -37,6 +39,12 @@ namespace proto_fuzzer {
 /// then duplicates that descriptor for OpenLDAP's own socket I/O. Because the
 /// duplicate names the same socketpair endpoint, every byte still stays inside
 /// the in-process peer; no loopback listener or real network socket is needed.
+///
+/// Transport selection: subclasses replace CreateConnection(). The implicit-TLS
+/// LDAPS peer uses that hook to run the identical BER exchange inside a
+/// verified OpenSSL acceptor. Incoming application bytes arrive through
+/// ObserveIncomingData() after any transport decoding, so the parser does not
+/// depend on whether the socketpair is plaintext or TLS.
 ///
 /// Script semantics:
 /// - `initial_response`, when non-empty, is the bind reply. The peer releases
@@ -57,7 +65,7 @@ namespace proto_fuzzer {
 /// INTEGER/SEQUENCE tags needed to delimit LDAPMessage envelopes. Everything
 /// else is opaque payload so malformed server data still reaches OpenLDAP's
 /// full parser. All sizes are bounded by kMaxClientMessageBytes.
-class LdapMockServer final : public MockServerBase {
+class LdapMockServer : public MockServerBase, public IncomingDataObserver {
  public:
   LdapMockServer();
 
@@ -65,6 +73,9 @@ class LdapMockServer final : public MockServerBase {
 
   LdapMockServer(const LdapMockServer&) = delete;
   LdapMockServer& operator=(const LdapMockServer&) = delete;
+
+  // Append one transport-decoded client fragment to the BER parser input.
+  void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
 
   // Bounded raw capture of complete client LDAPMessages, including envelope.
   const std::string& packet_transcript() const;
@@ -94,6 +105,11 @@ class LdapMockServer final : public MockServerBase {
  protected:
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
+
+  // Construct the transport wrapping curl's socketpair endpoint. The default
+  // is a plaintext MockConnection; the LDAPS peer overrides this to return a
+  // server-side TLS acceptor over the same socket.
+  virtual std::unique_ptr<MockConnection> CreateConnection();
 
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 

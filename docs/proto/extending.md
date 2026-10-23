@@ -19,8 +19,8 @@ one:
    `src/curl_fuzzer_tools/generate_option_manifest.py`.
 3. Decide which fixed profiles may retain it. The fast HTTP, HTTP/2 proxy,
    HTTP/3, TELNET, FTP, TFTP, IMAP/IMAPS, POP3/POP3S, SMTP/SMTPS,
-   MQTT/MQTTS, DICT, FILE, LDAP, RTSP, and Gopher lanes use explicit option
-   allowlists in `proto_fuzzer/target_policy.cc`.
+   MQTT/MQTTS, DICT, FILE, LDAP/LDAPS, RTSP, and Gopher lanes use explicit
+   option allowlists in `proto_fuzzer/target_policy.cc`.
 4. Add a correlated textproto seed when reaching useful code requires other
    options or particular peer bytes.
 

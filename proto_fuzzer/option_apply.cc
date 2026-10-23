@@ -34,7 +34,7 @@ constexpr char kPop3ProtocolAllowed[] = "pop3,pop3s";
 constexpr char kMqttProtocolAllowed[] = "mqtt,mqtts";
 constexpr char kDictProtocolAllowed[] = "dict";
 constexpr char kFileProtocolAllowed[] = "file";
-constexpr char kLdapProtocolAllowed[] = "ldap";
+constexpr char kLdapProtocolAllowed[] = "ldap,ldaps";
 constexpr char kRtspProtocolAllowed[] = "rtsp";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
@@ -165,6 +165,7 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       direct_protocols = kFileProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_LDAP:
+    case curl::fuzzer::proto::SCHEME_LDAPS:
       direct_protocols = kLdapProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_RTSP:

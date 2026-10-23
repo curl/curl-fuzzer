@@ -1736,6 +1736,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
             proto_fuzzer/imaps_mock_server.cc
+            proto_fuzzer/ldaps_mock_server.cc
             proto_fuzzer/mqtts_mock_server.cc
             proto_fuzzer/pop3s_mock_server.cc
             proto_fuzzer/smtps_mock_server.cc
@@ -2488,6 +2489,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/imap_mock_server.cc
             proto_fuzzer/pop3_mock_server.cc
             proto_fuzzer/mqtt_mock_server.cc
+            proto_fuzzer/ldap_mock_server.cc
             proto_fuzzer/target_policy.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
@@ -2687,6 +2689,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             add_executable(${_name}
                 ${_test_source}
                 ${_peer_source}
+                ${ARGN}
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
                 proto_fuzzer/multi_socket_driver.cc
@@ -2747,6 +2750,22 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(ldap_mock_server_test
             tests/ldap_mock_server_test.cc
             proto_fuzzer/ldap_mock_server.cc)
+        # LDAPS wraps the same BER peer in the in-process OpenSSL acceptor.
+        # Keep it with the TLS-aware executables so the plaintext LDAP test
+        # remains available on builds whose curl omits a TLS backend.
+        if(TARGET openssl_external)
+            curl_add_proto_peer_test(ldaps_mock_server_test
+                tests/ldaps_mock_server_test.cc
+                proto_fuzzer/ldap_mock_server.cc
+                proto_fuzzer/ldaps_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc)
+            target_compile_definitions(ldaps_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(ldaps_mock_server_test PRIVATE
+                ${OPENSSL_INSTALL_DIR}/include)
+            add_dependencies(ldaps_mock_server_test openssl_external)
+        endif()
         curl_add_proto_peer_test(rtsp_mock_server_test
             tests/rtsp_mock_server_test.cc
             proto_fuzzer/rtsp_mock_server.cc)
