@@ -60,6 +60,7 @@ def test_true_flags_use_boolean_mutations() -> None:
         "CURLOPT_HTTP09_ALLOWED",
         "CURLOPT_CRLF",
         "CURLOPT_CERTINFO",
+        "CURLOPT_SASL_IR",
     ):
         assert _kind(name) == "bool"
 
@@ -169,4 +170,10 @@ def test_checked_in_option_block_is_valid() -> None:
     schema = (REPO_ROOT / "schemas" / "curl_fuzzer.proto").read_text()
     entries = parse_proto_options(schema)
 
-    assert "CURLOPT_COPYPOSTFIELDS" in {entry.name for entry in entries}
+    by_name = {entry.name: entry.curl_value for entry in entries}
+
+    assert "CURLOPT_COPYPOSTFIELDS" in by_name
+    assert by_name["CURLOPT_LOGIN_OPTIONS"] == 10224
+    assert by_name["CURLOPT_MAIL_AUTH"] == 10217
+    assert by_name["CURLOPT_SASL_AUTHZID"] == 10289
+    assert by_name["CURLOPT_SASL_IR"] == 218

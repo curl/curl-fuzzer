@@ -2,20 +2,20 @@
 """
 Convert legacy TLV corpus entries into textproto scenarios.
 
-The TLV corpora under ``corpora/curl_fuzzer_http/`` are binary streams of
+Legacy TLV corpus inputs are binary streams of
 ``[type(2 bytes, big-endian)][length(4 bytes, big-endian)][value]`` records.
 This script walks a corpus directory, parses each record with the shared
 ``curl_fuzzer_tools.corpus`` decoder, and emits a textproto ``Scenario`` for
-every input, mapping an HTTP-relevant subset of TLV tags onto
-``SetOption``/``Connection`` fields.
+each representable input while reporting rejected inputs. A reviewed subset
+of TLV tags maps onto ``SetOption``/``Connection`` fields.
 
 Textproto output is produced by string formatting so the tool does not need
 the ``protobuf`` Python package. ``protoc --encode`` (a build-time dependency
 anyway) turns the textproto into binary corpus entries later.
 
 Unmapped tags are not silently dropped: they surface as ``# skipped TLV
-<CURLOPT_NAME>`` comments in the output so reviewers can spot HTTP-irrelevant
-data that appeared in the TLV corpus.
+<CURLOPT_NAME>`` comments in the output so reviewers can spot data outside
+the converter's supported field set.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from curl_fuzzer_tools.corpus import BaseType, TLVDecoder
 
-# Tag classification. The HTTP-relevant subset mirrors
+# Tag classification. The supported subset mirrors
 # schemas/curl_fuzzer.proto's CurlOptionId enum; a TLV tag landing in one of
 # these sets becomes a SetOption, with its CURLOPT name pulled straight
 # from BaseType.TYPEMAP. Tags outside the sets are reported as skipped.
@@ -45,6 +45,7 @@ STRING_TAGS = frozenset(
         BaseType.TYPE_MAIL_FROM,
         BaseType.TYPE_MAIL_AUTH,
         BaseType.TYPE_LOGIN_OPTIONS,
+        BaseType.TYPE_SASL_AUTHZID,
         BaseType.TYPE_XOAUTH2_BEARER,
     }
 )
@@ -59,6 +60,7 @@ BOOL_TAGS = frozenset(
         BaseType.TYPE_HTTPGET,
         BaseType.TYPE_SSL_VERIFYPEER,
         BaseType.TYPE_HTTP09_ALLOWED,
+        BaseType.TYPE_SASL_IR,
     }
 )
 
@@ -71,6 +73,38 @@ UINT_TAGS = frozenset(
 )
 
 RESPONSE_CHUNK_TAGS = frozenset(range(BaseType.TYPE_RSP1, BaseType.TYPE_RSP10 + 1))
+
+SCHEME_NAMES = {
+    b"dict": "SCHEME_DICT",
+    b"file": "SCHEME_FILE",
+    b"ftp": "SCHEME_FTP",
+    b"ftps": "SCHEME_FTPS",
+    b"gopher": "SCHEME_GOPHER",
+    b"gophers": "SCHEME_GOPHERS",
+    b"http": "SCHEME_HTTP",
+    b"https": "SCHEME_HTTPS",
+    b"imap": "SCHEME_IMAP",
+    b"imaps": "SCHEME_IMAPS",
+    b"ipfs": "SCHEME_IPFS",
+    b"ipns": "SCHEME_IPNS",
+    b"ldap": "SCHEME_LDAP",
+    b"ldaps": "SCHEME_LDAPS",
+    b"mqtt": "SCHEME_MQTT",
+    b"mqtts": "SCHEME_MQTTS",
+    b"pop3": "SCHEME_POP3",
+    b"pop3s": "SCHEME_POP3S",
+    b"rtsp": "SCHEME_RTSP",
+    b"smtp": "SCHEME_SMTP",
+    b"smtps": "SCHEME_SMTPS",
+    b"telnet": "SCHEME_TELNET",
+    b"tftp": "SCHEME_TFTP",
+    b"ws": "SCHEME_WS",
+    b"wss": "SCHEME_WSS",
+}
+
+
+class ConversionError(ValueError):
+    """Raised when a legacy input cannot be represented faithfully."""
 
 
 @dataclass
@@ -124,9 +158,18 @@ def render_string_option(tlv_type: int, value: bytes) -> str:
     )
 
 
+def decode_u32(tlv_type: int, value: bytes) -> int:
+    """Decode the exact-width integer representation used by legacy TLVs."""
+    if len(value) != 4:
+        raise ConversionError(
+            f"expected 4 bytes for {curlopt_name(tlv_type)}, got {len(value)}"
+        )
+    return int.from_bytes(value, "big")
+
+
 def render_bool_option(tlv_type: int, value: bytes) -> str:
     # TLV booleans are 4-byte big-endian ints; non-zero is true.
-    flag = bool(int.from_bytes(value, "big")) if value else False
+    flag = bool(decode_u32(tlv_type, value))
     return (
         f"options {{ option_id: {curlopt_name(tlv_type)} "
         f"bool_value: {'true' if flag else 'false'} }}"
@@ -134,48 +177,41 @@ def render_bool_option(tlv_type: int, value: bytes) -> str:
 
 
 def render_uint_option(tlv_type: int, value: bytes) -> str:
-    if len(value) != 4:
-        # TLV numeric values are always 4-byte big-endian per to_u32().
-        raise ValueError(
-            f"expected 4 bytes for {curlopt_name(tlv_type)}, got {len(value)}"
-        )
-    number = int.from_bytes(value, "big")
+    number = decode_u32(tlv_type, value)
     return f"options {{ option_id: {curlopt_name(tlv_type)} uint_value: {number} }}"
+
+
+def record_option(tlv_type: int, seen_option_ids: set[str]) -> None:
+    """Reject repeated scalar/string options like the legacy parser does."""
+    option_id = curlopt_name(tlv_type)
+    if option_id in seen_option_ids:
+        raise ConversionError(f"duplicate {option_id}")
+    seen_option_ids.add(option_id)
 
 
 def convert_stream(stream: bytes) -> ProtoOutput:
     """Decode a TLV corpus stream into accumulated Scenario fields."""
     out = ProtoOutput()
     url_seen = False
+    upload_seen = False
+    seen_option_ids: set[str] = set()
     for tlv in TLVDecoder(stream):
+        if len(tlv.data) != tlv.length:
+            label = BaseType.TYPEMAP.get(tlv.type, f"0x{tlv.type:02x}")
+            raise ConversionError(
+                f"truncated TLV {label}: declared {tlv.length} bytes, "
+                f"only {len(tlv.data)} available"
+            )
         if tlv.type == BaseType.TYPE_URL:
             if url_seen:
-                # The legacy parser rejects duplicate singleton options before
-                # starting a transfer. Leaving the runner fields empty keeps a
-                # malformed duplicate-URL seed non-runnable after conversion
-                # instead of silently granting it new proto coverage.
-                out.scheme = None
-                out.host_path = None
-                out.skipped.append(tlv.type)
-                continue
+                raise ConversionError("duplicate CURLOPT_URL")
             url_seen = True
             # RunScenario owns CURLOPT_URL: it composes it from these two
             # fields and deliberately does not expose CURLOPT_URL through the
             # generic option manifest. Preserve all bytes after the separator
             # verbatim so malformed authorities and paths remain fuzzable.
             scheme, separator, host_path = tlv.data.partition(b"://")
-            scheme_name = {
-                b"http": "SCHEME_HTTP",
-                b"https": "SCHEME_HTTPS",
-                b"ws": "SCHEME_WS",
-                b"wss": "SCHEME_WSS",
-                b"smtp": "SCHEME_SMTP",
-                b"smtps": "SCHEME_SMTPS",
-                b"imap": "SCHEME_IMAP",
-                b"imaps": "SCHEME_IMAPS",
-                b"pop3": "SCHEME_POP3",
-                b"pop3s": "SCHEME_POP3S",
-            }.get(scheme.lower())
+            scheme_name = SCHEME_NAMES.get(scheme.lower())
             if separator and scheme_name is not None and host_path:
                 out.scheme = scheme_name
                 out.host_path = host_path
@@ -193,6 +229,9 @@ def convert_stream(stream: bytes) -> ProtoOutput:
             # repeated mail_rcpt field. One TLV record is one recipient.
             out.mail_rcpt.append(tlv.data)
         elif tlv.type == BaseType.TYPE_UPLOAD1:
+            if upload_seen:
+                raise ConversionError("duplicate TYPE_UPLOAD1")
+            upload_seen = True
             # The legacy upload record is the message body served through the
             # read callback (CURLOPT_UPLOAD + CURLOPT_INFILESIZE_LARGE). The
             # proto runner drives uploads from the upload script instead.
@@ -202,10 +241,13 @@ def convert_stream(stream: bytes) -> ProtoOutput:
                 f"options {{ option_id: CURLOPT_INFILESIZE_LARGE uint_value: {len(tlv.data)} }}"
             )
         elif tlv.type in STRING_TAGS:
+            record_option(tlv.type, seen_option_ids)
             out.options.append(render_string_option(tlv.type, tlv.data))
         elif tlv.type in BOOL_TAGS:
+            record_option(tlv.type, seen_option_ids)
             out.options.append(render_bool_option(tlv.type, tlv.data))
         elif tlv.type in UINT_TAGS:
+            record_option(tlv.type, seen_option_ids)
             out.options.append(render_uint_option(tlv.type, tlv.data))
         else:
             out.skipped.append(tlv.type)
@@ -281,17 +323,28 @@ def run(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     converted = 0
+    rejected = 0
     for corpus_file in iter_corpus_files(args.corpus_dir):
-        data = convert_stream(corpus_file.read_bytes())
-        rendered = render_textproto(
-            source_name=f"{args.corpus_dir.name}/{corpus_file.name}",
-            data=data,
-        )
         out_path = args.output_dir / f"{corpus_file.stem}.textproto"
+        try:
+            data = convert_stream(corpus_file.read_bytes())
+            if data.scheme is None or data.host_path is None:
+                raise ConversionError(
+                    "input does not contain exactly one valid supported URL"
+                )
+            rendered = render_textproto(
+                source_name=f"{args.corpus_dir.name}/{corpus_file.name}",
+                data=data,
+            )
+        except ConversionError as error:
+            out_path.unlink(missing_ok=True)
+            print(f"rejected {corpus_file}: {error}", file=sys.stderr)
+            rejected += 1
+            continue
         out_path.write_text(rendered)
         converted += 1
-    print(f"converted {converted} TLV inputs to {args.output_dir}")
-    return 0
+    print(f"converted {converted} TLV inputs to {args.output_dir}; rejected {rejected}")
+    return 1 if rejected else 0
 
 
 if __name__ == "__main__":

@@ -81,7 +81,8 @@ Useful commands include:
 - `read_proto_corpus` for binary protobuf scenarios; named fields require
   `protoc`, but do not require a prior build from a source checkout.
 - `generate_corpus` for legacy TLV seeds.
-- `tlv_to_proto` for converting legacy HTTP corpus entries to textproto.
+- `tlv_to_proto` for converting supported fields from legacy TLV inputs to
+  textproto.
 - `generate_decoder_html` for the standalone browser decoder for legacy TLV
   and protobuf `Scenario` inputs. Run `npm ci --ignore-scripts` once before
   building it so the pinned protobuf.js runtime can be bundled into the page.

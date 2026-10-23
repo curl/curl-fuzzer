@@ -30,7 +30,7 @@ python -m pip install -e .
 | `read_corpus`              | Decode one legacy TLV input                                                                     |
 | `read_proto_corpus`        | Decode one binary protobuf scenario using `protoc`                                              |
 | `generate_corpus`          | Generate a legacy TLV testcase                                                                  |
-| `tlv_to_proto`             | Convert a directory of legacy HTTP inputs to textproto                                          |
+| `tlv_to_proto`             | Convert supported fields from a directory of legacy TLV inputs to textproto                     |
 | `generate_decoder_html`    | Build the standalone browser decoder for legacy TLV and protobuf `Scenario` inputs              |
 | `corpus_to_pcap`           | Convert response TLVs to a packet capture; requires Scapy from the development dependency group |
 | `generate_matrix`          | Package built fuzzers into balanced artifact shards and produce the CI matrix                    |
