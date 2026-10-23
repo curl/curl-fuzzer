@@ -40,7 +40,11 @@ namespace proto_fuzzer {
 /// After the peer accepts a `+` continuation it drains exactly the literal size
 /// announced by the command and pre-queues the next scripted reply as the final
 /// tagged completion, mirroring curl's blocking imap_done() wait.
-class ImapMockServer final : public PingpongMockServer {
+///
+/// Subclasses replace the transport through CreateConnection(). The implicit-
+/// TLS IMAPS peer uses that hook to wrap the identical tagged command exchange
+/// in a verified OpenSSL connection without changing the parser.
+class ImapMockServer : public PingpongMockServer {
  public:
   ImapMockServer();
 

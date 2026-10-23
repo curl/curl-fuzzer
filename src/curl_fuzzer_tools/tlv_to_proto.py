@@ -171,6 +171,10 @@ def convert_stream(stream: bytes) -> ProtoOutput:
                 b"wss": "SCHEME_WSS",
                 b"smtp": "SCHEME_SMTP",
                 b"smtps": "SCHEME_SMTPS",
+                b"imap": "SCHEME_IMAP",
+                b"imaps": "SCHEME_IMAPS",
+                b"pop3": "SCHEME_POP3",
+                b"pop3s": "SCHEME_POP3S",
             }.get(scheme.lower())
             if separator and scheme_name is not None and host_path:
                 out.scheme = scheme_name

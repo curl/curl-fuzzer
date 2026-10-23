@@ -636,6 +636,11 @@ enum Scheme {
   // Keep this append-only for the compatibility target's historical inputs.
   SCHEME_LDAP = 17;
   SCHEME_RTSP = 19;
+  // Implicit-TLS members of the existing mail lanes. They reuse the plaintext
+  // command parsers and differ only in transport setup, so the labels stay
+  // append-only alongside their plaintext peers.
+  SCHEME_IMAPS = 20;
+  SCHEME_POP3S = 21;
 }
 
 message SetOption {

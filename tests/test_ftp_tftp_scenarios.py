@@ -203,6 +203,16 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     denied = (imap_root / "imap_login_denied.textproto").read_text(encoding="utf-8")
     assert "NO [AUTHENTICATIONFAILED] invalid credentials" in denied
 
+    imaps = (imap_root / "imaps_login_fetch.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "scheme: SCHEME_IMAPS" in imaps
+    assert 'host_path: "tls.test/INBOX;UID=1"' in imaps
+    assert "OK LOGIN completed" in imaps
+    assert "* 1 FETCH (BODY[] {18}" in imaps
+    assert "Hello from IMAPS" in imaps
+    assert "A001" not in imaps
+
     pop3_root = SCENARIO_ROOT / "pop3"
     retr = (pop3_root / "pop3_retr_message.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_POP3" in retr
@@ -212,6 +222,15 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "+OK pass accepted" in retr
     assert "+OK 17 octets" in retr
     assert "Hello from POP3" in retr
+
+    pop3s = (pop3_root / "pop3s_retr_message.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "scheme: SCHEME_POP3S" in pop3s
+    assert 'host_path: "tls.test/1"' in pop3s
+    assert "+OK pass accepted" in pop3s
+    assert "+OK 18 octets" in pop3s
+    assert "Hello from POP3S" in pop3s
 
     listing = (pop3_root / "pop3_list_mailbox.textproto").read_text(encoding="utf-8")
     assert 'host_path: "pop3.test/"' in listing

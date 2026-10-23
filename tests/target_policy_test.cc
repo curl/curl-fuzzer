@@ -27,7 +27,11 @@ using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_LDAP;
+using curl::fuzzer::proto::SCHEME_IMAP;
+using curl::fuzzer::proto::SCHEME_IMAPS;
 using curl::fuzzer::proto::SCHEME_MQTT;
+using curl::fuzzer::proto::SCHEME_POP3;
+using curl::fuzzer::proto::SCHEME_POP3S;
 using curl::fuzzer::proto::SCHEME_RTSP;
 using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_TFTP;
@@ -1076,6 +1080,42 @@ void TestFastSmtpsPolicy() {
          "fast SMTP lane removed the SMTPS message body");
 }
 
+void TestFastImapsPolicy() {
+  Scenario scenario;
+  scenario.set_scheme(SCHEME_IMAPS);
+  scenario.set_host_path("untrusted.invalid:993/INBOX;UID=1?query#fragment");
+  scenario.mutable_upload()->set_data("implicit tls append body");
+  scenario.mutable_connection()->set_initial_response("* OK imaps.test\r\n");
+  scenario.mutable_connection()->add_on_readable("OK reply");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastImap);
+
+  Expect(scenario.scheme() == SCHEME_IMAPS,
+         "fast IMAP lane did not preserve an explicit IMAPS scheme");
+  Expect(scenario.host_path() == "tls.test/INBOX;UID=1?query#fragment",
+         "fast IMAP lane did not give IMAPS the certifiable authority");
+  Expect(scenario.has_upload() &&
+             scenario.upload().data() == "implicit tls append body",
+         "fast IMAP lane removed the IMAPS APPEND body");
+}
+
+void TestFastPop3sPolicy() {
+  Scenario scenario;
+  scenario.set_scheme(SCHEME_POP3S);
+  scenario.set_host_path("untrusted.invalid:995/2?query");
+  scenario.mutable_connection()->set_initial_response("+OK pop3s.test\r\n");
+  scenario.mutable_connection()->add_on_readable("+OK reply");
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastPop3);
+
+  Expect(scenario.scheme() == SCHEME_POP3S,
+         "fast POP3 lane did not preserve an explicit POP3S scheme");
+  Expect(scenario.host_path() == "tls.test/2?query",
+         "fast POP3 lane did not give POP3S the certifiable authority");
+  Expect(!scenario.has_upload() && !scenario.has_mime_post(),
+         "fast POP3 lane retained upload state its download-only peer cannot use");
+}
+
 void TestFastTftpPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:1234/path;mode=netascii?query");
@@ -1735,6 +1775,16 @@ void TestTimingPolicyMapsSecureSchemesToPlaintext() {
   NormalizeScenarioForTarget(&smtps, TargetProfile::kTiming);
   Expect(smtps.scheme() == SCHEME_SMTP,
          "timing policy did not map SMTPS to SMTP");
+
+  Scenario imaps = ScenarioWithBackpressure(SCHEME_IMAPS, 2048, 1);
+  NormalizeScenarioForTarget(&imaps, TargetProfile::kTiming);
+  Expect(imaps.scheme() == SCHEME_IMAP,
+         "timing policy did not map IMAPS to IMAP");
+
+  Scenario pop3s = ScenarioWithBackpressure(SCHEME_POP3S, 2048, 1);
+  NormalizeScenarioForTarget(&pop3s, TargetProfile::kTiming);
+  Expect(pop3s.scheme() == SCHEME_POP3,
+         "timing policy did not map POP3S to POP3");
 }
 
 void TestTimingPolicySuppliesBackpressureForZeroConfig() {
@@ -3008,6 +3058,8 @@ int main() {
   TestFastRtspPolicy();
   TestNonRtspPoliciesClearRtspSchemeAndOptions();
   TestFastSmtpsPolicy();
+  TestFastImapsPolicy();
+  TestFastPop3sPolicy();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();

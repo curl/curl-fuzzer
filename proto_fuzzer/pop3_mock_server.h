@@ -30,7 +30,11 @@ namespace proto_fuzzer {
 /// same terminator. Curl's POP3 reader strips dot-stuffing and detects the end
 /// of the body itself, so the peer writes the complete bounded script as soon
 /// as the command arrives.
-class Pop3MockServer final : public PingpongMockServer {
+///
+/// Subclasses replace the transport through CreateConnection(). The implicit-
+/// TLS POP3S peer uses that hook to wrap the identical status-line exchange in
+/// a verified OpenSSL connection without changing the parser.
+class Pop3MockServer : public PingpongMockServer {
  public:
   Pop3MockServer();
 

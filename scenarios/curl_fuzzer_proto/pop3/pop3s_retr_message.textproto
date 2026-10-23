@@ -1,0 +1,16 @@
+# Complete implicit-TLS POP3S RETR. curl negotiates TLS immediately, then runs
+# the same CAPA/USER/PASS/RETR exchange as plaintext POP3. Curl strips
+# dot-stuffing and detects the multi-line terminator, so the peer writes this
+# bounded script unchanged. The authority matches the checked-in tls.test
+# certificate.
+scheme: SCHEME_POP3S
+host_path: "tls.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "+OK pop3s.test ready\r\n"
+  on_readable: "+OK capabilities\r\nUSER\r\n.\r\n"
+  on_readable: "+OK user accepted\r\n"
+  on_readable: "+OK pass accepted\r\n"
+  on_readable: "+OK 18 octets\r\nHello from POP3S\r\n.\r\n"
+}
