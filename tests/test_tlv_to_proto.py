@@ -90,3 +90,36 @@ def test_http09_allowed_uses_the_manifest_boolean_field() -> None:
     )
 
     assert "option_id: CURLOPT_HTTP09_ALLOWED bool_value: true" in rendered
+
+
+def test_smtp_upload_translates_to_mail_rcpt_and_upload_script() -> None:
+    rendered = render_textproto(
+        "seed",
+        convert_stream(
+            tlv(BaseType.TYPE_URL, b"smtp://127.0.0.1:9005/900")
+            + tlv(BaseType.TYPE_RSP0, b"220 smtp.test ESMTP\r\n")
+            + tlv(BaseType.TYPE_RSP1, b"250 OK\r\n")
+            + tlv(BaseType.TYPE_MAIL_FROM, b"sender@example.com")
+            + tlv(BaseType.TYPE_MAIL_RECIPIENT, b"recipient@example.com")
+            + tlv(BaseType.TYPE_UPLOAD1, b"body")
+        ),
+    )
+
+    assert "scheme: SCHEME_SMTP" in rendered
+    assert 'host_path: "127.0.0.1:9005/900"' in rendered
+    assert 'option_id: CURLOPT_MAIL_FROM string_value: "sender@example.com"' in rendered
+    assert 'mail_rcpt: "recipient@example.com"' in rendered
+    assert "option_id: CURLOPT_UPLOAD bool_value: true" in rendered
+    assert "option_id: CURLOPT_INFILESIZE_LARGE uint_value: 4" in rendered
+    assert "upload {" in rendered and 'data: "body"' in rendered
+    assert 'initial_response: "220 smtp.test ESMTP\\r\\n"' in rendered
+    assert 'on_readable: "250 OK\\r\\n"' in rendered
+
+
+def test_smtps_url_translates_to_the_implicit_tls_scheme() -> None:
+    rendered = render_textproto(
+        "seed", convert_stream(tlv(BaseType.TYPE_URL, b"smtps://127.0.0.1/"))
+    )
+
+    assert "scheme: SCHEME_SMTPS" in rendered
+    assert 'host_path: "127.0.0.1/"' in rendered
