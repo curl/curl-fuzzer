@@ -153,6 +153,13 @@ message Scenario {
   // RCPT TO sequence, multi-recipient failures, and CURLOPT_MAIL_RCPT_
   // ALLOWFAILS together. Non-SMTP target policies clear this field.
   repeated bytes mail_rcpt = 28;
+  // Route the resolver lane's HTTPS transfer through its in-process DoH
+  // responder. The responder synthesizes an HTTPS resource record carrying
+  // alpn=h2,h3 so curl's HTTPS-connect filter selects the first ALPN from DNS
+  // rather than from CURLOPT_HTTP_VERSION. CURLOPT_RESOLVE cannot carry
+  // SVCB/HTTPS records, so this is the only structured path to that filter.
+  // Other fixed lanes clear the field; false preserves ordinary resolution.
+  bool doh_https_rr = 29;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

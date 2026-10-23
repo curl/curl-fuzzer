@@ -1732,6 +1732,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     set(PROTO_FUZZER_TLS_SOURCES)
     if(TARGET openssl_external)
         list(APPEND PROTO_FUZZER_TLS_SOURCES
+            proto_fuzzer/doh_https_rr_mock_server.cc
             proto_fuzzer/ftps_mock_server.cc
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc

@@ -147,13 +147,17 @@ void CanonicalizeSocksAuthority(curl::fuzzer::proto::Scenario* scenario) {
 }
 
 /// Use libc/curl's localhost path when there are no structured entries, and a
-/// fixed cache-backed name when entries are present. In both cases the path,
-/// query, and fragment remain mutation-controlled.
+/// fixed cache-backed name when entries are present. The DoH lane uses the
+/// certificate's tls.test authority because its outer transfer completes a
+/// verified TLS/ALPN h2 handshake. In every case the path, query, and fragment
+/// remain mutation-controlled.
 void CanonicalizeResolverAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
   const char* host =
-      (scenario->happy_eyeballs() || !scenario->resolve_entries().empty()) ? "resolve.test" : "localhost";
+      scenario->doh_https_rr()
+          ? "tls.test"
+          : ((scenario->happy_eyeballs() || !scenario->resolve_entries().empty()) ? "resolve.test" : "localhost");
   if (suffix_start == std::string::npos) {
     scenario->set_host_path(std::string(host) + "/");
     return;
@@ -1205,6 +1209,16 @@ void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(scenario, &IsCheapHttpOption);
 }
 
+/// Keep request-level HTTP mutations while preserving the resolver lane's
+/// fixed HTTP/2 transport. Scenario options run after the H2 peer installs
+/// CURL_HTTP_VERSION_2TLS, so retaining CURLOPT_HTTP_VERSION here would let a
+/// mutation disable the HTTPS-RR ALPN path this lane exists to exercise.
+void RetainDohHttpsRrOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario, [](curl::fuzzer::proto::CurlOptionId option_id) {
+    return IsCheapHttpOption(option_id) && option_id != curl::fuzzer::proto::CURLOPT_HTTP_VERSION;
+  });
+}
+
 /// IPFS and IPNS are rewritten to an ordinary gateway GET before curl runs, so
 /// the gateway lane can consume the same cheap HTTP request controls as the
 /// fast HTTP lane. Gateway selection and TLS policy remain harness-owned.
@@ -2196,7 +2210,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http3_plan();
   }
 
-  if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2) {
+  if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2 &&
+      !(profile == TargetProfile::kResolver && scenario->doh_https_rr())) {
     scenario->clear_http2_plan();
   }
 
@@ -2207,6 +2222,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile != TargetProfile::kResolver) {
     scenario->clear_resolve_entries();
     scenario->clear_happy_eyeballs();
+    scenario->clear_doh_https_rr();
   }
 
   // SMTP's schema-native recipient list has no meaning in another protocol's
@@ -2328,14 +2344,38 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kResolver) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+    // The DoH variant owns the outer HTTPS exchange through a verified
+    // TLS/ALPN h2 peer, so its response is an Http2Plan rather than a raw
+    // stream script. The ordinary resolver lanes keep plaintext HTTP.
+    const bool doh_https_rr = scenario->doh_https_rr();
+    scenario->set_scheme(doh_https_rr ? curl::fuzzer::proto::SCHEME_HTTPS : curl::fuzzer::proto::SCHEME_HTTP);
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
-    RetainCheapHttpOptions(scenario);
-    BoundStringValues(scenario->mutable_resolve_entries(), scenario_limits::kMaxResolveEntries,
-                      scenario_limits::kMaxResolveEntryBytes);
+    if (doh_https_rr) {
+      RetainDohHttpsRrOptions(scenario);
+    } else {
+      RetainCheapHttpOptions(scenario);
+    }
+    if (doh_https_rr) {
+      // CURLOPT_RESOLVE cannot carry an HTTPS record, and the responder owns
+      // both the address and HTTPS answers. Clearing the address entries keeps
+      // the DoH query on the only path that can reach the ALPN selector.
+      scenario->clear_resolve_entries();
+      scenario->clear_happy_eyeballs();
+      if (scenario->has_http2_plan()) {
+        auto* connection = scenario->mutable_connection();
+        connection->clear_initial_response();
+        connection->clear_on_readable();
+        connection->clear_server_frames();
+        BoundHttp2PlanShape(scenario->mutable_http2_plan());
+      }
+    } else {
+      scenario->clear_http2_plan();
+      BoundStringValues(scenario->mutable_resolve_entries(), scenario_limits::kMaxResolveEntries,
+                        scenario_limits::kMaxResolveEntryBytes);
+    }
     BoundScenarioShape(scenario);
     CanonicalizeResolverAuthority(scenario);
     return;

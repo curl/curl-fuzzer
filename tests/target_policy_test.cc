@@ -1918,6 +1918,10 @@ void TestResolverPolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.mutable_mime_post()->add_parts()->set_data("ignored");
+  auto *ordinary_http_version = scenario.add_options();
+  ordinary_http_version->set_option_id(
+      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  ordinary_http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxResolveEntries + 3; ++index) {
     scenario.add_resolve_entries(std::string(
@@ -1941,6 +1945,10 @@ void TestResolverPolicy() {
              scenario.socks_proxy_mode() ==
                  curl::fuzzer::proto::SOCKS_PROXY_SOCKS4,
          "resolver policy retained another dedicated lane's shape");
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
+         "ordinary resolver policy discarded its HTTP version mutation");
 
   Scenario localhost;
   localhost.set_host_path("untrusted.invalid/no-cache");
@@ -1957,14 +1965,45 @@ void TestResolverPolicy() {
   Expect(happy.happy_eyeballs(),
          "resolver policy discarded its happy-eyeballs selector");
 
+  Scenario doh;
+  doh.set_host_path("untrusted.invalid/doh");
+  doh.set_doh_https_rr(true);
+  doh.add_resolve_entries("example.test:443:127.0.0.1");
+  doh.set_happy_eyeballs(true);
+  doh.mutable_http2_plan();
+  auto *doh_http_version = doh.add_options();
+  doh_http_version->set_option_id(
+      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  doh_http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
+  auto *doh_user_agent = doh.add_options();
+  doh_user_agent->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
+  doh_user_agent->set_string_value("resolver-test");
+  NormalizeScenarioForTarget(&doh, TargetProfile::kResolver);
+  Expect(doh.scheme() == SCHEME_HTTPS,
+         "DoH resolver policy did not select its HTTPS transport");
+  Expect(doh.host_path() == "tls.test/doh",
+         "DoH resolver policy did not select the TLS authority");
+  Expect(doh.resolve_entries_size() == 0 && !doh.happy_eyeballs(),
+         "DoH resolver policy retained contradictory address-resolution state");
+  Expect(doh.has_http2_plan(),
+         "DoH resolver policy discarded the selected ALPN h2 response plan");
+  Expect(doh.options_size() == 1 &&
+             doh.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERAGENT,
+         "DoH resolver policy retained a transport override or discarded a "
+         "request-level HTTP option");
+
   Scenario ordinary;
   ordinary.add_resolve_entries("example.test:80:127.0.0.1");
   ordinary.set_happy_eyeballs(true);
+  ordinary.set_doh_https_rr(true);
   NormalizeScenarioForTarget(&ordinary, TargetProfile::kFastHttp);
   Expect(ordinary.resolve_entries_size() == 0,
          "non-resolver policy retained structured DNS work");
   Expect(!ordinary.happy_eyeballs(),
          "non-resolver policy retained happy-eyeballs state");
+  Expect(!ordinary.doh_https_rr(),
+         "non-resolver policy retained the DoH responder selector");
 }
 
 void TestPauseTerminalIsTelnetOnly() {

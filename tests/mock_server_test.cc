@@ -41,6 +41,7 @@
 #include <openssl/ech.h>
 #include <openssl/ssl.h>
 
+#include "proto_fuzzer/doh_https_rr_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
 #include "proto_fuzzer/tls_test_credentials.h"
@@ -67,6 +68,31 @@ public:
   using proto_fuzzer::MockServer::HandleOpenSocket;
   using proto_fuzzer::MockServer::MockServer;
 };
+
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+/// Force the local resolver endpoint's first setup step to fail so the test
+/// can prove the carrier never enters libcurl's native resolver fallback.
+class FailingDohHttpsRrMockServer final
+    : public proto_fuzzer::DohHttpsRrMockServer {
+ protected:
+  bool StartListener() override { return false; }
+};
+#endif
+
+/// Retain curl's verbose trace text so a focused test can prove which ALPN
+/// source drove the HTTPS-connect filter.
+struct TraceCapture {
+  std::string text;
+};
+
+/// Debug callback that appends every informational trace record.
+int CaptureTrace(CURL * /*handle*/, curl_infotype type, char *data,
+                 std::size_t size, void *userdata) {
+  if (type == CURLINFO_TEXT && data != nullptr && size != 0) {
+    static_cast<TraceCapture *>(userdata)->text.append(data, size);
+  }
+  return 0;
+}
 
 /// Capture ordinary request bytes to verify retained options across reuse.
 class RequestCapturingConnection final : public proto_fuzzer::MockConnection {
@@ -1912,6 +1938,112 @@ void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
   easy.reset();
 }
 
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+/// Drive an HTTPS transfer whose only DNS source is the loopback DoH
+/// responder. The synthesized HTTPS-RR advertises alpn=h2,h3, so the
+/// HTTPS-connect filter must select h2 from that record (rather than the
+/// configured version preference) and complete a real TLS/ALPN h2 exchange.
+void TestDohHttpsRrDrivesAlpnSelection() {
+  proto_fuzzer::ScopedTraceReset trace_reset;
+
+  // The HTTPS-connect filter's trace level defaults to NONE. Enable that
+  // component explicitly so the ALPN source record is observable; curl's
+  // ordinary verbose flag alone does not raise a filter's own log level.
+  (void)curl_global_trace("+HTTPS-CONNECT");
+
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/doh-httpsrr");
+  scenario.set_doh_https_rr(true);
+  auto *http_version = scenario.add_options();
+  http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
+
+  auto *wait = scenario.mutable_http2_plan()->add_actions()->mutable_wait();
+  wait->set_event(curl::fuzzer::proto::HTTP2_CLIENT_EVENT_HEADERS);
+  wait->mutable_stream()->set_request_index(0);
+  wait->set_count(1);
+  auto *headers = scenario.mutable_http2_plan()->add_actions()->mutable_headers();
+  headers->mutable_stream()->set_request_index(0);
+  headers->set_status_code(200);
+  auto *data = scenario.mutable_http2_plan()->add_actions()->mutable_data();
+  data->mutable_stream()->set_request_index(0);
+  data->set_data("OK");
+  data->set_end_stream(true);
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "DoH HTTPS-RR test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTPS);
+  curl_easy_setopt(easy, CURLOPT_URL, "https://tls.test/doh-httpsrr");
+  // The resolver lane removes the wildcard override so curl must resolve the
+  // origin through CURLOPT_DOH_URL below.
+  curl_easy_setopt(easy, CURLOPT_CONNECT_TO, nullptr);
+
+  TraceCapture trace;
+  curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
+  curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
+
+  proto_fuzzer::DohHttpsRrMockServer server;
+  server.Install(easy);
+  Expect(!server.doh_url().empty(),
+         "DoH responder did not publish a loopback URL");
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 1,
+         "DoH test did not apply its conflicting HTTP version");
+
+  CURLcode result = CURLE_FAILED_INIT;
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario, false);
+    server.ConfigureRequestData(&request_data);
+    result = server.DriveScenario(easy, scenario);
+  }
+
+  Expect(result == CURLE_OK,
+         "HTTPS transfer did not complete through the DoH responder");
+  Expect(server.httpsrr_answer_count() != 0,
+         "DoH responder never synthesized an HTTPS resource record");
+  Expect(trace.text.find("1st attempt uses h2 from HTTPS-RR") !=
+             std::string::npos,
+         "HTTPS-RR did not drive the filter's first ALPN selection");
+  Expect(server.negotiated_alpn() == "h2",
+         "the selected ALPN did not reach the TLS peer's handshake");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+/// A partial local-DoH setup must not perform the outer transfer. Otherwise an
+/// unset CURLOPT_DOH_URL silently selects the process's native resolver before
+/// the mock's socket callback gets a chance to confine the connection.
+void TestDohHttpsRrSetupFailureDoesNotDriveCurl() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("localhost/doh-setup-failure");
+  scenario.set_doh_https_rr(true);
+
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "DoH setup-failure test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to;
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
+                         "https://localhost/doh-setup-failure");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
+
+  FailingDohHttpsRrMockServer server;
+  server.Install(easy.get());
+  proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
+  server.ConfigureRequestData(&request_data);
+
+  Expect(server.DriveScenario(easy.get(), scenario) == CURLE_FAILED_INIT,
+         "DoH setup failure entered libcurl's resolver path");
+  Expect(server.connection() == nullptr,
+         "DoH setup failure opened the outer mock transport");
+}
+#endif
+
 } // namespace
 
 int main() {
@@ -1932,6 +2064,8 @@ int main() {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
   TestTlsWebSocketCompletesStreamingExchange();
   TestTlsWebSocketFlushesFinalManualFrame();
+  TestDohHttpsRrDrivesAlpnSelection();
+  TestDohHttpsRrSetupFailureDoesNotDriveCurl();
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();
 #endif
