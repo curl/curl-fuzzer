@@ -1846,11 +1846,12 @@ void TestHappyEyeballsAdvancesSubsequentScripts() {
   curl_slist_free_all(connect_to);
 }
 
-/// The timing lane folds IMAPS/POP3S/MQTTS onto HTTP because those schemes have
-/// no peer in kProtocolCoverage mode. Verify the runner then actually reaches
-/// curl instead of bailing on a null peer.
+/// The timing lane folds the mail/MQTT TLS schemes onto HTTP because their
+/// plaintext peers have no presence in kProtocolCoverage mode. Verify the
+/// runner then actually reaches curl instead of bailing on a null peer.
 void TestTimingLaneReachesCurlForPeerlessSchemes() {
-  for (const auto scheme : {curl::fuzzer::proto::SCHEME_IMAPS,
+  for (const auto scheme : {curl::fuzzer::proto::SCHEME_SMTPS,
+                            curl::fuzzer::proto::SCHEME_IMAPS,
                             curl::fuzzer::proto::SCHEME_POP3S,
                             curl::fuzzer::proto::SCHEME_MQTTS}) {
     Scenario scenario;

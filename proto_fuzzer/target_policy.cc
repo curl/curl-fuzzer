@@ -2045,18 +2045,16 @@ std::uint32_t CanonicalizeNonZero(std::uint32_t value, std::uint32_t minimum, st
 /// Keep the timing target on a protocol the timing run mode can actually
 /// drive. TLS setup has its own cost profile and would obscure whether
 /// backpressure mutations are exploring curl's send/receive state machines
-/// effectively, so secure schemes fold onto their plaintext member when that
-/// member has a peer in kProtocolCoverage mode. Mail, MQTT, and the other
-/// dedicated-lane protocols have no such peer and therefore fall back to the
-/// always-served HTTP peer rather than leaving the runner without a transport.
+/// effectively. Only WebSocket has a plaintext peer in kProtocolCoverage mode,
+/// so WSS folds onto WS; every other scheme — including the mail, MQTT, and
+/// file-transfer families whose peers are gated on their dedicated run modes —
+/// falls back to the always-served HTTP peer rather than leaving the runner
+/// without a transport.
 curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) {
   switch (scheme) {
     case curl::fuzzer::proto::SCHEME_WS:
     case curl::fuzzer::proto::SCHEME_WSS:
       return curl::fuzzer::proto::SCHEME_WS;
-    case curl::fuzzer::proto::SCHEME_SMTP:
-    case curl::fuzzer::proto::SCHEME_SMTPS:
-      return curl::fuzzer::proto::SCHEME_SMTP;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:

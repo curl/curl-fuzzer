@@ -2052,8 +2052,9 @@ void TestTimingPolicyMapsSecureSchemesToPlaintext() {
 
   Scenario smtps = ScenarioWithBackpressure(SCHEME_SMTPS, 2048, 1);
   NormalizeScenarioForTarget(&smtps, TargetProfile::kTiming);
-  Expect(smtps.scheme() == SCHEME_SMTP,
-         "timing policy did not map SMTPS to SMTP");
+  Expect(smtps.scheme() == SCHEME_HTTP,
+         "timing policy left SMTPS on a peerless scheme instead of the "
+         "reachable HTTP fallback");
 
   Scenario imaps = ScenarioWithBackpressure(SCHEME_IMAPS, 2048, 1);
   NormalizeScenarioForTarget(&imaps, TargetProfile::kTiming);
