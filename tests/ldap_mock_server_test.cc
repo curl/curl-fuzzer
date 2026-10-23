@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -27,6 +28,9 @@ using test_support::Fail;
 constexpr char kBaseDn[] = "dc=example,dc=com";
 constexpr char kUrl[] =
     "ldap://ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)";
+constexpr char kMechanismAttributeUrl[] =
+    "ldap://ldap.test/?supportedSASLMechanisms?base?"
+    "(objectclass=*)";
 
 // LDAPMessage { messageID 1, bindResponse { resultCode 49,
 //   matchedDN "", diagnosticMessage "invalid credentials" } }.
@@ -73,6 +77,7 @@ struct LdapRunResult {
   std::string transcript;
   std::size_t binds = 0;
   std::size_t searches = 0;
+  std::size_t mechanism_searches = 0;
   std::size_t unbinds = 0;
   std::size_t server_messages = 0;
   std::size_t scripted_messages = 0;
@@ -80,7 +85,7 @@ struct LdapRunResult {
   std::size_t scripted_bind_responses = 0;
 };
 
-LdapRunResult RunScenario(const Scenario &scenario) {
+LdapRunResult RunScenario(const Scenario &scenario, const char *url = kUrl) {
   LdapRunResult result;
   CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "curl_easy_init failed");
@@ -88,7 +93,7 @@ LdapRunResult RunScenario(const Scenario &scenario) {
       easy.get(), curl::fuzzer::proto::SCHEME_LDAP));
   Expect(connect_to != nullptr,
          "LDAP baseline did not create CONNECT_TO state");
-  Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, kUrl) == CURLE_OK,
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url) == CURLE_OK,
          "LDAP URL setup failed");
   Expect(curl_easy_setopt(easy.get(), CURLOPT_WRITEFUNCTION,
                           &CollectResponse) == CURLE_OK,
@@ -107,6 +112,7 @@ LdapRunResult RunScenario(const Scenario &scenario) {
   result.transcript = server.packet_transcript();
   result.binds = server.bind_request_count();
   result.searches = server.search_request_count();
+  result.mechanism_searches = server.mechanism_search_request_count();
   result.unbinds = server.unbind_request_count();
   result.server_messages = server.server_message_count();
   result.scripted_messages = server.scripted_message_count();
@@ -127,6 +133,21 @@ void AddCredentials(Scenario *scenario) {
   auto *password = scenario->add_options();
   password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
   password->set_string_value("secret");
+}
+
+void AddStringOption(Scenario *scenario,
+                     curl::fuzzer::proto::CurlOptionId option_id,
+                     std::string_view value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_string_value(std::string(value));
+}
+
+void AddBoolOption(Scenario *scenario,
+                   curl::fuzzer::proto::CurlOptionId option_id, bool value) {
+  auto *option = scenario->add_options();
+  option->set_option_id(option_id);
+  option->set_bool_value(value);
 }
 
 void TestBindAndSearchFormatsLdif() {
@@ -199,6 +220,70 @@ void TestEmptySearchScriptSynthesizesSuccess() {
          "LDAP peer did not synthesize a successful searchResDone");
 }
 
+void TestSaslMechanismDiscoveryAndPlainBind() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=PLAIN");
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_SASL_AUTHZID,
+                  "authorization-id");
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SASL_IR, true);
+  scenario.mutable_connection()->add_on_readable(kSearchEntry);
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code == CURLE_OK,
+         "LDAP SASL PLAIN bind and search did not complete");
+  Expect(result.mechanism_searches == 1,
+         "LDAP peer did not recognize the SASL mechanism query");
+  Expect(result.searches == 2,
+         "LDAP SASL flow did not issue mechanism and data searches");
+  Expect(result.binds == 1,
+         "LDAP SASL flow did not issue exactly one bindRequest");
+  Expect(result.synthesized_dones == 2,
+         "LDAP peer did not complete both mechanism and data searches");
+  Expect(result.scripted_messages == 1,
+         "LDAP mechanism query consumed the scripted data-search entry");
+  Expect(result.transcript.find("supportedSASLMechanisms") != std::string::npos,
+         "LDAP transcript lost the root-DSE mechanism query");
+  Expect(result.transcript.find("PLAIN") != std::string::npos,
+         "LDAP transcript did not contain the selected SASL mechanism");
+  Expect(result.transcript.find("authorization-id") != std::string::npos,
+         "LDAP SASL bind did not carry the configured authorization id");
+  Expect(result.body.find("cn: fuzz") != std::string::npos,
+         "LDAP SASL search did not reach the LDIF formatter");
+}
+
+void TestUnavailableSaslMechanismFailsClosed() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=LOGIN");
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code == CURLE_LOGIN_DENIED,
+         "LDAP accepted a SASL mechanism the peer did not advertise");
+  Expect(result.mechanism_searches == 1 && result.searches == 1,
+         "LDAP unavailable-mechanism flow did not stop after discovery");
+  Expect(result.binds == 0,
+         "LDAP unavailable-mechanism flow unexpectedly issued a bind");
+  Expect(result.scripted_messages == 0,
+         "LDAP unavailable-mechanism flow consumed data-search script");
+}
+
+void TestDataSearchForMechanismAttributeIsNotDiscovery() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+  scenario.mutable_connection()->add_on_readable(kSearchEntry);
+
+  const LdapRunResult result = RunScenario(scenario, kMechanismAttributeUrl);
+  Expect(result.code == CURLE_OK,
+         "LDAP data search for supportedSASLMechanisms did not complete");
+  Expect(result.mechanism_searches == 0 && result.searches == 1,
+         "LDAP peer misclassified a post-bind root-DSE search as discovery");
+  Expect(result.scripted_messages == 1,
+         "LDAP data search did not consume its scripted result");
+}
+
 } // namespace
 
 int main() {
@@ -209,6 +294,9 @@ int main() {
   TestRejectedBindStopsBeforeSearch();
   TestSearchErrorUsesScriptedDone();
   TestEmptySearchScriptSynthesizesSuccess();
+  TestSaslMechanismDiscoveryAndPlainBind();
+  TestUnavailableSaslMechanismFailsClosed();
+  TestDataSearchForMechanismAttributeIsNotDiscovery();
   curl_global_cleanup();
   return 0;
 }
