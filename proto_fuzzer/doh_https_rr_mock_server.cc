@@ -243,6 +243,7 @@ DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateCh
       listener_(-1),
       doh_request_count_(0),
       httpsrr_answer_count_(0),
+      setup_ok_(false),
       proxy_bypass_active_(false),
       lower_no_proxy_was_set_(false),
       upper_no_proxy_was_set_(false) {}
@@ -255,29 +256,55 @@ DohHttpsRrMockServer::~DohHttpsRrMockServer() {
 }
 
 /// Bind the DoH listener, point CURLOPT_DOH_URL at it, and bypass ambient
-/// proxies for curl's internal handle. Setup failure leaves the URL unset so
-/// the outer transfer cannot accidentally use an unrelated resolver.
+/// proxies for curl's internal handle. RunLoop refuses to drive the transfer
+/// after any partial setup so curl cannot fall back to an unrelated resolver.
 /// @param easy Easy handle that will perform the HTTPS transfer.
 void DohHttpsRrMockServer::Install(CURL* easy) {
   H2OriginMockServer::Install(easy);
   easy_ = easy;
-  if (!StartListener() || easy == nullptr) {
+  setup_ok_ = false;
+  if (easy_ == nullptr || !StartListener()) {
     return;
   }
-  if (curl_easy_setopt(easy, CURLOPT_DOH_URL, doh_url_.c_str()) != CURLE_OK) {
+  if (curl_easy_setopt(easy_, CURLOPT_DOH_URL, doh_url_.c_str()) != CURLE_OK) {
     StopListener();
     return;
   }
-  BeginProxyBypass();
+  if (!BeginProxyBypass()) {
+    StopListener();
+    return;
+  }
+  setup_ok_ = true;
 }
 
-/// Reassert the listener URL after the scenario's option prefix has run. The
-/// DoH URL is harness-owned and deliberately absent from the mutation grammar.
+/// Reassert the listener URL and fixed H2 selection after the scenario's
+/// option prefix has run. The DoH URL is absent from the mutation grammar, but
+/// CURLOPT_HTTP_VERSION is useful in the ordinary resolver lane and must not
+/// override this peer's transport.
 /// @param request_data Installed request state; unused by this transport.
 void DohHttpsRrMockServer::ConfigureRequestData(ScenarioRequestData* /*request_data*/) {
-  if (easy_ != nullptr && !doh_url_.empty()) {
-    (void)curl_easy_setopt(easy_, CURLOPT_DOH_URL, doh_url_.c_str());
+  setup_ok_ = false;
+  if (easy_ == nullptr || doh_url_.empty() || !proxy_bypass_active_) {
+    return;
   }
+  if (curl_easy_setopt(easy_, CURLOPT_DOH_URL, doh_url_.c_str()) != CURLE_OK) {
+    return;
+  }
+  setup_ok_ = curl_easy_setopt(easy_, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS) == CURLE_OK;
+}
+
+/// Refuse to enter libcurl when any local resolver setup step failed. Without
+/// a usable CURLOPT_DOH_URL, the HTTPS transfer would otherwise fall back to
+/// the process's native resolver before the socket callback can confine its
+/// destination.
+/// @param multi Multi handle already containing `easy`.
+/// @param easy Easy handle driving the outer HTTPS transfer.
+/// @param scenario Source of the bounded HTTP/2 response plan.
+void DohHttpsRrMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
+  if (!setup_ok_) {
+    return;
+  }
+  H2OriginMockServer::RunLoop(multi, easy, scenario);
 }
 
 /// Observe the outer transfer and advance every pending DoH exchange. curl
@@ -340,16 +367,19 @@ void DohHttpsRrMockServer::StopListener() {
 
 /// Force no_proxy for the internal DoH handle, which does not inherit the
 /// parent transfer's CURLOPT_PROXY.
-void DohHttpsRrMockServer::BeginProxyBypass() {
+/// @return true when both environment overrides are active.
+bool DohHttpsRrMockServer::BeginProxyBypass() {
   if (proxy_bypass_active_) {
-    return;
+    return true;
   }
   SaveEnvironment("no_proxy", &saved_no_proxy_lower_, &lower_no_proxy_was_set_);
   SaveEnvironment("NO_PROXY", &saved_no_proxy_upper_, &upper_no_proxy_was_set_);
   proxy_bypass_active_ = true;
   if (setenv("no_proxy", "*", 1) != 0 || setenv("NO_PROXY", "*", 1) != 0) {
     EndProxyBypass();
+    return false;
   }
+  return true;
 }
 
 /// Restore the proxy environment replaced by BeginProxyBypass.

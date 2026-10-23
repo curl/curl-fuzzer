@@ -1209,6 +1209,16 @@ void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
   RetainMatchingOptions(scenario, &IsCheapHttpOption);
 }
 
+/// Keep request-level HTTP mutations while preserving the resolver lane's
+/// fixed HTTP/2 transport. Scenario options run after the H2 peer installs
+/// CURL_HTTP_VERSION_2TLS, so retaining CURLOPT_HTTP_VERSION here would let a
+/// mutation disable the HTTPS-RR ALPN path this lane exists to exercise.
+void RetainDohHttpsRrOptions(curl::fuzzer::proto::Scenario* scenario) {
+  RetainMatchingOptions(scenario, [](curl::fuzzer::proto::CurlOptionId option_id) {
+    return IsCheapHttpOption(option_id) && option_id != curl::fuzzer::proto::CURLOPT_HTTP_VERSION;
+  });
+}
+
 /// IPFS and IPNS are rewritten to an ordinary gateway GET before curl runs, so
 /// the gateway lane can consume the same cheap HTTP request controls as the
 /// fast HTTP lane. Gateway selection and TLS policy remain harness-owned.
@@ -2343,7 +2353,11 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
-    RetainCheapHttpOptions(scenario);
+    if (doh_https_rr) {
+      RetainDohHttpsRrOptions(scenario);
+    } else {
+      RetainCheapHttpOptions(scenario);
+    }
     if (doh_https_rr) {
       // CURLOPT_RESOLVE cannot carry an HTTPS record, and the responder owns
       // both the address and HTTPS answers. Clearing the address entries keeps

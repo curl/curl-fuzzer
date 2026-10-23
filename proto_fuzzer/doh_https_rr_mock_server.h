@@ -58,6 +58,8 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
  protected:
   void ObserveActiveTransfer(CURL* easy) override;
 
+  void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+
  private:
   /// One accepted DoH TCP connection and its buffered request/response state.
   struct DohConnection {
@@ -75,9 +77,9 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   static constexpr std::size_t kMaxRequestBytes = 4096;
   static constexpr std::size_t kMaxResponseBytes = 4096;
 
-  bool StartListener();
+  virtual bool StartListener();
   void StopListener();
-  void BeginProxyBypass();
+  bool BeginProxyBypass();
   void EndProxyBypass();
 
   void ServiceDohConnections();
@@ -92,6 +94,11 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   std::array<DohConnection, kMaxConnections> connections_;
   std::size_t doh_request_count_;
   std::size_t httpsrr_answer_count_;
+
+  /// True only after every resolver endpoint and proxy-bypass step has been
+  /// installed. RunLoop refuses to perform when setup is partial so curl
+  /// cannot fall back to the process's native resolver.
+  bool setup_ok_;
 
   /// Saved process proxy bypass so the internal DoH handle cannot consult an
   /// ambient proxy configuration that does not apply to the parent transfer.
