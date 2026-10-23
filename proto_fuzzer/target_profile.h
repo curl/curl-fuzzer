@@ -61,6 +61,9 @@ enum class TargetProfile {
   kFastGopher,
   /// Exercise file:// URL parsing against a fixed read-only local target.
   kFastFile,
+  /// Exercise binary BER LDAP bind and search exchanges through the
+  /// OpenLDAP-backed single-socket peer.
+  kFastLdap,
   /// Exercise easy, share, multi, URL, and result API lifecycles.
   kApi,
   /// Exercise several easy handles through one shared multi handle.
@@ -114,6 +117,9 @@ enum class ScenarioRunMode {
   kGopherCoverage,
   /// Drive file:// without a peer, reading only the canonical local target.
   kFileCoverage,
+  /// Drive LDAP through its BER-aware single-socket peer, including the bind
+  /// reply and scripted search-result messages.
+  kLdapCoverage,
   /// Honour ApiPlan and run the dedicated lifecycle and typed-result probes.
   kApiLifecycle,
   /// Honour MultiPlan and drive several HTTP transfers through one multi.
@@ -187,6 +193,9 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
 
     case TargetProfile::kFastFile:
       return ScenarioRunMode::kFileCoverage;
+
+    case TargetProfile::kFastLdap:
+      return ScenarioRunMode::kLdapCoverage;
 
     case TargetProfile::kCompatibility:
     case TargetProfile::kFastWebSocket:

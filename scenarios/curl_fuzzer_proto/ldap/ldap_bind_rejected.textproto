@@ -1,0 +1,14 @@
+# A rejected simple bind must stop curl before it issues a searchRequest.
+# initial_response is the scripted bind reply; the peer rewrites its envelope
+# messageID to match the client's bind so the failure is associated correctly.
+# Result code 49 is LDAP_INVALID_CREDENTIALS, which curl maps to
+# CURLE_LOGIN_DENIED.
+scheme: SCHEME_LDAP
+host_path: "ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)"
+options { option_id: CURLOPT_USERNAME string_value: "cn=admin,dc=example,dc=com" }
+options { option_id: CURLOPT_PASSWORD string_value: "wrong" }
+connection {
+  # LDAPMessage { messageID 1, bindResponse {
+  #   resultCode 49, matchedDN "", diagnosticMessage "invalid credentials" } }
+  initial_response: "\060\037\002\001\001\141\032\012\001\061\004\000\004\023\151\156\166\141\154\151\144\040\143\162\145\144\145\156\164\151\141\154\163"
+}

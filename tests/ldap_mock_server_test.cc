@@ -1,0 +1,214 @@
+/*
+ * Copyright (C) Max Dymond, <cmeister2@gmail.com>, et al.
+ *
+ * SPDX-License-Identifier: curl
+ */
+
+#include <curl/curl.h>
+
+#include <cstddef>
+#include <string>
+
+#include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/curl_raii.h"
+#include "proto_fuzzer/ldap_mock_server.h"
+#include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/request_data.h"
+#include "test_assertions.h"
+
+namespace {
+
+using curl::fuzzer::proto::Scenario;
+using proto_fuzzer::CurlEasyPtr;
+using proto_fuzzer::CurlSlistPtr;
+using test_support::Expect;
+using test_support::Fail;
+
+constexpr char kBaseDn[] = "dc=example,dc=com";
+constexpr char kUrl[] =
+    "ldap://ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)";
+
+// LDAPMessage { messageID 1, bindResponse { resultCode 49,
+//   matchedDN "", diagnosticMessage "invalid credentials" } }.
+const std::string
+    kRejectedBind("\x30\x1f\x02\x01\x01\x61\x1a\x0a\x01\x31\x04\x00\x04\x13"
+                  "invalid credentials",
+                  33);
+
+// LDAPMessage { messageID 2, searchResEntry {
+//   objectName "dc=example,dc=com",
+//   attributes { cn: fuzz, objectClass: top, person } } }.
+const std::string kSearchEntry("\x30\x46\x02\x01\x02\x64\x41\x04\x11"
+                               "dc=example,dc=com"
+                               "\x30\x2c\x30\x0c\x04\x02"
+                               "cn"
+                               "\x31\x06\x04\x04"
+                               "fuzz"
+                               "\x30\x1c\x04\x0b"
+                               "objectClass"
+                               "\x31\x0d\x04\x03"
+                               "top"
+                               "\x04\x06"
+                               "person",
+                               72);
+
+// LDAPMessage { messageID 1, searchResDone { resultCode 32,
+//   matchedDN "", diagnosticMessage "no such object" } }. The scripted id is
+// deliberately 1 so the peer's renumbering to the search request is exercised.
+const std::string
+    kSearchRejected("\x30\x1a\x02\x01\x01\x65\x15\x0a\x01\x20\x04\x00\x04\x0e"
+                    "no such object",
+                    28);
+
+size_t CollectResponse(char *contents, size_t size, size_t nmemb,
+                       void *userdata) {
+  const size_t bytes = size * nmemb;
+  static_cast<std::string *>(userdata)->append(contents, bytes);
+  return bytes;
+}
+
+struct LdapRunResult {
+  CURLcode code = CURLE_FAILED_INIT;
+  std::string body;
+  std::string transcript;
+  std::size_t binds = 0;
+  std::size_t searches = 0;
+  std::size_t unbinds = 0;
+  std::size_t server_messages = 0;
+  std::size_t scripted_messages = 0;
+  std::size_t synthesized_dones = 0;
+  std::size_t scripted_bind_responses = 0;
+};
+
+LdapRunResult RunScenario(const Scenario &scenario) {
+  LdapRunResult result;
+  CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr, "curl_easy_init failed");
+  CurlSlistPtr connect_to(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_LDAP));
+  Expect(connect_to != nullptr,
+         "LDAP baseline did not create CONNECT_TO state");
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, kUrl) == CURLE_OK,
+         "LDAP URL setup failed");
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_WRITEFUNCTION,
+                          &CollectResponse) == CURLE_OK,
+         "LDAP write callback setup failed");
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_WRITEDATA, &result.body) ==
+             CURLE_OK,
+         "LDAP write data setup failed");
+  (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
+
+  proto_fuzzer::LdapMockServer server;
+  server.Install(easy.get());
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
+    result.code = server.DriveScenario(easy.get(), scenario);
+  }
+  result.transcript = server.packet_transcript();
+  result.binds = server.bind_request_count();
+  result.searches = server.search_request_count();
+  result.unbinds = server.unbind_request_count();
+  result.server_messages = server.server_message_count();
+  result.scripted_messages = server.scripted_message_count();
+  result.synthesized_dones = server.synthesized_done_count();
+  result.scripted_bind_responses = server.scripted_bind_response_count();
+
+  // CONNECT_TO storage must remain valid through easy cleanup.
+  easy.reset();
+  connect_to.reset();
+  return result;
+}
+
+void AddCredentials(Scenario *scenario) {
+  scenario->set_scheme(curl::fuzzer::proto::SCHEME_LDAP);
+  auto *username = scenario->add_options();
+  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
+  username->set_string_value("cn=admin,dc=example,dc=com");
+  auto *password = scenario->add_options();
+  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
+  password->set_string_value("secret");
+}
+
+void TestBindAndSearchFormatsLdif() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+  scenario.mutable_connection()->add_on_readable(kSearchEntry);
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code == CURLE_OK, "LDAP bind + search did not complete");
+  Expect(result.binds == 1, "LDAP peer did not observe one bindRequest");
+  Expect(result.searches == 1, "LDAP peer did not observe one searchRequest");
+  Expect(result.scripted_messages == 1,
+         "LDAP peer did not forward the scripted searchResEntry");
+  Expect(result.synthesized_dones == 1,
+         "LDAP peer did not synthesize searchResDone after the entry");
+  // bindResponse + searchResEntry + synthesized searchResDone.
+  Expect(result.server_messages == 3,
+         "LDAP peer wrote the wrong number of server messages");
+  Expect(result.body.find(std::string("DN: ") + kBaseDn) != std::string::npos,
+         "curl did not format the search entry DN as LDIF");
+  Expect(result.body.find("cn: fuzz") != std::string::npos,
+         "curl did not format the search entry attribute as LDIF");
+  Expect(result.transcript.size() > 0,
+         "LDAP peer captured no client message transcript");
+}
+
+void TestRejectedBindStopsBeforeSearch() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+  scenario.mutable_connection()->set_initial_response(kRejectedBind);
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code != CURLE_OK,
+         "rejected LDAP bind unexpectedly completed the transfer");
+  Expect(result.binds == 1, "LDAP peer did not observe one bindRequest");
+  Expect(result.searches == 0,
+         "LDAP transfer issued a search after a rejected bind");
+  Expect(result.scripted_bind_responses == 1,
+         "LDAP peer did not use the scripted bind response");
+  Expect(result.synthesized_dones == 0,
+         "LDAP peer synthesized a search completion after a failed bind");
+}
+
+void TestSearchErrorUsesScriptedDone() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+  scenario.mutable_connection()->add_on_readable(kSearchRejected);
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code != CURLE_OK,
+         "rejected LDAP search unexpectedly completed the transfer");
+  Expect(result.searches == 1, "LDAP peer did not observe one searchRequest");
+  Expect(result.scripted_messages == 1,
+         "LDAP peer did not forward the scripted search failure");
+  Expect(result.synthesized_dones == 0,
+         "LDAP peer duplicated a scripted searchResDone");
+}
+
+void TestEmptySearchScriptSynthesizesSuccess() {
+  Scenario scenario;
+  AddCredentials(&scenario);
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code == CURLE_OK,
+         "LDAP search without scripted entries did not complete");
+  Expect(result.searches == 1, "LDAP peer did not observe one searchRequest");
+  Expect(result.scripted_messages == 0,
+         "LDAP peer forwarded a scripted message without a script");
+  Expect(result.synthesized_dones == 1,
+         "LDAP peer did not synthesize a successful searchResDone");
+}
+
+} // namespace
+
+int main() {
+  if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
+    Fail("curl_global_init failed");
+  }
+  TestBindAndSearchFormatsLdif();
+  TestRejectedBindStopsBeforeSearch();
+  TestSearchErrorUsesScriptedDone();
+  TestEmptySearchScriptSynthesizesSuccess();
+  curl_global_cleanup();
+  return 0;
+}

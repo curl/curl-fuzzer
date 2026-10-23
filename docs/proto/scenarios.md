@@ -113,6 +113,15 @@ Other peers intentionally give those fields narrower meanings:
   removed. Mutations therefore exercise `file://` parsing and curl's local
   range, resume, time-condition, and metadata options without reading or
   writing an arbitrary host path.
+- LDAP is BER/ASN.1, not line-oriented. `initial_response`, when present, is
+  the scripted bind reply and is released only after curl's bindRequest with
+  its envelope messageID rewritten to the request id; an empty value asks the
+  peer to synthesize a successful bind. Each readable chunk is one complete
+  server LDAPMessage (for example a searchResEntry) forwarded after the
+  searchRequest and likewise renumbered. A scripted searchResDone ends the
+  search; otherwise the peer synthesizes one. The URL path carries the base DN,
+  attributes, scope, and filter, because this curl revision's OpenLDAP handler
+  does not consult `CURLOPT_CUSTOMREQUEST`.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.

@@ -22,6 +22,7 @@
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/imap_mock_server.h"
+#include "proto_fuzzer/ldap_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/mqtt_mock_server.h"
@@ -113,6 +114,8 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "pop3";
     case curl::fuzzer::proto::SCHEME_MQTT:
       return "mqtt";
+    case curl::fuzzer::proto::SCHEME_LDAP:
+      return "ldap";
     case curl::fuzzer::proto::SCHEME_SMTPS:
       return "smtps";
     case curl::fuzzer::proto::SCHEME_DICT:
@@ -294,6 +297,14 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       // FILE reads the local filesystem directly. The dedicated lane pins its
       // path to /dev/null, so there is no socket or scriptable peer to install.
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_LDAP:
+      // LDAP is BER/ASN.1 rather than line-oriented and OpenLDAP performs its
+      // own reads on a duplicate of curl's socket. Only the dedicated lane
+      // may turn an appended scheme value into a live bind/search exchange.
+      if (mode == ScenarioRunMode::kLdapCoverage) {
+        return std::make_unique<LdapMockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -343,6 +354,13 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
   if (auto* dict = dynamic_cast<DictMockServer*>(mock)) {
     const volatile std::size_t dict_observation[] = {dict->control_transcript().size(), dict->uploaded_data().size()};
     (void)dict_observation;
+  }
+
+  if (auto* ldap = dynamic_cast<LdapMockServer*>(mock)) {
+    const volatile std::size_t ldap_observation[] = {ldap->packet_transcript().size(), ldap->bind_request_count(),
+                                                     ldap->search_request_count(), ldap->scripted_message_count(),
+                                                     ldap->synthesized_done_count()};
+    (void)ldap_observation;
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)

@@ -26,6 +26,7 @@ using curl::fuzzer::proto::SCHEME_FTP;
 using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
+using curl::fuzzer::proto::SCHEME_LDAP;
 using curl::fuzzer::proto::SCHEME_MQTT;
 using curl::fuzzer::proto::SCHEME_TELNET;
 using curl::fuzzer::proto::SCHEME_TFTP;
@@ -389,6 +390,7 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -609,6 +611,7 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kApi,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
@@ -635,6 +638,7 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastSmtp,      TargetProfile::kFastFile,
       TargetProfile::kFastImap,      TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kApi,           TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -1384,6 +1388,96 @@ void TestNonDictPoliciesClearDictScheme() {
          "compatibility unexpectedly rewrote the DICT scheme");
 }
 
+void TestFastLdapPolicy() {
+  Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_host_path(
+      "untrusted.invalid:1389/dc=example,dc=com?cn?sub?(objectclass=*)#frag");
+  scenario.add_request_headers("X-Ignored: ldap");
+  scenario.add_telnet_options("TTYPE=ignored");
+  scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.mutable_mime_post()->add_parts()->set_data("mime");
+  scenario.mutable_upload()->set_data("callback upload");
+  scenario.mutable_connection()->add_on_readable("search entry");
+  scenario.mutable_connection()->add_server_frames()->set_payload("frame");
+  scenario.add_subsequent_connections()->set_initial_response("stream-only");
+  scenario.add_mail_rcpt("recipient@example.test");
+
+  auto *rejected = scenario.add_options();
+  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  auto *username = scenario.add_options();
+  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
+  username->set_string_value("cn=admin,dc=example,dc=com");
+  auto *custom = scenario.add_options();
+  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
+  custom->set_string_value("(cn=*)");
+  auto *password = scenario.add_options();
+  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
+  password->set_string_value("secret");
+  auto *ftp_port = scenario.add_options();
+  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
+  ftp_port->set_string_value("untrusted.invalid");
+  auto *max_size = scenario.add_options();
+  max_size->set_option_id(curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE);
+  max_size->set_uint_value(4096);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastLdap);
+
+  Expect(scenario.scheme() == SCHEME_LDAP,
+         "fast LDAP policy did not force LDAP");
+  Expect(scenario.host_path() ==
+             "ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)#frag",
+         "fast LDAP policy did not retain the base-DN and filter suffix");
+  Expect(scenario.subsequent_connections_size() == 0 &&
+             scenario.request_headers_size() == 0 &&
+             !scenario.has_mime_post() && scenario.telnet_options_size() == 0 &&
+             !scenario.has_api_plan() && !scenario.has_upload() &&
+             scenario.mail_rcpt_size() == 0,
+         "fast LDAP policy retained another protocol's shape");
+  Expect(scenario.connection().initial_response() == "response sentinel" &&
+             scenario.connection().on_readable(0) == "search entry" &&
+             !scenario.connection().has_backpressure() &&
+             scenario.connection().server_frames_size() == 0,
+         "fast LDAP policy changed the scripted bind/search bytes or retained "
+         "stream-only controls");
+  Expect(scenario.options_size() == 3,
+         "fast LDAP policy retained a non-LDAP option");
+  Expect(scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERNAME &&
+             scenario.options(1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE,
+         "fast LDAP policy changed retained option order");
+  Expect(scenario.options(0).string_value() == "cn=admin,dc=example,dc=com" &&
+             scenario.options(1).string_value() == "secret",
+         "fast LDAP policy lost the simple-bind credentials");
+}
+
+void TestNonLdapPoliciesClearLdapScheme() {
+  constexpr TargetProfile kOtherPolicies[] = {
+      TargetProfile::kFastHttp, TargetProfile::kFastMqtt,
+      TargetProfile::kTiming,  TargetProfile::kApi,
+  };
+
+  for (const TargetProfile profile : kOtherPolicies) {
+    Scenario scenario;
+    scenario.set_host_path("ldap.test/dc=example,dc=com");
+    scenario.set_scheme(SCHEME_LDAP);
+
+    NormalizeScenarioForTarget(&scenario, profile);
+
+    Expect(scenario.scheme() != SCHEME_LDAP,
+           "a non-LDAP policy retained the LDAP scheme");
+  }
+
+  Scenario compatibility;
+  compatibility.set_host_path("ldap.test/dc=example,dc=com");
+  compatibility.set_scheme(SCHEME_LDAP);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.scheme() == SCHEME_LDAP,
+         "compatibility unexpectedly rewrote the LDAP scheme");
+}
+
 void TestResolverPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:8080/path?query#fragment");
@@ -1919,6 +2013,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kMulti,
       TargetProfile::kTiming,
   };
@@ -2014,6 +2109,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kApi,
       TargetProfile::kTiming,
   };
@@ -2193,6 +2289,8 @@ void TestProfileRunModes() {
          "fast DICT profile does not authorize the command-aware peer");
   Expect(RunModeFor(TargetProfile::kFastFile) == ScenarioRunMode::kFileCoverage,
          "fast FILE profile does not authorize its peerless local reader");
+  Expect(RunModeFor(TargetProfile::kFastLdap) == ScenarioRunMode::kLdapCoverage,
+         "fast LDAP profile does not authorize the BER-aware peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
          "deep HTTP profile does not authorize filename-parser inputs");
@@ -2262,6 +2360,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2315,6 +2414,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kFastGopher,
       TargetProfile::kSocks4,
       TargetProfile::kResolver,
@@ -2675,6 +2775,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,
       TargetProfile::kFastGopher,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -2781,6 +2882,8 @@ int main() {
   TestNonMqttPoliciesClearMqttScheme();
   TestFastDictPolicy();
   TestNonDictPoliciesClearDictScheme();
+  TestFastLdapPolicy();
+  TestNonLdapPoliciesClearLdapScheme();
   TestFastSmtpsPolicy();
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
