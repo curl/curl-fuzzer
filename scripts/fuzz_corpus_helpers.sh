@@ -61,7 +61,7 @@ fuzz_public_corpus_names() {
             # intact.
             echo "curl_fuzzer_proto_https_h2"
             ;;
-        curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_ftp|curl_fuzzer_proto_tftp|curl_fuzzer_proto_smtp|curl_fuzzer_proto_api|curl_fuzzer_proto_multi|curl_fuzzer_proto_timing)
+curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_ftp|curl_fuzzer_proto_tftp|curl_fuzzer_proto_smtp|curl_fuzzer_proto_imap|curl_fuzzer_proto_pop3|curl_fuzzer_proto_api|curl_fuzzer_proto_multi|curl_fuzzer_proto_timing)
             echo "curl_fuzzer_proto"
             ;;
     esac

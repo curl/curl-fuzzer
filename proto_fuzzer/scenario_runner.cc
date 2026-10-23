@@ -20,10 +20,12 @@
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
+#include "proto_fuzzer/imap_mock_server.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/multi_transfer_runner.h"
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/pop3_mock_server.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/smtp_mock_server.h"
 #include "proto_fuzzer/socks4_mock_server.h"
@@ -102,6 +104,10 @@ const char* SchemePrefix(curl::fuzzer::proto::Scheme scheme) {
       return "tftp";
     case curl::fuzzer::proto::SCHEME_SMTP:
       return "smtp";
+    case curl::fuzzer::proto::SCHEME_IMAP:
+      return "imap";
+    case curl::fuzzer::proto::SCHEME_POP3:
+      return "pop3";
     case curl::fuzzer::proto::SCHEME_GOPHER:
       return "gopher";
     case curl::fuzzer::proto::SCHEME_GOPHERS:
@@ -233,6 +239,18 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
         return std::make_unique<SmtpMockServer>();
       }
       return nullptr;
+    case curl::fuzzer::proto::SCHEME_IMAP:
+      // IMAP replies are tag-aligned. Only the dedicated lane may reinterpret
+      // an append-only scheme value that historical inputs could carry.
+      if (mode == ScenarioRunMode::kImapCoverage) {
+        return std::make_unique<ImapMockServer>();
+      }
+      return nullptr;
+    case curl::fuzzer::proto::SCHEME_POP3:
+      if (mode == ScenarioRunMode::kPop3Coverage) {
+        return std::make_unique<Pop3MockServer>();
+      }
+      return nullptr;
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
     default:
       return nullptr;
@@ -260,6 +278,16 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
   if (auto* smtp = dynamic_cast<SmtpMockServer*>(mock)) {
     const volatile std::size_t smtp_observation[] = {smtp->control_transcript().size(), smtp->uploaded_data().size()};
     (void)smtp_observation;
+  }
+
+  if (auto* imap = dynamic_cast<ImapMockServer*>(mock)) {
+    const volatile std::size_t imap_observation[] = {imap->control_transcript().size(), imap->uploaded_data().size()};
+    (void)imap_observation;
+  }
+
+  if (auto* pop3 = dynamic_cast<Pop3MockServer*>(mock)) {
+    const volatile std::size_t pop3_observation[] = {pop3->control_transcript().size(), pop3->uploaded_data().size()};
+    (void)pop3_observation;
   }
 
   if (auto* websocket = dynamic_cast<WebSocketMockServer*>(mock)) {
