@@ -24,7 +24,7 @@ namespace proto_fuzzer {
 /// in-process TLS transport. The lane fixes protocol selection rather than
 /// relying on a mutable CURLOPT_HTTP_VERSION, and installs the public server-
 /// push callback before curl emits its initial SETTINGS frame.
-class H2OriginMockServer final : public TlsMockServer {
+class H2OriginMockServer : public TlsMockServer {
  public:
   explicit H2OriginMockServer(
       curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =

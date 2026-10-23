@@ -18,3 +18,13 @@ def test_resolver_lane_has_localhost_and_structured_resolve_seeds() -> None:
     assert 'resolve_entries: "+' in structured
     assert 'resolve_entries: "*:' in structured
     assert 'resolve_entries: "-' in structured
+
+
+def test_resolver_lane_has_a_doh_httpsrr_seed() -> None:
+    doh = (SCENARIO_DIR / "doh_httpsrr_alpn.textproto").read_text()
+
+    assert "scheme: SCHEME_HTTPS" in doh
+    assert 'host_path: "tls.test/' in doh
+    assert "doh_https_rr: true" in doh
+    assert "http2_plan {" in doh
+    assert "HTTP2_CLIENT_EVENT_HEADERS" in doh

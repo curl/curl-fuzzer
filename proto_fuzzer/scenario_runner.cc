@@ -40,6 +40,7 @@
 #include "proto_fuzzer/websocket_mock_server.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+#include "proto_fuzzer/doh_https_rr_mock_server.h"
 #include "proto_fuzzer/ftps_mock_server.h"
 #include "proto_fuzzer/h2_origin_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
@@ -214,6 +215,20 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   if (mode == ScenarioRunMode::kSocks4Coverage) {
     return std::make_unique<Socks4MockServer>(scenario.socks_proxy_mode());
+  }
+
+  if (mode == ScenarioRunMode::kResolverCoverage && scenario.doh_https_rr()) {
+    // The DoH responder answers both the address and HTTPS resource-record
+    // queries; its TLS/ALPN h2 carrier then completes the outer HTTPS
+    // transfer selected from the record.
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+    return std::make_unique<DohHttpsRrMockServer>(scenario.tls_certificate_chain());
+#else
+    // MemorySanitizer builds deliberately omit OpenSSL, so no verified TLS
+    // peer exists for the HTTPS-RR lane. Keep the target available while
+    // refusing to fall through to an unrelated transport.
+    return nullptr;
+#endif
   }
 
   if (mode == ScenarioRunMode::kResolverCoverage && scenario.happy_eyeballs()) {
@@ -635,7 +650,11 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     mock->SetMultiObserver([api_lifecycle](CURLM* multi) { api_lifecycle->SetActiveMulti(multi); });
   }
 
-  ScenarioRequestData* request_data = transfer.InstallRequestData(scenario, mode == ScenarioRunMode::kResolverCoverage);
+  // The DoH lane lets the loopback responder answer every lookup, including
+  // the address query, so it must not install the resolver lane's fixed
+  // CURLOPT_RESOLVE cache entries.
+  const bool apply_resolve_entries = mode == ScenarioRunMode::kResolverCoverage && !scenario.doh_https_rr();
+  ScenarioRequestData* request_data = transfer.InstallRequestData(scenario, apply_resolve_entries);
   if (mode == ScenarioRunMode::kResolverCoverage && !request_data->resolve_entries_ready()) {
     return 0;
   }

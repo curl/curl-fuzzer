@@ -1957,14 +1957,33 @@ void TestResolverPolicy() {
   Expect(happy.happy_eyeballs(),
          "resolver policy discarded its happy-eyeballs selector");
 
+  Scenario doh;
+  doh.set_host_path("untrusted.invalid/doh");
+  doh.set_doh_https_rr(true);
+  doh.add_resolve_entries("example.test:443:127.0.0.1");
+  doh.set_happy_eyeballs(true);
+  doh.mutable_http2_plan();
+  NormalizeScenarioForTarget(&doh, TargetProfile::kResolver);
+  Expect(doh.scheme() == SCHEME_HTTPS,
+         "DoH resolver policy did not select its HTTPS transport");
+  Expect(doh.host_path() == "tls.test/doh",
+         "DoH resolver policy did not select the TLS authority");
+  Expect(doh.resolve_entries_size() == 0 && !doh.happy_eyeballs(),
+         "DoH resolver policy retained contradictory address-resolution state");
+  Expect(doh.has_http2_plan(),
+         "DoH resolver policy discarded the selected ALPN h2 response plan");
+
   Scenario ordinary;
   ordinary.add_resolve_entries("example.test:80:127.0.0.1");
   ordinary.set_happy_eyeballs(true);
+  ordinary.set_doh_https_rr(true);
   NormalizeScenarioForTarget(&ordinary, TargetProfile::kFastHttp);
   Expect(ordinary.resolve_entries_size() == 0,
          "non-resolver policy retained structured DNS work");
   Expect(!ordinary.happy_eyeballs(),
          "non-resolver policy retained happy-eyeballs state");
+  Expect(!ordinary.doh_https_rr(),
+         "non-resolver policy retained the DoH responder selector");
 }
 
 void TestPauseTerminalIsTelnetOnly() {

@@ -38,8 +38,9 @@ The main groups of fields are:
 - Peer work: `connection`, `subsequent_connections`, structured WebSocket
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
-  TLS certificate selection, HTTPS/H2 key-exchange selection, `socks_proxy_mode`,
-  `trace_ids`, filename-backed parser inputs, and `fail_allocations`.
+  `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
+  `socks_proxy_mode`, `trace_ids`, filename-backed parser inputs, and
+  `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
 contract. Its checked-in `CurlOptionId` numbers are part of the serialized
@@ -157,6 +158,11 @@ Other peers intentionally give those fields narrower meanings:
   against a fixed loopback gateway and the in-process HTTP peer. `host_path`
   holds a pinned CID/name followed by the mutation-controlled gateway path,
   query, and fragment; the runner prepends the gateway authority.
+- The resolver lane's `doh_https_rr` flag binds a loopback DoH responder and
+  points `CURLOPT_DOH_URL` at it. The responder answers address and HTTPS
+  queries; its HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer
+  completes through the in-process TLS/ALPN h2 peer using `http2_plan`.
+  `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.
