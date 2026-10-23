@@ -1,0 +1,17 @@
+# A non-S3 SigV4 request takes the generic payload-hash path. The escaped path
+# also keeps URI canonicalization active while the fixed date makes the final
+# Authorization header reproducible in the transcript regression.
+scheme: SCHEME_HTTP
+host_path: "api.us-east-1.amazonaws.com/prod/resource%20name?b=2&a=1"
+request_headers: "X-Amz-Date: 20130524T000000Z"
+options {
+  option_id: CURLOPT_USERPWD
+  string_value: "AKIDEXAMPLE:wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
+}
+options {
+  option_id: CURLOPT_AWS_SIGV4
+  string_value: "aws:amz:us-east-1:execute-api"
+}
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}
