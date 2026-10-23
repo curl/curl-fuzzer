@@ -67,6 +67,7 @@ struct MqttsRunResult {
   std::size_t publishes = 0;
   std::size_t subscribes = 0;
   std::size_t qos1_publishes = 0;
+  std::size_t active_pollset_probes = 0;
   int tls_version = 0;
   std::size_t handshakes = 0;
   std::string alpn;
@@ -104,6 +105,7 @@ MqttsRunResult RunScenario(const Scenario &scenario, const char *url) {
   result.publishes = server.publish_count();
   result.subscribes = server.subscribe_count();
   result.qos1_publishes = server.qos1_publish_count();
+  result.active_pollset_probes = server.active_pollset_probe_count();
   result.tls_version = server.negotiated_tls_version();
   result.handshakes = server.completed_handshake_count();
   result.alpn = server.negotiated_alpn();
@@ -126,6 +128,7 @@ void ExpectImplicitTls(const MqttsRunResult &result) {
 void TestPublishSendsConnectAndDisconnect() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_MQTTS);
+  scenario.set_probe_multi_pollset(true);
   auto *fields = scenario.add_options();
   fields->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
   fields->set_string_value(kPayload);
@@ -153,6 +156,8 @@ void TestPublishSendsConnectAndDisconnect() {
          "MQTTS peer parsed the wrong publish payload");
   Expect(result.transcript.find(kTopic) != std::string::npos,
          "MQTTS packet transcript lost the topic bytes");
+  Expect(result.active_pollset_probes != 0,
+         "MQTTS opt-in did not probe a live protocol pollset");
 }
 
 void TestSubscribeDeliversServerPublish() {
@@ -183,6 +188,8 @@ void TestSubscribeDeliversServerPublish() {
          "MQTTS subscribe forwarded the wrong PUBLISH body");
   Expect(result.transcript.find("sensors/kitchen") != std::string::npos,
          "MQTTS subscribe transcript lost the SUBSCRIBE topic");
+  Expect(result.active_pollset_probes == 0,
+         "MQTTS default path unexpectedly issued a pollset probe");
 }
 
 void TestRejectedConnackStopsBeforePublish() {

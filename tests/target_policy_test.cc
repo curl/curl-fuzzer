@@ -1427,6 +1427,7 @@ void TestMailAuthenticationOptionPolicies() {
 
 void TestFastMqttPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path(
       "untrusted.invalid:1883/sensors/kitchen?query#fragment");
   scenario.add_request_headers("X-Ignored: mqtt");
@@ -1454,6 +1455,8 @@ void TestFastMqttPolicy() {
 
   Expect(scenario.scheme() == SCHEME_MQTT,
          "fast MQTT policy did not force MQTT");
+  Expect(scenario.probe_multi_pollset(),
+         "fast MQTT policy removed its pollset-probe opt-in");
   Expect(scenario.host_path() == "mqtt.test/sensors/kitchen?query#fragment",
          "fast MQTT policy did not retain the publish topic suffix");
   Expect(scenario.subsequent_connections_size() == 0 &&
@@ -1481,6 +1484,7 @@ void TestFastMqttPolicy() {
 void TestFastMqttsPolicy() {
   Scenario scenario;
   scenario.set_scheme(SCHEME_MQTTS);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("untrusted.invalid:8883/sensors/kitchen?query#fragment");
   auto *payload = scenario.add_options();
   payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
@@ -1492,6 +1496,8 @@ void TestFastMqttsPolicy() {
 
   Expect(scenario.scheme() == SCHEME_MQTTS,
          "fast MQTT lane did not preserve an explicit MQTTS scheme");
+  Expect(scenario.probe_multi_pollset(),
+         "fast MQTT lane removed the MQTTS pollset-probe opt-in");
   Expect(scenario.host_path() == "tls.test/sensors/kitchen?query#fragment",
          "fast MQTT lane did not give MQTTS the certifiable authority");
   Expect(scenario.options_size() == 1 &&
@@ -2931,7 +2937,6 @@ void TestOnlySupportedPoliciesRetainPollsetProbe() {
       TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,
       TargetProfile::kFastTftp,
-      TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastGopher,
       TargetProfile::kFastFile,

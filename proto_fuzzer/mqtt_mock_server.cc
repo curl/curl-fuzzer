@@ -51,6 +51,7 @@ MqttMockServer::MqttMockServer()
       publish_count_(0),
       subscribe_count_(0),
       qos1_publish_count_(0),
+      active_pollset_probe_count_(0),
       release_script_chunks_(false),
       protocol_error_(false),
       socket_opened_(false) {}
@@ -84,6 +85,12 @@ std::size_t MqttMockServer::subscribe_count() const { return subscribe_count_; }
 /// @return Number of PUBLISH packets that requested QoS 1.
 std::size_t MqttMockServer::qos1_publish_count() const { return qos1_publish_count_; }
 
+/// Report how many requested zero-timeout multi-poll probes ran during the
+/// most recent drive. RunLoop increments this only after a successful perform
+/// turn while curl still owns an active transfer and the MQTT socket is open.
+/// @return Number of active, connected pollset probes in the previous drive.
+std::size_t MqttMockServer::active_pollset_probe_count() const { return active_pollset_probe_count_; }
+
 /// Reset every borrowed pointer, parser cursor, and observable capture before
 /// borrowing the next Scenario.
 /// @param scenario Scenario whose Connection supplies the CONNACK and any
@@ -99,6 +106,7 @@ void MqttMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scena
   publish_count_ = 0;
   subscribe_count_ = 0;
   qos1_publish_count_ = 0;
+  active_pollset_probe_count_ = 0;
   pending_client_bytes_.clear();
   packet_transcript_.clear();
   published_topic_.clear();
@@ -424,6 +432,14 @@ void MqttMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto
     result = curl_multi_perform(multi, &still_running);
     if (result != CURLM_OK) {
       break;
+    }
+
+    // Pollset construction is opt-in coverage work. Waiting until the socket
+    // callback has run and the transfer remains active keeps the default hot
+    // loop syscall-free and asks curl for a live MQTT protocol pollset.
+    if (scenario.probe_multi_pollset() && still_running && socket_opened_) {
+      ProbeMultiPollset(multi);
+      ++active_pollset_probe_count_;
     }
 
     bool made_progress = still_running != running_before;

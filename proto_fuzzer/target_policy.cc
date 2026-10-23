@@ -2242,12 +2242,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_mail_rcpt();
   }
 
-  // Only these command/reply peers currently interleave zero-timeout public
-  // multi polling with immediate service of their live control connection.
+  // Only these protocol peers currently interleave zero-timeout public multi
+  // polling with immediate service of their live connection.
   // Keep the opt-in out of fixed lanes whose driver cannot honor that timing
   // contract; compatibility returned above and preserves its wire input.
   if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
-      profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp) {
+      profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp &&
+      profile != TargetProfile::kFastMqtt) {
     scenario->clear_probe_multi_pollset();
   }
 
