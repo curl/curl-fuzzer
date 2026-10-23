@@ -1,0 +1,12 @@
+# The curl-fuzzer build explicitly disables NTLM. Advertising only that
+# selected mechanism reaches the blocked/unchosen SASL path without sending an
+# AUTH command.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/unavailable.test"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM" }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250-AUTH NTLM\r\n250 8BITMIME\r\n"
+}

@@ -23,10 +23,10 @@ namespace proto_fuzzer {
 ///
 /// SMTP needs neither a data channel nor a second script per socket: curl
 /// sends one command at a time and waits for the matching response. This peer
-/// therefore treats Scenario.connection as a command-aligned reply script.
+/// therefore treats Scenario.connection as a client-line-aligned reply script.
 /// `initial_response` is the 220 greeting; each `on_readable` entry is the
-/// reply to the next command (EHLO/HELO, MAIL FROM, RCPT TO, DATA, and finally
-/// the reply after the message body).
+/// reply to the next command or SASL continuation (EHLO/HELO, AUTH, MAIL FROM,
+/// RCPT TO, DATA, and finally the reply after the message body).
 ///
 /// The one exception to the command/reply rhythm is the message body. After a
 /// 354 reply to DATA, curl writes the bounded upload script followed by the
@@ -74,6 +74,10 @@ class SmtpMockServer : public PingpongMockServer {
   std::size_t recipient_count_;
   /// Number of RCPT TO commands observed in this drive.
   std::size_t rcpt_command_count_;
+  /// True after a 334 AUTH reply and until the final authentication reply.
+  /// SASL cancellation keeps this set because curl may immediately try
+  /// another mechanism on the same connection.
+  bool auth_exchange_active_;
 };
 
 }  // namespace proto_fuzzer
