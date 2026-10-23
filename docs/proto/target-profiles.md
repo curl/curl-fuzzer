@@ -25,7 +25,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_smtp` | Single-connection SMTP greeting, EHLO/HELO, mail envelope, DATA body upload and EOB drain, and graceful QUIT. The same target also runs implicit-TLS `smtps://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_imap` | Single-connection IMAP greeting, CAPABILITY, LOGIN/AUTHENTICATE, SELECT, FETCH literals, APPEND uploads, and tagged completion. The same target also runs implicit-TLS `imaps://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_pop3` | Single-connection POP3 greeting, CAPA, USER/PASS or APOP, LIST, RETR multi-line bodies, and QUIT. The same target also runs implicit-TLS `pop3s://` scenarios through a verified in-process TLS peer. |
-| `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. |
+| `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. The same target also runs implicit-TLS `mqtts://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
 | `curl_fuzzer_proto_file` | `file://` URL parsing with a fuzz-controlled authority and suffix, pinned to a read-only `/dev/null` path. There is no network peer and uploads are removed so the lane cannot write host files. |

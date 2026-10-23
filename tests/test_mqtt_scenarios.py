@@ -27,6 +27,7 @@ def test_mqtt_schema_exposes_publish_and_credential_controls() -> None:
         "CURLOPT_USERPWD",
     } <= _supported_options()
     assert "SCHEME_MQTT = 13;" in SCENARIO_SCHEMA.read_text(encoding="utf-8")
+    assert "SCHEME_MQTTS = 22;" in SCENARIO_SCHEMA.read_text(encoding="utf-8")
 
 
 def test_mqtt_publish_seed_preloads_connack_before_publish() -> None:
@@ -53,5 +54,25 @@ def test_mqtt_rejected_connack_seed_has_no_server_packets() -> None:
     rejected = (SCENARIO_ROOT / "mqtt_connack_rejected.textproto").read_text(
         encoding="utf-8"
     )
+    assert 'initial_response: "\\040\\002\\000\\005"' in rejected
+    assert "on_readable" not in rejected
+
+
+def test_mqtts_publish_seed_uses_certifiable_authority() -> None:
+    """Keep the implicit-TLS seed pinned to the checked-in trust anchor."""
+    publish = (SCENARIO_ROOT / "mqtts_publish.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_MQTTS" in publish
+    assert 'host_path: "tls.test/sensors/kitchen"' in publish
+    assert 'CURLOPT_POSTFIELDS string_value: "hello mqtt"' in publish
+    assert 'initial_response: "\\040\\002\\000\\000"' in publish
+
+
+def test_mqtts_rejected_connack_seed_preloads_only_failure() -> None:
+    """The MQTTS rejection seed must not script server packets."""
+    rejected = (SCENARIO_ROOT / "mqtts_connack_rejected.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "scheme: SCHEME_MQTTS" in rejected
+    assert 'host_path: "tls.test/sensors/rejected"' in rejected
     assert 'initial_response: "\\040\\002\\000\\005"' in rejected
     assert "on_readable" not in rejected

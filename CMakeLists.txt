@@ -1735,6 +1735,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/h2_origin_mock_server.cc
             proto_fuzzer/h2_proxy_mock_server.cc
             proto_fuzzer/imaps_mock_server.cc
+            proto_fuzzer/mqtts_mock_server.cc
             proto_fuzzer/pop3s_mock_server.cc
             proto_fuzzer/smtps_mock_server.cc
             proto_fuzzer/tls_mock_server.cc
@@ -2484,6 +2485,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/smtp_mock_server.cc
             proto_fuzzer/imap_mock_server.cc
             proto_fuzzer/pop3_mock_server.cc
+            proto_fuzzer/mqtt_mock_server.cc
             proto_fuzzer/target_policy.cc
             proto_fuzzer/telnet_mock_server.cc
             proto_fuzzer/telnet_scenario.cc
@@ -2887,6 +2889,54 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 COMMAND pop3s_mock_server_test)
             set_tests_properties(pop3s_mock_server_test PROPERTIES TIMEOUT 5)
             add_dependencies(fuzzer_unit_tests pop3s_mock_server_test)
+        endif()
+
+        # The MQTTS peer needs the in-process OpenSSL carrier in addition to the
+        # plaintext MQTT implementation. Keep this executable separate so the
+        # TLS-free MQTT test remains available on builds without OpenSSL.
+        if(TARGET openssl_external)
+            add_executable(mqtts_mock_server_test
+                tests/mqtts_mock_server_test.cc
+                proto_fuzzer/mqtts_mock_server.cc
+                proto_fuzzer/mqtt_mock_server.cc
+                proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_test_credential_cache.cc
+                proto_fuzzer/mock_server.cc
+                proto_fuzzer/mock_server_base.cc
+                proto_fuzzer/multi_socket_driver.cc
+                proto_fuzzer/option_apply.cc
+                proto_fuzzer/option_model.cc
+                proto_fuzzer/request_data.cc
+                proto_fuzzer/ws_frame.cc
+                ${GEN_PB_CC})
+            target_compile_features(mqtts_mock_server_test PRIVATE cxx_std_17)
+            target_compile_options(mqtts_mock_server_test PRIVATE ${COMMON_FLAGS})
+            target_compile_definitions(mqtts_mock_server_test PRIVATE
+                PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+            target_include_directories(mqtts_mock_server_test PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE}
+                ${OPENSSL_INSTALL_DIR}/include)
+            target_link_libraries(mqtts_mock_server_test PRIVATE
+                ${CURL_LIB_DIR}/libcurl.a
+                ${CURL_STATIC_DEPENDENCY_LIBS}
+                "-Wl,@${LPM_LINK_RSP}"
+                pthread
+                m)
+            target_link_options(mqtts_mock_server_test PRIVATE
+                ${COVERAGE_LINK_FLAGS})
+            add_dependencies(mqtts_mock_server_test
+                ${FUZZ_DEPS}
+                openssl_external
+                zlib_external
+                libprotobuf_mutator_external
+                lpm_link_rsp)
+            add_test(NAME mqtts_mock_server_test
+                COMMAND mqtts_mock_server_test)
+            set_tests_properties(mqtts_mock_server_test PROPERTIES TIMEOUT 5)
+            add_dependencies(fuzzer_unit_tests mqtts_mock_server_test)
         endif()
 
         if(BUILD_HTTP3_VARIANT)

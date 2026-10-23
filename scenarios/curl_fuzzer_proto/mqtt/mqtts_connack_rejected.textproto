@@ -1,0 +1,9 @@
+# A CONNACK with a non-zero return code must reject the implicit-TLS MQTTS
+# connection before curl sends any PUBLISH or SUBSCRIBE packet.
+scheme: SCHEME_MQTTS
+host_path: "tls.test/sensors/rejected"
+options { option_id: CURLOPT_POSTFIELDS string_value: "never sent" }
+connection {
+  # CONNACK: 0x20, remaining length 2, session-present 0, return code 5.
+  initial_response: "\040\002\000\005"
+}

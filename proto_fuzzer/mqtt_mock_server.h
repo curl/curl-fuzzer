@@ -13,10 +13,12 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/incoming_data_observer.h"
 #include "proto_fuzzer/mock_server_base.h"
 #include "proto_fuzzer/scenario_limits.h"
 
@@ -47,7 +49,12 @@ namespace proto_fuzzer {
 ///
 /// All work remains in-process and non-waiting, so malformed packet headers
 /// terminate by the operation budget or a half-close instead of a timeout.
-class MqttMockServer final : public MockServerBase {
+///
+/// Subclasses replace the transport through CreateConnection(). The implicit-
+/// TLS MQTTS peer uses that hook to wrap the identical packet exchange in a
+/// verified OpenSSL connection; incoming bytes are observed after transport
+/// decoding so the parser does not depend on the carrier.
+class MqttMockServer : public MockServerBase, public IncomingDataObserver {
  public:
   MqttMockServer();
 
@@ -79,10 +86,14 @@ class MqttMockServer final : public MockServerBase {
   std::size_t qos1_publish_count() const;
 
  protected:
+  virtual std::unique_ptr<MockConnection> CreateConnection();
+
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
 
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+
+  void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
 
  private:
   /// Outcome of decoding the base-128 remaining-length field.

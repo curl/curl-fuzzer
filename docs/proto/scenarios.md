@@ -100,7 +100,10 @@ Other peers intentionally give those fields narrower meanings:
   DISCONNECT) released after the peer acknowledges curl's SUBSCRIBE. Client
   packets are delimited by MQTT's fixed header and base-128 remaining length,
   not by newlines; the URL path becomes the publish/subscribe topic and
-  `CURLOPT_POSTFIELDS` supplies the publish payload.
+  `CURLOPT_POSTFIELDS` supplies the publish payload. An `SCHEME_MQTTS` scenario
+  runs the identical packet exchange over implicit TLS; its fixed authority is
+  `tls.test`, matching the checked-in trust anchor, and the handshake carries
+  no ALPN extension.
 - DICT uses the primary connection for one request/response exchange. curl
   writes a `CLIENT` identification line, a command derived from the URL path
   (`DEFINE` from `/d:word`, `MATCH` from `/match:word:db`, `SHOW` from

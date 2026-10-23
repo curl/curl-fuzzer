@@ -125,6 +125,23 @@ void MqttMockServer::ApplyScriptBackpressure(MockConnection* connection,
   connection->ApplyBackpressure(receive_buffer, static_cast<std::size_t>(backpressure.drain_limit()));
 }
 
+/// Create the default plaintext transport for the MQTT packet exchange. The
+/// MQTTS subclass overrides this factory while retaining the binary parser.
+/// @return A new socketpair-backed connection.
+std::unique_ptr<MockConnection> MqttMockServer::CreateConnection() { return std::make_unique<MockConnection>(); }
+
+/// Append decoded application bytes to the pending parser buffer. The outer
+/// service loop drains this buffer after every transport call, so it remains
+/// bounded by the scenario's packet budget.
+/// @param data First decoded byte.
+/// @param size Number of bytes available at `data`.
+void MqttMockServer::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  pending_client_bytes_.append(reinterpret_cast<const char*>(data), size);
+}
+
 /// Create the single MQTT socketpair and queue the scenario's first server
 /// bytes. curl sends CONNECT immediately, so a normal scenario preloads the
 /// CONNACK here; an empty or malformed greeting remains a reachable error path.
@@ -137,11 +154,12 @@ curl_socket_t MqttMockServer::HandleOpenSocket(curlsocktype purpose, struct curl
     return CURL_SOCKET_BAD;
   }
 
-  connection_ = std::make_unique<MockConnection>();
-  if (!connection_->ok()) {
+  connection_ = CreateConnection();
+  if (!connection_ || !connection_->ok()) {
     connection_.reset();
     return CURL_SOCKET_BAD;
   }
+  connection_->SetIncomingDataObserver(this);
 
   ApplyScriptBackpressure(connection_.get(), scenario_->connection());
   const std::string& greeting = scenario_->connection().initial_response();
@@ -314,18 +332,22 @@ bool MqttMockServer::ReleaseNextServerChunk() {
   return true;
 }
 
-/// Read without waiting and process every complete packet currently buffered.
-/// A packet is delivered only after its fixed header and declared body have
-/// both arrived, so fragmentation cannot shift the parser.
-/// @return true when bytes, a packet, or a response cursor advanced.
+/// Advance the carrier without waiting, then process every complete packet
+/// already decoded into the pending buffer. A plaintext connection yields raw
+/// socket bytes; a TLS carrier completes its handshake and yields decrypted
+/// application bytes through ObserveIncomingData. A packet is delivered only
+/// after its fixed header and declared body have both arrived, so fragmentation
+/// cannot shift the parser.
+/// @return true when bytes, transport state, a packet, or a response cursor
+///         advanced.
 bool MqttMockServer::ServiceClientConnection() {
   if (connection_ == nullptr || protocol_error_) {
     return false;
   }
 
   const std::size_t size_before_read = pending_client_bytes_.size();
-  connection_->ReadAvailable(&pending_client_bytes_);
-  bool made_progress = pending_client_bytes_.size() != size_before_read;
+  const std::size_t transport_progress = connection_->DrainIncoming();
+  bool made_progress = pending_client_bytes_.size() != size_before_read || transport_progress != 0;
 
   std::size_t consumed = 0;
   int packets = 0;

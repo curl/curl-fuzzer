@@ -242,15 +242,18 @@ void CanonicalizePop3Authority(curl::fuzzer::proto::Scenario* scenario) {
 /// controlled: curl percent-decodes that path into the PUBLISH/SUBSCRIBE topic.
 /// A missing path is a legitimate "No MQTT topic found" error, but a default
 /// topic makes most newly generated inputs reach the packet peer instead of
-/// stopping at URL validation.
+/// stopping at URL validation. Implicit-TLS inputs use the checked-in
+/// certificate's tls.test name so the verified handshake can complete before
+/// the same packet exchange runs.
 void CanonicalizeMqttAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
+  const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_MQTTS ? "tls.test" : "mqtt.test";
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path("mqtt.test/topic");
+    scenario->set_host_path(std::string(host) + "/topic");
     return;
   }
-  scenario->set_host_path("mqtt.test" + host_path.substr(suffix_start));
+  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
 /// Pin the DICT server authority while retaining every lookup selector in the
@@ -563,6 +566,7 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_POP3S:
     case curl::fuzzer::proto::SCHEME_MQTT:
+    case curl::fuzzer::proto::SCHEME_MQTTS:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
     case curl::fuzzer::proto::SCHEME_SMTP:
@@ -1980,12 +1984,14 @@ curl::fuzzer::proto::Scheme PlaintextScheme(curl::fuzzer::proto::Scheme scheme) 
     case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_POP3S:
       return curl::fuzzer::proto::SCHEME_POP3;
+    case curl::fuzzer::proto::SCHEME_MQTT:
+    case curl::fuzzer::proto::SCHEME_MQTTS:
+      return curl::fuzzer::proto::SCHEME_MQTT;
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
     case curl::fuzzer::proto::SCHEME_TELNET:
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_TFTP:
-    case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_DICT:
     case curl::fuzzer::proto::SCHEME_FILE:
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
@@ -2315,7 +2321,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastMqtt) {
-    scenario->set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
+    // The dedicated MQTT lane services both the plaintext and implicit-TLS
+    // variants through one packet-aware parser. Preserve an explicitly
+    // supplied MQTTS scheme so the seed and mutations can select the TLS peer;
+    // every other scheme falls back to the historical plaintext lane.
+    const auto scheme = scenario->scheme();
+    scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_MQTTS ? curl::fuzzer::proto::SCHEME_MQTTS
+                                                                     : curl::fuzzer::proto::SCHEME_MQTT);
     RemoveIgnoredMqttShape(scenario);
     RetainMqttOptions(scenario);
     BoundScenarioShape(scenario);

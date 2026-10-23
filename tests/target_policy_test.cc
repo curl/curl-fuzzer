@@ -30,6 +30,7 @@ using curl::fuzzer::proto::SCHEME_LDAP;
 using curl::fuzzer::proto::SCHEME_IMAP;
 using curl::fuzzer::proto::SCHEME_IMAPS;
 using curl::fuzzer::proto::SCHEME_MQTT;
+using curl::fuzzer::proto::SCHEME_MQTTS;
 using curl::fuzzer::proto::SCHEME_POP3;
 using curl::fuzzer::proto::SCHEME_POP3S;
 using curl::fuzzer::proto::SCHEME_RTSP;
@@ -1326,6 +1327,32 @@ void TestFastMqttPolicy() {
          "fast MQTT policy changed retained option order or credentials");
 }
 
+void TestFastMqttsPolicy() {
+  Scenario scenario;
+  scenario.set_scheme(SCHEME_MQTTS);
+  scenario.set_host_path("untrusted.invalid:8883/sensors/kitchen?query#fragment");
+  auto *payload = scenario.add_options();
+  payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
+  payload->set_string_value("implicit tls mqtt");
+  scenario.mutable_connection()->set_initial_response(
+      std::string("\x20\x02\x00\x00", 4));
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastMqtt);
+
+  Expect(scenario.scheme() == SCHEME_MQTTS,
+         "fast MQTT lane did not preserve an explicit MQTTS scheme");
+  Expect(scenario.host_path() == "tls.test/sensors/kitchen?query#fragment",
+         "fast MQTT lane did not give MQTTS the certifiable authority");
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_POSTFIELDS &&
+             scenario.options(0).string_value() == "implicit tls mqtt",
+         "fast MQTT lane removed the MQTTS publish payload");
+  Expect(scenario.connection().initial_response() ==
+             std::string("\x20\x02\x00\x00", 4),
+         "fast MQTT lane removed the MQTTS CONNACK");
+}
+
 void TestNonMqttPoliciesClearMqttScheme() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
@@ -1785,6 +1812,11 @@ void TestTimingPolicyMapsSecureSchemesToPlaintext() {
   NormalizeScenarioForTarget(&pop3s, TargetProfile::kTiming);
   Expect(pop3s.scheme() == SCHEME_POP3,
          "timing policy did not map POP3S to POP3");
+
+  Scenario mqtts = ScenarioWithBackpressure(SCHEME_MQTTS, 2048, 1);
+  NormalizeScenarioForTarget(&mqtts, TargetProfile::kTiming);
+  Expect(mqtts.scheme() == SCHEME_MQTT,
+         "timing policy did not map MQTTS to MQTT");
 }
 
 void TestTimingPolicySuppliesBackpressureForZeroConfig() {
@@ -3050,6 +3082,7 @@ int main() {
   TestFastImapPolicy();
   TestFastPop3Policy();
   TestFastMqttPolicy();
+  TestFastMqttsPolicy();
   TestNonMqttPoliciesClearMqttScheme();
   TestFastDictPolicy();
   TestNonDictPoliciesClearDictScheme();

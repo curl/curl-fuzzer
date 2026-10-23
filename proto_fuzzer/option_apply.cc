@@ -31,7 +31,7 @@ constexpr char kTftpProtocolAllowed[] = "tftp";
 constexpr char kSmtpProtocolAllowed[] = "smtp,smtps";
 constexpr char kImapProtocolAllowed[] = "imap,imaps";
 constexpr char kPop3ProtocolAllowed[] = "pop3,pop3s";
-constexpr char kMqttProtocolAllowed[] = "mqtt";
+constexpr char kMqttProtocolAllowed[] = "mqtt,mqtts";
 constexpr char kDictProtocolAllowed[] = "dict";
 constexpr char kFileProtocolAllowed[] = "file";
 constexpr char kLdapProtocolAllowed[] = "ldap";
@@ -148,6 +148,7 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
       direct_protocols = kPop3ProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_MQTT:
+    case curl::fuzzer::proto::SCHEME_MQTTS:
       direct_protocols = kMqttProtocolAllowed;
       break;
     case curl::fuzzer::proto::SCHEME_DICT:
