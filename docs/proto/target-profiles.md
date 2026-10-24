@@ -33,7 +33,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_rtsp` | Single-connection, request-aligned RTSP method/CSeq exchanges, SDP response bodies, and PLAY responses with interleaved RTP packets. |
 | `curl_fuzzer_proto_ipfs` | `ipfs://` and `ipns://` gateway rewrites as ordinary HTTP GETs against the in-process HTTP peer, with a pinned CID/name and a mutation-controlled gateway path. |
 | `curl_fuzzer_proto_api` | Easy, share, multi, URL, connect-only, pause/resume, and typed result API lifecycles described by `api_plan`. |
-| `curl_fuzzer_proto_multi` | Two to four easy handles on one shared multi handle, with bounded scheduling actions, connection-cache controls, and a five-second packaged timeout. |
+| `curl_fuzzer_proto_multi` | Two to four easy handles on one shared multi handle, with bounded scheduling actions, connection-cache controls, an opt-in closed progress/rate-limit probe, and a five-second packaged timeout. |
 | `curl_fuzzer_proto_timing` | Plain HTTP or WebSocket backpressure and timed-wait behavior; it guarantees a non-default bounded pressure configuration. |
 
 The exact target inventory and platform gates are maintained in
@@ -99,6 +99,24 @@ protocol socket, so ordinary false/default corpus entries do not pay for an
 unconditional polling syscall. The proxy-transport lane may probe several
 bounded perform turns because its HAProxy filter is installed only after SOCKS
 negotiation completes.
+
+The multi profile's `MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT` value is a closed
+state-machine probe. The runtime redirects the internal progress meter to an
+owned anonymous temporary stream, enables it, and applies a fixed one-byte per
+second receive limit plus a 20-millisecond transfer timeout to every easy
+handle. The authored seed releases each two-byte response body over two peer
+turns so curl must observe the rate-limited state before cleanup. None of the
+sink, rate, or timeout values is mutation-controlled, and failure to create the
+anonymous stream leaves the probe disabled.
+
+This probe deliberately does not manufacture the error-only
+`Curl_creader_free` path: that function needs a request-body reader to be
+created and then rejected, which would couple this generic state-machine case
+to an unrelated allocation-failure index. It also does not claim
+`Curl_multi_wakeup_internal`, whose live call site belongs to the threaded
+resolver lifecycle rather than the generic multi runner. The identity content
+decoder used by the seed does safely exercise `Curl_cwriter_def_write` as part
+of the response path.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
 inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would

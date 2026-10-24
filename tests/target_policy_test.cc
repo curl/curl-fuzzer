@@ -2867,6 +2867,8 @@ void TestMultiPolicyRetainsAndBoundsItsPlan() {
   plan->set_keep_connections_open(true);
   plan->set_multiplex(true);
   plan->set_wake_multi(true);
+  plan->set_state_probe_profile(
+      curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT);
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxMultiActions + 3; ++index) {
     auto *action = plan->add_actions();
@@ -2899,12 +2901,22 @@ void TestMultiPolicyRetainsAndBoundsItsPlan() {
   Expect(static_cast<std::size_t>(scenario.multi_plan().actions_size()) ==
              proto_fuzzer::scenario_limits::kMaxMultiActions,
          "multi policy retained actions beyond its operation budget");
+  Expect(scenario.multi_plan().state_probe_profile() ==
+             curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT,
+         "multi policy discarded its closed state-probe profile");
   Expect(scenario.multi_plan().actions(0).transfer_selector() <
              scenario.multi_plan().transfer_count(),
          "multi policy retained an out-of-range handle selector");
   Expect(static_cast<std::size_t>(scenario.subsequent_connections_size()) ==
              proto_fuzzer::scenario_limits::kMaxMultiTransfers - 1,
          "multi policy retained response scripts beyond its handle count");
+
+  scenario.mutable_multi_plan()->set_state_probe_profile(
+      static_cast<curl::fuzzer::proto::MultiStateProbeProfile>(99));
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kMulti);
+  Expect(scenario.multi_plan().state_probe_profile() ==
+             curl::fuzzer::proto::MULTI_STATE_PROBE_NONE,
+         "multi policy retained an unknown state-probe profile");
 }
 
 void TestOtherPoliciesDiscardMultiPlans() {

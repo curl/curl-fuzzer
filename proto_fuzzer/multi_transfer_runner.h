@@ -31,6 +31,8 @@ struct MultiTransferRunStats {
   std::size_t easy_done_notifications = 0;
   /// Ordered plan actions consumed, including intentional no-ops.
   std::size_t actions_consumed = 0;
+  /// Easy handles that received the complete closed state-probe setup.
+  std::size_t state_probe_handles = 0;
   /// Peer sockets opened while serving the concurrent transfers.
   std::size_t opened_connections = 0;
 };

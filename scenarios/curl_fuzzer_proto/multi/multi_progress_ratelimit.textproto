@@ -1,0 +1,22 @@
+# Correlate curl's internal progress meter with a real receive-rate pause. The
+# harness redirects meter output to an anonymous stream and applies the fixed
+# rate/timeout values; no mutated scalar can make another lane slow or noisy.
+scheme: SCHEME_HTTP
+host_path: "multi.test/progress-rate"
+options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "identity" }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Encoding: identity\r\nContent-Length: 2\r\nConnection: close\r\n\r\n"
+  on_readable: "a"
+  on_readable: "b"
+}
+subsequent_connections {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Encoding: identity\r\nContent-Length: 2\r\nConnection: close\r\n\r\n"
+  on_readable: "c"
+  on_readable: "d"
+}
+multi_plan {
+  transfer_count: 2
+  max_host_connections: 2
+  max_total_connections: 2
+  state_probe_profile: MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT
+}

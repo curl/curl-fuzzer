@@ -763,6 +763,15 @@ void BoundMultiPlanShape(curl::fuzzer::proto::MultiPlan* plan) {
       break;
   }
 
+  switch (plan->state_probe_profile()) {
+    case curl::fuzzer::proto::MULTI_STATE_PROBE_NONE:
+    case curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT:
+      break;
+    default:
+      plan->set_state_probe_profile(curl::fuzzer::proto::MULTI_STATE_PROBE_NONE);
+      break;
+  }
+
   for (auto& action : *plan->mutable_actions()) {
     action.set_transfer_selector(action.transfer_selector() % transfer_count);
     switch (action.kind()) {
