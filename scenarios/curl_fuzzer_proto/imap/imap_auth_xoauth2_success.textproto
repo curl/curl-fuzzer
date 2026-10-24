@@ -1,0 +1,16 @@
+# Authored successor (not a byte-for-byte conversion) to the legacy seed
+# corpora/curl_fuzzer_imap/test_xoauth2_imap. Keep the fixed command tags paired
+# with the transcript regression: they pin the audited curl command sequence.
+scheme: SCHEME_IMAP
+host_path: "imap.test/INBOX/;MAILINDEX=1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz-user" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=XOAUTH2" }
+options { option_id: CURLOPT_XOAUTH2_BEARER string_value: "fuzz-xoauth2-token" }
+connection {
+  initial_response: "* OK IMAP4rev1 ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1 AUTH=XOAUTH2\r\nA001 OK CAPABILITY completed\r\n"
+  on_readable: "+ \r\n"
+  on_readable: "A002 OK AUTHENTICATE completed\r\n"
+  on_readable: "* 1 EXISTS\r\nA003 OK [READ-WRITE] SELECT completed\r\n"
+  on_readable: "* 1 FETCH (BODY[TEXT] {5}\r\nhello)\r\nA004 OK FETCH completed\r\n"
+}

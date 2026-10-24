@@ -1,0 +1,15 @@
+# The first HTTP/1.1 response is reusable on paper, but the mock half-closes
+# its write side after the complete zero-length body. FRESH_CONNECT skips the
+# initial empty-pool lookup while still allowing the followed request to scan
+# and prune that dead idle connection before opening the second socket.
+scheme: SCHEME_HTTP
+host_path: "reap.test/start"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 1 }
+options { option_id: CURLOPT_FRESH_CONNECT bool_value: true }
+connection {
+  initial_response: "HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nreaped"
+}

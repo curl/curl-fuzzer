@@ -777,6 +777,35 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
   }
 }
 
+/// Retain the same-easy MIME repeat only when its callback cursor and MIME
+/// consumer both exist. Pinning this closed probe to the ordinary multi loop
+/// avoids combining a second perform with connect-only or paused-response
+/// lifecycles whose state cannot be meaningfully reused.
+void CanonicalizeApiMimeRepeat(curl::fuzzer::proto::Scenario* scenario) {
+  if (!scenario->has_api_plan() || !scenario->api_plan().repeat_mime_post()) {
+    return;
+  }
+
+  bool has_callback_part = false;
+  if (scenario->has_mime_post()) {
+    for (const auto& part : scenario->mime_post().parts()) {
+      if (part.content_case() == curl::fuzzer::proto::MimePart::kUploadCallback) {
+        has_callback_part = true;
+        break;
+      }
+    }
+  }
+  if (!scenario->has_upload() || !has_callback_part) {
+    scenario->mutable_api_plan()->clear_repeat_mime_post();
+    return;
+  }
+
+  auto* plan = scenario->mutable_api_plan();
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
+  plan->set_wake_multi(false);
+  plan->set_pause_response_once(false);
+}
+
 /// Keep concurrent-handle work within the mock's fixed socket and operation
 /// budgets. Values are canonicalized here rather than only at runtime so LPM
 /// mutates state that the target can actually distinguish.
@@ -2915,6 +2944,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       }
       if (scenario->has_api_plan()) {
         BoundApiPlanShape(scenario->mutable_api_plan());
+        CanonicalizeApiMimeRepeat(scenario);
       }
       return;
 

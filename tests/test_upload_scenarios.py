@@ -23,6 +23,19 @@ def test_upload_retry_seeds_keep_rewind_and_follow_on_responses() -> None:
         assert trigger in scenario
 
 
+def test_mime_redirect_replays_a_memory_backed_part() -> None:
+    """Retain the completed redirect that rewinds curl's MIME reader stack."""
+    scenario = (SCENARIOS / "http_mime_redirect_rewind.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "mime_post {" in scenario
+    assert 'data: "mime-redirect-rewind-body"' in scenario
+    assert 'request_headers: "Expect:"' in scenario
+    assert "307 Temporary Redirect" in scenario
+    assert "Location: http://mime.test/redirect/destination" in scenario
+    assert "subsequent_connections {" in scenario
+
+
 def test_upload_abort_seed_reaches_callback_terminal() -> None:
     """Retain a tiny deterministic input for CURL_READFUNC_ABORT coverage."""
     scenario = (SCENARIOS / "http_upload_callback_abort.textproto").read_text(

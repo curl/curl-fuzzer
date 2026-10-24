@@ -773,6 +773,71 @@ HttpSeedTranscript CaptureHttpSeed(const char *name) {
   return result;
 }
 
+void TestCallbackMimeSeedFailsSecondSameEasyRewind() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/api/api_mime_callback_reuse.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read callback MIME reuse seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse callback MIME reuse seed");
+  proto_fuzzer::NormalizeScenarioForTarget(&scenario,
+                                           proto_fuzzer::TargetProfile::kApi);
+  Expect(scenario.has_api_plan() && scenario.api_plan().repeat_mime_post(),
+         "API policy discarded callback MIME reuse");
+
+  proto_fuzzer::CurlSlistPtr connect_to;
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "callback MIME reuse test could not allocate an easy handle");
+  connect_to.reset(
+      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
+  const std::string url = "http://" + scenario.host_path();
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
+         "callback MIME reuse test could not set its seed URL");
+
+  RequestCapturingServer server;
+  server.Install(easy.get());
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario) ==
+             static_cast<std::size_t>(scenario.options_size()),
+         "callback MIME reuse test could not apply every seed option");
+
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
+    server.ConfigureRequestData(&request_data);
+    Expect(
+        request_data.stats().mime_callback_parts == 1,
+        "callback MIME reuse seed did not install exactly one callback part");
+
+    const CURLcode first = server.DriveScenario(easy.get(), scenario);
+    const std::size_t first_connection_count = server.opened_connection_count();
+    const std::string first_request = server.request();
+    Expect(first == CURLE_OK && first_connection_count == 1,
+           "callback MIME reuse seed did not complete its first POST");
+    Expect(request_data.upload_state().offset() ==
+               request_data.upload_state().data_size(),
+           "callback MIME reuse seed did not consume its callback cursor");
+    Expect(first_request.find("callback-mime-reuse-body") !=
+               std::string::npos,
+           "callback MIME reuse seed did not capture its first body");
+
+    const CURLcode second = server.DriveScenario(easy.get(), scenario);
+    Expect(second == CURLE_SEND_FAIL_REWIND,
+           "callback MIME reuse did not reject its non-rewindable second POST");
+    Expect(request_data.upload_state().seek_calls() == 1,
+           "callback MIME reuse did not issue exactly one rewind seek");
+    Expect(server.opened_connection_count() == 1,
+           "callback MIME rewind failure did not open one fresh transport");
+    Expect(server.request() == first_request,
+           "callback MIME rewind failure emitted a second request");
+  }
+
+  easy.reset();
+  connect_to.reset();
+}
+
 void TestBearerChallengeSelectsAndRetriesAuthentication() {
   const HttpSeedTranscript result =
       CaptureHttpSeed("http_auth_bearer.textproto");
@@ -797,6 +862,92 @@ void TestBearerChallengeSelectsAndRetriesAuthentication() {
   Expect(second_end != std::string::npos &&
              second.find("\r\n\r\n", second_end + 4) == std::string::npos,
          "Bearer seed emitted an unexpected third request");
+}
+
+void TestRedirectPrunesDeadReusableConnection() {
+  const HttpSeedTranscript result =
+      CaptureHttpSeed("http_redirect_reap_dead_connection.textproto");
+  Expect(result.code == CURLE_OK && result.response_code == 200 &&
+             result.connection_count == 2,
+         "dead reusable connection was not replaced for the redirect");
+
+  constexpr std::string_view kFirst = "GET /start HTTP/1.1\r\n";
+  constexpr std::string_view kSecond = "GET /final HTTP/1.1\r\n";
+  Expect(result.request.rfind(kFirst, 0) == 0,
+         "dead-connection seed did not send its initial request");
+  const std::size_t first_end = result.request.find("\r\n\r\n");
+  Expect(first_end != std::string::npos,
+         "dead-connection seed omitted the first request terminator");
+  const std::size_t second_start = first_end + 4;
+  Expect(result.request.find(kSecond, second_start) == second_start,
+         "dead-connection redirect did not send its followed request");
+  const std::size_t second_end = result.request.find("\r\n\r\n", second_start);
+  Expect(second_end != std::string::npos &&
+             result.request.find("\r\n\r\n", second_end + 4) ==
+                 std::string::npos,
+         "dead-connection seed emitted an unexpected third request");
+}
+
+void TestMimeRedirectRewindsCompletedBody() {
+  const HttpSeedTranscript result =
+      CaptureHttpSeed("http_mime_redirect_rewind.textproto");
+  Expect(result.code == CURLE_OK && result.response_code == 200 &&
+             result.connection_count == 2,
+         "MIME redirect did not complete on one bounded retry");
+
+  constexpr std::string_view kFirstRequestLine =
+      "POST /redirect/source HTTP/1.1\r\n";
+  constexpr std::string_view kSecondRequestLine =
+      "POST /redirect/destination HTTP/1.1\r\n";
+  const std::size_t first_start = result.request.find(kFirstRequestLine);
+  Expect(first_start == 0, "MIME retry did not begin with its first POST");
+  const std::size_t second_start = result.request.find(kSecondRequestLine);
+  Expect(second_start != std::string::npos,
+         "MIME retry did not emit its second POST");
+  Expect(
+      result.request.find("POST ", second_start + kSecondRequestLine.size()) ==
+          std::string::npos,
+      "MIME retry did not emit exactly two POST requests");
+
+  const auto request_end = [&result](std::size_t start) {
+    const std::size_t header_end = result.request.find("\r\n\r\n", start);
+    const std::size_t length_start =
+        result.request.find("Content-Length: ", start);
+    Expect(header_end != std::string::npos &&
+               length_start != std::string::npos && length_start < header_end,
+           "MIME retry request omitted its content length");
+    const std::size_t value_start = length_start + 16;
+    const std::size_t value_end = result.request.find("\r\n", value_start);
+    Expect(value_end != std::string::npos && value_end <= header_end,
+           "MIME retry content length was not terminated");
+    std::size_t length = 0;
+    for (std::size_t index = value_start; index < value_end; ++index) {
+      const char digit = result.request[index];
+      Expect(digit >= '0' && digit <= '9',
+             "MIME retry content length was not decimal");
+      length = length * 10 + static_cast<std::size_t>(digit - '0');
+    }
+    return header_end + 4 + length;
+  };
+
+  const std::size_t first_end = request_end(first_start);
+  const std::size_t second_end = request_end(second_start);
+  Expect(first_end == second_start && second_end == result.request.size(),
+         "MIME redirect completed before both request bodies were "
+         "drained");
+
+  const std::string first =
+      result.request.substr(first_start, first_end - first_start);
+  const std::string second = result.request.substr(second_start);
+  Expect(first.find("mime-redirect-rewind-body") != std::string::npos &&
+             second.find("mime-redirect-rewind-body") != std::string::npos,
+         "MIME retry did not replay the in-memory part body");
+
+  const std::size_t first_body = first.find("\r\n\r\n");
+  const std::size_t second_body = second.find("\r\n\r\n");
+  Expect(first_body != std::string::npos && second_body != std::string::npos &&
+             first.substr(first_body + 4) == second.substr(second_body + 4),
+         "MIME retry changed its multipart body while rewinding");
 }
 
 void TestAwsSigV4SeedsEmitVerifiedTranscripts() {
@@ -2437,7 +2588,10 @@ int main() {
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
   TestH2cUpgradeTransitionsToHttp2();
+  TestCallbackMimeSeedFailsSecondSameEasyRewind();
   TestBearerChallengeSelectsAndRetriesAuthentication();
+  TestRedirectPrunesDeadReusableConnection();
+  TestMimeRedirectRewindsCompletedBody();
   TestAwsSigV4SeedsEmitVerifiedTranscripts();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
   TestTlsWebSocketCompletesStreamingExchange();
