@@ -2854,6 +2854,11 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
         scenario->clear_hsts_file();
       } else if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
         CanonicalizeHttpTransportAuthority(scenario);
+        // The selected transport owns the route. Alt-Svc and HSTS can rewrite
+        // its fixed plaintext authority into a different proxy or TLS path,
+        // defeating the mode the scenario is meant to exercise.
+        scenario->clear_altsvc_file();
+        scenario->clear_hsts_file();
       } else if (!scenario->altsvc_file().empty()) {
         CanonicalizeAltSvcAuthority(scenario);
       }
