@@ -48,6 +48,7 @@ def test_resolver_lane_has_target_local_threaded_outcomes() -> None:
     negative = (SCENARIO_DIR / "threaded_negative.textproto").read_text()
     link_local = (SCENARIO_DIR / "threaded_link_local.textproto").read_text()
     partial = (SCENARIO_DIR / "threaded_partial.textproto").read_text()
+    queued_cancel = (SCENARIO_DIR / "threaded_queued_cancel.textproto").read_text()
 
     assert "RESOLVER_MODE_THREADED_POSITIVE" in positive
     assert 'host_path: "resolver-positive.test/' in positive
@@ -57,7 +58,10 @@ def test_resolver_lane_has_target_local_threaded_outcomes() -> None:
     assert 'host_path: "resolver-link-local.test/' in link_local
     assert "RESOLVER_MODE_THREADED_PARTIAL" in partial
     assert 'host_path: "resolver-partial.test/' in partial
-    for scenario in (positive, negative, link_local, partial):
+    assert "RESOLVER_MODE_THREADED_QUEUED_CANCEL" in queued_cancel
+    assert 'host_path: "resolver-queued-cancel.test/' in queued_cancel
+    assert 'trace_config: "+THREADS"' in queued_cancel
+    for scenario in (positive, negative, link_local, partial, queued_cancel):
         assert "resolve_entries:" not in scenario
 
 
