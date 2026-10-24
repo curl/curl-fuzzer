@@ -1,0 +1,16 @@
+# OAUTHBEARER without SASL-IR uses two continuation rounds: curl first sends
+# the bearer response, then acknowledges the server's base64 error with AQ==.
+# The original AUTHENTICATE tag must survive until the terminal NO response.
+scheme: SCHEME_IMAP
+host_path: "imap.test/INBOX"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=OAUTHBEARER" }
+options { option_id: CURLOPT_XOAUTH2_BEARER string_value: "invalid-token" }
+connection {
+  initial_response: "* OK imap.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1 AUTH=OAUTHBEARER\r\nOK CAPABILITY completed\r\n"
+  on_readable: "+ \r\n"
+  on_readable: "+ eyJzdGF0dXMiOiJpbnZhbGlkX3Rva2VuIn0=\r\n"
+  on_readable: "NO Authentication failed\r\n"
+}

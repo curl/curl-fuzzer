@@ -1,0 +1,11 @@
+# Advertise a mechanism deliberately unavailable in this build. Curl must
+# reject authentication without sending an AUTH line.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM" }
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nSASL NTLM\r\nUSER\r\n.\r\n"
+}

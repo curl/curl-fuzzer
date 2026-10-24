@@ -22,9 +22,9 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_telnet` | Bounded TELNET negotiation and callback-backed input against a preloaded local peer. |
 | `curl_fuzzer_proto_ftp` | Plain FTP control plus passive or loopback-confined active data connections. The same target runs implicit-TLS `ftps://` scenarios through a verified in-process TLS peer, with both control and passive data channels wrapped and active mode deliberately unavailable. |
 | `curl_fuzzer_proto_tftp` | Packet-preserving TFTP exchanges over private loopback UDP endpoints. |
-| `curl_fuzzer_proto_smtp` | Single-connection SMTP greeting, EHLO/HELO, mail envelope, DATA body upload and EOB drain, and graceful QUIT. The same target also runs implicit-TLS `smtps://` scenarios through a verified in-process TLS peer. |
-| `curl_fuzzer_proto_imap` | Single-connection IMAP greeting, CAPABILITY, LOGIN/AUTHENTICATE, SELECT, FETCH literals, APPEND uploads, and tagged completion. The same target also runs implicit-TLS `imaps://` scenarios through a verified in-process TLS peer. |
-| `curl_fuzzer_proto_pop3` | Single-connection POP3 greeting, CAPA, USER/PASS or APOP, LIST, RETR multi-line bodies, and QUIT. The same target also runs implicit-TLS `pop3s://` scenarios through a verified in-process TLS peer. |
+| `curl_fuzzer_proto_smtp` | Single-connection SMTP greeting, EHLO/HELO, mail envelope, DATA body upload and EOB drain, graceful QUIT, and opt-in active pollset probes. The same target also runs implicit-TLS `smtps://` scenarios through a verified in-process TLS peer. |
+| `curl_fuzzer_proto_imap` | Single-connection IMAP greeting, CAPABILITY, LOGIN/AUTHENTICATE, SELECT, FETCH literals, APPEND uploads, tagged completion, and opt-in active pollset probes. The same target also runs implicit-TLS `imaps://` scenarios through a verified in-process TLS peer. |
+| `curl_fuzzer_proto_pop3` | Single-connection POP3 greeting, CAPA, USER/PASS or APOP, LIST, RETR multi-line bodies, QUIT, and opt-in active pollset probes. The same target also runs implicit-TLS `pop3s://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. The same target also runs implicit-TLS `mqtts://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
@@ -78,6 +78,12 @@ lane additionally replaces the URL path with `/dev/null` and removes upload
 state; the authority, query, and fragment remain
 mutation-controlled so URL parsing still has fuzzing value without granting
 access to host files.
+
+The fixed SMTP, IMAP, and POP3 profiles retain `probe_multi_pollset`; every
+other fixed profile currently clears it. The flag adds zero-timeout public
+multi-poll calls only while those peers' shared perform loop has a live
+transfer and control socket, so ordinary false/default corpus entries do not
+pay for an unconditional polling syscall.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
 inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would

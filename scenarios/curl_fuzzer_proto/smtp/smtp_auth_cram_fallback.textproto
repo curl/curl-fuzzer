@@ -1,0 +1,16 @@
+# A malformed CRAM-MD5 challenge must make curl send SASL cancellation, accept
+# the cancellation reply, and retry with the remaining PLAIN mechanism.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/fallback.test"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250-AUTH CRAM-MD5 PLAIN\r\n250 8BITMIME\r\n"
+  on_readable: "334 !\r\n"
+  on_readable: "501 authentication exchange cancelled\r\n"
+  on_readable: "334 \r\n"
+  on_readable: "235 2.7.0 authentication succeeded\r\n"
+  on_readable: "214 smtp.test help\r\n"
+  on_readable: "221 bye\r\n"
+}

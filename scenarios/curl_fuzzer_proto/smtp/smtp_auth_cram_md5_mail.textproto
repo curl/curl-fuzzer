@@ -1,0 +1,30 @@
+# Authenticate with a valid RFC 2195 CRAM-MD5 challenge, then complete a
+# normal mail upload. The fixed challenge makes the continuation deterministic
+# for the fuzz/secret credentials.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/cram.test"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5" }
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 54 }
+options { option_id: CURLOPT_MAIL_FROM string_value: "sender@example.test" }
+options { option_id: CURLOPT_FORBID_REUSE bool_value: true }
+mail_rcpt: "recipient@example.test"
+upload {
+  data: "Subject: fuzz\r\n\r\nfirst line\r\n.leading dot\r\nlast line\r\n"
+  read_sizes: 7
+  read_sizes: 11
+  read_sizes: 9
+}
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250-AUTH CRAM-MD5\r\n250 8BITMIME\r\n"
+  on_readable: "334 PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UuZXhhbXBsZS5uZXQ+\r\n"
+  on_readable: "235 2.7.0 authentication succeeded\r\n"
+  on_readable: "250 sender accepted\r\n"
+  on_readable: "250 recipient accepted\r\n"
+  on_readable: "354 send the message\r\n"
+  on_readable: "250 message queued\r\n"
+  on_readable: "221 bye\r\n"
+}

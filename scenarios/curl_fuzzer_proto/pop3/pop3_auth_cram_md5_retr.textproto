@@ -1,0 +1,15 @@
+# Authenticate with a valid CRAM-MD5 challenge, then retrieve a message. The
+# challenge matches the strict transcript test so the client response is
+# deterministic.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5" }
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nSASL CRAM-MD5\r\nUSER\r\n.\r\n"
+  on_readable: "+ PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UuZXhhbXBsZS5uZXQ+\r\n"
+  on_readable: "+OK authentication succeeded\r\n"
+  on_readable: "+OK 17 octets\r\nHello from POP3\r\n.\r\n"
+}

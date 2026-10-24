@@ -1,0 +1,11 @@
+# Reject an otherwise valid APOP digest and terminate before RETR.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP" }
+connection {
+  initial_response: "+OK pop3.test ready <id@host>\r\n"
+  on_readable: "+OK capabilities\r\n.\r\n"
+  on_readable: "-ERR invalid digest\r\n"
+}

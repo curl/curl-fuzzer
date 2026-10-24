@@ -159,6 +159,7 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     smtp_root = SCENARIO_ROOT / "smtp"
     upload = (smtp_root / "smtp_upload_mail.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_SMTP" in upload
+    assert "probe_multi_pollset: true" in upload
     assert 'host_path: "smtp.test/client.test"' in upload
     assert "CURLOPT_UPLOAD bool_value: true" in upload
     assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in upload
@@ -178,6 +179,47 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in smtps
     assert "354 send the message" in smtps
     assert "250 message queued" in smtps
+
+    cram = (smtp_root / "smtp_auth_cram_md5_mail.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5"' in cram
+    assert "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UuZXhhbXBsZS5uZXQ+" in cram
+    assert "235 2.7.0 authentication succeeded" in cram
+    assert "354 send the message" in cram
+    assert "250 message queued" in cram
+
+    fallback = (smtp_root / "smtp_auth_cram_fallback.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "AUTH CRAM-MD5 PLAIN" in fallback
+    assert 'on_readable: "334 !\\r\\n"' in fallback
+    assert "501 authentication exchange cancelled" in fallback
+    assert 'on_readable: "334 \\r\\n"' in fallback
+    assert "235 2.7.0 authentication succeeded" in fallback
+
+    plain_ir = (smtp_root / "smtp_auth_plain_sasl_ir.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain_ir
+    assert "CURLOPT_SASL_IR bool_value: true" in plain_ir
+    assert "250-AUTH PLAIN" in plain_ir
+
+    helo = (smtp_root / "smtp_ehlo_helo_fallback.textproto").read_text(encoding="utf-8")
+    assert "500 EHLO unavailable" in helo
+    assert "250 smtp.test greets client" in helo
+    assert "214 smtp.test help" in helo
+
+    expn = (smtp_root / "smtp_custom_expn.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_CUSTOMREQUEST string_value: "EXPN"' in expn
+    assert 'mail_rcpt: "list@example.test"' in expn
+    assert "CURLOPT_UPLOAD" not in expn
+    assert "250 member@example.test" in expn
+
+    unavailable = (smtp_root / "smtp_auth_unavailable_ntlm.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM"' in unavailable
+    assert "250-AUTH NTLM" in unavailable
+    assert "235" not in unavailable
 
 
 def test_dict_seeds_keep_lookup_paths_and_response_terminators() -> None:
@@ -201,6 +243,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     """Keep tagless status replies paired with literal and multi-line bodies."""
     imap_root = SCENARIO_ROOT / "imap"
     fetch = (imap_root / "imap_fetch_literal.textproto").read_text(encoding="utf-8")
+    assert "probe_multi_pollset: true" in fetch
     assert "scheme: SCHEME_IMAP" in fetch
     assert 'host_path: "imap.test/INBOX;UID=1"' in fetch
     assert "* CAPABILITY IMAP4rev1" in fetch
@@ -220,9 +263,33 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     denied = (imap_root / "imap_login_denied.textproto").read_text(encoding="utf-8")
     assert "NO [AUTHENTICATIONFAILED] invalid credentials" in denied
 
-    imaps = (imap_root / "imaps_login_fetch.textproto").read_text(
+    plain = (imap_root / "imap_auth_plain_continuation.textproto").read_text(
         encoding="utf-8"
     )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain
+    assert 'CURLOPT_SASL_AUTHZID string_value: "authorization-id"' in plain
+    assert "* OK authentication continues\\r\\n+ \\r\\n" in plain
+    assert "OK AUTHENTICATE completed" in plain
+    assert "OK FETCH completed" in plain
+
+    oauth = (imap_root / "imap_auth_oauthbearer_error.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=OAUTHBEARER"' in oauth
+    assert 'CURLOPT_XOAUTH2_BEARER string_value: "invalid-token"' in oauth
+    assert oauth.count('on_readable: "+') == 2
+    assert "NO Authentication failed" in oauth
+
+    fallback = (imap_root / "imap_auth_cram_fallback.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "AUTH=CRAM-MD5 AUTH=PLAIN" in fallback
+    assert 'on_readable: "+ !\\r\\n"' in fallback
+    assert "NO AUTH exchange cancelled by client" in fallback
+    assert "OK AUTHENTICATE completed" in fallback
+    assert "OK FETCH completed" in fallback
+
+    imaps = (imap_root / "imaps_login_fetch.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_IMAPS" in imaps
     assert 'host_path: "tls.test/INBOX;UID=1"' in imaps
     assert "OK LOGIN completed" in imaps
@@ -232,6 +299,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
 
     pop3_root = SCENARIO_ROOT / "pop3"
     retr = (pop3_root / "pop3_retr_message.textproto").read_text(encoding="utf-8")
+    assert "probe_multi_pollset: true" in retr
     assert "scheme: SCHEME_POP3" in retr
     assert 'host_path: "pop3.test/1"' in retr
     assert "+OK capabilities" in retr
@@ -240,9 +308,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "+OK 17 octets" in retr
     assert "Hello from POP3" in retr
 
-    pop3s = (pop3_root / "pop3s_retr_message.textproto").read_text(
-        encoding="utf-8"
-    )
+    pop3s = (pop3_root / "pop3s_retr_message.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_POP3S" in pop3s
     assert 'host_path: "tls.test/1"' in pop3s
     assert "+OK pass accepted" in pop3s
@@ -255,3 +321,54 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
 
     rejected = (pop3_root / "pop3_user_denied.textproto").read_text(encoding="utf-8")
     assert "-ERR no such user" in rejected
+
+    cram = (pop3_root / "pop3_auth_cram_md5_retr.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5"' in cram
+    assert "SASL CRAM-MD5" in cram
+    assert "PDE4OTYuNjk3MTcwOTUy" in cram
+    assert "+OK authentication succeeded" in cram
+
+    fallback = (pop3_root / "pop3_auth_cram_fallback.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "SASL CRAM-MD5 PLAIN" in fallback
+    assert 'on_readable: "+ !\\r\\n"' in fallback
+    assert "-ERR authentication exchange cancelled" in fallback
+    assert 'on_readable: "+ \\r\\n"' in fallback
+
+    plain_ir = (pop3_root / "pop3_auth_plain_sasl_ir.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain_ir
+    assert "CURLOPT_SASL_IR bool_value: true" in plain_ir
+    assert "SASL PLAIN" in plain_ir
+
+    apop = (pop3_root / "pop3_apop_retr.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP"' in apop
+    assert "<id@host>" in apop
+    assert "+OK authentication succeeded" in apop
+
+    apop_denied = (pop3_root / "pop3_apop_denied.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP"' in apop_denied
+    assert "-ERR invalid digest" in apop_denied
+
+    unavailable = (pop3_root / "pop3_auth_unavailable_ntlm.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM"' in unavailable
+    assert "SASL NTLM" in unavailable
+    assert "+OK authentication succeeded" not in unavailable
+
+    uidl = (pop3_root / "pop3_uidl_mailbox.textproto").read_text(encoding="utf-8")
+    assert 'CURLOPT_CUSTOMREQUEST string_value: "UIDL"' in uidl
+    assert "+OK unique ids follow" in uidl
+    assert "whqtswO00QHEf7kmZ" in uidl
+
+    top = (pop3_root / "pop3_top_long_dot_stuffed.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_CUSTOMREQUEST string_value: "TOP 1 0"' in top
+    assert "CURLOPT_BUFFERSIZE uint_value: 1024" in top
+    assert "..dot-stuffed\\r\\n" in top
+    assert "...two-leading-dots\\r\\n.\\r\\n" in top
+    assert top.count("A" * 80) >= 16

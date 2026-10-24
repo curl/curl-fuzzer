@@ -3,6 +3,7 @@
 # the seed stays independent of curl's process-global connection id. The
 # literal size must match the bytes between `{17}` and the tagged completion.
 scheme: SCHEME_IMAP
+probe_multi_pollset: true
 host_path: "imap.test/INBOX;UID=1"
 options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
 options { option_id: CURLOPT_PASSWORD string_value: "secret" }
