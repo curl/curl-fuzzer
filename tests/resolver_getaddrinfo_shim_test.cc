@@ -96,6 +96,17 @@ void TestPartialAddresses() {
   freeaddrinfo(result);
 }
 
+void TestQueuedCancelAddress() {
+  addrinfo hints{};
+  hints.ai_family = AF_INET6;
+  addrinfo *result = nullptr;
+  Expect(getaddrinfo("resolver-queued-cancel.test", "80", &hints, &result) == 0,
+         "queued-cancellation shim lookup failed without an armed gate");
+  Expect(CountAddresses(result) == 2 && result->ai_family == AF_INET6,
+         "queued-cancellation shim returned the wrong family set");
+  freeaddrinfo(result);
+}
+
 } // namespace
 
 int main() {
@@ -103,5 +114,6 @@ int main() {
   TestNegativeAndUnknownNames();
   TestLinkLocalRetryShapes();
   TestPartialAddresses();
+  TestQueuedCancelAddress();
   return 0;
 }

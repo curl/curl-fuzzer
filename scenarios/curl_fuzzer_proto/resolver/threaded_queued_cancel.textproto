@@ -1,0 +1,7 @@
+# Cap curl's public resolver pool at one worker, hold its first target-local
+# address lookup, and drive a duplicated easy while later queries remain
+# queue-owned. This covers matching and destruction of cancelled resolver
+# items without relying on the host name service or scheduler timing.
+scheme: SCHEME_HTTP
+host_path: "resolver-queued-cancel.test/threaded-queued-cancel"
+resolver_mode: RESOLVER_MODE_THREADED_QUEUED_CANCEL

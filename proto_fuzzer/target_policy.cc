@@ -249,6 +249,9 @@ void CanonicalizeResolverAuthority(curl::fuzzer::proto::Scenario* scenario) {
     case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
       host = "resolver-partial.test";
       break;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL:
+      host = "resolver-queued-cancel.test";
+      break;
     case curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET:
       host = "resolver-unix.test";
       break;
@@ -277,7 +280,8 @@ bool IsThreadedResolverMode(curl::fuzzer::proto::ResolverMode mode) {
   return mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE ||
          mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE ||
          mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL ||
-         mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL;
+         mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL ||
+         mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL;
 }
 
 /// Give the TFTP lane a parseable filename-bearing URL while retaining the
@@ -2600,6 +2604,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
       case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
       case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
+      case curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL:
         break;
       default:
         scenario->clear_resolver_mode();
