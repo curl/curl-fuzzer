@@ -119,6 +119,11 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "04-27-26  11:01AM",
             'initial_response: "match"',
         ),
+        "ftp_url_type_ascii.textproto": (
+            'host_path: "ftp.test/file.txt;type=a"',
+            "229 Entering Extended Passive Mode",
+            'initial_response: "ascii"',
+        ),
     }
     ftp_root = SCENARIO_ROOT / "ftp"
     for name, tokens in expected_tokens.items():
