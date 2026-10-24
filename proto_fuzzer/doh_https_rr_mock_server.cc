@@ -237,12 +237,15 @@ bool BuildDnsResponse(const std::string& query, std::string* response, bool* htt
 /// Construct an idle responder. The listener and proxy bypass are installed
 /// by Install(), after the TLS carrier has prepared the outer peer.
 /// @param certificate_chain Certificate chain served by the outer TLS peer.
-DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
+/// @param malformed_answers Whether to truncate synthesized DNS answers.
+DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                                           bool malformed_answers)
     : H2OriginMockServer(certificate_chain),
       easy_(nullptr),
       listener_(-1),
       doh_request_count_(0),
       httpsrr_answer_count_(0),
+      malformed_answers_(malformed_answers),
       setup_ok_(false),
       proxy_bypass_active_(false),
       lower_no_proxy_was_set_(false),
@@ -538,6 +541,13 @@ bool DohHttpsRrMockServer::CompleteRequest(DohConnection* connection) {
   bool httpsrr = false;
   if (!BuildDnsResponse(body, &dns, &httpsrr)) {
     dns.clear();
+  }
+  if (malformed_answers_) {
+    // A non-empty, header-short message reaches curl's DoH decode error path
+    // after an otherwise successful HTTP exchange. Keeping one byte avoids
+    // conflating the parser failure with an empty response body.
+    dns.assign(1, '\0');
+    httpsrr = false;
   }
 
   connection->response =

@@ -1,0 +1,9 @@
+# Balance curl's process-wide resolver initialization through the public
+# global cleanup API after this local transfer, then reinstall the harness
+# allocator callbacks before the next fuzz input.
+scheme: SCHEME_HTTP
+host_path: "localhost/global-lifecycle"
+resolver_mode: RESOLVER_MODE_GLOBAL_LIFECYCLE
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nlifecycle"
+}

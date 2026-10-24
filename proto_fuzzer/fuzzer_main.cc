@@ -75,6 +75,8 @@ struct CurlGlobalBootstrap {
       (void)curl_global_init(CURL_GLOBAL_ALL);
     }
   }
+
+  ~CurlGlobalBootstrap() { curl_global_cleanup(); }
 };
 const CurlGlobalBootstrap kGlobalBootstrap;
 
@@ -181,6 +183,14 @@ int ProtoFuzzerTestOneInput(TargetProfile profile, const std::uint8_t* data, std
     allocation_fault_injection::Arm();
     proto_fuzzer::RunScenario(scenario, RunModeFor(profile));
     allocation_fault_injection::Reset();
+    if (profile == TargetProfile::kResolver &&
+        scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE) {
+      curl_global_cleanup();
+      if (!allocation_fault_injection::ReinitializeCurl()) {
+        std::fputs("warning: libcurl reinitialization failed\n", stderr);
+        (void)curl_global_init(CURL_GLOBAL_ALL);
+      }
+    }
   }
   return 0;
 }

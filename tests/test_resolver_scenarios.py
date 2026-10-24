@@ -28,3 +28,38 @@ def test_resolver_lane_has_a_doh_httpsrr_seed() -> None:
     assert "doh_https_rr: true" in doh
     assert "http2_plan {" in doh
     assert "HTTP2_CLIENT_EVENT_HEADERS" in doh
+
+
+def test_resolver_lane_has_target_local_threaded_outcomes() -> None:
+    positive = (SCENARIO_DIR / "threaded_positive.textproto").read_text()
+    negative = (SCENARIO_DIR / "threaded_negative.textproto").read_text()
+    link_local = (SCENARIO_DIR / "threaded_link_local.textproto").read_text()
+    partial = (SCENARIO_DIR / "threaded_partial.textproto").read_text()
+
+    assert "RESOLVER_MODE_THREADED_POSITIVE" in positive
+    assert 'host_path: "resolver-positive.test/' in positive
+    assert "RESOLVER_MODE_THREADED_NEGATIVE" in negative
+    assert 'host_path: "resolver-negative.test/' in negative
+    assert "RESOLVER_MODE_THREADED_LINK_LOCAL" in link_local
+    assert 'host_path: "resolver-link-local.test/' in link_local
+    assert "RESOLVER_MODE_THREADED_PARTIAL" in partial
+    assert 'host_path: "resolver-partial.test/' in partial
+    for scenario in (positive, negative, link_local, partial):
+        assert "resolve_entries:" not in scenario
+
+
+def test_resolver_lane_has_confined_unix_and_doh_error_outcomes() -> None:
+    unix_socket = (SCENARIO_DIR / "unix_socket.textproto").read_text()
+    doh_error = (SCENARIO_DIR / "doh_error.textproto").read_text()
+    global_lifecycle = (SCENARIO_DIR / "global_lifecycle.textproto").read_text()
+
+    assert "RESOLVER_MODE_UNIX_SOCKET" in unix_socket
+    assert 'host_path: "resolver-unix.test/' in unix_socket
+    assert "/curl-fuzzer-resolver.sock" not in unix_socket
+    assert "RESOLVER_MODE_DOH_ERROR" in doh_error
+    assert 'host_path: "tls.test/' in doh_error
+    assert "doh_https_rr: true" not in doh_error
+    assert "http2_plan {" in doh_error
+    assert 'trace_config: "+DOH"' in doh_error
+    assert "RESOLVER_MODE_GLOBAL_LIFECYCLE" in global_lifecycle
+    assert 'host_path: "localhost/' in global_lifecycle

@@ -1,0 +1,9 @@
+# Return AAAA before A by a fixed target-local interval. Curl consumes the
+# live IPv6 resolver result while the IPv4 work item remains outstanding,
+# covering the partial asynchronous handoff without relying on scheduler luck.
+scheme: SCHEME_HTTP
+host_path: "resolver-partial.test/threaded-partial"
+resolver_mode: RESOLVER_MODE_THREADED_PARTIAL
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\npartial"
+}

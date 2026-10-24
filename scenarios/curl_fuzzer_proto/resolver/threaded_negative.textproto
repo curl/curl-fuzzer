@@ -1,0 +1,6 @@
+# Return EAI_NONAME from the target-local backend. Curl should classify the
+# result as authoritative and install a negative DNS-cache entry without
+# opening a socket or consulting ambient DNS.
+scheme: SCHEME_HTTP
+host_path: "resolver-negative.test/threaded-negative"
+resolver_mode: RESOLVER_MODE_THREADED_NEGATIVE

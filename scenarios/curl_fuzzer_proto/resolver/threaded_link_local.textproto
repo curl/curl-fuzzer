@@ -1,0 +1,9 @@
+# First return a scope-less IPv6 link-local address, then answer curl's
+# AF_UNSPEC retry with IPv6 plus IPv4. Curl strips the IPv4 retry result before
+# handing the remaining address to the confined open-socket callback.
+scheme: SCHEME_HTTP
+host_path: "resolver-link-local.test/threaded-link-local"
+resolver_mode: RESOLVER_MODE_THREADED_LINK_LOCAL
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nscope"
+}
