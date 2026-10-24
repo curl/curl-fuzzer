@@ -21,6 +21,7 @@
 #include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
+#include "proto_fuzzer/http_transport_mock_server.h"
 #include "proto_fuzzer/imap_mock_server.h"
 #include "proto_fuzzer/ipfs_url.h"
 #include "proto_fuzzer/ldap_mock_server.h"
@@ -232,6 +233,11 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   if (mode == ScenarioRunMode::kProxyTransportCoverage) {
     return std::make_unique<ProxyTransportMockServer>(scenario.socks_proxy_mode(), scenario.haproxy_protocol());
+  }
+
+  if (mode == ScenarioRunMode::kDeepHttpCoverage &&
+      scenario.http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
+    return std::make_unique<HttpTransportMockServer>(scenario.http_transport_mode());
   }
 
   if (mode == ScenarioRunMode::kResolverCoverage && scenario.doh_https_rr()) {
@@ -515,6 +521,11 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
   if (auto* proxy = dynamic_cast<ProxyTransportMockServer*>(mock)) {
     const volatile std::size_t proxy_observation = proxy->client_transcript().size();
     (void)proxy_observation;
+  }
+
+  if (auto* transport = dynamic_cast<HttpTransportMockServer*>(mock)) {
+    const volatile std::size_t transport_observation = transport->client_transcript().size();
+    (void)transport_observation;
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)

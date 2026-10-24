@@ -223,6 +223,50 @@ void TestDeepHttpAltSvcCanonicalAuthority() {
          "deep HTTP policy canonicalized an authority without Alt-Svc input");
 }
 
+void TestDeepHttpTransportPolicy() {
+  Scenario connect;
+  connect.set_host_path("mutated.example:8443/path?query#fragment");
+  connect.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+  connect.set_probe_multi_pollset(true);
+
+  NormalizeScenarioForTarget(&connect, TargetProfile::kDeepHttp);
+
+  Expect(connect.scheme() == SCHEME_HTTP &&
+             connect.host_path() == "transport.test/path?query#fragment",
+         "deep HTTP transport policy did not isolate its origin authority");
+  Expect(connect.http_transport_mode() ==
+                 curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY &&
+             connect.probe_multi_pollset(),
+         "deep HTTP transport policy discarded CONNECT poll work");
+
+  Scenario forward;
+  forward.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY);
+  forward.set_probe_multi_pollset(true);
+  NormalizeScenarioForTarget(&forward, TargetProfile::kDeepHttp);
+  Expect(forward.http_transport_mode() ==
+                 curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY &&
+             !forward.probe_multi_pollset(),
+         "forward-proxy policy retained unrelated repeated polling");
+
+  Scenario unknown;
+  unknown.set_http_transport_mode(
+      static_cast<curl::fuzzer::proto::HttpTransportMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kDeepHttp);
+  Expect(unknown.http_transport_mode() ==
+             curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT,
+         "deep HTTP policy retained an unknown transport mode");
+
+  Scenario other;
+  other.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.http_transport_mode() ==
+             curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT,
+         "a non-deep policy retained the HTTP transport selector");
+}
+
 void TestFastHttpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
@@ -3010,7 +3054,6 @@ void TestCompatibilityProfileIsNoOp() {
 void TestOnlySupportedPoliciesRetainPollsetProbe() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,
@@ -3047,6 +3090,14 @@ void TestOnlySupportedPoliciesRetainPollsetProbe() {
   NormalizeScenarioForTarget(&proxy_transport, TargetProfile::kProxyTransport);
   Expect(proxy_transport.probe_multi_pollset(),
          "proxy-transport policy discarded its pollset probe");
+
+  Scenario deep_connect;
+  deep_connect.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+  deep_connect.set_probe_multi_pollset(true);
+  NormalizeScenarioForTarget(&deep_connect, TargetProfile::kDeepHttp);
+  Expect(deep_connect.probe_multi_pollset(),
+         "deep CONNECT policy discarded its pollset probe");
 
   Scenario compatibility;
   compatibility.set_probe_multi_pollset(true);
@@ -3579,6 +3630,7 @@ int main() {
   TestDeepHttpPolicy();
   TestDeepHttpBoundsFileInputs();
   TestDeepHttpAltSvcCanonicalAuthority();
+  TestDeepHttpTransportPolicy();
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
   TestFastHttp2Policy();
