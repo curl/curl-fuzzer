@@ -1,0 +1,9 @@
+# Return an unconnected INET socket restricted to the peer's ephemeral
+# loopback listener. Curl binds it to host!127.0.0.1 and applies fixed TCP
+# keepalive settings before making the real local connect.
+scheme: SCHEME_HTTP
+host_path: "resolve.test/interface-keepalive"
+proxy_socket_option_mode: PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nloopback"
+}

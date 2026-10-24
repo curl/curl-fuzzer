@@ -267,6 +267,64 @@ void TestDeepHttpTransportPolicy() {
          "a non-deep policy retained the HTTP transport selector");
 }
 
+void TestDeepHttpProxySocketOptionPolicy() {
+  struct Case {
+    curl::fuzzer::proto::ProxySocketOptionMode mode;
+    const char *host_path;
+  };
+  constexpr Case kCases[] = {
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME,
+       "service.proxy.test/path?query#fragment"},
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR,
+       "127.0.0.2/path?query#fragment"},
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR,
+       "[::1]/path?query#fragment"},
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY,
+       "proxy-origin.test/path?query#fragment"},
+      {curl::fuzzer::proto::
+           PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE,
+       "resolve.test/path?query#fragment"},
+  };
+
+  for (const auto &test_case : kCases) {
+    Scenario scenario;
+    scenario.set_host_path("mutated.example:8443/path?query#fragment");
+    scenario.set_proxy_socket_option_mode(test_case.mode);
+    scenario.set_http_transport_mode(
+        curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+    scenario.set_altsvc_file("must not replace the fixed route");
+    scenario.set_hsts_file("must not upgrade the plaintext option route");
+
+    NormalizeScenarioForTarget(&scenario, TargetProfile::kDeepHttp);
+
+    Expect(scenario.scheme() == SCHEME_HTTP &&
+               scenario.proxy_socket_option_mode() == test_case.mode &&
+               scenario.host_path() == test_case.host_path,
+           "deep HTTP policy did not canonicalize a proxy/socket mode");
+    Expect(scenario.altsvc_file().empty() && scenario.hsts_file().empty(),
+           "proxy/socket mode retained a conflicting routing file");
+    Expect(scenario.http_transport_mode() ==
+               curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT,
+           "proxy/socket mode retained a competing HTTP transport");
+  }
+
+  Scenario unknown;
+  unknown.set_proxy_socket_option_mode(
+      static_cast<curl::fuzzer::proto::ProxySocketOptionMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kDeepHttp);
+  Expect(unknown.proxy_socket_option_mode() ==
+             curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT,
+         "deep HTTP policy retained an unknown proxy/socket mode");
+
+  Scenario other;
+  other.set_proxy_socket_option_mode(
+      curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.proxy_socket_option_mode() ==
+             curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT,
+         "a non-deep policy retained the proxy/socket mode");
+}
+
 void TestFastHttpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
@@ -3761,6 +3819,7 @@ int main() {
   TestDeepHttpBoundsFileInputs();
   TestDeepHttpAltSvcCanonicalAuthority();
   TestDeepHttpTransportPolicy();
+  TestDeepHttpProxySocketOptionPolicy();
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
   TestFastHttp2Policy();

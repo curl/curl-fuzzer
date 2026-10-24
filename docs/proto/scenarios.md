@@ -41,8 +41,9 @@ The main groups of fields are:
   `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential profiles, `socks_proxy_mode`,
-  `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
-  `probe_multi_pollset`, `resolver_mode`, filename-backed parser inputs, and
+  `haproxy_protocol`, `http_transport_mode`, `proxy_socket_option_mode`,
+  `trace_ids`, `probe_multi_pollset`, `resolver_mode`, filename-backed parser
+  inputs, and
   `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
@@ -66,6 +67,16 @@ endpoint and every socket is replaced by the in-process peer; Unix mode uses a
 harness-owned abstract name and creates no filesystem entry. Use
 request-triggered `on_readable` chunks for these modes. A CONNECT script puts
 the tunnel response first and the origin response second.
+
+The deep HTTP lane's `proxy_socket_option_mode` selects a closed set of option
+paths. Fixed hostname, IPv4-CIDR, and IPv6-CIDR lists exercise
+`CURLOPT_NOPROXY`; a scoped `http_proxy` override points only at a fixed
+numeric loopback endpoint intercepted by the socketpair callback and restores
+the previous environment afterwards. The interface/keepalive mode returns an
+unconnected INET socket only for its owned ephemeral loopback listener, binds
+it with `host!127.0.0.1`, and applies fixed TCP keepalive values. Mutations
+cannot supply an environment value, interface, bind address, proxy endpoint,
+or destination port.
 
 Other peers intentionally give those fields narrower meanings:
 

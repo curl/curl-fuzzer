@@ -1,0 +1,8 @@
+# Match a loopback IPv4 literal against a fixed CIDR list. CONNECT_TO and the
+# socket callback still prevent a real connection.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.2/noproxy-ipv4"
+proxy_socket_option_mode: PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nipv4"
+}
