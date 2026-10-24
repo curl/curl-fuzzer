@@ -59,6 +59,7 @@ struct H2TransferResult {
   std::size_t cleaned_push_count = 0;
   std::size_t pushed_body_bytes = 0;
   CURLcode upkeep_result = CURLE_FAILED_INIT;
+  bool post_headers_transition_applied = false;
 };
 
 H2TransferResult DriveH2Scenario(const Scenario &scenario) {
@@ -91,6 +92,8 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
     result.cleaned_push_count = server.cleaned_push_count();
     result.pushed_body_bytes = runtime.pushed_body_bytes();
     result.upkeep_result = runtime.upkeep_result();
+    result.post_headers_transition_applied =
+        runtime.post_headers_transition_applied();
 
     // The server intentionally retains its detached multi and connection
     // cache. Clean the caller-owned easy first, matching RunScenario.
@@ -134,6 +137,28 @@ Scenario MakeRawScenario() {
       std::string("\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
                   "\x00\x00\x03\x00\x01\x00\x00\x00\x01raw",
                   22));
+  return scenario;
+}
+
+Scenario MakeFatalContinuationScenario() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("tls.test/h2-fatal-continuations");
+  auto *plan = scenario.mutable_http2_plan();
+  auto *wait = plan->add_actions()->mutable_wait();
+  wait->set_event(curl::fuzzer::proto::HTTP2_CLIENT_EVENT_HEADERS);
+  wait->mutable_stream()->set_request_index(0);
+  wait->set_count(1);
+
+  // Start one response header block without END_HEADERS, then exceed
+  // nghttp2's bounded continuation-frame limit. This mirrors curl's own
+  // protocol regression fixture and leaves the session in a fatal state.
+  std::string frames("\x00\x00\x01\x01\x00\x00\x00\x00\x01\x88", 10);
+  const std::string continuation("\x00\x00\x00\x09\x00\x00\x00\x00\x01", 9);
+  for (int index = 0; index < 9; ++index) {
+    frames.append(continuation);
+  }
+  plan->add_actions()->set_raw_bytes(frames);
   return scenario;
 }
 
@@ -183,9 +208,10 @@ void TestStructuredPriorKnowledgeExchange() {
   Expect(result.http_version == CURL_HTTP_VERSION_2_0 &&
              result.new_connection_count == 1,
          "h2c peer did not use one HTTP/2 prior-knowledge connection");
-  Expect(result.observed_request_count == 1 &&
-             result.observed_client_settings_count >= 1,
-         "structured h2c peer did not observe client setup and request HEADERS");
+  Expect(
+      result.observed_request_count == 1 &&
+          result.observed_client_settings_count >= 1,
+      "structured h2c peer did not observe client setup and request HEADERS");
   Expect(result.upkeep_result == CURLE_OK,
          "structured h2c peer did not complete its upkeep probe");
 }
@@ -197,6 +223,16 @@ void TestRawPriorKnowledgeExchange() {
          "raw h2c response did not complete");
   Expect(result.http_version == CURL_HTTP_VERSION_2_0,
          "raw h2c peer did not report HTTP/2");
+}
+
+void TestContinuationFloodProducesBoundedFatalSessionError() {
+  const H2TransferResult result =
+      DriveH2Scenario(MakeFatalContinuationScenario());
+
+  Expect(result.code == CURLE_RECV_ERROR,
+         "continuation flood did not produce curl's bounded receive error");
+  Expect(result.observed_request_count == 1,
+         "continuation flood ran before a real request stream was observed");
 }
 
 void TestValidPushPromiseReachesCallback() {
@@ -252,6 +288,7 @@ void TestAcceptedPushCleanupSuppressesHandleEnumerationFailures() {
 int main() {
   TestStructuredPriorKnowledgeExchange();
   TestRawPriorKnowledgeExchange();
+  TestContinuationFloodProducesBoundedFatalSessionError();
   TestValidPushPromiseReachesCallback();
   TestAcceptedPushCompletesAndCleansUpOneHandle();
 #if defined(PROTO_FUZZER_WRAP_MULTI_GET_HANDLES)

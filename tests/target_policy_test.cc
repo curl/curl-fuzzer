@@ -22,26 +22,26 @@ namespace {
 
 using curl::fuzzer::proto::Scenario;
 using curl::fuzzer::proto::SCHEME_DICT;
+using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_FTP;
 using curl::fuzzer::proto::SCHEME_FTPS;
-using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
+using curl::fuzzer::proto::SCHEME_IMAP;
+using curl::fuzzer::proto::SCHEME_IMAPS;
 using curl::fuzzer::proto::SCHEME_IPFS;
 using curl::fuzzer::proto::SCHEME_IPNS;
 using curl::fuzzer::proto::SCHEME_LDAP;
-using curl::fuzzer::proto::SCHEME_IMAP;
-using curl::fuzzer::proto::SCHEME_IMAPS;
 using curl::fuzzer::proto::SCHEME_LDAPS;
 using curl::fuzzer::proto::SCHEME_MQTT;
 using curl::fuzzer::proto::SCHEME_MQTTS;
 using curl::fuzzer::proto::SCHEME_POP3;
 using curl::fuzzer::proto::SCHEME_POP3S;
 using curl::fuzzer::proto::SCHEME_RTSP;
-using curl::fuzzer::proto::SCHEME_TELNET;
-using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_SMTP;
 using curl::fuzzer::proto::SCHEME_SMTPS;
+using curl::fuzzer::proto::SCHEME_TELNET;
+using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
@@ -285,8 +285,7 @@ void TestDeepHttpProxySocketOptionPolicy() {
        "[::1]/path?query#fragment"},
       {curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY,
        "proxy-origin.test/path?query#fragment"},
-      {curl::fuzzer::proto::
-           PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE,
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE,
        "resolve.test/path?query#fragment"},
   };
 
@@ -523,22 +522,20 @@ void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
 
 void TestOtherPoliciesDiscardTlsGroupProfiles() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kFastHttp2,
-      TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
-      TargetProfile::kProxyTransport,        TargetProfile::kResolver,
-      TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
-      TargetProfile::kFastFile,
-      TargetProfile::kFastGopher,
-      TargetProfile::kFastTftp,      TargetProfile::kFastImap,
-      TargetProfile::kFastPop3,      TargetProfile::kFastGopher,
-      TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
-      TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
-      TargetProfile::kFastIpfs,
-      TargetProfile::kApi,           TargetProfile::kMulti,
-      TargetProfile::kTiming,
+      TargetProfile::kFastHttp,       TargetProfile::kDeepHttp,
+      TargetProfile::kFastHttps,      TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,      TargetProfile::kH2Proxy,
+      TargetProfile::kProxyTransport, TargetProfile::kResolver,
+      TargetProfile::kFastWebSocket,  TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,     TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,       TargetProfile::kFastGopher,
+      TargetProfile::kFastTftp,       TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,       TargetProfile::kFastGopher,
+      TargetProfile::kFastMqtt,       TargetProfile::kFastDict,
+      TargetProfile::kFastLdap,       TargetProfile::kFastRtsp,
+      TargetProfile::kFastIpfs,       TargetProfile::kApi,
+      TargetProfile::kMulti,          TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kOtherPolicies) {
@@ -752,14 +749,13 @@ void TestNonHttp3PoliciesDiscardPlans() {
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
-      TargetProfile::kFastFile,
-      TargetProfile::kApi,
+      TargetProfile::kFastFile,      TargetProfile::kApi,
       TargetProfile::kFastTftp,      TargetProfile::kFastImap,
       TargetProfile::kFastPop3,      TargetProfile::kApi,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
       TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
-      TargetProfile::kFastIpfs,
-      TargetProfile::kMulti,         TargetProfile::kTiming,
+      TargetProfile::kFastIpfs,      TargetProfile::kMulti,
+      TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kOtherPolicies) {
@@ -786,9 +782,8 @@ void TestNonTlsPoliciesDiscardTlsCertificateChains() {
       TargetProfile::kFastImap,      TargetProfile::kFastPop3,
       TargetProfile::kFastMqtt,      TargetProfile::kFastDict,
       TargetProfile::kFastLdap,      TargetProfile::kFastRtsp,
-      TargetProfile::kFastIpfs,
-      TargetProfile::kApi,           TargetProfile::kMulti,
-      TargetProfile::kTiming,
+      TargetProfile::kFastIpfs,      TargetProfile::kApi,
+      TargetProfile::kMulti,         TargetProfile::kTiming,
   };
 
   for (const TargetProfile profile : kNonHttpsPolicies) {
@@ -813,6 +808,8 @@ void TestH2ProxyPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload(
       "WebSocket-only frame");
   scenario.mutable_connection()->mutable_manual_probes()->set_flag_matrix(true);
+  scenario.mutable_connection()->set_proxy_protocol(
+      curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
   scenario.add_subsequent_connections()->set_initial_response(
       "unrepresentable second proxy stream");
   scenario.mutable_mime_post()->add_parts()->set_data("MIME body");
@@ -828,6 +825,9 @@ void TestH2ProxyPolicy() {
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
   scenario.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_PROXYAUTH);
+  scenario.add_options()->set_option_id(
+      curl::fuzzer::proto::CURLOPT_PROXYUSERPWD);
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kH2Proxy);
 
@@ -842,20 +842,43 @@ void TestH2ProxyPolicy() {
          "HTTP/2 proxy policy retained transport shapes its peer cannot use");
   Expect(scenario.connection().on_readable(0) == "raw HTTP/2 frames",
          "HTTP/2 proxy policy removed the raw outer frame stream");
+  Expect(scenario.connection().proxy_protocol() ==
+             curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1,
+         "HTTPS proxy policy discarded its H1 protocol profile");
   Expect(scenario.request_headers(0) == "X-Origin: retained" &&
              scenario.has_mime_post() && scenario.has_upload(),
          "HTTP/2 proxy policy removed state visible to the origin request");
   Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan(),
          "HTTP/2 proxy policy retained another target's work");
-  Expect(scenario.h2_forward_proxy(),
-         "HTTP/2 proxy policy discarded direct-forwarding mode");
-  Expect(scenario.options_size() == 2 &&
+  Expect(!scenario.h2_forward_proxy(),
+         "HTTP/1 proxy policy retained unsupported direct-forwarding mode");
+  Expect(scenario.options_size() == 4 &&
              scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_POST &&
              scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION,
+                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION &&
+             scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_PROXYAUTH &&
+             scenario.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_PROXYUSERPWD,
          "HTTP/2 proxy policy retained an option that can bypass its fixed "
          "transport");
+
+  Scenario h2_forward;
+  h2_forward.set_h2_forward_proxy(true);
+  NormalizeScenarioForTarget(&h2_forward, TargetProfile::kH2Proxy);
+  Expect(h2_forward.h2_forward_proxy() &&
+             h2_forward.connection().proxy_protocol() ==
+                 curl::fuzzer::proto::PROXY_PROTOCOL_HTTP2,
+         "HTTP/2 proxy policy discarded direct-forwarding mode");
+
+  Scenario other;
+  other.mutable_connection()->set_proxy_protocol(
+      curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.connection().proxy_protocol() ==
+             curl::fuzzer::proto::PROXY_PROTOCOL_HTTP2,
+         "non-proxy policy retained the nested proxy protocol selector");
 }
 
 void TestFastWebSocketPolicy() {
@@ -1236,14 +1259,12 @@ void TestFastSmtpPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
   for (std::size_t index = 0;
-       index < proto_fuzzer::scenario_limits::kMaxMailRecipients + 2;
-       ++index) {
+       index < proto_fuzzer::scenario_limits::kMaxMailRecipients + 2; ++index) {
     scenario.add_mail_rcpt("recipient-" + std::to_string(index) +
                            "@example.test");
   }
   scenario.set_mail_rcpt(
-      0, std::string(proto_fuzzer::scenario_limits::kMaxMailRecipientBytes +
-                     32,
+      0, std::string(proto_fuzzer::scenario_limits::kMaxMailRecipientBytes + 32,
                      'r'));
 
   auto *rejected = scenario.add_options();
@@ -1255,8 +1276,7 @@ void TestFastSmtpPolicy() {
   from->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_FROM);
   from->set_string_value("sender@example.test");
   auto *allow_fails = scenario.add_options();
-  allow_fails->set_option_id(
-      curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS);
+  allow_fails->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS);
   allow_fails->set_uint_value(7);
   auto *ftp_port = scenario.add_options();
   ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
@@ -1352,8 +1372,9 @@ void TestFastPop3sPolicy() {
          "fast POP3 lane did not preserve an explicit POP3S scheme");
   Expect(scenario.host_path() == "tls.test/2?query",
          "fast POP3 lane did not give POP3S the certifiable authority");
-  Expect(!scenario.has_upload() && !scenario.has_mime_post(),
-         "fast POP3 lane retained upload state its download-only peer cannot use");
+  Expect(
+      !scenario.has_upload() && !scenario.has_mime_post(),
+      "fast POP3 lane retained upload state its download-only peer cannot use");
 }
 
 void TestFastTftpPolicy() {
@@ -1497,9 +1518,9 @@ void TestFastPop3Policy() {
          "fast POP3 policy removed its pollset-probe opt-in");
   Expect(scenario.host_path() == "pop3.test/2?query",
          "fast POP3 policy did not retain the message-id path");
-  Expect(scenario.request_headers_size() == 0 &&
-             !scenario.has_mime_post() && !scenario.has_upload() &&
-             scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+  Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
+             !scenario.has_upload() && scenario.telnet_options_size() == 0 &&
+             !scenario.has_api_plan() &&
              scenario.subsequent_connections_size() == 0,
          "fast POP3 policy retained work its download-only peer cannot use");
   Expect(scenario.connection().on_readable(0) == "control reply" &&
@@ -1641,7 +1662,8 @@ void TestFastMqttsPolicy() {
   Scenario scenario;
   scenario.set_scheme(SCHEME_MQTTS);
   scenario.set_probe_multi_pollset(true);
-  scenario.set_host_path("untrusted.invalid:8883/sensors/kitchen?query#fragment");
+  scenario.set_host_path(
+      "untrusted.invalid:8883/sensors/kitchen?query#fragment");
   auto *payload = scenario.add_options();
   payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
   payload->set_string_value("implicit tls mqtt");
@@ -1725,9 +1747,9 @@ void TestFastDictPolicy() {
          "fast DICT policy did not force DICT");
   Expect(scenario.host_path() == "dict.test/d:word?query#fragment",
          "fast DICT policy did not retain the lookup path suffix");
-  Expect(scenario.request_headers_size() == 0 &&
-             !scenario.has_mime_post() && !scenario.has_upload() &&
-             scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
+  Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
+             !scenario.has_upload() && scenario.telnet_options_size() == 0 &&
+             !scenario.has_api_plan() &&
              scenario.subsequent_connections_size() == 0,
          "fast DICT policy retained work its download-only peer cannot use");
   Expect(scenario.connection().on_readable_size() == 1 &&
@@ -1864,8 +1886,10 @@ void TestFastLdapPolicy() {
 
 void TestNonLdapPoliciesClearLdapScheme() {
   constexpr TargetProfile kOtherPolicies[] = {
-      TargetProfile::kFastHttp, TargetProfile::kFastMqtt,
-      TargetProfile::kTiming,  TargetProfile::kApi,
+      TargetProfile::kFastHttp,
+      TargetProfile::kFastMqtt,
+      TargetProfile::kTiming,
+      TargetProfile::kApi,
   };
 
   for (const TargetProfile profile : kOtherPolicies) {
@@ -1947,8 +1971,7 @@ void TestFastLdapsPolicy() {
 
 void TestFastRtspPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
-  scenario.set_host_path(
-      "untrusted.invalid:554/twister/video?query#fragment");
+  scenario.set_host_path("untrusted.invalid:554/twister/video?query#fragment");
   scenario.add_request_headers("Require: gzip");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
@@ -1986,16 +2009,14 @@ void TestFastRtspPolicy() {
   Expect(scenario.host_path() == "rtsp.test/twister/video?query#fragment",
          "fast RTSP policy did not pin the authority and retain the path");
   Expect(scenario.subsequent_connections_size() == 0 &&
-             !scenario.has_mime_post() &&
-             scenario.telnet_options_size() == 0 &&
+             !scenario.has_mime_post() && scenario.telnet_options_size() == 0 &&
              !scenario.has_api_plan() && !scenario.has_multi_plan(),
          "fast RTSP policy retained another protocol's shape");
   Expect(scenario.request_headers_size() == 1 &&
              scenario.request_headers(0) == "Require: gzip",
          "fast RTSP policy discarded a usable custom request header");
-  Expect(scenario.has_upload() &&
-             scenario.upload().terminal() ==
-                 curl::fuzzer::proto::UPLOAD_TERMINAL_EOF,
+  Expect(scenario.has_upload() && scenario.upload().terminal() ==
+                                      curl::fuzzer::proto::UPLOAD_TERMINAL_EOF,
          "fast RTSP policy changed the bounded request body state");
   Expect(scenario.connection().on_readable(0) == "control reply" &&
              scenario.connection().initial_response().empty() &&
@@ -2295,8 +2316,7 @@ void TestResolverPolicy() {
   doh.set_happy_eyeballs(true);
   doh.mutable_http2_plan();
   auto *doh_http_version = doh.add_options();
-  doh_http_version->set_option_id(
-      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  doh_http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
   doh_http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
   auto *doh_user_agent = doh.add_options();
   doh_user_agent->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
@@ -2310,9 +2330,8 @@ void TestResolverPolicy() {
          "DoH resolver policy retained contradictory address-resolution state");
   Expect(doh.has_http2_plan(),
          "DoH resolver policy discarded the selected ALPN h2 response plan");
-  Expect(doh.options_size() == 1 &&
-             doh.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERAGENT,
+  Expect(doh.options_size() == 1 && doh.options(0).option_id() ==
+                                        curl::fuzzer::proto::CURLOPT_USERAGENT,
          "DoH resolver policy retained a transport override or discarded a "
          "request-level HTTP option");
 
@@ -2327,22 +2346,23 @@ void TestResolverPolicy() {
   Expect(threaded.scheme() == SCHEME_HTTP &&
              threaded.host_path() == "resolver-positive.test/threaded",
          "threaded resolver policy did not select its fixed authority");
-  Expect(threaded.resolve_entries_size() == 0 &&
-             !threaded.happy_eyeballs() && !threaded.doh_https_rr(),
+  Expect(threaded.resolve_entries_size() == 0 && !threaded.happy_eyeballs() &&
+             !threaded.doh_https_rr(),
          "threaded resolver policy retained a bypassing resolver source");
-  Expect(threaded.connection().backpressure().drain_limit() == 1,
-         "threaded resolver policy did not install its fixed timed-drive marker");
+  Expect(
+      threaded.connection().backpressure().drain_limit() == 1,
+      "threaded resolver policy did not install its fixed timed-drive marker");
 
   Scenario link_local;
   link_local.set_host_path("untrusted.invalid/scope");
   link_local.set_resolver_mode(
       curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL);
   NormalizeScenarioForTarget(&link_local, TargetProfile::kResolver);
-  Expect(link_local.host_path() ==
-             "resolver-link-local.test/scope",
+  Expect(link_local.host_path() == "resolver-link-local.test/scope",
          "link-local resolver policy did not select its shim authority");
   Expect(link_local.connection().backpressure().drain_limit() == 1,
-         "link-local resolver policy did not install its fixed timed-drive marker");
+         "link-local resolver policy did not install its fixed timed-drive "
+         "marker");
 
   Scenario partial;
   partial.set_host_path("untrusted.invalid/partial");
@@ -2355,16 +2375,14 @@ void TestResolverPolicy() {
 
   Scenario unix_socket;
   unix_socket.set_host_path("untrusted.invalid/unix");
-  unix_socket.set_resolver_mode(
-      curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET);
+  unix_socket.set_resolver_mode(curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET);
   NormalizeScenarioForTarget(&unix_socket, TargetProfile::kResolver);
   Expect(unix_socket.host_path() == "resolver-unix.test/unix",
          "Unix resolver policy did not select its fixed authority");
 
   Scenario doh_error;
   doh_error.set_host_path("untrusted.invalid/doh-error");
-  doh_error.set_resolver_mode(
-      curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  doh_error.set_resolver_mode(curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
   doh_error.mutable_http2_plan()
       ->add_actions()
       ->mutable_headers()
@@ -2398,8 +2416,7 @@ void TestResolverPolicy() {
          "non-resolver policy retained happy-eyeballs state");
   Expect(!ordinary.doh_https_rr(),
          "non-resolver policy retained the DoH responder selector");
-  Expect(ordinary.resolver_mode() ==
-             curl::fuzzer::proto::RESOLVER_MODE_DEFAULT,
+  Expect(ordinary.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DEFAULT,
          "non-resolver policy retained the target-local resolver selector");
 }
 
@@ -2828,6 +2845,8 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
   plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
   plan->set_wake_multi(true);
   plan->set_pause_response_once(true);
+  plan->set_guess_scheme_url(true);
+  plan->set_probe_version_info(true);
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxApiShareDataSelectors + 3;
        ++index) {
@@ -2841,7 +2860,8 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors + 3;
        ++index) {
-    plan->add_reentrant_probe_selectors(static_cast<std::uint32_t>(index + 300));
+    plan->add_reentrant_probe_selectors(
+        static_cast<std::uint32_t>(index + 300));
   }
   NormalizeScenarioForTarget(&scenario, TargetProfile::kApi);
 
@@ -2861,7 +2881,9 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
              scenario.api_plan().drive_mode() ==
                  curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET &&
              scenario.api_plan().wake_multi() &&
-             scenario.api_plan().pause_response_once(),
+             scenario.api_plan().pause_response_once() &&
+             scenario.api_plan().guess_scheme_url() &&
+             scenario.api_plan().probe_version_info(),
          "API policy changed mutation-controlled lifecycle choices");
   Expect(static_cast<std::size_t>(
              scenario.api_plan().share_data_selectors_size()) ==
@@ -3070,13 +3092,13 @@ void TestAllocationFailuresAvoidDanglingMimeReader() {
   Scenario scenario;
   scenario.mutable_mime_post()->add_parts()->set_data("mime body");
   scenario.add_fail_allocations(102);
-  auto* crlf = scenario.add_options();
+  auto *crlf = scenario.add_options();
   crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
   crlf->set_bool_value(true);
-  auto* transfer_text = scenario.add_options();
+  auto *transfer_text = scenario.add_options();
   transfer_text->set_option_id(curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
   transfer_text->set_bool_value(true);
-  auto* retained = scenario.add_options();
+  auto *retained = scenario.add_options();
   retained->set_option_id(curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
   retained->set_uint_value(1);
 
@@ -3092,13 +3114,12 @@ void TestAllocationFailuresAvoidDanglingMimeReader() {
 
   Scenario ordinary;
   ordinary.mutable_mime_post()->add_parts()->set_data("mime body");
-  auto* ordinary_crlf = ordinary.add_options();
+  auto *ordinary_crlf = ordinary.add_options();
   ordinary_crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
   ordinary_crlf->set_bool_value(true);
   NormalizeScenarioForTarget(&ordinary, TargetProfile::kDeepHttp);
-  Expect(ordinary.options_size() == 1 &&
-             ordinary.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_CRLF,
+  Expect(ordinary.options_size() == 1 && ordinary.options(0).option_id() ==
+                                             curl::fuzzer::proto::CURLOPT_CRLF,
          "ordinary MIME input lost CRLF conversion coverage");
 
   ordinary.add_fail_allocations(0);
@@ -3120,8 +3141,7 @@ void TestAllocationFailuresAvoidDanglingMimeReader() {
   compatibility.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
   compatibility.mutable_mime_post()->add_parts()->set_data("mime body");
   compatibility.add_fail_allocations(102);
-  compatibility.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_CRLF);
+  compatibility.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
   compatibility.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
   NormalizeScenarioForExecution(&compatibility);
@@ -3140,6 +3160,26 @@ void TestAllocationFailuresAvoidDanglingMimeReader() {
   NormalizeScenarioForExecution(&non_http);
   Expect(non_http.options_size() == 2,
          "allocation safety removed conversion options for non-HTTP MIME");
+}
+
+void TestExecutionBoundsLocalPortRange() {
+  Scenario scenario;
+  auto *large = scenario.add_options();
+  large->set_option_id(curl::fuzzer::proto::CURLOPT_LOCALPORTRANGE);
+  large->set_uint_value(std::numeric_limits<std::uint64_t>::max());
+  auto *boolean = scenario.add_options();
+  boolean->set_option_id(curl::fuzzer::proto::CURLOPT_LOCALPORTRANGE);
+  boolean->set_bool_value(true);
+  auto *mismatched = scenario.add_options();
+  mismatched->set_option_id(curl::fuzzer::proto::CURLOPT_LOCALPORTRANGE);
+  mismatched->set_string_value("ignored");
+
+  NormalizeScenarioForExecution(&scenario);
+
+  Expect(scenario.options(0).uint_value() == 16 &&
+             scenario.options(1).uint_value() == 1 &&
+             scenario.options(2).uint_value() == 0,
+         "execution policy did not bound the local-port retry range");
 }
 
 void TestProfileRunModes() {
@@ -3198,8 +3238,7 @@ void TestProfileRunModes() {
          "fast LDAP profile does not authorize the BER-aware peer");
   Expect(RunModeFor(TargetProfile::kFastRtsp) == ScenarioRunMode::kRtspCoverage,
          "fast RTSP profile does not authorize the request-aligned peer");
-  Expect(RunModeFor(TargetProfile::kFastIpfs) ==
-             ScenarioRunMode::kFastProtocol,
+  Expect(RunModeFor(TargetProfile::kFastIpfs) == ScenarioRunMode::kFastProtocol,
          "fast IPFS profile does not use the in-process HTTP peer");
   Expect(RunModeFor(TargetProfile::kDeepHttp) ==
              ScenarioRunMode::kDeepHttpCoverage,
@@ -3352,7 +3391,8 @@ void TestAllocationFailurePlansAreCanonicalized() {
                scenario.fail_allocations(1) == 2 &&
                scenario.fail_allocations(2) == 3 &&
                scenario.fail_allocations(3) == 7,
-           "fixed policy did not sort, deduplicate, and bound allocation failures");
+           "fixed policy did not sort, deduplicate, and bound allocation "
+           "failures");
     const std::string normalized = scenario.SerializeAsString();
     NormalizeScenarioForTarget(&scenario, profile);
     Expect(scenario.SerializeAsString() == normalized,
@@ -3360,11 +3400,10 @@ void TestAllocationFailurePlansAreCanonicalized() {
   }
 
   Scenario folded;
-  folded.add_fail_allocations(
-      static_cast<std::uint32_t>(proto_fuzzer::scenario_limits::kMaxAllocationOrdinal + 1));
+  folded.add_fail_allocations(static_cast<std::uint32_t>(
+      proto_fuzzer::scenario_limits::kMaxAllocationOrdinal + 1));
   NormalizeScenarioForTarget(&folded, TargetProfile::kFastHttp);
-  Expect(folded.fail_allocations_size() == 1 &&
-             folded.fail_allocations(0) == 1,
+  Expect(folded.fail_allocations_size() == 1 && folded.fail_allocations(0) == 1,
          "allocation failure ordinal was not folded into the runtime range");
 }
 
@@ -3493,6 +3532,8 @@ void TestHttpsH2PolicyBoundsStructuredPlan() {
   scenario.mutable_connection()->set_initial_response("raw");
   scenario.mutable_connection()->add_on_readable("raw chunk");
   auto *plan = scenario.mutable_http2_plan();
+  plan->set_stream_weight_after_headers(
+      std::numeric_limits<std::uint32_t>::max());
   auto *enable_push = plan->mutable_initial_settings()->add_entries();
   enable_push->set_identifier(2);
   enable_push->set_value(8);
@@ -3546,6 +3587,9 @@ void TestHttpsH2PolicyBoundsStructuredPlan() {
   Expect(scenario.http2_plan().actions(1).yield_turns() ==
              proto_fuzzer::scenario_limits::kMaxHttp2YieldTurns,
          "structured H2 policy retained an excessive yield count");
+  Expect(scenario.http2_plan().stream_weight_after_headers() >= 1 &&
+             scenario.http2_plan().stream_weight_after_headers() <= 256,
+         "structured H2 policy did not bound its post-header transition");
 
   Scenario other;
   other.mutable_http2_plan()->add_actions()->mutable_headers();
@@ -3556,7 +3600,7 @@ void TestHttpsH2PolicyBoundsStructuredPlan() {
 
 void TestH2NormalizationPreservesValidSettings() {
   constexpr TargetProfile kH2Profiles[] = {TargetProfile::kHttpsH2,
-                                         TargetProfile::kFastHttp2};
+                                           TargetProfile::kFastHttp2};
   for (const TargetProfile profile : kH2Profiles) {
     Scenario scenario;
     auto *settings = scenario.mutable_http2_plan()->mutable_initial_settings();
@@ -3622,9 +3666,8 @@ void TestH2NormalizationCanonicalizesSettingsWireWidth() {
 }
 
 void TestH2FlowControlSeedPreservesInitialWindow() {
-  const std::string path =
-      std::string(PROTO_FUZZER_SCENARIO_DIR) +
-      "/https_h2/https_h2_push_flow_control.textproto";
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/https_h2/https_h2_push_flow_control.textproto";
   std::ifstream input(path);
   Expect(input.is_open(), "could not read the H2 flow-control seed");
   const std::string text((std::istreambuf_iterator<char>(input)),
@@ -3637,8 +3680,8 @@ void TestH2FlowControlSeedPreservesInitialWindow() {
                  4U &&
              seed.http2_plan().initial_settings().entries(0).value() == 0U,
          "H2 flow-control seed no longer requests an initial zero window");
-  for (const TargetProfile profile : {TargetProfile::kHttpsH2,
-                                     TargetProfile::kFastHttp2}) {
+  for (const TargetProfile profile :
+       {TargetProfile::kHttpsH2, TargetProfile::kFastHttp2}) {
     Scenario scenario = seed;
     NormalizeScenarioForTarget(&scenario, profile);
     const auto &settings = scenario.http2_plan().initial_settings();
@@ -3659,8 +3702,8 @@ void TestRawHttp2SeedsFitDedicatedTarget() {
   };
 
   for (const char *name : kSeedNames) {
-    const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
-                             "/http/" + name;
+    const std::string path =
+        std::string(PROTO_FUZZER_SCENARIO_DIR) + "/http/" + name;
     std::ifstream input(path);
     Expect(input.is_open(), "could not read a raw HTTP/2 seed");
     const std::string text((std::istreambuf_iterator<char>(input)),
@@ -3671,8 +3714,7 @@ void TestRawHttp2SeedsFitDedicatedTarget() {
     const auto connection = scenario.connection();
     bool selects_prior_knowledge = false;
     for (const auto &option : scenario.options()) {
-      if (option.option_id() ==
-              curl::fuzzer::proto::CURLOPT_HTTP_VERSION &&
+      if (option.option_id() == curl::fuzzer::proto::CURLOPT_HTTP_VERSION &&
           option.uint_value() == CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE) {
         selects_prior_knowledge = true;
       }
@@ -3693,8 +3735,7 @@ void TestRawHttp2SeedsFitDedicatedTarget() {
                connection.SerializeAsString(),
            "HTTP/2 target changed a raw seed's response bytes");
     for (const auto &option : scenario.options()) {
-      Expect(option.option_id() !=
-                 curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
+      Expect(option.option_id() != curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
              "HTTP/2 target retained a seed's transport selection option");
     }
   }
@@ -3713,7 +3754,7 @@ void TestNormalizationBoundsCanonicalOptionStrings() {
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttps);
 
   Expect(scenario.options(0).string_value().size() ==
-             proto_fuzzer::scenario_limits::kMaxMetadataBytes &&
+                 proto_fuzzer::scenario_limits::kMaxMetadataBytes &&
              scenario.options(0).string_value().rfind("sha256//", 0) == 0,
          "pin canonicalization escaped the final option-string budget");
   Expect(scenario.options(1).value_case() ==
@@ -3728,34 +3769,20 @@ void TestNormalizationBoundsCanonicalOptionStrings() {
 
 void TestNormalizationPipelineIsIdempotent() {
   constexpr TargetProfile kProfiles[] = {
-      TargetProfile::kCompatibility,
-      TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,
-      TargetProfile::kHttpsH2,
-      TargetProfile::kFastHttp2,
-      TargetProfile::kFastHttp3,
-      TargetProfile::kH2Proxy,
-      TargetProfile::kProxyTransport,
-      TargetProfile::kResolver,
-      TargetProfile::kFastWebSocket,
-      TargetProfile::kFastSecureWebSocket,
-      TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
-      TargetProfile::kFastTftp,
-      TargetProfile::kFastSmtp,
-      TargetProfile::kFastFile,
-      TargetProfile::kFastImap,
-      TargetProfile::kFastPop3,
-      TargetProfile::kFastMqtt,
-      TargetProfile::kFastDict,
-      TargetProfile::kFastLdap,
-      TargetProfile::kFastRtsp,
-      TargetProfile::kFastIpfs,
-      TargetProfile::kFastGopher,
-      TargetProfile::kApi,
-      TargetProfile::kMulti,
-      TargetProfile::kTiming,
+      TargetProfile::kCompatibility,  TargetProfile::kFastHttp,
+      TargetProfile::kDeepHttp,       TargetProfile::kFastHttps,
+      TargetProfile::kHttpsH2,        TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttp3,      TargetProfile::kH2Proxy,
+      TargetProfile::kProxyTransport, TargetProfile::kResolver,
+      TargetProfile::kFastWebSocket,  TargetProfile::kFastSecureWebSocket,
+      TargetProfile::kFastTelnet,     TargetProfile::kFastFtp,
+      TargetProfile::kFastTftp,       TargetProfile::kFastSmtp,
+      TargetProfile::kFastFile,       TargetProfile::kFastImap,
+      TargetProfile::kFastPop3,       TargetProfile::kFastMqtt,
+      TargetProfile::kFastDict,       TargetProfile::kFastLdap,
+      TargetProfile::kFastRtsp,       TargetProfile::kFastIpfs,
+      TargetProfile::kFastGopher,     TargetProfile::kApi,
+      TargetProfile::kMulti,          TargetProfile::kTiming,
   };
   // Check the composition with competing shapes and both direct/proxy H3.
   // These are serialization-only checks; no peer or curl handle is driven.
@@ -3783,10 +3810,13 @@ void TestNormalizationPipelineIsIdempotent() {
           curl::fuzzer::proto::API_DRIVE_EASY_PERFORM);
       scenario.mutable_api_plan()->set_pause_response_once(true);
       scenario.mutable_multi_plan()->set_transfer_count(999999);
-      auto *mime = scenario.mutable_mime_post()->add_parts()->mutable_generated_data();
+      auto *mime =
+          scenario.mutable_mime_post()->add_parts()->mutable_generated_data();
       mime->set_pattern("abc");
       mime->set_repeat_count(999999);
-      scenario.add_subsequent_connections()->mutable_backpressure()->set_drain_limit(1);
+      scenario.add_subsequent_connections()
+          ->mutable_backpressure()
+          ->set_drain_limit(1);
 
       auto *pin = scenario.add_options();
       pin->set_option_id(curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY);
@@ -3796,7 +3826,8 @@ void TestNormalizationPipelineIsIdempotent() {
       post->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
       post->set_uint_value(7);
 
-      auto *settings = scenario.mutable_http2_plan()->mutable_initial_settings();
+      auto *settings =
+          scenario.mutable_http2_plan()->mutable_initial_settings();
       auto *window = settings->add_entries();
       window->set_identifier(4);
       window->set_value(0);
@@ -3806,10 +3837,15 @@ void TestNormalizationPipelineIsIdempotent() {
       auto *invalid = settings->add_entries();
       invalid->set_identifier(0);
       invalid->set_value(999999);
-      scenario.mutable_http2_plan()->add_actions()->mutable_headers()->set_end_stream(true);
+      scenario.mutable_http2_plan()
+          ->add_actions()
+          ->mutable_headers()
+          ->set_end_stream(true);
 
       scenario.mutable_http3_plan()->set_use_h1_connect_udp_proxy(proxy);
-      auto *response = scenario.mutable_http3_plan()->add_actions()->mutable_structured_response();
+      auto *response = scenario.mutable_http3_plan()
+                           ->add_actions()
+                           ->mutable_structured_response();
       response->add_response_headers()->set_name("X Bad");
       response->set_finish_stream(true);
 
@@ -3897,6 +3933,7 @@ int main() {
   TestApiEasyDrivesDropMultiOnlyWork();
   TestApiAllocationFailuresAvoidDebugEventAdapter();
   TestAllocationFailuresAvoidDanglingMimeReader();
+  TestExecutionBoundsLocalPortRange();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
   TestOnlySupportedPoliciesRetainPollsetProbe();

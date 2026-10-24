@@ -2808,6 +2808,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(ftp_mock_server_test
             tests/ftp_mock_server_test.cc
             proto_fuzzer/ftp_mock_server.cc)
+        target_compile_definitions(ftp_mock_server_test PRIVATE
+            PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(smtp_mock_server_test
             tests/smtp_mock_server_test.cc
             proto_fuzzer/smtp_mock_server.cc)

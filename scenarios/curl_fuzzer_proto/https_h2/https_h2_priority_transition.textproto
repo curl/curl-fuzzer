@@ -1,0 +1,23 @@
+# Change stream weight only after the peer has observed request headers. The
+# subsequent yield gives curl a deterministic egress turn before the peer
+# completes the response; nghttp2 may consume the update without a wire frame.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/h2-priority"
+http2_plan {
+  stream_weight_after_headers: 32
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  actions { yield_turns: 2 }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+      end_stream: true
+    }
+  }
+}

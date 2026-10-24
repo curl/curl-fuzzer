@@ -16,7 +16,11 @@ def test_copy_postfields_is_a_supported_option() -> None:
         option.name
         for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
     }
-    assert "CURLOPT_COPYPOSTFIELDS" in supported
+    assert {
+        "CURLOPT_COPYPOSTFIELDS",
+        "CURLOPT_LOCALPORT",
+        "CURLOPT_LOCALPORTRANGE",
+    } <= supported
 
 
 def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
@@ -53,6 +57,12 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
         "api_copy_postfields.textproto": (
             "CURLOPT_COPYPOSTFIELDS",
             'string_value: "copy\\000body"',
+        ),
+        "api_url_guess_local_port.textproto": (
+            "CURLOPT_LOCALPORT",
+            "CURLOPT_LOCALPORTRANGE",
+            "guess_scheme_url: true",
+            "probe_version_info: true",
         ),
     }
 

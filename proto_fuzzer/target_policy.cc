@@ -37,6 +37,11 @@ constexpr std::uint32_t kMinBackpressureBufferBytes = 2048;
 constexpr std::uint32_t kMaxBackpressureBufferBytes = 4096;
 constexpr std::uint32_t kMaxDrainBytesPerIteration = 1024;
 
+// CURLOPT_LOCALPORTRANGE performs one synchronous bind attempt per selected
+// port. Retain a useful retry window without letting one mutation request tens
+// of thousands of syscalls from a single transfer.
+constexpr std::uint64_t kMaxLocalPortRange = 16;
+
 // A default, bounded identifier keeps newly generated inputs on the gateway's
 // /ipfs/ or /ipns/ namespace. The path, query, and fragment after it stay
 // mutation-controlled.
@@ -971,6 +976,9 @@ void BoundHttp2PlanShape(curl::fuzzer::proto::Http2Plan* plan) {
   TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxHttp2Actions);
   BoundHttp2Settings(plan->mutable_initial_settings());
   plan->mutable_initial_settings()->set_ack(false);
+  if (plan->stream_weight_after_headers() > 256U) {
+    plan->set_stream_weight_after_headers(1U + (plan->stream_weight_after_headers() - 1U) % 256U);
+  }
   if (plan->actions().empty()) {
     auto* response = plan->add_actions()->mutable_headers();
     response->set_status_code(200);
@@ -1268,6 +1276,8 @@ bool IsH2ProxyOriginOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_POST:
     case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
     case curl::fuzzer::proto::CURLOPT_POSTREDIR:
+    case curl::fuzzer::proto::CURLOPT_PROXYAUTH:
+    case curl::fuzzer::proto::CURLOPT_PROXYUSERPWD:
     case curl::fuzzer::proto::CURLOPT_RANGE:
     case curl::fuzzer::proto::CURLOPT_REFERER:
     case curl::fuzzer::proto::CURLOPT_REQUEST_TARGET:
@@ -1736,6 +1746,16 @@ std::uint64_t IntegralMutationValue(const curl::fuzzer::proto::SetOption& option
       return 0;
   }
   return 0;
+}
+
+/// Bound the synchronous local-port search for both fixed and compatibility
+/// execution copies. The persistent compatibility input remains unchanged.
+void CanonicalizeLocalPortRange(curl::fuzzer::proto::Scenario* scenario) {
+  for (auto& option : *scenario->mutable_options()) {
+    if (option.option_id() == curl::fuzzer::proto::CURLOPT_LOCALPORTRANGE) {
+      option.set_uint_value(std::min<std::uint64_t>(IntegralMutationValue(option), kMaxLocalPortRange));
+    }
+  }
 }
 
 /// Keep prior-knowledge HTTP/2 and HTTP/3 out of the throughput-oriented HTTP
@@ -2251,6 +2271,16 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
+  // The nested selector belongs exclusively to the HTTPS CONNECT proxy lane.
+  // Compatibility returned above and therefore preserves accumulated inputs;
+  // every unrelated fixed lane drops work its peer cannot observe.
+  if (profile != TargetProfile::kH2Proxy) {
+    scenario->mutable_connection()->clear_proxy_protocol();
+    for (auto& connection : *scenario->mutable_subsequent_connections()) {
+      connection.clear_proxy_protocol();
+    }
+  }
+
   // MQTT is append-only as well. No other fixed lane may reinterpret one of
   // its packet scripts, so clear the selector before the lane-specific early
   // paths install their own scheme. Compatibility returned above and keeps
@@ -2451,6 +2481,17 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveIgnoredH2ProxyShape(scenario);
+    switch (scenario->connection().proxy_protocol()) {
+      case curl::fuzzer::proto::PROXY_PROTOCOL_HTTP2:
+      case curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1:
+        break;
+      default:
+        scenario->mutable_connection()->set_proxy_protocol(curl::fuzzer::proto::PROXY_PROTOCOL_HTTP2);
+        break;
+    }
+    if (scenario->connection().proxy_protocol() == curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1) {
+      scenario->clear_h2_forward_proxy();
+    }
     RetainH2ProxyOriginOptions(scenario);
     BoundScenarioShape(scenario);
     CanonicalizeH2ProxyOriginAuthority(scenario);
@@ -2992,6 +3033,7 @@ void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario) {
   CanonicalizeAllocationFailures(scenario);
   CanonicalizeAllocationFailureDrive(scenario);
   CanonicalizeAllocationFailureOptions(scenario);
+  CanonicalizeLocalPortRange(scenario);
 }
 
 /// Complete normalization for a loaded or mutated fixed-target Scenario.

@@ -55,6 +55,7 @@ void H2CleartextMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer
     runtime_.DrivePlan(multi, *this, kMaxIdleIterations, kMaxDriveIterations, [this, easy] {
       ObserveActiveTransfer(easy);
       ResumeResponseIfRequested(easy);
+      runtime_.ApplyPostHeadersTransition(easy);
     });
     SetKeepConnectionsOpen(false);
   }

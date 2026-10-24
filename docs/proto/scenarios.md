@@ -237,8 +237,12 @@ Other peers intentionally give those fields narrower meanings:
   global-lifecycle mode finishes a localhost transfer, calls the public global
   cleanup entrypoint only after all resolver workers are gone, and reinstalls
   the harness allocator callbacks before another input runs.
-- HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
-  after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
+- HTTP/2 origin lanes treat connection bytes as raw HTTP/2 frames after a
+  fixed prior-knowledge or TLS/ALPN setup. The HTTPS CONNECT proxy does the
+  same when `connection.proxy_protocol` is zero; its explicit HTTP/1 profile
+  instead treats the script as a bounded CONNECT response and always uses a
+  tunnel. The H2 profile can select either CONNECT tunnelling or direct
+  absolute-form forwarding with `h2_forward_proxy`. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.
 - Direct HTTP/3 uses ordered `http3_plan` actions after a valid QUIC/TLS
   handshake and discards the ordinary connection script. Setting
