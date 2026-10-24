@@ -82,6 +82,7 @@ struct Statistics {
 };
 
 bool InitializeCurl() noexcept;
+bool ReinitializeCurl() noexcept;
 void Configure(const std::uint32_t* ordinals, std::size_t count) noexcept;
 void Arm() noexcept;
 void Disarm() noexcept;

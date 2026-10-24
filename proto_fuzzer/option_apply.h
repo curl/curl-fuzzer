@@ -47,6 +47,13 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
 
 CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option);
 
+/// Apply one closed, harness-owned TLS client-credential configuration.
+/// No protobuf bytes become a path, provider, or engine identifier.
+/// @param easy Handle receiving the fixed credential options.
+/// @param profile Safe credential setup selected by the HTTPS lane.
+/// @return The first curl_easy_setopt error, or CURLE_OK.
+CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile);
+
 std::size_t RuntimeOptionCount(const curl::fuzzer::proto::Scenario& scenario);
 
 std::size_t ApplyScenarioOptions(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);

@@ -45,6 +45,7 @@ def test_tls_controls_are_reachable_as_copied_values() -> None:
         "CURLOPT_SSL_SESSIONID_CACHE",
         "CURLOPT_SSL_ENABLE_ALPN",
         "CURLOPT_SSL_OPTIONS",
+        "CURLOPT_SSL_VERIFYSTATUS",
         "CURLOPT_PINNEDPUBLICKEY",
         "CURLOPT_ECH",
     } <= supported
@@ -89,6 +90,26 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "CURLOPT_SSLVERSION uint_value: 393222",
             "Connection: close",
             "subsequent_connections {",
+        ),
+        "https_tls_cert_status.textproto": (
+            "CURLOPT_SSL_VERIFYSTATUS bool_value: true",
+            "status-probe",
+        ),
+        "https_tls_client_engine.textproto": (
+            "TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL",
+            "unreachable",
+        ),
+        "https_tls_client_pkcs12.textproto": (
+            "TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12",
+            "unreachable",
+        ),
+        "https_tls_client_provider.textproto": (
+            "TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL",
+            "unreachable",
+        ),
+        "https_tls_client_provider_unloaded.textproto": (
+            "TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL",
+            "unreachable",
         ),
         "https_ech_success.textproto": (
             "CURLOPT_ECH",

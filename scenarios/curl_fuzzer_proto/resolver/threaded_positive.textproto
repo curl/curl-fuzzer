@@ -1,0 +1,10 @@
+# Drive curl's threaded resolver against the target-local deterministic
+# getaddrinfo backend. Two IPv4 addresses plus DNS shuffling cover the async
+# result, cache, and address-ordering paths before OPENSOCKETFUNCTION
+# substitutes the in-process peer.
+scheme: SCHEME_HTTP
+host_path: "resolver-positive.test/threaded-positive"
+resolver_mode: RESOLVER_MODE_THREADED_POSITIVE
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nresolved"
+}

@@ -117,6 +117,22 @@ void CanonicalizeTlsGroupProfile(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep the client-side TLS probe inside the closed set whose backing bytes,
+/// paths, and provider names are owned by the harness.
+void CanonicalizeTlsClientCredentialProfile(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->tls_client_credential_profile()) {
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL:
+      return;
+    default:
+      scenario->clear_tls_client_credential_profile();
+      return;
+  }
+}
+
 /// Keep the proxied origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
@@ -171,15 +187,49 @@ void CanonicalizeHttpTransportAuthority(curl::fuzzer::proto::Scenario* scenario)
 void CanonicalizeResolverAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
-  const char* host =
-      scenario->doh_https_rr()
-          ? "tls.test"
-          : ((scenario->happy_eyeballs() || !scenario->resolve_entries().empty()) ? "resolve.test" : "localhost");
+  const char* host = "localhost";
+  switch (scenario->resolver_mode()) {
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE:
+      host = "resolver-positive.test";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE:
+      host = "resolver-negative.test";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL:
+      host = "resolver-link-local.test";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
+      host = "resolver-partial.test";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET:
+      host = "resolver-unix.test";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
+      host = "localhost";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
+      host = "tls.test";
+      break;
+    case curl::fuzzer::proto::RESOLVER_MODE_DEFAULT:
+    default:
+      host =
+          scenario->doh_https_rr()
+              ? "tls.test"
+              : ((scenario->happy_eyeballs() || !scenario->resolve_entries().empty()) ? "resolve.test" : "localhost");
+      break;
+  }
   if (suffix_start == std::string::npos) {
     scenario->set_host_path(std::string(host) + "/");
     return;
   }
   scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
+}
+
+bool IsThreadedResolverMode(curl::fuzzer::proto::ResolverMode mode) {
+  return mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE ||
+         mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE ||
+         mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL ||
+         mode == curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL;
 }
 
 /// Give the TFTP lane a parseable filename-bearing URL while retaining the
@@ -2237,8 +2287,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http3_plan();
   }
 
-  if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2 &&
-      !(profile == TargetProfile::kResolver && scenario->doh_https_rr())) {
+  const bool resolver_uses_doh =
+      profile == TargetProfile::kResolver &&
+      (scenario->doh_https_rr() || scenario->resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2 && !resolver_uses_doh) {
     scenario->clear_http2_plan();
   }
 
@@ -2255,6 +2307,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_resolve_entries();
     scenario->clear_happy_eyeballs();
     scenario->clear_doh_https_rr();
+    scenario->clear_resolver_mode();
   }
 
   // SMTP's schema-native recipient list has no meaning in another protocol's
@@ -2296,6 +2349,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // early TLS-option failure.
   if (profile != TargetProfile::kFastHttps) {
     scenario->clear_crl_file();
+    scenario->clear_tls_client_credential_profile();
   }
 
   if (profile == TargetProfile::kFastHttp3) {
@@ -2403,12 +2457,43 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     // The DoH variant owns the outer HTTPS exchange through a verified
     // TLS/ALPN h2 peer, so its response is an Http2Plan rather than a raw
     // stream script. The ordinary resolver lanes keep plaintext HTTP.
+    switch (scenario->resolver_mode()) {
+      case curl::fuzzer::proto::RESOLVER_MODE_DEFAULT:
+      case curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE:
+      case curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE:
+      case curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL:
+      case curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET:
+      case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
+      case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
+      case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
+        break;
+      default:
+        scenario->clear_resolver_mode();
+        break;
+    }
+    const bool fixed_resolver_mode = scenario->resolver_mode() != curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;
+    if (fixed_resolver_mode) {
+      scenario->clear_resolve_entries();
+      scenario->clear_happy_eyeballs();
+    }
+    if (scenario->resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR) {
+      scenario->set_doh_https_rr(true);
+    } else if (fixed_resolver_mode) {
+      scenario->clear_doh_https_rr();
+    }
     const bool doh_https_rr = scenario->doh_https_rr();
     scenario->set_scheme(doh_https_rr ? curl::fuzzer::proto::SCHEME_HTTPS : curl::fuzzer::proto::SCHEME_HTTP);
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
+    // The generic fast-lane pruning above removes fuzz-controlled timing
+    // knobs. Threaded resolver modes add back one fixed marker so their
+    // bounded drive performs a pollset probe and short fdset waits while the
+    // target-local resolver work is outstanding.
+    if (IsThreadedResolverMode(scenario->resolver_mode())) {
+      scenario->mutable_connection()->mutable_backpressure()->set_drain_limit(1);
+    }
     if (doh_https_rr) {
       RetainDohHttpsRrOptions(scenario);
     } else {
@@ -2729,6 +2814,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       ClearAllBackpressure(scenario);
       CanonicalizeTlsAuthority(scenario);
       CanonicalizeTlsCertificateChain(scenario);
+      CanonicalizeTlsClientCredentialProfile(scenario);
       return;
 
     case TargetProfile::kHttpsH2:

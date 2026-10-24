@@ -36,7 +36,8 @@ namespace proto_fuzzer {
 class DohHttpsRrMockServer : public H2OriginMockServer {
  public:
   explicit DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                                    curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
+                                    curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+                                bool malformed_answers = false);
   ~DohHttpsRrMockServer() override;
 
   DohHttpsRrMockServer(const DohHttpsRrMockServer&) = delete;
@@ -94,6 +95,10 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   std::array<DohConnection, kMaxConnections> connections_;
   std::size_t doh_request_count_;
   std::size_t httpsrr_answer_count_;
+
+  /// Replace each otherwise-valid DNS body with a bounded malformed message.
+  /// This keeps transport success distinct from DNS parser failure.
+  bool malformed_answers_;
 
   /// True only after every resolver endpoint and proxy-bypass step has been
   /// installed. RunLoop refuses to perform when setup is partial so curl

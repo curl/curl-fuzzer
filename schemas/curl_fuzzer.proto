@@ -187,6 +187,20 @@ message Scenario {
   // name and never consumes a fuzz-controlled filesystem path. Other fixed
   // lanes clear this field. Zero preserves the historical direct transport.
   HttpTransportMode http_transport_mode = 33;
+  // Select one harness-owned resolver outcome in the dedicated resolver
+  // lane. Threaded modes use a target-local getaddrinfo shim, so they cover
+  // curl's real asynchronous resolver and cache state without consulting
+  // ambient DNS. The Unix mode supplies a fixed pathname only to curl's
+  // address builder; OPENSOCKETFUNCTION still returns the in-process peer.
+  // Other fixed lanes clear this field. Zero preserves the historical
+  // localhost/CURLOPT_RESOLVE/DoH behavior.
+  ResolverMode resolver_mode = 34;
+  // Select one bounded, harness-owned client-credential setup in the verified
+  // HTTPS lane. The profile never exposes a mutated filename, provider, or
+  // engine name: malformed blobs are compiled into the harness and the only
+  // file-backed probes use the fixed /dev/null path. Other fixed targets clear
+  // this field, and zero preserves the ordinary no-client-certificate path.
+  TlsClientCredentialProfile tls_client_credential_profile = 35;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -203,6 +217,17 @@ enum TlsCertificateChainProfile {
 enum TlsGroupProfile {
   TLS_GROUP_X25519 = 0;
   TLS_GROUP_PROVIDER_DEFAULT = 1;
+}
+
+// Safe client-side credential configurations for OpenSSL option coverage.
+// These profiles deliberately exercise setup and rejection paths rather than
+// accepting arbitrary filesystem or provider identifiers from protobuf data.
+enum TlsClientCredentialProfile {
+  TLS_CLIENT_CREDENTIAL_NONE = 0;
+  TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12 = 1;
+  TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL = 2;
+  TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL = 3;
+  TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL = 4;
 }
 
 enum SocksProxyMode {
@@ -228,6 +253,29 @@ enum HttpTransportMode {
   HTTP_TRANSPORT_CONNECT_PROXY = 2;
   // Reach the HTTP origin through a fixed abstract Unix-domain socket.
   HTTP_TRANSPORT_UNIX_SOCKET = 3;
+}
+
+enum ResolverMode {
+  RESOLVER_MODE_DEFAULT = 0;
+  // Return two harness-owned IPv4 addresses from getaddrinfo and enable
+  // curl's address shuffler before opening the in-process peer.
+  RESOLVER_MODE_THREADED_POSITIVE = 1;
+  // Return EAI_NONAME so curl records an authoritative negative cache entry.
+  RESOLVER_MODE_THREADED_NEGATIVE = 2;
+  // Return a scope-less IPv6 link-local result, then an AF_UNSPEC retry, to
+  // exercise curl's scope repair and family filtering.
+  RESOLVER_MODE_THREADED_LINK_LOCAL = 3;
+  // Resolve a fixed, non-existent Unix-domain pathname while the open-socket
+  // callback supplies the already-connected anonymous peer.
+  RESOLVER_MODE_UNIX_SOCKET = 4;
+  // Feed bounded malformed DNS messages from the in-process DoH responder.
+  RESOLVER_MODE_DOH_ERROR = 5;
+  // Stagger harness-owned AAAA and A answers so curl intentionally observes
+  // and consumes a live partial asynchronous result.
+  RESOLVER_MODE_THREADED_PARTIAL = 6;
+  // Complete one ordinary local transfer, then exercise curl's balanced
+  // global cleanup and reinitialization lifecycle between fuzz inputs.
+  RESOLVER_MODE_GLOBAL_LIFECYCLE = 7;
 }
 
 // A bounded, ordered HTTP/3 server script. Structured responses keep common
@@ -903,6 +951,7 @@ enum CurlOptionId {
   CURLOPT_SSL_SIGNATURE_ALGORITHMS = 10328;
   CURLOPT_SSL_VERIFYHOST = 81;
   CURLOPT_SSL_VERIFYPEER = 64;
+  CURLOPT_SSL_VERIFYSTATUS = 232;
   CURLOPT_TFTP_BLKSIZE = 178;
   CURLOPT_TFTP_NO_OPTIONS = 242;
   CURLOPT_TIMECONDITION = 33;
