@@ -293,6 +293,15 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "OK AUTHENTICATE completed" in plain
     assert "OK FETCH completed" in plain
 
+    login_listing = (
+        imap_root / "imap_auth_login_custom_fetch.textproto"
+    ).read_text(encoding="utf-8")
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=LOGIN"' in login_listing
+    assert "* CAPABILITY IMAP4rev1 AUTH=LOGIN" in login_listing
+    assert login_listing.count('on_readable: "+') == 2
+    assert "UID FETCH 1:* (FLAGS)" in login_listing
+    assert "OK FETCH completed" in login_listing
+
     oauth = (imap_root / "imap_auth_oauthbearer_error.textproto").read_text(
         encoding="utf-8"
     )
@@ -300,6 +309,26 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert 'CURLOPT_XOAUTH2_BEARER string_value: "invalid-token"' in oauth
     assert oauth.count('on_readable: "+') == 2
     assert "NO Authentication failed" in oauth
+
+    xoauth2 = (imap_root / "imap_auth_xoauth2_success.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=XOAUTH2"' in xoauth2
+    assert (
+        'CURLOPT_XOAUTH2_BEARER string_value: "fuzz-xoauth2-token"' in xoauth2
+    )
+    assert "A002 OK AUTHENTICATE completed" in xoauth2
+    assert "A004 OK FETCH completed" in xoauth2
+
+    digest = (imap_root / "imap_auth_digest_md5_search.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'host_path: "imap.test/INBOX?ALL"' in digest
+    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=DIGEST-MD5"' in digest
+    assert "AUTH=DIGEST-MD5\\r\\nOK CAPABILITY completed" in digest
+    assert digest.count('on_readable: "+') == 2
+    assert "OK AUTHENTICATE completed" in digest
+    assert "* SEARCH 1 2\\r\\nOK SEARCH completed" in digest
 
     fallback = (imap_root / "imap_auth_cram_fallback.textproto").read_text(
         encoding="utf-8"
