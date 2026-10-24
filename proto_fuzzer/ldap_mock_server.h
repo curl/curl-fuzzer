@@ -93,6 +93,9 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
   // Number of root-DSE supportedSASLMechanisms searches observed.
   std::size_t mechanism_search_request_count() const;
 
+  // Number of StartTLS ExtendedRequest messages observed.
+  std::size_t starttls_request_count() const;
+
   // Number of unbindRequest messages observed during teardown.
   std::size_t unbind_request_count() const;
 
@@ -184,6 +187,8 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
 
   void HandleMechanismSearchRequest(std::uint32_t message_id);
 
+  void HandleStartTlsRequest(std::uint32_t message_id);
+
   bool ReleaseNextServerChunk();
 
   bool FinishSearchIfReady();
@@ -214,6 +219,7 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
   std::size_t bind_request_count_;
   std::size_t search_request_count_;
   std::size_t mechanism_search_request_count_;
+  std::size_t starttls_request_count_;
   std::size_t unbind_request_count_;
   std::size_t server_message_count_;
   std::size_t scripted_message_count_;

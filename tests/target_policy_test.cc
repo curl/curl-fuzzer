@@ -1785,6 +1785,7 @@ void TestFastLdapPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
   scenario.add_mail_rcpt("recipient@example.test");
+  scenario.set_ldap_starttls(true);
 
   auto *rejected = scenario.add_options();
   rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
@@ -1853,6 +1854,8 @@ void TestFastLdapPolicy() {
              scenario.options(3).string_value() == "authorization-id" &&
              scenario.options(4).bool_value(),
          "fast LDAP policy lost the SASL-bind configuration");
+  Expect(scenario.ldap_starttls(),
+         "fast LDAP policy discarded the bounded StartTLS mode");
 }
 
 void TestNonLdapPoliciesClearLdapScheme() {
@@ -1865,11 +1868,14 @@ void TestNonLdapPoliciesClearLdapScheme() {
     Scenario scenario;
     scenario.set_host_path("ldap.test/dc=example,dc=com");
     scenario.set_scheme(SCHEME_LDAP);
+    scenario.set_ldap_starttls(true);
 
     NormalizeScenarioForTarget(&scenario, profile);
 
     Expect(scenario.scheme() != SCHEME_LDAP,
            "a non-LDAP policy retained the LDAP scheme");
+    Expect(!scenario.ldap_starttls(),
+           "a non-LDAP policy retained the StartTLS mode");
 
     Scenario secure;
     secure.set_host_path("tls.test/dc=example,dc=com");
@@ -1884,9 +1890,10 @@ void TestNonLdapPoliciesClearLdapScheme() {
   Scenario compatibility;
   compatibility.set_host_path("ldap.test/dc=example,dc=com");
   compatibility.set_scheme(SCHEME_LDAP);
+  compatibility.set_ldap_starttls(true);
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
-  Expect(compatibility.scheme() == SCHEME_LDAP,
-         "compatibility unexpectedly rewrote the LDAP scheme");
+  Expect(compatibility.scheme() == SCHEME_LDAP && compatibility.ldap_starttls(),
+         "compatibility unexpectedly rewrote the LDAP StartTLS shape");
 
   Scenario secure_compatibility;
   secure_compatibility.set_host_path("tls.test/dc=example,dc=com");
@@ -1902,6 +1909,7 @@ void TestFastLdapsPolicy() {
   scenario.set_scheme(SCHEME_LDAPS);
   scenario.set_host_path(
       "untrusted.invalid:636/dc=example,dc=com?cn?sub?(objectclass=*)#frag");
+  scenario.set_ldap_starttls(true);
   scenario.add_request_headers("X-Ignored: ldaps");
   scenario.mutable_connection()->add_on_readable("search entry");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
@@ -1929,6 +1937,8 @@ void TestFastLdapsPolicy() {
              scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_USERNAME,
          "fast LDAP lane retained a non-LDAP option for LDAPS");
+  Expect(!scenario.ldap_starttls(),
+         "fast LDAP lane retained StartTLS for implicit LDAPS");
 }
 
 void TestFastRtspPolicy() {

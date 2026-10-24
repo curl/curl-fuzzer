@@ -196,9 +196,10 @@ Other peers intentionally give those fields narrower meanings:
   callbacks, so the in-process peer terminates ordinary TLS records and then
   parses decrypted LDAPMessages. The fixed authority is `tls.test`, matching
   the checked-in trust anchor, and the handshake carries no ALPN extension.
-  `CURLOPT_USE_SSL` is intentionally not retained: LDAP StartTLS would require
-  a successful ExtendedResponse followed by upgrading that same plaintext
-  carrier, while the current TLS peer supports implicit TLS from byte zero.
+  A plaintext `SCHEME_LDAP` scenario may instead set `ldap_starttls`: the peer
+  recognizes OpenLDAP's ExtendedRequest and returns a successful correlated
+  ExtendedResponse before curl installs its TLS filter. The peer intentionally
+  closes the unimplemented upgraded carrier, keeping this transition bounded.
 - RTSP is request-aligned and has no server greeting. The peer consumes each
   request start line and header block, releases the next `on_readable` entry
   only after the terminating empty line, and drains any announced

@@ -87,3 +87,12 @@ def test_ldaps_seed_runs_bind_and_search_over_implicit_tls() -> None:
     # searchResEntry: SEQUENCE, messageID 2, application tag 4 (0x64).
     assert 'on_readable: "\\060\\106\\002\\001\\002\\144' in secure
     assert "initial_response" not in secure
+
+
+def test_ldap_starttls_seed_correlates_the_upgrade_mode() -> None:
+    """Keep StartTLS separate from both plaintext bind and implicit LDAPS."""
+    starttls = (SCENARIO_ROOT / "ldap_starttls.textproto").read_text(encoding="utf-8")
+    assert "scheme: SCHEME_LDAP" in starttls
+    assert 'host_path: "ldap.test/' in starttls
+    assert "ldap_starttls: true" in starttls
+    assert "SCHEME_LDAPS" not in starttls

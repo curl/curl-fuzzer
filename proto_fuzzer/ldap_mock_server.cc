@@ -37,6 +37,8 @@ constexpr unsigned char kSearchRequest = 0x63;
 constexpr unsigned char kSearchResultEntry = 0x64;
 constexpr unsigned char kSearchResultDone = 0x65;
 constexpr unsigned char kAbandonRequest = 0x50;
+constexpr unsigned char kExtendedRequest = 0x77;
+constexpr unsigned char kExtendedResponse = 0x78;
 constexpr unsigned char kSetTag = 0x31;
 constexpr unsigned char kPresentFilter = 0x87;
 constexpr int kLdapSuccess = 0;
@@ -58,6 +60,7 @@ LdapMockServer::LdapMockServer()
       bind_request_count_(0),
       search_request_count_(0),
       mechanism_search_request_count_(0),
+      starttls_request_count_(0),
       unbind_request_count_(0),
       server_message_count_(0),
       scripted_message_count_(0),
@@ -100,6 +103,9 @@ std::size_t LdapMockServer::search_request_count() const { return search_request
 
 /// @return Number of root-DSE supportedSASLMechanisms searches observed.
 std::size_t LdapMockServer::mechanism_search_request_count() const { return mechanism_search_request_count_; }
+
+/// @return Number of StartTLS ExtendedRequest messages observed.
+std::size_t LdapMockServer::starttls_request_count() const { return starttls_request_count_; }
 
 /// @return Number of unbindRequest messages observed.
 std::size_t LdapMockServer::unbind_request_count() const { return unbind_request_count_; }
@@ -460,6 +466,7 @@ void LdapMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scena
   bind_request_count_ = 0;
   search_request_count_ = 0;
   mechanism_search_request_count_ = 0;
+  starttls_request_count_ = 0;
   unbind_request_count_ = 0;
   server_message_count_ = 0;
   scripted_message_count_ = 0;
@@ -608,9 +615,23 @@ void LdapMockServer::HandleMechanismSearchRequest(std::uint32_t message_id) {
   (void)WriteServerBytes(done);
 }
 
+/// Accept the RFC 4511 StartTLS ExtendedRequest. The successful correlated
+/// response makes OpenLDAP return control to curl, which installs its TLS
+/// connection filter on the existing confined socketpair. This plaintext peer
+/// deliberately does not impersonate a TLS server after the upgrade: the
+/// subsequent handshake observes a bounded EOF/error path while still
+/// exercising the production filter transition.
+/// @param message_id Client request identifier echoed in ExtendedResponse.
+void LdapMockServer::HandleStartTlsRequest(std::uint32_t message_id) {
+  ++starttls_request_count_;
+  std::string response;
+  BuildResultMessage(message_id, kExtendedResponse, kLdapSuccess, &response);
+  (void)WriteServerBytes(response);
+}
+
 /// Route one complete client message. Unknown protocol operations are consumed
-/// without a reply, matching LDAP's asymmetry: only bind and search expect
-/// responses, while unbind/abandon are fire-and-forget.
+/// without a reply, matching LDAP's asymmetry: bind, search, and StartTLS
+/// expect responses, while unbind/abandon are fire-and-forget.
 /// @param message Decoded client envelope.
 void LdapMockServer::HandleClientMessage(const MessageView& message) {
   switch (message.op_tag) {
@@ -624,6 +645,10 @@ void LdapMockServer::HandleClientMessage(const MessageView& message) {
       } else {
         HandleSearchRequest(message.message_id);
       }
+      return;
+
+    case kExtendedRequest:
+      HandleStartTlsRequest(message.message_id);
       return;
 
     case kUnbindRequest:
