@@ -74,6 +74,7 @@ OPTION_KIND_OVERRIDES: dict[str, str] = {
     "CURLOPT_FORBID_REUSE": "bool",
     "CURLOPT_UPLOAD": "bool",
     "CURLOPT_SSL_VERIFYPEER": "bool",
+    "CURLOPT_SSL_VERIFYSTATUS": "bool",
     "CURLOPT_SSL_SESSIONID_CACHE": "bool",
     "CURLOPT_SSL_ENABLE_ALPN": "bool",
     "CURLOPT_COOKIESESSION": "bool",

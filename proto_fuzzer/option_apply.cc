@@ -38,6 +38,11 @@ constexpr char kLdapProtocolAllowed[] = "ldap,ldaps";
 constexpr char kRtspProtocolAllowed[] = "rtsp";
 constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
+constexpr char kDefaultProvider[] = "default";
+constexpr char kEngineCertificateType[] = "ENG";
+constexpr char kPkcs12CertificateType[] = "P12";
+constexpr char kProviderCertificateType[] = "PROV";
+constexpr unsigned char kMalformedPkcs12[] = {0x30, 0x00};
 constexpr char kVerboseEnvVar[] = "FUZZ_VERBOSE";
 constexpr char kAltSvcHttpEnvVar[] = "CURL_ALTSVC_HTTP";
 constexpr char kHstsHttpEnvVar[] = "CURL_HSTS_HTTP";
@@ -230,6 +235,65 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
     curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
   }
   return connect_to;
+}
+
+/// Apply one closed, harness-owned TLS client-credential configuration.
+/// No protobuf bytes become a path, provider, or engine identifier.
+/// @param easy Handle receiving the fixed credential options.
+/// @param profile Safe credential setup selected by the HTTPS lane.
+/// @return The first curl_easy_setopt error, or CURLE_OK.
+CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile) {
+  if (easy == nullptr) {
+    return CURLE_BAD_FUNCTION_ARGUMENT;
+  }
+
+  const auto set_string = [easy](CURLoption option, const char* value) {
+    return curl_easy_setopt(easy, option, value);
+  };
+  switch (profile) {
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE:
+      return CURLE_OK;
+
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12: {
+      CURLcode result = set_string(CURLOPT_SSLCERTTYPE, kPkcs12CertificateType);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      const curl_blob blob = {const_cast<unsigned char*>(kMalformedPkcs12), sizeof(kMalformedPkcs12), CURL_BLOB_COPY};
+      return curl_easy_setopt(easy, CURLOPT_SSLCERT_BLOB, &blob);
+    }
+
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL: {
+      CURLcode result = set_string(CURLOPT_SSLCERTTYPE, kEngineCertificateType);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      return set_string(CURLOPT_SSLCERT, kDevNull);
+    }
+
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL: {
+      CURLcode result = set_string(CURLOPT_SSLENGINE, kDefaultProvider);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      result = set_string(CURLOPT_SSLCERTTYPE, kProviderCertificateType);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      return set_string(CURLOPT_SSLCERT, kDevNull);
+    }
+
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL: {
+      CURLcode result = set_string(CURLOPT_SSLCERTTYPE, kProviderCertificateType);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      return set_string(CURLOPT_SSLCERT, kDevNull);
+    }
+
+    default:
+      return CURLE_BAD_FUNCTION_ARGUMENT;
+  }
 }
 
 /// Translate and apply one generated scalar/string SetOption to the easy handle.

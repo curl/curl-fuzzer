@@ -64,6 +64,31 @@ namespace {
 
 constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
 constexpr std::size_t kMaxResultHeaders = 16;
+constexpr char kResolverUnixSocketPath[] = "/curl-fuzzer-resolver.sock";
+
+/// Apply only harness-owned resolver controls. Target policy has already
+/// replaced the URL authority with a fixed name understood by the target-local
+/// getaddrinfo shim and removed fuzzed cache entries for these modes.
+bool ApplyResolverMode(CURL* easy, curl::fuzzer::proto::ResolverMode mode) {
+  switch (mode) {
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE:
+      return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4) == CURLE_OK &&
+             curl_easy_setopt(easy, CURLOPT_DNS_SHUFFLE_ADDRESSES, 1L) == CURLE_OK;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
+      return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER) == CURLE_OK;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE:
+      return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER) == CURLE_OK;
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL:
+      return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6) == CURLE_OK;
+    case curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET:
+      return curl_easy_setopt(easy, CURLOPT_UNIX_SOCKET_PATH, kResolverUnixSocketPath) == CURLE_OK;
+    case curl::fuzzer::proto::RESOLVER_MODE_DEFAULT:
+    case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
+    case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
+    default:
+      return true;
+  }
+}
 /// Probe each public getinfo return family and the response-header API after
 /// curl has settled the transfer. Applications commonly inspect these APIs,
 /// but a harness that only drives I/O leaves their type dispatch and
@@ -245,7 +270,8 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     // queries; its TLS/ALPN h2 carrier then completes the outer HTTPS
     // transfer selected from the record.
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-    return std::make_unique<DohHttpsRrMockServer>(scenario.tls_certificate_chain());
+    return std::make_unique<DohHttpsRrMockServer>(
+        scenario.tls_certificate_chain(), scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
 #else
     // MemorySanitizer builds deliberately omit OpenSSL, so no verified TLS
     // peer exists for the HTTPS-RR lane. Keep the target available while
@@ -606,7 +632,6 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   // Every input starts from a known off trace baseline (and returns to it when
   // the scope exits), so one input's trace selection cannot leak into another.
   proto_fuzzer::ScopedTraceReset trace_reset;
-
   if (mode == ScenarioRunMode::kMultiTransfer) {
     (void)proto_fuzzer::RunMultiTransferScenario(scenario);
     return 0;
@@ -643,6 +668,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   }
   CURL* easy = transfer.easy();
   const std::string url = ScenarioUrl(scenario, prefix);
+  bool resolver_mode_ready = true;
   const auto configure_easy = [&] {
     transfer.ApplyBaseline(scenario);
     (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
@@ -652,8 +678,17 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
+    if (mode == ScenarioRunMode::kResolverCoverage) {
+      resolver_mode_ready = ApplyResolverMode(easy, scenario.resolver_mode());
+    }
+    if (mode == ScenarioRunMode::kTlsCoverage) {
+      (void)ApplyTlsClientCredentialProfile(easy, scenario.tls_client_credential_profile());
+    }
   };
   configure_easy();
+  if (!resolver_mode_ready) {
+    return 0;
+  }
   transfer.ConfigureAltSvcRouting(scenario.host_path());
 
   if (file_lane) {
@@ -692,7 +727,8 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   // The DoH lane lets the loopback responder answer every lookup, including
   // the address query, so it must not install the resolver lane's fixed
   // CURLOPT_RESOLVE cache entries.
-  const bool apply_resolve_entries = mode == ScenarioRunMode::kResolverCoverage && !scenario.doh_https_rr();
+  const bool apply_resolve_entries = mode == ScenarioRunMode::kResolverCoverage && !scenario.doh_https_rr() &&
+                                     scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;
   ScenarioRequestData* request_data = transfer.InstallRequestData(scenario, apply_resolve_entries);
   if (mode == ScenarioRunMode::kResolverCoverage && !request_data->resolve_entries_ready()) {
     return 0;

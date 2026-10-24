@@ -47,6 +47,8 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
 
 CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option);
 
+CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile);
+
 std::size_t RuntimeOptionCount(const curl::fuzzer::proto::Scenario& scenario);
 
 std::size_t ApplyScenarioOptions(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);

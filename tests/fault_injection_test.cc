@@ -234,6 +234,14 @@ void TestInstalledCurlCallbacks() {
   curl_free(escaped);
 }
 
+void TestCurlCallbackReinitialization() {
+  faults::Reset();
+  curl_global_cleanup();
+  Expect(faults::ReinitializeCurl(),
+         "allocator callbacks were not reinstalled after global cleanup");
+  TestInstalledCurlCallbacks();
+}
+
 } // namespace
 
 int main() {
@@ -245,6 +253,7 @@ int main() {
   TestResetInvalidatesLiveSuppression();
   TestThreadLocalPlan();
   TestInstalledCurlCallbacks();
+  TestCurlCallbackReinitialization();
   faults::Reset();
   return 0;
 }

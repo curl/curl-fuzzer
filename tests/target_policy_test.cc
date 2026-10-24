@@ -422,6 +422,32 @@ void TestTlsPoliciesRejectUnknownCertificateChain() {
   }
 }
 
+void TestTlsClientCredentialProfilePolicy() {
+  Scenario https;
+  https.set_tls_client_credential_profile(
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12);
+  NormalizeScenarioForTarget(&https, TargetProfile::kFastHttps);
+  Expect(https.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12,
+         "HTTPS policy discarded a bounded client-credential profile");
+
+  Scenario unknown;
+  unknown.set_tls_client_credential_profile(
+      static_cast<curl::fuzzer::proto::TlsClientCredentialProfile>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastHttps);
+  Expect(unknown.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE,
+         "HTTPS policy retained an unknown client-credential profile");
+
+  Scenario plaintext;
+  plaintext.set_tls_client_credential_profile(
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL);
+  NormalizeScenarioForTarget(&plaintext, TargetProfile::kDeepHttp);
+  Expect(plaintext.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE,
+         "non-HTTPS policy retained client-credential setup work");
+}
+
 void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
   Scenario scenario;
   scenario.set_tls_group_profile(
@@ -2200,10 +2226,81 @@ void TestResolverPolicy() {
          "DoH resolver policy retained a transport override or discarded a "
          "request-level HTTP option");
 
+  Scenario threaded;
+  threaded.set_host_path("untrusted.invalid/threaded");
+  threaded.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE);
+  threaded.add_resolve_entries("*:80:203.0.113.1");
+  threaded.set_happy_eyeballs(true);
+  threaded.set_doh_https_rr(true);
+  NormalizeScenarioForTarget(&threaded, TargetProfile::kResolver);
+  Expect(threaded.scheme() == SCHEME_HTTP &&
+             threaded.host_path() == "resolver-positive.test/threaded",
+         "threaded resolver policy did not select its fixed authority");
+  Expect(threaded.resolve_entries_size() == 0 &&
+             !threaded.happy_eyeballs() && !threaded.doh_https_rr(),
+         "threaded resolver policy retained a bypassing resolver source");
+  Expect(threaded.connection().backpressure().drain_limit() == 1,
+         "threaded resolver policy did not install its fixed timed-drive marker");
+
+  Scenario link_local;
+  link_local.set_host_path("untrusted.invalid/scope");
+  link_local.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL);
+  NormalizeScenarioForTarget(&link_local, TargetProfile::kResolver);
+  Expect(link_local.host_path() ==
+             "resolver-link-local.test/scope",
+         "link-local resolver policy did not select its shim authority");
+  Expect(link_local.connection().backpressure().drain_limit() == 1,
+         "link-local resolver policy did not install its fixed timed-drive marker");
+
+  Scenario partial;
+  partial.set_host_path("untrusted.invalid/partial");
+  partial.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL);
+  NormalizeScenarioForTarget(&partial, TargetProfile::kResolver);
+  Expect(partial.host_path() == "resolver-partial.test/partial" &&
+             partial.connection().backpressure().drain_limit() == 1,
+         "partial resolver policy did not select its deterministic drive");
+
+  Scenario unix_socket;
+  unix_socket.set_host_path("untrusted.invalid/unix");
+  unix_socket.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET);
+  NormalizeScenarioForTarget(&unix_socket, TargetProfile::kResolver);
+  Expect(unix_socket.host_path() == "resolver-unix.test/unix",
+         "Unix resolver policy did not select its fixed authority");
+
+  Scenario doh_error;
+  doh_error.set_host_path("untrusted.invalid/doh-error");
+  doh_error.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  doh_error.mutable_http2_plan()
+      ->add_actions()
+      ->mutable_headers()
+      ->set_status_code(200);
+  NormalizeScenarioForTarget(&doh_error, TargetProfile::kResolver);
+  Expect(doh_error.scheme() == SCHEME_HTTPS &&
+             doh_error.host_path() == "tls.test/doh-error" &&
+             doh_error.doh_https_rr() && doh_error.has_http2_plan() &&
+             doh_error.http2_plan().actions_size() == 1,
+         "DoH error policy did not retain the confined DoH transport");
+
+  Scenario global_lifecycle;
+  global_lifecycle.set_host_path("untrusted.invalid/global");
+  global_lifecycle.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE);
+  NormalizeScenarioForTarget(&global_lifecycle, TargetProfile::kResolver);
+  Expect(global_lifecycle.host_path() == "localhost/global" &&
+             global_lifecycle.scheme() == SCHEME_HTTP,
+         "global resolver lifecycle policy did not select localhost");
+
   Scenario ordinary;
   ordinary.add_resolve_entries("example.test:80:127.0.0.1");
   ordinary.set_happy_eyeballs(true);
   ordinary.set_doh_https_rr(true);
+  ordinary.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE);
   NormalizeScenarioForTarget(&ordinary, TargetProfile::kFastHttp);
   Expect(ordinary.resolve_entries_size() == 0,
          "non-resolver policy retained structured DNS work");
@@ -2211,6 +2308,9 @@ void TestResolverPolicy() {
          "non-resolver policy retained happy-eyeballs state");
   Expect(!ordinary.doh_https_rr(),
          "non-resolver policy retained the DoH responder selector");
+  Expect(ordinary.resolver_mode() ==
+             curl::fuzzer::proto::RESOLVER_MODE_DEFAULT,
+         "non-resolver policy retained the target-local resolver selector");
 }
 
 void TestPauseTerminalIsTelnetOnly() {
@@ -3635,6 +3735,7 @@ int main() {
   TestHttpsH2Policy();
   TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
+  TestTlsClientCredentialProfilePolicy();
   TestHttpsH2PolicyRejectsUnknownTlsGroupProfile();
   TestOtherPoliciesDiscardTlsGroupProfiles();
   TestFastHttp3PolicyMaterializesUsefulPlan();

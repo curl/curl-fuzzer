@@ -1095,6 +1095,9 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
            "TLS scenario option was rejected by curl");
   }
+  Expect(proto_fuzzer::ApplyTlsClientCredentialProfile(
+             easy, scenario.tls_client_credential_profile()) == CURLE_OK,
+         "TLS client-credential profile was rejected during setup");
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
 
@@ -1258,6 +1261,36 @@ void TestTlsPublicKeyPins() {
   Expect(mismatch_result.verify_result == 0,
          "ordinary certificate verification failed before the pin comparison");
 }
+
+#if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+void TestTlsClientCredentialProfilesFailInsideOwnedInputs() {
+  constexpr curl::fuzzer::proto::TlsClientCredentialProfile kProfiles[] = {
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12,
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL,
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL,
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL,
+  };
+  for (const auto profile : kProfiles) {
+    Scenario scenario = MakeTlsScenario("client-credential", "unreachable");
+    scenario.set_tls_client_credential_profile(profile);
+    const TlsTransferResult result = DriveTlsScenario(scenario);
+    Expect(result.code != CURLE_OK,
+           "invalid harness-owned client credential unexpectedly completed");
+    Expect(result.response.empty() && result.handshake_count == 0,
+           "client credential failure reached encrypted application data");
+  }
+}
+
+void TestTlsCertificateStatusRequestIsBackendChecked() {
+  Scenario scenario = MakeTlsScenario("cert-status", "status-probe");
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS, true);
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_SSL_INVALIDCERTSTATUS,
+         "missing stapled status did not reach OpenSSL status validation");
+  Expect(result.response.empty(),
+         "curl delivered HTTP data after rejecting missing certificate status");
+}
+#endif
 
 void TestTlsRedirectReusesSession() {
   Scenario scenario;
@@ -2216,6 +2249,42 @@ void TestDohHttpsRrDrivesAlpnSelection() {
   curl_slist_free_all(connect_to);
 }
 
+/// A complete loopback HTTP response carrying malformed DNS bytes must reach
+/// curl's DoH decoder and fail there. This distinguishes typed DoH diagnostics
+/// from listener/setup errors and native-resolver fallback.
+void TestDohMalformedAnswerReachesDecoder() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/doh-error");
+  scenario.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  scenario.set_doh_https_rr(true);
+
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "DoH malformed-answer test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to;
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
+                         "https://tls.test/doh-error");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
+
+  proto_fuzzer::DohHttpsRrMockServer server(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, true);
+  server.Install(easy.get());
+  proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
+  server.ConfigureRequestData(&request_data);
+
+  const CURLcode result = server.DriveScenario(easy.get(), scenario);
+  Expect(result == CURLE_COULDNT_RESOLVE_HOST,
+         "malformed DoH answer did not fail in name resolution");
+  Expect(server.doh_request_count() != 0,
+         "malformed DoH test served no complete probe");
+  Expect(server.httpsrr_answer_count() == 0,
+         "malformed DoH test recorded a valid HTTPS-RR answer");
+}
+
 /// A partial local-DoH setup must not perform the outer transfer. Otherwise an
 /// unset CURLOPT_DOH_URL silently selects the process's native resolver before
 /// the mock's socket callback gets a chance to confine the connection.
@@ -2270,6 +2339,7 @@ int main() {
   TestTlsWebSocketCompletesStreamingExchange();
   TestTlsWebSocketFlushesFinalManualFrame();
   TestDohHttpsRrDrivesAlpnSelection();
+  TestDohMalformedAnswerReachesDecoder();
   TestDohHttpsRrSetupFailureDoesNotDriveCurl();
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();
@@ -2280,6 +2350,10 @@ int main() {
 #endif
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
+#if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  TestTlsClientCredentialProfilesFailInsideOwnedInputs();
+  TestTlsCertificateStatusRequestIsBackendChecked();
+#endif
   TestTlsRedirectReusesSession();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
