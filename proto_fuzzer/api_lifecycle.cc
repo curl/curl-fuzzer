@@ -412,14 +412,25 @@ ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan,
   ProbeEasyOptionMetadataOnce();
   ProbeUrlAndEscaping(url);
   response_callback_state_.owner = this;
-  const bool wants_response_callback = plan_.pause_response_once() || plan_.reentrant_probe_selectors_size() > 0;
+  response_callback_state_.debug_pause_cycle = plan_.debug_pause_cycle_during_replay();
+  const bool wants_response_callback = plan_.pause_response_once() || response_callback_state_.debug_pause_cycle ||
+                                       plan_.reentrant_probe_selectors_size() > 0;
   if (wants_response_callback) {
-    response_callback_state_.pause_once = plan_.pause_response_once();
+    response_callback_state_.pause_once = plan_.pause_response_once() || response_callback_state_.debug_pause_cycle;
     // Install userdata first: if the callback setopt were ever rejected, the
     // baseline sink safely ignores the non-null pointer. The opposite order
     // could dispatch this callback with libcurl's default FILE* userdata.
     (void)curl_easy_setopt(easy_, CURLOPT_WRITEDATA, &response_callback_state_);
     (void)curl_easy_setopt(easy_, CURLOPT_WRITEFUNCTION, &ApiLifecycle::ResponseWrite);
+  }
+  if (response_callback_state_.debug_pause_cycle) {
+    // curl_global_trace is process-global and additive. The per-handle verbose
+    // switch and callback state below keep the extra work confined to selected
+    // API scenarios after the write category has been enabled once.
+    (void)curl_global_trace("+write");
+    (void)curl_easy_setopt(easy_, CURLOPT_DEBUGDATA, &response_callback_state_);
+    (void)curl_easy_setopt(easy_, CURLOPT_DEBUGFUNCTION, &ApiLifecycle::DebugCallback);
+    (void)curl_easy_setopt(easy_, CURLOPT_VERBOSE, 1L);
   }
   if (plan_.attach_share()) {
     ConfigureShare();
@@ -444,6 +455,14 @@ std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, st
     state->pause_returned = true;
     return CURL_WRITEFUNC_PAUSE;
   }
+  if (bytes != 0 && state->debug_pause_cycle && !state->debug_pause_cycle_done) {
+    // The first PAUSE put these bytes in cw-out's chain. Pause their replay
+    // while arming the immediately following write trace to make its debug
+    // callback synchronously enter a nested flush before cw-out records the
+    // second pause.
+    state->debug_pause_armed = true;
+    return CURL_WRITEFUNC_PAUSE;
+  }
   if (bytes > std::numeric_limits<std::size_t>::max() - state->bytes_received) {
     return 0;
   }
@@ -453,6 +472,28 @@ std::size_t ApiLifecycle::ResponseWrite(char* /*contents*/, std::size_t size, st
     state->owner->RunReentrantProbes();
   }
   return bytes;
+}
+
+/// Re-enter the pause API from the write trace emitted after ResponseWrite
+/// returns PAUSE for a replayed buffer but before cw-out records that second
+/// pause. Disarm first because either nested call may itself emit debug records.
+int ApiLifecycle::DebugCallback(CURL* easy, curl_infotype type, char* /*data*/, std::size_t /*size*/, void* user_data) {
+  auto* state = static_cast<ResponseCallbackState*>(user_data);
+  if (state == nullptr || type != CURLINFO_TEXT || !state->debug_pause_armed || state->debug_pause_cycle_done) {
+    return 0;
+  }
+  // cw-out first traces the callback's return value, then records the pause
+  // and emits its "PAUSE requested" trace. Re-enter only from that second
+  // record, when writer.paused is true and the outer replay still owns cwbuf.
+  if (!state->debug_pause_write_trace_seen) {
+    state->debug_pause_write_trace_seen = true;
+    return 0;
+  }
+  state->debug_pause_armed = false;
+  state->debug_pause_cycle_done = true;
+  state->debug_pause_result = curl_easy_pause(easy, CURLPAUSE_RECV);
+  state->debug_continue_result = curl_easy_pause(easy, CURLPAUSE_CONT);
+  return 0;
 }
 
 /// @return whether the API-plan response callback returned PAUSE once.
@@ -475,6 +516,15 @@ std::size_t ApiLifecycle::reentrant_probes_run() const { return response_callbac
 std::size_t ApiLifecycle::reentrant_recursive_rejections() const {
   return response_callback_state_.recursive_rejections;
 }
+
+/// @return Whether the write-trace callback ran its nested pause cycle.
+bool ApiLifecycle::debug_pause_cycle_ran() const { return response_callback_state_.debug_pause_cycle_done; }
+
+/// @return Result of pausing receive from the write-trace callback.
+CURLcode ApiLifecycle::debug_pause_result() const { return response_callback_state_.debug_pause_result; }
+
+/// @return Result of continuing receive from the write-trace callback.
+CURLcode ApiLifecycle::debug_continue_result() const { return response_callback_state_.debug_continue_result; }
 
 /// Fire each selected public API call once, in scenario order, from inside the
 /// first non-empty response callback. Multi probes are skipped when the drive

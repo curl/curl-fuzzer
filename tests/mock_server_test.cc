@@ -1492,6 +1492,51 @@ void TestApiResponseCallbackPausesAndResumes() {
   curl_slist_free_all(connect_to);
 }
 
+/// After the client callback pauses a replayed buffer, cw-out records that
+/// pause and emits a trace before the outer flush releases its buffer.
+/// Re-entering the pause API there must not recursively consume that buffer.
+void TestApiDebugCallbackPauseCycleDuringReplay() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("api.test/debug-pause-replay");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("paused");
+  auto *plan = scenario.mutable_api_plan();
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
+  plan->set_pause_response_once(true);
+  plan->set_debug_pause_cycle_during_replay(true);
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "debug-pause replay test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/debug-pause-replay");
+
+  TestMockServer server(proto_fuzzer::MultiDrivePolicy::kFromApiPlan);
+  server.Install(easy);
+  auto lifecycle = std::make_unique<proto_fuzzer::ApiLifecycle>(
+      easy, *plan, "http://api.test/debug-pause-replay");
+
+  const CURLcode transfer_result = server.DriveScenario(easy, scenario);
+  Expect(lifecycle->response_pause_returned(),
+         "debug-pause replay never returned CURL_WRITEFUNC_PAUSE");
+  Expect(lifecycle->debug_pause_cycle_ran(),
+         "write-trace debug callback did not run the pause cycle");
+  Expect(lifecycle->debug_pause_result() == CURLE_OK &&
+             lifecycle->debug_continue_result() == CURLE_OK,
+         "debug callback pause cycle was not accepted");
+  Expect(transfer_result == CURLE_OK,
+         "debug-pause replay transfer did not finish");
+  Expect(lifecycle->response_bytes_received() == 6,
+         "debug callback pause cycle changed delivered response bytes");
+
+  curl_easy_cleanup(easy);
+  lifecycle.reset();
+  curl_slist_free_all(connect_to);
+}
+
 /// Pausing after the content decoder has already produced output exercises the
 /// cw-pause writer that sits in front of content decoding. That writer only
 /// sees still-encoded bytes, so a body larger than one 4096-byte cw-pause chunk
@@ -2089,6 +2134,7 @@ int main() {
   TestEasyEventsPreloadsIncrementalResponse();
   TestConnectOnlyExercisesDirectIo();
   TestApiResponseCallbackPausesAndResumes();
+  TestApiDebugCallbackPauseCycleDuringReplay();
   TestApiPausedDecodingBuffersEncodedRemainder();
   TestApiReentrancyProbesAreRejectedInsideCallback();
   TestEasyPerformBoundsConnectOnlyUpload();

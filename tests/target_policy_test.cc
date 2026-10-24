@@ -2492,7 +2492,7 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
   plan->set_attach_share(true);
   plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
   plan->set_wake_multi(true);
-  plan->set_pause_response_once(true);
+  plan->set_debug_pause_cycle_during_replay(true);
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxApiShareDataSelectors + 3;
        ++index) {
@@ -2526,7 +2526,8 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
              scenario.api_plan().drive_mode() ==
                  curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET &&
              scenario.api_plan().wake_multi() &&
-             scenario.api_plan().pause_response_once(),
+             scenario.api_plan().pause_response_once() &&
+             scenario.api_plan().debug_pause_cycle_during_replay(),
          "API policy changed mutation-controlled lifecycle choices");
   Expect(static_cast<std::size_t>(
              scenario.api_plan().share_data_selectors_size()) ==
@@ -2691,6 +2692,7 @@ void TestApiEasyDrivesDropMultiOnlyWork() {
     scenario.mutable_api_plan()->set_drive_mode(drive_mode);
     scenario.mutable_api_plan()->set_wake_multi(true);
     scenario.mutable_api_plan()->set_pause_response_once(true);
+    scenario.mutable_api_plan()->set_debug_pause_cycle_during_replay(true);
 
     NormalizeScenarioForTarget(&scenario, TargetProfile::kApi);
 
@@ -2700,6 +2702,8 @@ void TestApiEasyDrivesDropMultiOnlyWork() {
            "easy drive retained a multi-only wakeup mutation");
     Expect(!scenario.api_plan().pause_response_once(),
            "blocking easy drive retained an unresumable output pause");
+    Expect(!scenario.api_plan().debug_pause_cycle_during_replay(),
+           "blocking easy drive retained a replay-only debug pause cycle");
   }
 }
 

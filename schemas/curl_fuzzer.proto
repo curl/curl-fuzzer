@@ -443,6 +443,11 @@ message ApiPlan {
   // with a recursive-API-call result, even on a curl_easy_pause() replay; the
   // table still holds only calls that stay safe if the guard admits them.
   repeated uint32 reentrant_probe_selectors = 9;
+  // During the write trace emitted while previously paused output is replayed,
+  // call curl_easy_pause(RECV) followed by curl_easy_pause(CONT) from the debug
+  // callback. The API target makes this imply paused-output replay and write
+  // tracing so mutations cannot retain an ineffective half-plan.
+  bool debug_pause_cycle_during_replay = 10;
 }
 
 // Public transfer entrypoints covered by the API lane. An enum prevents
