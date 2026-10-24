@@ -109,6 +109,19 @@ def test_bearer_seed_requires_a_challenged_retry() -> None:
     assert "subsequent_connections {" in scenario
 
 
+def test_dead_connection_seed_prunes_a_reusable_redirect_socket() -> None:
+    """Keep pool pruning behind a real dead idle HTTP/1.1 connection."""
+    scenario = (
+        HTTP_SCENARIOS / "http_redirect_reap_dead_connection.textproto"
+    ).read_text(encoding="utf-8")
+    assert "302 Found" in scenario
+    assert "Location: /final" in scenario
+    assert "CURLOPT_FOLLOWLOCATION uint_value: 1" in scenario
+    assert "CURLOPT_FRESH_CONNECT bool_value: true" in scenario
+    assert "Connection: close" not in scenario
+    assert scenario.count("subsequent_connections {") == 1
+
+
 def test_sigv4_seeds_compute_s3_and_generic_payload_hashes() -> None:
     """Do not let a supplied content hash bypass either signer path."""
     s3 = (HTTP_SCENARIOS / "http_auth_aws_sigv4.textproto").read_text(encoding="utf-8")
