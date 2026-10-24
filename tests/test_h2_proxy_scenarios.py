@@ -50,6 +50,17 @@ def test_h2_proxy_seeds_preserve_frame_correlations() -> None:
             "origin.test/absolute/path?item=one",
             "\\x01\\x05",
         ),
+        "h1_proxy_chunked_auth.textproto": (
+            "PROXY_PROTOCOL_HTTP1",
+            "With no credentials",
+            "Transfer-Encoding: chunked",
+        ),
+        "h1_proxy_preemptive_auth.textproto": (
+            "PROXY_PROTOCOL_HTTP1",
+            "CURLOPT_PROXYAUTH",
+            "CURLOPT_PROXYUSERPWD",
+            "Proxy-Authorization",
+        ),
     }
 
     assert {path.name for path in SCENARIO_ROOT.glob("*.textproto")} == set(

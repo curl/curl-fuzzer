@@ -74,6 +74,7 @@ void H2OriginMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::p
     runtime_.DrivePlan(multi, *this, kMaxIdleIterations, kMaxDriveIterations, [this, easy] {
       ObserveActiveTransfer(easy);
       ResumeResponseIfRequested(easy);
+      runtime_.ApplyPostHeadersTransition(easy);
     });
   }
   runtime_.FinishTransfer(easy, connection());

@@ -32,6 +32,7 @@ constexpr std::size_t kMaxFramePayload = 16384;
 
 constexpr std::uint8_t kDataFrame = 0;
 constexpr std::uint8_t kHeadersFrame = 1;
+constexpr std::uint8_t kPriorityFrame = 2;
 constexpr std::uint8_t kRstStreamFrame = 3;
 constexpr std::uint8_t kSettingsFrame = 4;
 constexpr std::uint8_t kPushPromiseFrame = 5;
@@ -120,7 +121,8 @@ H2PlanDriver::H2PlanDriver()
       initial_settings_sent_(false),
       client_settings_ack_sent_(false),
       expect_client_preface_(true),
-      observed_client_settings_(0) {
+      observed_client_settings_(0),
+      observed_client_priority_(0) {
   (void)nghttp2_hd_deflate_new(&deflater_, 4096);
 }
 
@@ -138,6 +140,7 @@ void H2PlanDriver::Reset(const curl::fuzzer::proto::Http2Plan& plan, std::string
   client_settings_ack_sent_ = false;
   expect_client_preface_ = true;
   observed_client_settings_ = 0;
+  observed_client_priority_ = 0;
   client_bytes_.clear();
   request_streams_.clear();
   pushed_streams_.clear();
@@ -202,6 +205,10 @@ void H2PlanDriver::RecordClientFrame(std::uint8_t type, std::uint8_t flags, std:
   }
   if (stream_id == 0) {
     return;
+  }
+
+  if (type == kPriorityFrame) {
+    ++observed_client_priority_;
   }
 
   auto& stream = client_streams_[stream_id];
@@ -548,5 +555,8 @@ std::size_t H2PlanDriver::observed_request_count() const { return request_stream
 
 /// @return number of non-ACK client SETTINGS frames observed.
 std::size_t H2PlanDriver::observed_client_settings_count() const { return observed_client_settings_; }
+
+/// @return PRIORITY frames observed from curl since the latest plan reset.
+std::size_t H2PlanDriver::observed_client_priority_count() const { return observed_client_priority_; }
 
 }  // namespace proto_fuzzer

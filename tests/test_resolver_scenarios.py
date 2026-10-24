@@ -30,6 +30,19 @@ def test_resolver_lane_has_a_doh_httpsrr_seed() -> None:
     assert "HTTP2_CLIENT_EVENT_HEADERS" in doh
 
 
+def test_resolver_httpsrr_trace_seed_only_enables_per_input_tracing() -> None:
+    control = (SCENARIO_DIR / "doh_httpsrr_alpn.textproto").read_text()
+    traced = (SCENARIO_DIR / "doh_httpsrr_alpn_trace.textproto").read_text()
+
+    def scenario_fields(text: str) -> list[str]:
+        return [line for line in text.splitlines() if not line.startswith("#")]
+
+    assert 'trace_config: "all"' not in control
+    expected = scenario_fields(control)
+    expected.insert(expected.index("http2_plan {"), 'trace_config: "all"')
+    assert scenario_fields(traced) == expected
+
+
 def test_resolver_lane_has_target_local_threaded_outcomes() -> None:
     positive = (SCENARIO_DIR / "threaded_positive.textproto").read_text()
     negative = (SCENARIO_DIR / "threaded_negative.textproto").read_text()

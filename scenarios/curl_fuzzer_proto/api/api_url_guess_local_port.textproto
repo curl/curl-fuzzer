@@ -1,0 +1,15 @@
+# Keep both numeric conversions in public setopt and opt into one bounded URL
+# API scheme-inference probe. The socketpair transport makes the bind controls
+# inert for routing while preserving their validation paths.
+scheme: SCHEME_HTTP
+host_path: "api.test/url-guess"
+options { option_id: CURLOPT_LOCALPORT uint_value: 12345 }
+options { option_id: CURLOPT_LOCALPORTRANGE uint_value: 3 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+}
+api_plan {
+  drive_mode: API_DRIVE_MULTI_PERFORM
+  guess_scheme_url: true
+  probe_version_info: true
+}

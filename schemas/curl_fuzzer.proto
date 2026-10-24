@@ -399,6 +399,10 @@ message Http2Plan {
   // Sent as the peer's first application frame. INITIAL_WINDOW_SIZE can
   // therefore constrain an upload before any response action is released.
   Http2Settings initial_settings = 2;
+  // Change the public CURLOPT_STREAM_WEIGHT only after the peer has observed
+  // request headers. Zero disables the transition; non-zero values are
+  // canonicalized to curl's documented [1, 256] range.
+  uint32 stream_weight_after_headers = 3;
 }
 
 // One peer operation or delivery boundary. Structured frames use the peer's
@@ -561,6 +565,12 @@ message ApiPlan {
   // with a recursive-API-call result, even on a curl_easy_pause() replay; the
   // table still holds only calls that stay safe if the guard admits them.
   repeated uint32 reentrant_probe_selectors = 9;
+  // Exercise scheme inference through the public URL API using one fixed,
+  // bounded hostname without an explicit scheme.
+  bool guess_scheme_url = 10;
+  // Query the immutable public version/feature descriptor once for this
+  // lifecycle. The runtime bounds feature-name traversal independently.
+  bool probe_version_info = 11;
 }
 
 // Public transfer entrypoints covered by the API lane. An enum prevents
@@ -827,6 +837,15 @@ message Connection {
   // focused on the behaviour they're exercising. Ignored when the scenario
   // isn't in manual-drive mode.
   WsManualProbes manual_probes = 5;
+  // Select the HTTPS CONNECT proxy's negotiated application protocol. The
+  // zero value preserves the historical H2 peer; HTTP/1.1 is a separate,
+  // bounded CONNECT-parser profile owned by the same target.
+  ProxyProtocol proxy_protocol = 6;
+}
+
+enum ProxyProtocol {
+  PROXY_PROTOCOL_HTTP2 = 0;
+  PROXY_PROTOCOL_HTTP1 = 1;
 }
 
 // Gates the optional client-side send probes fired from the manual-drive
@@ -951,6 +970,8 @@ enum CurlOptionId {
   CURLOPT_IGNORE_CONTENT_LENGTH = 136;
   CURLOPT_INFILESIZE_LARGE = 30115;
   CURLOPT_KEEP_SENDING_ON_ERROR = 245;
+  CURLOPT_LOCALPORT = 139;
+  CURLOPT_LOCALPORTRANGE = 140;
   CURLOPT_LOGIN_OPTIONS = 10224;
   CURLOPT_MAIL_AUTH = 10217;
   CURLOPT_MAIL_FROM = 10186;
@@ -967,6 +988,8 @@ enum CurlOptionId {
   CURLOPT_POST = 47;
   CURLOPT_POSTFIELDS = 10015;
   CURLOPT_POSTREDIR = 161;
+  CURLOPT_PROXYAUTH = 111;
+  CURLOPT_PROXYUSERPWD = 10006;
   CURLOPT_RANGE = 10007;
   CURLOPT_REFERER = 10016;
   CURLOPT_REQUEST_TARGET = 10266;

@@ -13,6 +13,7 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -58,6 +59,12 @@ class H2Runtime {
   CURLcode upkeep_result() const;
   std::size_t observed_request_count() const;
   std::size_t observed_client_settings_count() const;
+  std::size_t observed_client_priority_count() const;
+  bool post_headers_transition_applied() const;
+  CURLcode stream_weight_setopt_result() const;
+  CURLcode stream_weight_egress_result() const;
+
+  void ApplyPostHeadersTransition(CURL* easy);
 
  private:
   static int PushCallback(CURL* parent, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
@@ -72,6 +79,10 @@ class H2Runtime {
   std::size_t accepted_push_count_ = 0;
   std::size_t pushed_body_bytes_ = 0;
   CURLcode upkeep_result_ = CURLE_FAILED_INIT;
+  std::uint32_t stream_weight_after_headers_ = 0;
+  bool post_headers_transition_applied_ = false;
+  CURLcode stream_weight_setopt_result_ = CURLE_FAILED_INIT;
+  CURLcode stream_weight_egress_result_ = CURLE_FAILED_INIT;
 };
 
 }  // namespace proto_fuzzer

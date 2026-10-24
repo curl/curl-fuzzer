@@ -27,11 +27,11 @@
 #if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
 #include "proto_fuzzer/api_coverage_probes.h"
 #endif
-#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/curl_global_lifecycle.h"
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
-#include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/ipfs_url.h"
+#include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/target_policy.h"
@@ -78,7 +78,7 @@ public:
 /// can prove the carrier never enters libcurl's native resolver fallback.
 class FailingDohHttpsRrMockServer final
     : public proto_fuzzer::DohHttpsRrMockServer {
- protected:
+protected:
   bool StartListener() override { return false; }
 };
 #endif
@@ -167,8 +167,10 @@ struct ParserFaultRun {
 /// @param contents Header bytes supplied by curl.
 /// @param size Size of each supplied element.
 /// @param nmemb Number of supplied elements.
-/// @param userdata Pointer to the ParserFaultRun receiving callback observations.
-/// @return size * nmemb, consuming every supplied byte without aborting delivery.
+/// @param userdata Pointer to the ParserFaultRun receiving callback
+/// observations.
+/// @return size * nmemb, consuming every supplied byte without aborting
+/// delivery.
 size_t ObserveParserHeaders(char *contents, size_t size, size_t nmemb,
                             void *userdata) {
   const size_t bytes = size * nmemb;
@@ -192,7 +194,8 @@ size_t ObserveParserHeaders(char *contents, size_t size, size_t nmemb,
 /// from easy initialization through handle and peer cleanup. Capture the final
 /// statistics before resetting the plan for the next run.
 /// @param ordinal One-based allocation attempt selected for failure.
-/// @return Transfer outcome, header callback observations, and final statistics.
+/// @return Transfer outcome, header callback observations, and final
+/// statistics.
 ParserFaultRun DriveParserFaultScenario(std::uint32_t ordinal) {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
@@ -1485,6 +1488,91 @@ void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);
 }
+
+void TestHttp1ProxyConsumesChunkedAuthenticationResponse() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("origin.test/h1-proxy");
+  auto *connection = scenario.mutable_connection();
+  connection->set_proxy_protocol(curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  connection->add_on_readable("HTTP/1.1 407 Proxy Authentication Required\r\n"
+                              "Proxy-Authenticate: Basic realm=\"fuzz\"\r\n"
+                              "Transfer-Encoding: chunked\r\n\r\n"
+                              "4\r\nfail\r\n0\r\n\r\n");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "HTTP/1.1 proxy test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h1-proxy");
+
+  proto_fuzzer::H2ProxyMockServer server(
+      proto_fuzzer::H2ProxyMode::kTunnel,
+      curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  server.Install(easy);
+  const CURLcode code = server.DriveScenario(easy, scenario);
+  long connect_code = 0;
+  (void)curl_easy_getinfo(easy, CURLINFO_HTTP_CONNECTCODE, &connect_code);
+
+  Expect(code != CURLE_OK, "rejected HTTP/1.1 CONNECT unexpectedly completed");
+  Expect(connect_code == 407,
+         "HTTP/1.1 CONNECT did not retain the proxy response status");
+  Expect(server.negotiated_alpn() == "http/1.1",
+         "HTTP/1.1 proxy TLS handshake selected the wrong ALPN");
+  Expect(server.client_transcript().find(
+             "CONNECT origin.test:80 HTTP/1.1\r\n") != std::string::npos &&
+             server.client_transcript().find("Proxy-Authorization:") ==
+                 std::string::npos,
+         "HTTP/1.1 proxy did not receive the unauthenticated CONNECT");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+void TestHttp1ProxyAddsPreemptiveAuthorizationHeader() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("origin.test/h1-proxy-auth");
+  auto *auth = scenario.add_options();
+  auth->set_option_id(curl::fuzzer::proto::CURLOPT_PROXYAUTH);
+  auth->set_uint_value(CURLAUTH_BASIC);
+  auto *credentials = scenario.add_options();
+  credentials->set_option_id(curl::fuzzer::proto::CURLOPT_PROXYUSERPWD);
+  credentials->set_string_value("fuzz:secret");
+  auto *connection = scenario.mutable_connection();
+  connection->set_proxy_protocol(curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  connection->add_on_readable("HTTP/1.1 407 Proxy Authentication Required\r\n"
+                              "Proxy-Authenticate: Basic realm=\"fuzz\"\r\n"
+                              "Content-Length: 0\r\n\r\n");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "authenticated proxy test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h1-proxy-auth");
+
+  proto_fuzzer::H2ProxyMockServer server(
+      proto_fuzzer::H2ProxyMode::kTunnel,
+      curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  server.Install(easy);
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 2,
+         "authenticated proxy test did not apply both proxy options");
+  const CURLcode code = server.DriveScenario(easy, scenario);
+
+  Expect(code != CURLE_OK,
+         "rejected authenticated CONNECT unexpectedly completed");
+  Expect(server.client_transcript().find(
+             "CONNECT origin.test:80 HTTP/1.1\r\n") != std::string::npos &&
+             server.client_transcript().find(
+                 "Proxy-Authorization: Basic ZnV6ejpzZWNyZXQ=\r\n") !=
+                 std::string::npos,
+         "HTTP/1.1 proxy did not receive the preemptive Basic header");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
 #endif
 
 void TestTransferSessionRejectsUnsafeReconfiguration() {
@@ -1532,19 +1620,20 @@ void TestTransferSessionCleansIncompleteSharedTransfers() {
     server.SetKeepConnectionsOpen(true);
     {
       proto_fuzzer::TransferSession transfer;
-      Expect(transfer.Initialize(), "incomplete session could not allocate easy");
+      Expect(transfer.Initialize(),
+             "incomplete session could not allocate easy");
       transfer.ApplyBaseline(scenario);
       (void)curl_easy_setopt(transfer.easy(), CURLOPT_URL,
-                            "http://session.test/incomplete");
+                             "http://session.test/incomplete");
       server.Install(transfer.easy());
-      auto *lifecycle = transfer.InstallApiLifecycle(
-          *plan, "http://session.test/incomplete");
+      auto *lifecycle =
+          transfer.InstallApiLifecycle(*plan, "http://session.test/incomplete");
       Expect(lifecycle != nullptr, "session did not install API/share state");
-      server.SetMultiObserver([lifecycle](CURLM *multi) {
-        lifecycle->SetActiveMulti(multi);
-      });
+      server.SetMultiObserver(
+          [lifecycle](CURLM *multi) { lifecycle->SetActiveMulti(multi); });
       server.ConfigureRequestData(transfer.InstallRequestData(scenario));
-      Expect(server.DriveScenario(transfer.easy(), scenario) == CURLE_FAILED_INIT,
+      Expect(server.DriveScenario(transfer.easy(), scenario) ==
+                 CURLE_FAILED_INIT,
              "incomplete session unexpectedly produced a completion message");
       Expect(server.opened_connection_count() == 1,
              "incomplete session did not open its local peer");
@@ -1568,6 +1657,8 @@ void TestApiLifecycleCompletesSocketActionTransfer() {
   plan->set_attach_share(true);
   plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET);
   plan->set_wake_multi(true);
+  plan->set_guess_scheme_url(true);
+  plan->set_probe_version_info(true);
   for (std::uint32_t selector = 0; selector < 9; ++selector) {
     plan->add_share_data_selectors(selector);
   }
@@ -1601,6 +1692,11 @@ void TestApiLifecycleCompletesSocketActionTransfer() {
 
   Expect(response == "socket",
          "socket-action API drive did not complete the scripted HTTP response");
+  Expect(lifecycle->guessed_scheme_url(),
+         "public URL API did not infer FTP for the bounded hostname probe");
+  Expect(lifecycle->version_info_probed() &&
+             lifecycle->https_proxy_feature_present(),
+         "public version API did not report HTTPS proxy support");
 
   curl_easy_cleanup(easy);
   lifecycle.reset();
@@ -1630,7 +1726,8 @@ void TestEasyPerformPreloadsIncrementalResponse() {
   server.Install(easy);
   const CURLcode result = server.DriveEasyScenario(easy, scenario);
 
-  Expect(result == CURLE_OK && response == "easy",
+  Expect(
+      result == CURLE_OK && response == "easy",
       "curl_easy_perform did not consume the preloaded incremental response");
 
   curl_easy_cleanup(easy);
@@ -1762,8 +1859,8 @@ void TestApiPausedDecodingBuffersEncodedRemainder() {
   scenario.set_host_path("api.test/pause-buffered");
   scenario.mutable_connection()->set_initial_response(
       "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-      std::to_string(compressed.size()) +
-      "\r\nContent-Encoding: gzip\r\n\r\n" + compressed);
+      std::to_string(compressed.size()) + "\r\nContent-Encoding: gzip\r\n\r\n" +
+      compressed);
   auto *accept = scenario.add_options();
   accept->set_option_id(curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING);
   accept->set_string_value("gzip");
@@ -1800,7 +1897,8 @@ void TestApiPausedDecodingBuffersEncodedRemainder() {
 /// ones run normally. Every probe is selected so the callback covers the whole
 /// typed table in one transfer.
 void TestApiReentrancyProbesAreRejectedInsideCallback() {
-  constexpr std::size_t kProbeSelectors = proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors;
+  constexpr std::size_t kProbeSelectors =
+      proto_fuzzer::scenario_limits::kMaxApiReentrantSelectors;
 
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
@@ -2116,17 +2214,16 @@ void TestHappyEyeballsAdvancesSubsequentScripts() {
 /// plaintext peers have no presence in kProtocolCoverage mode. Verify the
 /// runner then actually reaches curl instead of bailing on a null peer.
 void TestTimingLaneReachesCurlForPeerlessSchemes() {
-  for (const auto scheme : {curl::fuzzer::proto::SCHEME_SMTPS,
-                            curl::fuzzer::proto::SCHEME_IMAPS,
-                            curl::fuzzer::proto::SCHEME_POP3S,
-                            curl::fuzzer::proto::SCHEME_MQTTS}) {
+  for (const auto scheme :
+       {curl::fuzzer::proto::SCHEME_SMTPS, curl::fuzzer::proto::SCHEME_IMAPS,
+        curl::fuzzer::proto::SCHEME_POP3S, curl::fuzzer::proto::SCHEME_MQTTS}) {
     Scenario scenario;
     scenario.set_scheme(scheme);
     scenario.set_host_path("timing.test/path");
     scenario.mutable_connection()->add_on_readable(
         "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
-    proto_fuzzer::NormalizeScenarioForTarget(&scenario,
-                                             proto_fuzzer::TargetProfile::kTiming);
+    proto_fuzzer::NormalizeScenarioForTarget(
+        &scenario, proto_fuzzer::TargetProfile::kTiming);
     Expect(scenario.scheme() == curl::fuzzer::proto::SCHEME_HTTP,
            "timing policy left a peerless scheme in place");
 
@@ -2150,7 +2247,7 @@ void TestTimingLaneReachesCurlForPeerlessSchemes() {
 /// namespace survives; mirror that ordering and assert the actual request
 /// line, not just the policy output.
 void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
-  constexpr const char* kCid =
+  constexpr const char *kCid =
       "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
   const std::string url = proto_fuzzer::BuildIpfsGatewayUrl(
       curl::fuzzer::proto::SCHEME_IPFS, std::string(kCid) + "/../../evil");
@@ -2168,7 +2265,8 @@ void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
   server.Install(easy.get());
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
-  scenario.set_host_path("127.0.1.127:8080/ipfs/" + std::string(kCid) + "/evil");
+  scenario.set_host_path("127.0.1.127:8080/ipfs/" + std::string(kCid) +
+                         "/evil");
   scenario.mutable_connection()->add_on_readable(
       "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
   (void)server.DriveScenario(easy.get(), scenario);
@@ -2203,7 +2301,8 @@ void TestDohHttpsRrDrivesAlpnSelection() {
   wait->set_event(curl::fuzzer::proto::HTTP2_CLIENT_EVENT_HEADERS);
   wait->mutable_stream()->set_request_index(0);
   wait->set_count(1);
-  auto *headers = scenario.mutable_http2_plan()->add_actions()->mutable_headers();
+  auto *headers =
+      scenario.mutable_http2_plan()->add_actions()->mutable_headers();
   headers->mutable_stream()->set_request_index(0);
   headers->set_status_code(200);
   auto *data = scenario.mutable_http2_plan()->add_actions()->mutable_data();
@@ -2212,7 +2311,8 @@ void TestDohHttpsRrDrivesAlpnSelection() {
   data->set_end_stream(true);
 
   CURL *easy = curl_easy_init();
-  Expect(easy != nullptr, "DoH HTTPS-RR test could not allocate an easy handle");
+  Expect(easy != nullptr,
+         "DoH HTTPS-RR test could not allocate an easy handle");
   struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTPS);
   curl_easy_setopt(easy, CURLOPT_URL, "https://tls.test/doh-httpsrr");
@@ -2260,8 +2360,7 @@ void TestDohMalformedAnswerReachesDecoder() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
   scenario.set_host_path("tls.test/doh-error");
-  scenario.set_resolver_mode(
-      curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  scenario.set_resolver_mode(curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
   scenario.set_doh_https_rr(true);
 
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
@@ -2270,8 +2369,7 @@ void TestDohMalformedAnswerReachesDecoder() {
   proto_fuzzer::CurlSlistPtr connect_to;
   connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
       easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
-  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
-                         "https://tls.test/doh-error");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "https://tls.test/doh-error");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
 
   proto_fuzzer::DohHttpsRrMockServer server(
@@ -2367,6 +2465,8 @@ int main() {
 #endif
   TestH2ProxyCarriesAnHttpOriginResponse();
   TestH2ForwardProxyConvertsAbsoluteFormRequest();
+  TestHttp1ProxyConsumesChunkedAuthenticationResponse();
+  TestHttp1ProxyAddsPreemptiveAuthorizationHeader();
 #endif
   TestTransferSessionRejectsUnsafeReconfiguration();
   TestTransferSessionCleansIncompleteSharedTransfers();

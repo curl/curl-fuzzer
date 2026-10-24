@@ -1,0 +1,10 @@
+# The proxy lane's explicit HTTP/1.1 profile keeps TLS and routing owned while
+# a 407 challenge exercises CONNECT header copying. With no credentials to
+# reject, the complete chunked body is consumed before curl reports the
+# authentication failure.
+scheme: SCHEME_HTTP
+host_path: "origin.test/h1-proxy"
+connection {
+  proxy_protocol: PROXY_PROTOCOL_HTTP1
+  on_readable: "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"fuzz\"\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nfail\r\n0\r\n\r\n"
+}

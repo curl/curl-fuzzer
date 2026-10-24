@@ -12,9 +12,9 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
 | `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, bounded CRL input, and closed harness-owned client-credential profiles. |
 | `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a GnuTLS or mbedTLS curl client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
-| `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, input-selectable X25519 or provider-default key exchange, plus push and upkeep probes. |
+| `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, input-selectable X25519 or provider-default key exchange, plus push, live stream-weight, fatal-session, and upkeep probes. |
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
-| `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS/HTTP/2 CONNECT proxy; mutations control bounded raw proxy frames and origin request settings. |
+| `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS CONNECT proxy. `connection.proxy_protocol` selects the existing HTTP/2 frame peer or a bounded HTTP/1.1 CONNECT response profile; proxy authentication options remain owned by this lane. |
 | `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4, SOCKS4A, SOCKS5, or SOCKS5-hostname proxy, including scripted SOCKS5 username/password authentication and an optional fixed HAProxy protocol-v1 prefix. The historical basename is retained for accumulated-corpus compatibility. |
 | `curl_fuzzer_proto_resolver` | Localhost and bounded `CURLOPT_RESOLVE` cache operations; deterministic positive, negative, link-local retry, and Unix-socket resolver states; a real loopback happy-eyeballs race; and loopback DoH success or malformed-answer diagnostics. |
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
@@ -79,7 +79,9 @@ upload state and can write only to that fixed sink; the authority, query, and
 fragment remain mutation-controlled so URL parsing still has fuzzing value
 without granting access to host files.
 
-The resolver profile also clears arbitrary backpressure. Its four threaded
+The resolver profile also clears arbitrary backpressure. Its successful
+HTTPS-RR exchange has a trace-enabled coverage twin with the same peer
+transcript; trace state remains scoped to that input. Its four threaded
 `resolver_mode` values install one fixed timed-drive marker instead. Their
 authorities are pinned to names handled by the resolver binary's target-local
 `getaddrinfo` backend: no ambient name service is consulted, returned address

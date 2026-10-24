@@ -27,9 +27,10 @@ enum class H2ProxyMode {
 /// mutation-controlled HTTP origin: every accepted input reaches TLS ALPN and
 /// proxy request setup without DNS, while frame bytes still explore
 /// curl/nghttp2's success and error paths.
-class H2ProxyMockServer final : public TlsMockServer {
+class H2ProxyMockServer final : public TlsMockServer, private IncomingDataObserver {
  public:
-  explicit H2ProxyMockServer(H2ProxyMode mode = H2ProxyMode::kTunnel);
+  explicit H2ProxyMockServer(H2ProxyMode mode = H2ProxyMode::kTunnel,
+                             curl::fuzzer::proto::ProxyProtocol protocol = curl::fuzzer::proto::PROXY_PROTOCOL_HTTP2);
   ~H2ProxyMockServer() override = default;
 
   H2ProxyMockServer(const H2ProxyMockServer&) = delete;
@@ -37,8 +38,17 @@ class H2ProxyMockServer final : public TlsMockServer {
 
   void Install(CURL* easy) override;
 
+  const std::string& client_transcript() const;
+
+ protected:
+  std::unique_ptr<MockConnection> CreateConnection() override;
+
  private:
+  void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
+
   H2ProxyMode mode_;
+  curl::fuzzer::proto::ProxyProtocol protocol_;
+  std::string client_transcript_;
 };
 
 }  // namespace proto_fuzzer

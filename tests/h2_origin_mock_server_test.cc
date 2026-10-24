@@ -46,6 +46,10 @@ struct H2TransferResult {
   std::size_t pushed_body_bytes = 0;
   std::size_t observed_request_count = 0;
   std::size_t observed_client_settings_count = 0;
+  std::size_t observed_client_priority_count = 0;
+  bool post_headers_transition_applied = false;
+  CURLcode stream_weight_setopt_result = CURLE_FAILED_INIT;
+  CURLcode stream_weight_egress_result = CURLE_FAILED_INIT;
   CURLcode upkeep_result = CURLE_FAILED_INIT;
 };
 
@@ -85,6 +89,12 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   result.observed_request_count = runtime.observed_request_count();
   result.observed_client_settings_count =
       runtime.observed_client_settings_count();
+  result.observed_client_priority_count =
+      runtime.observed_client_priority_count();
+  result.post_headers_transition_applied =
+      runtime.post_headers_transition_applied();
+  result.stream_weight_setopt_result = runtime.stream_weight_setopt_result();
+  result.stream_weight_egress_result = runtime.stream_weight_egress_result();
   result.upkeep_result = runtime.upkeep_result();
 
   curl_easy_cleanup(easy);
@@ -185,6 +195,25 @@ Scenario MakeStructuredScenario() {
   return scenario;
 }
 
+Scenario MakePriorityTransitionScenario() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/h2-priority");
+  auto *plan = scenario.mutable_http2_plan();
+  plan->set_stream_weight_after_headers(32);
+
+  auto *wait = plan->add_actions()->mutable_wait();
+  wait->set_event(curl::fuzzer::proto::HTTP2_CLIENT_EVENT_HEADERS);
+  wait->mutable_stream()->set_request_index(0);
+  wait->set_count(1);
+  plan->add_actions()->set_yield_turns(2);
+  auto *headers = plan->add_actions()->mutable_headers();
+  headers->mutable_stream()->set_request_index(0);
+  headers->set_status_code(200);
+  headers->set_end_stream(true);
+  return scenario;
+}
+
 void TestValidPushPromiseReachesCallback() {
   const H2TransferResult result = DriveH2Scenario(MakePushScenario());
 
@@ -240,6 +269,22 @@ void TestStructuredPlanTracksRequestAndEncodesResponse() {
   Expect(result.observed_client_settings_count >= 1 &&
              result.observed_request_count == 1,
          "structured H2 peer did not track client setup and request HEADERS");
+  Expect(!result.post_headers_transition_applied &&
+             result.stream_weight_setopt_result == CURLE_FAILED_INIT &&
+             result.stream_weight_egress_result == CURLE_FAILED_INIT,
+         "zero stream weight unexpectedly enabled the post-header transition");
+}
+
+void TestLiveStreamWeightReachesEgressTransition() {
+  const H2TransferResult result =
+      DriveH2Scenario(MakePriorityTransitionScenario());
+
+  Expect(result.code == CURLE_OK,
+         "live H2 stream-weight transition prevented completion");
+  Expect(result.post_headers_transition_applied &&
+             result.stream_weight_setopt_result == CURLE_OK &&
+             result.stream_weight_egress_result == CURLE_OK,
+         "live H2 stream-weight transition did not reach its egress edge");
 }
 
 // Observe the same provider configuration through an ordinary TLS peer that
@@ -297,6 +342,7 @@ int main() {
   TestAcceptedPushCompletesAndCleansUpOneHandle();
   TestRedirectReusesH2ConnectionAroundPingAndUpkeep();
   TestStructuredPlanTracksRequestAndEncodesResponse();
+  TestLiveStreamWeightReachesEgressTransition();
   TestProviderDefaultTlsGroupRemainsReachable();
   return 0;
 }

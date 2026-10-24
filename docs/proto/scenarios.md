@@ -219,7 +219,10 @@ Other peers intentionally give those fields narrower meanings:
   points `CURLOPT_DOH_URL` at it. The responder answers address and HTTPS
   queries; its HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer
   completes through the in-process TLS/ALPN h2 peer using `http2_plan`.
-  `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records.
+  `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records. A
+  paired coverage seed repeats that exact exchange with `trace_config: "all"`;
+  tracing is reset at the input boundary and does not become a resolver-lane
+  default.
 - The resolver lane's non-default `resolver_mode` values select fixed,
   target-owned states. Positive and negative threaded lookups, plus a
   scope-less link-local result and AF_UNSPEC retry, use only the resolver
@@ -234,8 +237,12 @@ Other peers intentionally give those fields narrower meanings:
   global-lifecycle mode finishes a localhost transfer, calls the public global
   cleanup entrypoint only after all resolver workers are gone, and reinstalls
   the harness allocator callbacks before another input runs.
-- HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
-  after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
+- HTTP/2 origin lanes treat connection bytes as raw HTTP/2 frames after a
+  fixed prior-knowledge or TLS/ALPN setup. The HTTPS CONNECT proxy does the
+  same when `connection.proxy_protocol` is zero; its explicit HTTP/1 profile
+  instead treats the script as a bounded CONNECT response and always uses a
+  tunnel. The H2 profile can select either CONNECT tunnelling or direct
+  absolute-form forwarding with `h2_forward_proxy`. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.
 - Direct HTTP/3 uses ordered `http3_plan` actions after a valid QUIC/TLS
   handshake and discards the ordinary connection script. Setting

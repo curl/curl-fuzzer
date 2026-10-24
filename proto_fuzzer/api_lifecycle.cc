@@ -407,9 +407,29 @@ void ProbeEasyOptionMetadataOnce() {
 /// @param url Bounded scenario URL used by URL and escaping probes during
 ///        construction; it is not retained.
 ApiLifecycle::ApiLifecycle(CURL* easy, const curl::fuzzer::proto::ApiPlan& plan, std::string_view url)
-    : easy_(easy), plan_(plan), share_(nullptr), active_multi_(nullptr) {
+    : easy_(easy),
+      plan_(plan),
+      share_(nullptr),
+      active_multi_(nullptr),
+      guessed_scheme_url_(false),
+      version_info_probed_(false),
+      https_proxy_feature_present_(false) {
   ProbeKnownErrorStringsOnce();
   ProbeEasyOptionMetadataOnce();
+  if (plan_.probe_version_info()) {
+    const curl_version_info_data* info = curl_version_info(CURLVERSION_NOW);
+    version_info_probed_ = info != nullptr;
+    if (info != nullptr) {
+      https_proxy_feature_present_ = (info->features & CURL_VERSION_HTTPS_PROXY) != 0;
+      // Feature names are null-terminated public data. Keep even a malformed
+      // provider response from turning this observation into an unbounded walk.
+      if (info->feature_names != nullptr) {
+        for (std::size_t index = 0; index < 64 && info->feature_names[index] != nullptr; ++index) {
+          (void)std::string_view(info->feature_names[index]);
+        }
+      }
+    }
+  }
   ProbeUrlAndEscaping(url);
   response_callback_state_.owner = this;
   const bool wants_response_callback = plan_.pause_response_once() || plan_.reentrant_probe_selectors_size() > 0;
@@ -577,6 +597,20 @@ void ApiLifecycle::ProbeUrlAndEscaping(std::string_view url) {
 
   CURLU* url_handle = curl_url();
   if (url_handle != nullptr) {
+    if (plan_.guess_scheme_url()) {
+      constexpr char kGuessInput[] = "ftp.example.test/path";
+      if (curl_url_set(url_handle, CURLUPART_URL, kGuessInput, CURLU_GUESS_SCHEME) == CURLUE_OK) {
+        char* scheme = nullptr;
+        if (curl_url_get(url_handle, CURLUPART_SCHEME, &scheme, 0) == CURLUE_OK) {
+          guessed_scheme_url_ = scheme != nullptr && std::string_view(scheme) == "ftp";
+          curl_free(scheme);
+        }
+      }
+      curl_url_cleanup(url_handle);
+      url_handle = curl_url();
+    }
+  }
+  if (url_handle != nullptr) {
     const unsigned int parse_flags = CURLU_ALLOW_SPACE | CURLU_NON_SUPPORT_SCHEME;
     if (curl_url_set(url_handle, CURLUPART_URL, input.c_str(), parse_flags) != CURLUE_OK) {
       (void)curl_url_set(url_handle, CURLUPART_SCHEME, "http", 0);
@@ -635,6 +669,15 @@ void ApiLifecycle::ProbeUrlAndEscaping(std::string_view url) {
   char* decoded = curl_easy_unescape(easy_, input.data(), input_length, &decoded_length);
   curl_free(decoded);
 }
+
+/// @return True when the opt-in public URL probe inferred FTP successfully.
+bool ApiLifecycle::guessed_scheme_url() const { return guessed_scheme_url_; }
+
+/// @return True when the opt-in version descriptor query returned data.
+bool ApiLifecycle::version_info_probed() const { return version_info_probed_; }
+
+/// @return Public HTTPS-proxy feature state observed by the version query.
+bool ApiLifecycle::https_proxy_feature_present() const { return https_proxy_feature_present_; }
 
 /// Run correctly typed CURLINFO and response-header probes selected by the
 /// plan. Call only after the transfer entrypoint has returned. The typed
