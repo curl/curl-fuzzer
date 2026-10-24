@@ -98,6 +98,11 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "200 PORT accepted",
             'initial_response: "active-port"',
         ),
+        "ftp_active_listener_allocation_failure.textproto": (
+            'CURLOPT_FTPPORT string_value: "127.0.0.1"',
+            "fail_allocations: 86",
+            "harness-owned loopback socket",
+        ),
         "ftp_eprt_port_fallback.textproto": (
             "CURLOPT_FTP_USE_EPRT bool_value: true",
             "500 EPRT unsupported",

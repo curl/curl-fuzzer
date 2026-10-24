@@ -1,0 +1,9 @@
+# Discover a fixed numeric loopback HTTP proxy from a scoped environment
+# override. The socket callback intercepts that endpoint, and the prior
+# environment is restored after the transfer.
+scheme: SCHEME_HTTP
+host_path: "proxy-origin.test/environment"
+proxy_socket_option_mode: PROXY_SOCKET_OPTION_ENV_HTTP_PROXY
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nproxy"
+}
