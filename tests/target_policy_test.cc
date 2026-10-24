@@ -509,6 +509,32 @@ void TestTlsClientCredentialProfilePolicy() {
          "non-HTTPS policy retained client-credential setup work");
 }
 
+void TestTlsHandshakeProfilePolicy() {
+  Scenario https;
+  https.set_tls_handshake_profile(
+      curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY);
+  NormalizeScenarioForTarget(&https, TargetProfile::kFastHttps);
+  Expect(https.tls_handshake_profile() ==
+             curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY,
+         "HTTPS policy discarded its OpenSSL handshake terminal");
+
+  Scenario unknown;
+  unknown.set_tls_handshake_profile(
+      static_cast<curl::fuzzer::proto::TlsHandshakeProfile>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastHttps);
+  Expect(unknown.tls_handshake_profile() ==
+             curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT,
+         "HTTPS policy retained an unknown handshake profile");
+
+  Scenario plaintext;
+  plaintext.set_tls_handshake_profile(
+      curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY);
+  NormalizeScenarioForTarget(&plaintext, TargetProfile::kDeepHttp);
+  Expect(plaintext.tls_handshake_profile() ==
+             curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT,
+         "non-HTTPS policy retained a TLS handshake terminal");
+}
+
 void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
   Scenario scenario;
   scenario.set_tls_group_profile(
@@ -3967,6 +3993,7 @@ int main() {
   TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestTlsClientCredentialProfilePolicy();
+  TestTlsHandshakeProfilePolicy();
   TestHttpsH2PolicyRejectsUnknownTlsGroupProfile();
   TestOtherPoliciesDiscardTlsGroupProfiles();
   TestFastHttp3PolicyMaterializesUsefulPlan();

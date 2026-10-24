@@ -48,10 +48,12 @@ class TlsServerContext;
 /// socket callbacks or application-protocol drive loop.
 class TlsMockTransport {
  public:
-  explicit TlsMockTransport(TlsApplicationProtocol protocol = TlsApplicationProtocol::kHttp11,
-                            curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                                curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-                            TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault);
+  explicit TlsMockTransport(
+      TlsApplicationProtocol protocol = TlsApplicationProtocol::kHttp11,
+      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
+          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault,
+      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT);
   ~TlsMockTransport();
 
   TlsMockTransport(const TlsMockTransport&) = delete;
@@ -74,6 +76,7 @@ class TlsMockTransport {
 
  private:
   const TlsGroupPolicy group_policy_;
+  const bool openssl_close_notify_;
   std::unique_ptr<TlsServerContext> context_;
 };
 
@@ -84,7 +87,9 @@ class TlsMockServer : public MockServer {
  public:
   TlsMockServer();
 
-  explicit TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain);
+  explicit TlsMockServer(
+      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT);
   ~TlsMockServer() override;
 
   TlsMockServer(const TlsMockServer&) = delete;
@@ -117,10 +122,12 @@ class TlsMockServer : public MockServer {
   std::string ech_outer_name() const;
 
  protected:
-  explicit TlsMockServer(TlsApplicationProtocol protocol,
-                         curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-                         TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault);
+  explicit TlsMockServer(
+      TlsApplicationProtocol protocol,
+      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
+          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault,
+      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT);
 
   TlsGroupPolicy group_policy() const;
 

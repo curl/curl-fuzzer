@@ -88,18 +88,20 @@ Other peers intentionally give those fields narrower meanings:
   preserve already-read payload for `curl_ws_recv`; later chunks are delivered
   by the manual-drive tail.
 - The dedicated HTTPS peer encrypts connection-script bytes as HTTP
-  application data. The compatibility target preserves its older behavior and
-  treats HTTPS script bytes as raw TLS records. Its optional
-  `tls_client_credential_profile` selects only harness-owned malformed blobs or
-  fixed `/dev/null` engine/provider probes; protobuf bytes never become a
-  filename, engine name, or provider name.
-  This control deliberately leaves `Curl_ssl_cfilter_add` to a protocol peer
-  capable of an in-place STARTTLS upgrade. `SSL_ERROR_to_str` also remains a
-  measured residual because these credentials are rejected before a
-  deterministic post-handshake OpenSSL I/O error exists. Process-lifecycle
+  application data. Its optional `tls_client_credential_profile` selects only
+  harness-owned malformed blobs or fixed `/dev/null` engine/provider probes;
+  protobuf bytes never become a filename, engine name, or provider name. The
+  separate
+  `tls_handshake_profile` can replace the OpenSSL peer with one fixed
+  pre-handshake `close_notify` record, covering curl's clean terminal error
+  translation without accepting fuzz-selected TLS bytes; GnuTLS and mbedTLS
+  clients treat that profile as the ordinary verified peer. The compatibility
+  target preserves its older behavior and treats HTTPS script bytes as raw TLS
+  records. These controls deliberately leave `Curl_ssl_cfilter_add` to a
+  protocol peer capable of an in-place STARTTLS upgrade. Process-lifecycle
   probes for `ossl_cleanup`, `Curl_ssl_cleanup`, `Curl_ssl_version`, and
-  `Curl_tls_keylog_close` belong in the one-shot API lane instead of a
-  per-input HTTPS path.
+  `Curl_tls_keylog_close` belong in the one-shot API lane instead of a per-input
+  HTTPS path.
 - TELNET preloads a bounded response before entering curl's blocking protocol
   loop.
 - FTP treats the primary connection as command-aligned control replies and

@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 
 #include <cstddef>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,16 @@ namespace {
 constexpr std::size_t kMaxSessionExportAttempts = 8;
 constexpr std::size_t kMaxSessionHashSize = 128;
 constexpr std::size_t kMaxSessionDataSize = 16 * 1024;
+
+/// The TLS carrier always uses OpenSSL on its server side, but the HTTPS seed
+/// corpus is also replayed by curl clients built with GnuTLS and mbedTLS.
+/// Backend-specific handshake terminals must not replace their ordinary peer.
+bool CurlClientUsesOpenSsl() {
+  const curl_version_info_data* version = curl_version_info(CURLVERSION_NOW);
+  constexpr char kOpenSslPrefix[] = "OpenSSL/";
+  return version != nullptr && version->ssl_version != nullptr &&
+         std::strncmp(version->ssl_version, kOpenSslPrefix, sizeof(kOpenSslPrefix) - 1) == 0;
+}
 
 /// Own the only export retained by one probe. curl owns every pointer passed
 /// to the callback, so both binary fields must be copied before it returns.
@@ -466,16 +477,45 @@ class TlsMockConnection final : public MockConnection {
   bool failed_;
 };
 
+/// Emit one fixed clean-shutdown alert without completing a server handshake.
+/// OpenSSL classifies this as SSL_ERROR_ZERO_RETURN with an empty error queue;
+/// ignoring scripted response bytes keeps protobuf data out of the TLS record.
+class TlsCloseNotifyConnection final : public MockConnection {
+ public:
+  TlsCloseNotifyConnection() : alert_sent_(false) {}
+
+  bool WriteAll(const unsigned char* /*data*/, std::size_t /*size*/) override { return true; }
+
+  void ShutdownWrite() override {
+    if (alert_sent_) {
+      return;
+    }
+    static constexpr unsigned char kCloseNotify[] = {
+        0x15, 0x03, 0x03, 0x00, 0x02, 0x01, 0x00,
+    };
+    alert_sent_ = true;
+    (void)MockConnection::WriteAll(kCloseNotify, sizeof(kCloseNotify));
+    MockConnection::ShutdownWrite();
+  }
+
+ private:
+  bool alert_sent_;
+};
+
 }  // namespace
 
 /// Construct one reusable TLS context for a protocol-specific peer.
 /// @param protocol Fixed ALPN application protocol offered by the server.
 /// @param certificate_chain Certificate-chain profile presented to curl.
 /// @param group_policy Immutable server key-exchange group policy.
+/// @param handshake_profile Closed peer-side handshake terminal.
 TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
                                    curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                                   TlsGroupPolicy group_policy)
+                                   TlsGroupPolicy group_policy,
+                                   curl::fuzzer::proto::TlsHandshakeProfile handshake_profile)
     : group_policy_(group_policy),
+      openssl_close_notify_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY &&
+                            CurlClientUsesOpenSsl()),
       context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy)) {}
 
 TlsMockTransport::~TlsMockTransport() = default;
@@ -494,6 +534,9 @@ void TlsMockTransport::Install(CURL* easy) const {
 /// Wrap one socketpair server endpoint in an OpenSSL acceptor.
 /// @return A failed connection when context setup was unavailable.
 std::unique_ptr<MockConnection> TlsMockTransport::CreateConnection() {
+  if (openssl_close_notify_) {
+    return std::make_unique<TlsCloseNotifyConnection>();
+  }
   return std::make_unique<TlsMockConnection>(context_.get());
 }
 
@@ -548,18 +591,22 @@ TlsMockServer::TlsMockServer() : TlsMockServer(curl::fuzzer::proto::TLS_CERTIFIC
 
 /// Select one bounded certificate-chain profile for an HTTP/1.1 TLS peer.
 /// @param certificate_chain Peer certificate chain presented to curl.
-TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : TlsMockServer(TlsApplicationProtocol::kHttp11, certificate_chain) {}
+/// @param handshake_profile Closed peer-side handshake terminal.
+TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                             curl::fuzzer::proto::TlsHandshakeProfile handshake_profile)
+    : TlsMockServer(TlsApplicationProtocol::kHttp11, certificate_chain, TlsGroupPolicy::kProviderDefault,
+                    handshake_profile) {}
 
 /// Construct the shared TLS transport for a protocol-specific derived peer
 /// with one fixed ALPN outcome.
 /// @param protocol Fixed application protocol the server must negotiate.
 /// @param certificate_chain Peer certificate chain presented to curl.
 /// @param group_policy Immutable server key-exchange group policy.
+/// @param handshake_profile Closed peer-side handshake terminal.
 TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
                              curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                             TlsGroupPolicy group_policy)
-    : transport_(protocol, certificate_chain, group_policy),
+                             TlsGroupPolicy group_policy, curl::fuzzer::proto::TlsHandshakeProfile handshake_profile)
+    : transport_(protocol, certificate_chain, group_policy, handshake_profile),
       saw_live_tls_session_(false),
       session_export_attempt_count_(0),
       exported_session_count_(0),

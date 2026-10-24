@@ -138,6 +138,18 @@ void CanonicalizeTlsClientCredentialProfile(curl::fuzzer::proto::Scenario* scena
   }
 }
 
+/// Keep the OpenSSL handshake terminal inside its closed, harness-owned set.
+void CanonicalizeTlsHandshakeProfile(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->tls_handshake_profile()) {
+    case curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT:
+    case curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY:
+      return;
+    default:
+      scenario->clear_tls_handshake_profile();
+      return;
+  }
+}
+
 /// Keep the proxied origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
@@ -2460,6 +2472,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile != TargetProfile::kFastHttps) {
     scenario->clear_crl_file();
     scenario->clear_tls_client_credential_profile();
+    scenario->clear_tls_handshake_profile();
   }
 
   if (profile == TargetProfile::kFastHttp3) {
@@ -2966,6 +2979,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       CanonicalizeTlsAuthority(scenario);
       CanonicalizeTlsCertificateChain(scenario);
       CanonicalizeTlsClientCredentialProfile(scenario);
+      CanonicalizeTlsHandshakeProfile(scenario);
       return;
 
     case TargetProfile::kHttpsH2:
