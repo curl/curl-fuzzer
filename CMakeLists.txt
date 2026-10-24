@@ -2533,6 +2533,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/allocation_fault_injection.cc
             proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/api_lifecycle.cc
+            proto_fuzzer/curl_global_lifecycle.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/h2_runtime.cc
             proto_fuzzer/ftp_mock_server.cc
@@ -2603,7 +2604,6 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 CURL_FUZZER_HAS_ECH)
         target_sources(mock_server_test PRIVATE
             proto_fuzzer/api_coverage_probes.cc
-            proto_fuzzer/curl_global_lifecycle.cc
             full_coverage/public_api.cc
             full_coverage/utility_api.cc
             full_coverage/dynamic_formatting.cc)
