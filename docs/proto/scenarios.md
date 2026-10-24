@@ -39,8 +39,9 @@ The main groups of fields are:
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
-  `socks_proxy_mode`, `trace_ids`, `probe_multi_pollset`, filename-backed
-  parser inputs, and `fail_allocations`.
+  `socks_proxy_mode`, `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
+  `probe_multi_pollset`, filename-backed parser inputs, and
+  `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
 contract. Its checked-in `CurlOptionId` numbers are part of the serialized
@@ -56,12 +57,23 @@ opens the socket and each `on_readable` value is released on a later readable
 turn. `subsequent_connections` supplies bounded scripts for redirects,
 authentication retries, and other fresh HTTP sockets.
 
+The deep HTTP lane can instead select a fixed plaintext forward proxy, a fixed
+HTTP/1.1 CONNECT proxy, or a fixed abstract Unix-domain origin with
+`http_transport_mode`. Proxy traffic is always directed to a numeric loopback
+endpoint and every socket is replaced by the in-process peer; Unix mode uses a
+harness-owned abstract name and creates no filesystem entry. Use
+request-triggered `on_readable` chunks for these modes. A CONNECT script puts
+the tunnel response first and the origin response second.
+
 Other peers intentionally give those fields narrower meanings:
 
 - WebSocket scenarios use a peer that generates the `101` handshake and
   accepts either raw chunks or structured `server_frames`. The WSS lane runs
   that same Upgrade, framing, callback, and manual-drive behavior after a
-  verified in-process TLS handshake.
+  verified in-process TLS handshake. For `CURLOPT_CONNECT_ONLY=2`, the peer
+  coalesces the first bounded frame with the `101` response so libcurl must
+  preserve already-read payload for `curl_ws_recv`; later chunks are delivered
+  by the manual-drive tail.
 - The dedicated HTTPS peer encrypts connection-script bytes as HTTP
   application data. The compatibility target preserves its older behavior and
   treats HTTPS script bytes as raw TLS records.
@@ -102,12 +114,19 @@ Other peers intentionally give those fields narrower meanings:
   terminating dot line and are written unchanged. An `SCHEME_POP3S` scenario
   runs the identical exchange over implicit TLS against the same `tls.test`
   authority and also negotiates no ALPN protocol.
-- SMTP, IMAP, POP3, FTP, FTPS, MQTT, and MQTTS retain the opt-in
-  `probe_multi_pollset` field. When it is true, their drivers call zero-timeout
-  `curl_multi_poll` after successful perform turns while both the transfer and
-  protocol connection are live. This reaches the protocol pollset callbacks
-  without delaying the default false path. Other fixed target policies clear
-  the field until their custom loops can provide the same service guarantee.
+- The proxy-transport lane uses request-triggered chunks for each SOCKS reply
+  and then for tunneled HTTP. SOCKS5 advertises deterministic no-auth and
+  username/password methods; the scripted method-selection byte chooses the
+  path. `haproxy_protocol` inserts a protocol-v1 prefix after tunnel setup with
+  fixed loopback metadata, never a fuzz-selected endpoint.
+- SMTP, IMAP, POP3, FTP, FTPS, MQTT, MQTTS, the proxy-transport lane, and deep
+  HTTP CONNECT retain the opt-in `probe_multi_pollset` field. When it is true,
+  their drivers call zero-timeout `curl_multi_poll` after successful perform
+  turns while both the transfer and protocol connection are live. This reaches
+  protocol/filter pollset callbacks without delaying the default false path.
+  Other fixed target policies, including direct, forward-proxy, and Unix-domain
+  deep HTTP, clear the field until their loops have a useful intermediate
+  state to probe.
 - MQTT treats the primary connection as a binary packet stream. The initial
   response is the CONNACK, while each readable chunk is an opaque
   server-initiated packet (for example PUBLISH followed by a server

@@ -1,0 +1,10 @@
+# Forward-proxy mode makes curl construct an absolute-form textual request
+# before cf-h2-proxy translates it to :scheme, :authority, and :path. The peer
+# returns one complete HTTP/2 response on that request stream.
+scheme: SCHEME_HTTP
+host_path: "origin.test/absolute/path?item=one"
+h2_forward_proxy: true
+connection {
+  initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+  on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x01\x01\x05\x00\x00\x00\x01\x88"
+}

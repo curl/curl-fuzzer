@@ -1,0 +1,9 @@
+# Send an absolute-form request through the fixed numeric HTTP proxy. The
+# socket callback replaces the proxy connection with the in-process peer, so
+# neither the proxy nor the origin can escape the harness.
+scheme: SCHEME_HTTP
+host_path: "transport.test/forward?mode=proxy"
+http_transport_mode: HTTP_TRANSPORT_FORWARD_PROXY
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nforward"
+}

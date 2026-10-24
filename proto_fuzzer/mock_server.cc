@@ -593,6 +593,12 @@ void MockServer::RunSocketActionLoop(CURLM* multi, CURL* easy) {
   }
 }
 
+/// Ordinary HTTP and compatibility peers retain the historical perform-only
+/// loop even if an append-only scenario field is present. Protocol subclasses
+/// opt in only when their peer can service every repeated poll turn.
+/// @return False for the generic mock server.
+bool MockServer::SupportsRepeatedPollsetProbe() const { return false; }
+
 /// Seed the mock from the scenario, then drive the perform loop until curl is
 /// done or a deterministic operation/idle budget is hit. Ordinary scenarios
 /// never wait; explicit backpressure scenarios may use short select() waits.
@@ -620,6 +626,7 @@ void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Sc
         return backpressure.recv_buf_bytes() != 0 || backpressure.drain_limit() != 0;
       });
   const int idle_limit = timed_drive ? kMaxTimedIdleIterations : kMaxIdleIterations;
+  const bool repeated_pollset_probe = scenario.probe_multi_pollset() && SupportsRepeatedPollsetProbe();
   CURLMcode rc = CURLM_OK;
 
   while (still_running && idle_iterations < idle_limit && drive_iterations++ < kMaxDriveIterations) {
@@ -632,10 +639,12 @@ void MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Sc
     ObserveActiveTransfer(easy);
     ResumeResponseIfRequested(easy);
     made_progress = still_running != running_before;
-    if (timed_drive && still_running && !pollset_probed) {
-      // Probe only after curl has built the socket/filter chain. A zero-timeout
-      // poll adds no wall-clock wait; restricting it to the timing lane keeps
-      // the fixed HTTP target free of a per-input polling syscall.
+    if (still_running && ((timed_drive && !pollset_probed) || repeated_pollset_probe)) {
+      // Probe only after curl has built the socket/filter chain. Timing cases
+      // need one zero-timeout poll; an explicit protocol opt-in probes each
+      // bounded perform turn so filters installed after a SOCKS handshake
+      // (notably HAProxy) are observed while active. Default fast paths remain
+      // free of a per-input polling syscall.
       ProbeMultiPollset(multi);
       pollset_probed = true;
     }

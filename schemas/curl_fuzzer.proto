@@ -87,9 +87,11 @@ message Scenario {
   Http3Plan http3_plan = 13;
   // Enable verbose curl tracing with LIB-IDS prefixes for this scenario.
   bool trace_ids = 14;
-  // Select the resolution side for the dedicated SOCKS4 proxy lane. Other
-  // fixed targets clear this field, and the compatibility target ignores it,
-  // preserving the semantics of historical serialized inputs.
+  // Select the wire version and resolution side for the dedicated proxy
+  // transport lane. Values zero and one retain the original SOCKS4/SOCKS4A
+  // behavior of historical serialized inputs; SOCKS5 modes are append-only.
+  // Other fixed targets clear this field, and the compatibility target ignores
+  // it, preserving the semantics of historical serialized inputs.
   SocksProxyMode socks_proxy_mode = 15;
   // Harness-owned CURLOPT_RESOLVE entries for the dedicated resolver lane.
   // The runtime appends a fixed mapping for the requested origin after these
@@ -162,11 +164,29 @@ message Scenario {
   bool doh_https_rr = 29;
   // Exercise curl's public multi poll path between successful perform turns
   // while the transfer and its in-process protocol connection are both live.
-  // The fixed SMTP, IMAP, POP3, FTP/FTPS, and MQTT/MQTTS lanes retain this
-  // opt-in because their custom loop can immediately service the peer; other
-  // fixed lanes clear it. False preserves the syscall-free historical fast
-  // path.
+  // The fixed SMTP, IMAP, POP3, FTP/FTPS, MQTT/MQTTS, and proxy transport
+  // lanes retain this opt-in because their custom loop can immediately
+  // service the peer; other fixed lanes clear it. False preserves the
+  // syscall-free historical fast path.
   bool probe_multi_pollset = 30;
+  // Send a HAProxy protocol-v1 prefix through the selected SOCKS tunnel before
+  // the HTTP request. The prefix uses harness-owned loopback metadata; fuzzed
+  // bytes can neither select an address nor escape the in-process socketpair.
+  // Only the proxy transport lane retains this flag. False preserves the
+  // historical SOCKS-only wire exchange.
+  bool haproxy_protocol = 31;
+  // Send the H2 proxy lane's origin request directly through the proxy rather
+  // than establishing a CONNECT tunnel. curl first builds an absolute-form
+  // textual request and then translates it to HTTP/2 pseudo-headers, reaching
+  // request-target parsing that a tunneled origin-form request cannot. Other
+  // fixed lanes clear this field; false preserves existing proxy corpus bytes.
+  bool h2_forward_proxy = 32;
+  // Select a harness-owned HTTP transport for the deep HTTP coverage lane.
+  // Proxy modes always use the fixed numeric loopback endpoint intercepted by
+  // the in-process socket callback; the Unix mode uses a fixed abstract socket
+  // name and never consumes a fuzz-controlled filesystem path. Other fixed
+  // lanes clear this field. Zero preserves the historical direct transport.
+  HttpTransportMode http_transport_mode = 33;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -191,6 +211,23 @@ enum SocksProxyMode {
   SOCKS_PROXY_SOCKS4 = 0;
   // Send the canonical hostname after SOCKS4A's 0.0.0.1 marker.
   SOCKS_PROXY_SOCKS4A = 1;
+  // Resolve the canonical localhost origin on the curl side and send its
+  // numeric IPv4 address in a SOCKS5 CONNECT request.
+  SOCKS_PROXY_SOCKS5 = 2;
+  // Send the canonical hostname in a SOCKS5 CONNECT request for proxy-side
+  // resolution.
+  SOCKS_PROXY_SOCKS5_HOSTNAME = 3;
+}
+
+enum HttpTransportMode {
+  // Connect directly to the canonical origin through the socketpair peer.
+  HTTP_TRANSPORT_DIRECT = 0;
+  // Send an absolute-form HTTP request through the fixed plaintext proxy.
+  HTTP_TRANSPORT_FORWARD_PROXY = 1;
+  // Establish an HTTP/1.1 CONNECT tunnel through the fixed plaintext proxy.
+  HTTP_TRANSPORT_CONNECT_PROXY = 2;
+  // Reach the HTTP origin through a fixed abstract Unix-domain socket.
+  HTTP_TRANSPORT_UNIX_SOCKET = 3;
 }
 
 // A bounded, ordered HTTP/3 server script. Structured responses keep common

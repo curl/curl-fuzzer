@@ -32,8 +32,9 @@ enum class TargetProfile {
   kFastHttp3,
   /// Exercise an HTTP/1.1 origin through an HTTPS/HTTP2 CONNECT proxy.
   kH2Proxy,
-  /// Exercise HTTP through an in-process SOCKS4/SOCKS4A proxy.
-  kSocks4,
+  /// Exercise HTTP through an in-process SOCKS proxy, optionally preceded by
+  /// a HAProxy protocol-v1 prefix after tunnel establishment.
+  kProxyTransport,
   /// Exercise localhost lookup and structured CURLOPT_RESOLVE host-cache work.
   kResolver,
   /// Exercise plaintext WebSocket framing without wall-clock waits.
@@ -100,8 +101,9 @@ enum class ScenarioRunMode {
   kHttp3Coverage,
   /// Drive raw HTTP/2 proxy frames around one CONNECT tunnel.
   kH2ProxyCoverage,
-  /// Drive a request-triggered SOCKS4 reply followed by tunneled HTTP.
-  kSocks4Coverage,
+  /// Drive request-triggered SOCKS4/SOCKS5 negotiation, optional HAProxy
+  /// framing, and the tunneled HTTP exchange.
+  kProxyTransportCoverage,
   /// Let curl resolve the origin while the socket callback still owns I/O.
   kResolverCoverage,
   /// Drive FTP or FTPS through its concurrent control/passive-data peer.
@@ -172,8 +174,8 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
     case TargetProfile::kH2Proxy:
       return ScenarioRunMode::kH2ProxyCoverage;
 
-    case TargetProfile::kSocks4:
-      return ScenarioRunMode::kSocks4Coverage;
+    case TargetProfile::kProxyTransport:
+      return ScenarioRunMode::kProxyTransportCoverage;
 
     case TargetProfile::kResolver:
       return ScenarioRunMode::kResolverCoverage;

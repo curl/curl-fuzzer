@@ -85,11 +85,26 @@ struct TraceCapture {
   std::string text;
 };
 
+/// Retain the textual request buffer handed to curl's connection-filter stack.
+/// In forward-proxy mode this is the absolute-form input cf-h2-proxy parses
+/// before emitting HTTP/2 pseudo-headers.
+struct OutgoingHeaderCapture {
+  std::string bytes;
+};
+
 /// Debug callback that appends every informational trace record.
 int CaptureTrace(CURL * /*handle*/, curl_infotype type, char *data,
                  std::size_t size, void *userdata) {
   if (type == CURLINFO_TEXT && data != nullptr && size != 0) {
     static_cast<TraceCapture *>(userdata)->text.append(data, size);
+  }
+  return 0;
+}
+
+int CaptureOutgoingHeaders(CURL * /*handle*/, curl_infotype type, char *data,
+                           std::size_t size, void *userdata) {
+  if (type == CURLINFO_HEADER_OUT && data != nullptr && size != 0) {
+    static_cast<OutgoingHeaderCapture *>(userdata)->bytes.append(data, size);
   }
   return 0;
 }
@@ -697,6 +712,132 @@ void TestH2cUpgradeTransitionsToHttp2() {
          "h2c upgrade request omitted HTTP2-Settings");
 }
 
+/// Result of replaying one checked-in HTTP seed through the production option
+/// and request-data paths while retaining curl's complete wire transcript.
+struct HttpSeedTranscript {
+  CURLcode code = CURLE_FAILED_INIT;
+  std::string request;
+  std::size_t connection_count = 0;
+  long response_code = 0;
+};
+
+HttpSeedTranscript CaptureHttpSeed(const char *name) {
+  const std::string path =
+      std::string(PROTO_FUZZER_SCENARIO_DIR) + "/http/" + name;
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read HTTP transcript seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse HTTP transcript seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::TargetProfile::kDeepHttp);
+
+  proto_fuzzer::CurlSlistPtr connect_to;
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "HTTP transcript test could not allocate an easy handle");
+  connect_to.reset(
+      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
+  const std::string url = "http://" + scenario.host_path();
+  Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
+         "HTTP transcript test could not set its seed URL");
+
+  RequestCapturingServer server;
+  server.Install(easy.get());
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario) ==
+             static_cast<std::size_t>(scenario.options_size()),
+         "HTTP transcript test could not apply every seed option");
+
+  HttpSeedTranscript result;
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
+    server.ConfigureRequestData(&request_data);
+    result.code = server.DriveScenario(easy.get(), scenario);
+  }
+  result.request = server.request();
+  result.connection_count = server.opened_connection_count();
+  (void)curl_easy_getinfo(easy.get(), CURLINFO_RESPONSE_CODE,
+                          &result.response_code);
+
+  // OPENSOCKET userdata borrows the peer, so clean easy while it is live.
+  easy.reset();
+  return result;
+}
+
+void TestBearerChallengeSelectsAndRetriesAuthentication() {
+  const HttpSeedTranscript result =
+      CaptureHttpSeed("http_auth_bearer.textproto");
+  Expect(result.code == CURLE_OK && result.response_code == 200 &&
+             result.connection_count == 2,
+         "Bearer challenge did not complete on one bounded retry");
+
+  const std::size_t first_end = result.request.find("\r\n\r\n");
+  Expect(first_end != std::string::npos,
+         "Bearer transcript did not contain its first request");
+  const std::string first = result.request.substr(0, first_end + 4);
+  const std::string second = result.request.substr(first_end + 4);
+  Expect(first.rfind("GET /bearer?scope=read HTTP/1.1\r\n", 0) == 0 &&
+             first.find("Authorization:") == std::string::npos,
+         "Bearer seed sent credentials before its 401 challenge");
+  Expect(second.rfind("GET /bearer?scope=read HTTP/1.1\r\n", 0) == 0 &&
+             second.find("Authorization: Bearer "
+                         "eyJhbGciOiJIUzI1NiJ9.payload.signature\r\n") !=
+                 std::string::npos,
+         "Bearer retry did not send the selected token");
+  const std::size_t second_end = second.find("\r\n\r\n");
+  Expect(second_end != std::string::npos &&
+             second.find("\r\n\r\n", second_end + 4) == std::string::npos,
+         "Bearer seed emitted an unexpected third request");
+}
+
+void TestAwsSigV4SeedsEmitVerifiedTranscripts() {
+  const HttpSeedTranscript s3 =
+      CaptureHttpSeed("http_auth_aws_sigv4.textproto");
+  Expect(s3.code == CURLE_OK && s3.response_code == 200 &&
+             s3.connection_count == 1,
+         "S3 SigV4 seed did not complete exactly one request");
+  Expect(s3.request.rfind(
+             "POST /example-bucket/test%20file.txt?partNumber=1&uploadId="
+             "example HTTP/1.1\r\n",
+             0) == 0,
+         "S3 SigV4 transcript changed its method, path, or query");
+  Expect(s3.request.find(
+             "x-amz-content-sha256: "
+             "4e76d8fd3dc47c9e95fa0f34771810ed0428cc69d59da4507c10a1090b6cac51"
+             "\r\n") != std::string::npos,
+         "S3 SigV4 transcript did not hash its in-memory payload");
+  Expect(s3.request.find(
+             "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"
+             "20130524/us-east-1/s3/aws4_request, SignedHeaders=host;"
+             "x-amz-content-sha256;x-amz-date, Signature="
+             "410465ed28d2eadba47170e25556c1a0f6121c9fba90c15450189a7db3664d17"
+             "\r\n") != std::string::npos,
+         "S3 SigV4 transcript did not contain the verified signature");
+  Expect(s3.request.size() >= 12 && s3.request.compare(s3.request.size() - 12,
+                                                       12, "fuzz-payload") == 0,
+         "S3 SigV4 transcript did not send the signed payload");
+
+  const HttpSeedTranscript service =
+      CaptureHttpSeed("http_auth_aws_sigv4_service.textproto");
+  Expect(service.code == CURLE_OK && service.response_code == 200 &&
+             service.connection_count == 1,
+         "generic SigV4 seed did not complete exactly one request");
+  Expect(service.request.rfind("GET /prod/resource%20name?b=2&a=1 HTTP/1.1\r\n",
+                               0) == 0,
+         "generic SigV4 transcript changed its wire request target");
+  Expect(service.request.find("x-amz-content-sha256:") == std::string::npos,
+         "generic SigV4 transcript unexpectedly emitted the S3 hash header");
+  Expect(service.request.find(
+             "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"
+             "20130524/us-east-1/execute-api/aws4_request, "
+             "SignedHeaders=host;x-amz-date, Signature="
+             "8a29b887a9b8a2b8a39f177be34081e1ef6fe71926caad2386ef92dfc33d7c61"
+             "\r\n") != std::string::npos,
+         "generic SigV4 transcript did not contain the verified signature");
+}
+
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 /// Values retained from a completed TLS drive after its easy handle and peer
 /// have been safely dismantled. Tests assert these public/client and
@@ -1241,6 +1382,68 @@ void TestH2ProxyCarriesAnHttpOriginResponse() {
          "HTTP/2 proxy completed an unexpected number of TLS handshakes");
   Expect(response == "OK",
          "HTTP/2 proxy did not preserve the tunneled HTTP response");
+
+  curl_easy_cleanup(easy);
+  curl_slist_free_all(connect_to);
+}
+
+void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/h2_proxy/h2_proxy_absolute_form.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the H2 forward-proxy seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the H2 forward-proxy seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::TargetProfile::kH2Proxy);
+  Expect(scenario.h2_forward_proxy(),
+         "H2 proxy policy discarded the seed's forwarding mode");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "H2 forward-proxy test could not allocate an easy handle");
+  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  const std::string url = "http://" + scenario.host_path();
+  Expect(curl_easy_setopt(easy, CURLOPT_URL, url.c_str()) == CURLE_OK,
+         "H2 forward-proxy test could not set its origin URL");
+
+  OutgoingHeaderCapture outgoing;
+  (void)curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+  (void)curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureOutgoingHeaders);
+  (void)curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &outgoing);
+
+  proto_fuzzer::H2ProxyMockServer server(proto_fuzzer::H2ProxyMode::kForward);
+  server.Install(easy);
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 0,
+         "H2 forward-proxy seed unexpectedly applied scalar options");
+  CURLcode code = CURLE_FAILED_INIT;
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    server.ConfigureRequestData(&request_data);
+    code = server.DriveScenario(easy, scenario);
+  }
+
+  long response_code = 0;
+  long http_version = CURL_HTTP_VERSION_NONE;
+  (void)curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &response_code);
+  (void)curl_easy_getinfo(easy, CURLINFO_HTTP_VERSION, &http_version);
+  Expect(code == CURLE_OK && response_code == 200 &&
+             http_version == CURL_HTTP_VERSION_2_0,
+         "H2 forward proxy did not complete its direct response stream");
+  Expect(server.negotiated_alpn() == "h2" &&
+             server.completed_handshake_count() == 1,
+         "H2 forward proxy did not use one verified h2 connection");
+  Expect(outgoing.bytes.rfind(
+             "GET http://origin.test/absolute/path?item=one HTTP/2\r\n", 0) ==
+             0,
+         "H2 forward proxy did not feed an absolute-form target to cf-h2");
+  Expect(outgoing.bytes.find("Host: origin.test\r\n") != std::string::npos &&
+             outgoing.bytes.find("CONNECT ") == std::string::npos,
+         "H2 forward proxy changed the parsed authority or used a tunnel");
 
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);
@@ -2061,6 +2264,8 @@ int main() {
   TestManualWebSocketDriveUsesBoundedLastOption();
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
   TestH2cUpgradeTransitionsToHttp2();
+  TestBearerChallengeSelectsAndRetriesAuthentication();
+  TestAwsSigV4SeedsEmitVerifiedTranscripts();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
   TestTlsWebSocketCompletesStreamingExchange();
   TestTlsWebSocketFlushesFinalManualFrame();
@@ -2081,6 +2286,7 @@ int main() {
   TestTlsEchCompletesEncryptedClientHello();
 #endif
   TestH2ProxyCarriesAnHttpOriginResponse();
+  TestH2ForwardProxyConvertsAbsoluteFormRequest();
 #endif
   TestTransferSessionRejectsUnsafeReconfiguration();
   TestTransferSessionCleansIncompleteSharedTransfers();

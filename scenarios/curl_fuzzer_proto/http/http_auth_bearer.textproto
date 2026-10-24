@@ -1,13 +1,16 @@
 # CURLOPT_XOAUTH2_BEARER supplies HTTP's Bearer token as well as mail-protocol
-# OAuth. Selecting CURLAUTH_BEARER reaches the HTTP authorization formatter
-# without a challenge/retry round trip.
+# OAuth. Let the 401 challenge select CURLAUTH_BEARER from CURLAUTH_ANY, then
+# close the first connection so the retry has a separate bounded response.
 scheme: SCHEME_HTTP
 host_path: "auth.test/bearer?scope=read"
 options {
   option_id: CURLOPT_XOAUTH2_BEARER
   string_value: "eyJhbGciOiJIUzI1NiJ9.payload.signature"
 }
-options { option_id: CURLOPT_HTTPAUTH uint_value: 64 }
+options { option_id: CURLOPT_HTTPAUTH uint_value: 4294967023 }
 connection {
-  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+  on_readable: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Bearer realm=\"fuzz-api\", scope=\"read write\"\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
 }

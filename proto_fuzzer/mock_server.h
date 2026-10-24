@@ -93,6 +93,9 @@ class MockServer : public MockServerBase {
 
   virtual void ObserveActiveTransfer(CURL* easy);
 
+  // Whether this peer can service repeated zero-timeout public polls.
+  virtual bool SupportsRepeatedPollsetProbe() const;
+
   curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
                                  struct curl_sockaddr* address = nullptr) override;
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;

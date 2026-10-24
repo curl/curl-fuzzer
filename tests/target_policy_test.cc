@@ -223,6 +223,50 @@ void TestDeepHttpAltSvcCanonicalAuthority() {
          "deep HTTP policy canonicalized an authority without Alt-Svc input");
 }
 
+void TestDeepHttpTransportPolicy() {
+  Scenario connect;
+  connect.set_host_path("mutated.example:8443/path?query#fragment");
+  connect.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+  connect.set_probe_multi_pollset(true);
+
+  NormalizeScenarioForTarget(&connect, TargetProfile::kDeepHttp);
+
+  Expect(connect.scheme() == SCHEME_HTTP &&
+             connect.host_path() == "transport.test/path?query#fragment",
+         "deep HTTP transport policy did not isolate its origin authority");
+  Expect(connect.http_transport_mode() ==
+                 curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY &&
+             connect.probe_multi_pollset(),
+         "deep HTTP transport policy discarded CONNECT poll work");
+
+  Scenario forward;
+  forward.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY);
+  forward.set_probe_multi_pollset(true);
+  NormalizeScenarioForTarget(&forward, TargetProfile::kDeepHttp);
+  Expect(forward.http_transport_mode() ==
+                 curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY &&
+             !forward.probe_multi_pollset(),
+         "forward-proxy policy retained unrelated repeated polling");
+
+  Scenario unknown;
+  unknown.set_http_transport_mode(
+      static_cast<curl::fuzzer::proto::HttpTransportMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kDeepHttp);
+  Expect(unknown.http_transport_mode() ==
+             curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT,
+         "deep HTTP policy retained an unknown transport mode");
+
+  Scenario other;
+  other.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.http_transport_mode() ==
+             curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT,
+         "a non-deep policy retained the HTTP transport selector");
+}
+
 void TestFastHttpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
@@ -270,6 +314,7 @@ void TestHttpsH2Policy() {
   scenario.mutable_upload()->set_data("upload body");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.set_h2_forward_proxy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_accept_h2_push(true);
 
@@ -308,6 +353,8 @@ void TestHttpsH2Policy() {
   Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan() &&
              !scenario.has_multi_plan(),
          "HTTPS/H2 policy retained another target's work");
+  Expect(!scenario.h2_forward_proxy(),
+         "HTTPS/H2 policy retained forward-proxy-only work");
   Expect(scenario.accept_h2_push(),
          "HTTPS/H2 policy discarded its accepted-push mode");
   Expect(scenario.options_size() == 2 &&
@@ -391,7 +438,7 @@ void TestOtherPoliciesDiscardTlsGroupProfiles() {
       TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,     TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,     TargetProfile::kH2Proxy,
-      TargetProfile::kSocks4,        TargetProfile::kResolver,
+      TargetProfile::kProxyTransport,        TargetProfile::kResolver,
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,      TargetProfile::kFastSmtp,
@@ -684,6 +731,7 @@ void TestH2ProxyPolicy() {
   scenario.mutable_upload()->set_data("upload body");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.set_h2_forward_proxy(true);
 
   scenario.add_options()->set_option_id(
       curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
@@ -708,9 +756,11 @@ void TestH2ProxyPolicy() {
          "HTTP/2 proxy policy removed the raw outer frame stream");
   Expect(scenario.request_headers(0) == "X-Origin: retained" &&
              scenario.has_mime_post() && scenario.has_upload(),
-         "HTTP/2 proxy policy removed state visible to the tunneled request");
+         "HTTP/2 proxy policy removed state visible to the origin request");
   Expect(scenario.telnet_options_size() == 0 && !scenario.has_api_plan(),
          "HTTP/2 proxy policy retained another target's work");
+  Expect(scenario.h2_forward_proxy(),
+         "HTTP/2 proxy policy discarded direct-forwarding mode");
   Expect(scenario.options_size() == 2 &&
              scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_POST &&
@@ -2012,10 +2062,65 @@ void TestNonIpfsPoliciesClearIpfsScheme() {
          "compatibility unexpectedly rewrote the IPNS input");
 }
 
+void TestProxyTransportPolicy() {
+  Scenario remote = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
+  remote.set_host_path("untrusted.invalid:8443/path?query#fragment");
+  remote.set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME);
+  remote.set_haproxy_protocol(true);
+  remote.set_probe_multi_pollset(true);
+  remote.mutable_api_plan()->set_duplicate_easy(true);
+  remote.mutable_multi_plan()->set_transfer_count(4);
+  remote.mutable_connection()->add_on_readable("reply");
+
+  NormalizeScenarioForTarget(&remote, TargetProfile::kProxyTransport);
+
+  Expect(remote.scheme() == SCHEME_HTTP,
+         "proxy-transport policy did not force plaintext HTTP");
+  Expect(remote.host_path() == "socks.test/path?query#fragment",
+         "proxy-transport policy did not pin the remote-resolution host");
+  Expect(remote.socks_proxy_mode() ==
+                 curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME &&
+             remote.haproxy_protocol() && remote.probe_multi_pollset(),
+         "proxy-transport policy discarded an owned mode or poll probe");
+  Expect(remote.connection().initial_response().empty() &&
+             remote.connection().on_readable_size() == 1,
+         "proxy-transport policy did not enforce request-triggered replies");
+  Expect(!remote.has_api_plan() && !remote.has_multi_plan(),
+         "proxy-transport policy retained unrelated lifecycle work");
+
+  Scenario local;
+  local.set_host_path("untrusted.invalid/local");
+  local.set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS5);
+  NormalizeScenarioForTarget(&local, TargetProfile::kProxyTransport);
+  Expect(local.host_path() == "localhost/local" &&
+             local.socks_proxy_mode() ==
+                 curl::fuzzer::proto::SOCKS_PROXY_SOCKS5,
+         "proxy-transport policy changed the local SOCKS5 mode");
+
+  Scenario unknown;
+  unknown.set_host_path("untrusted.invalid/unknown");
+  unknown.set_socks_proxy_mode(
+      static_cast<curl::fuzzer::proto::SocksProxyMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kProxyTransport);
+  Expect(unknown.socks_proxy_mode() ==
+                 curl::fuzzer::proto::SOCKS_PROXY_SOCKS4 &&
+             unknown.host_path() == "localhost/unknown",
+         "proxy-transport policy retained an unknown wire mode");
+
+  Scenario other;
+  other.set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME);
+  other.set_haproxy_protocol(true);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.socks_proxy_mode() == curl::fuzzer::proto::SOCKS_PROXY_SOCKS4 &&
+             !other.haproxy_protocol(),
+         "a non-proxy policy retained proxy-transport selectors");
+}
+
 void TestResolverPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:8080/path?query#fragment");
   scenario.set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A);
+  scenario.set_haproxy_protocol(true);
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.mutable_mime_post()->add_parts()->set_data("ignored");
@@ -2044,7 +2149,8 @@ void TestResolverPolicy() {
   Expect(!scenario.has_api_plan() && !scenario.has_multi_plan() &&
              !scenario.has_mime_post() &&
              scenario.socks_proxy_mode() ==
-                 curl::fuzzer::proto::SOCKS_PROXY_SOCKS4,
+                 curl::fuzzer::proto::SOCKS_PROXY_SOCKS4 &&
+             !scenario.haproxy_protocol(),
          "resolver policy retained another dedicated lane's shape");
   Expect(scenario.options_size() == 1 &&
              scenario.options(0).option_id() ==
@@ -2864,8 +2970,9 @@ void TestProfileRunModes() {
   Expect(RunModeFor(TargetProfile::kH2Proxy) ==
              ScenarioRunMode::kH2ProxyCoverage,
          "HTTP/2 proxy profile does not authorize its CONNECT peer");
-  Expect(RunModeFor(TargetProfile::kSocks4) == ScenarioRunMode::kSocks4Coverage,
-         "SOCKS4 profile does not authorize its proxy peer");
+  Expect(RunModeFor(TargetProfile::kProxyTransport) ==
+             ScenarioRunMode::kProxyTransportCoverage,
+         "proxy-transport profile does not authorize its fixed peer");
   Expect(RunModeFor(TargetProfile::kResolver) ==
              ScenarioRunMode::kResolverCoverage,
          "resolver profile does not authorize DNS/cache work");
@@ -2910,6 +3017,10 @@ void TestCompatibilityProfileIsNoOp() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("compatibility.example/");
   scenario.set_probe_multi_pollset(true);
+  scenario.set_socks_proxy_mode(
+      curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME);
+  scenario.set_haproxy_protocol(true);
+  scenario.set_h2_forward_proxy(true);
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_accept_h2_push(true);
@@ -2943,13 +3054,11 @@ void TestCompatibilityProfileIsNoOp() {
 void TestOnlySupportedPoliciesRetainPollsetProbe() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,
-      TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
       TargetProfile::kH2Proxy,
-      TargetProfile::kSocks4,
       TargetProfile::kResolver,
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
@@ -2976,6 +3085,20 @@ void TestOnlySupportedPoliciesRetainPollsetProbe() {
            "an unsupported fixed policy retained pollset-probe work");
   }
 
+  Scenario proxy_transport;
+  proxy_transport.set_probe_multi_pollset(true);
+  NormalizeScenarioForTarget(&proxy_transport, TargetProfile::kProxyTransport);
+  Expect(proxy_transport.probe_multi_pollset(),
+         "proxy-transport policy discarded its pollset probe");
+
+  Scenario deep_connect;
+  deep_connect.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+  deep_connect.set_probe_multi_pollset(true);
+  NormalizeScenarioForTarget(&deep_connect, TargetProfile::kDeepHttp);
+  Expect(deep_connect.probe_multi_pollset(),
+         "deep CONNECT policy discarded its pollset probe");
+
   Scenario compatibility;
   compatibility.set_probe_multi_pollset(true);
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
@@ -2992,7 +3115,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
       TargetProfile::kH2Proxy,
-      TargetProfile::kSocks4,
+      TargetProfile::kProxyTransport,
       TargetProfile::kResolver,
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
@@ -3065,7 +3188,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastRtsp,
       TargetProfile::kFastIpfs,
       TargetProfile::kFastGopher,
-      TargetProfile::kSocks4,
+      TargetProfile::kProxyTransport,
       TargetProfile::kResolver,
       TargetProfile::kApi,
       TargetProfile::kMulti,
@@ -3411,7 +3534,7 @@ void TestNormalizationPipelineIsIdempotent() {
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
       TargetProfile::kH2Proxy,
-      TargetProfile::kSocks4,
+      TargetProfile::kProxyTransport,
       TargetProfile::kResolver,
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
@@ -3507,6 +3630,7 @@ int main() {
   TestDeepHttpPolicy();
   TestDeepHttpBoundsFileInputs();
   TestDeepHttpAltSvcCanonicalAuthority();
+  TestDeepHttpTransportPolicy();
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
   TestFastHttp2Policy();
@@ -3545,6 +3669,7 @@ int main() {
   TestNonRtspPoliciesClearRtspSchemeAndOptions();
   TestFastIpfsPolicy();
   TestNonIpfsPoliciesClearIpfsScheme();
+  TestProxyTransportPolicy();
   TestFastSmtpsPolicy();
   TestFastImapsPolicy();
   TestFastPop3sPolicy();
