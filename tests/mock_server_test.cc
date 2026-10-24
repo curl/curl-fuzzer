@@ -799,6 +799,30 @@ void TestBearerChallengeSelectsAndRetriesAuthentication() {
          "Bearer seed emitted an unexpected third request");
 }
 
+void TestRedirectPrunesDeadReusableConnection() {
+  const HttpSeedTranscript result =
+      CaptureHttpSeed("http_redirect_reap_dead_connection.textproto");
+  Expect(result.code == CURLE_OK && result.response_code == 200 &&
+             result.connection_count == 2,
+         "dead reusable connection was not replaced for the redirect");
+
+  constexpr std::string_view kFirst = "GET /start HTTP/1.1\r\n";
+  constexpr std::string_view kSecond = "GET /final HTTP/1.1\r\n";
+  Expect(result.request.rfind(kFirst, 0) == 0,
+         "dead-connection seed did not send its initial request");
+  const std::size_t first_end = result.request.find("\r\n\r\n");
+  Expect(first_end != std::string::npos,
+         "dead-connection seed omitted the first request terminator");
+  const std::size_t second_start = first_end + 4;
+  Expect(result.request.find(kSecond, second_start) == second_start,
+         "dead-connection redirect did not send its followed request");
+  const std::size_t second_end = result.request.find("\r\n\r\n", second_start);
+  Expect(second_end != std::string::npos &&
+             result.request.find("\r\n\r\n", second_end + 4) ==
+                 std::string::npos,
+         "dead-connection seed emitted an unexpected third request");
+}
+
 void TestMimeRedirectRewindsCompletedBody() {
   const HttpSeedTranscript result =
       CaptureHttpSeed("http_mime_redirect_rewind.textproto");
@@ -2500,6 +2524,7 @@ int main() {
   TestBrotliResponseExpandsAcrossWriteBufferBoundary();
   TestH2cUpgradeTransitionsToHttp2();
   TestBearerChallengeSelectsAndRetriesAuthentication();
+  TestRedirectPrunesDeadReusableConnection();
   TestMimeRedirectRewindsCompletedBody();
   TestAwsSigV4SeedsEmitVerifiedTranscripts();
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
