@@ -305,7 +305,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     case curl::fuzzer::proto::SCHEME_HTTPS:
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
       if (mode == ScenarioRunMode::kTlsCoverage) {
-        return std::make_unique<TlsMockServer>(scenario.tls_certificate_chain());
+        return std::make_unique<TlsMockServer>(scenario.tls_certificate_chain(), scenario.tls_handshake_profile());
       }
 #else
       (void)mode;
