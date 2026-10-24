@@ -128,6 +128,14 @@ bool InitializeCurl() noexcept {
   return callbacks_active;
 }
 
+/// Reinstall the same allocator callbacks after a deliberate, balanced
+/// curl_global_cleanup(). Call only when no curl handles or workers remain.
+/// @return true when libcurl accepted the callbacks.
+bool ReinitializeCurl() noexcept {
+  return curl_global_init_mem(CURL_GLOBAL_ALL, internal::Malloc, internal::Free, internal::Realloc, internal::Strdup,
+                              internal::Calloc) == CURLE_OK;
+}
+
 /// Store a bounded, sorted, unique allocation plan for the calling thread.
 /// Values outside the useful range are folded into it. Retaining the smallest
 /// ordinals makes oversized compatibility inputs deterministic without heap

@@ -1391,6 +1391,16 @@ if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
 endif()
 
 if(BUILD_TESTING)
+    add_executable(resolver_getaddrinfo_shim_test
+        tests/resolver_getaddrinfo_shim_test.cc
+        proto_fuzzer/resolver_getaddrinfo_shim.cc)
+    target_compile_features(resolver_getaddrinfo_shim_test PRIVATE cxx_std_17)
+    target_compile_options(resolver_getaddrinfo_shim_test PRIVATE ${COMMON_FLAGS})
+    target_link_options(resolver_getaddrinfo_shim_test PRIVATE ${COVERAGE_LINK_FLAGS})
+    add_test(NAME resolver_getaddrinfo_shim_test
+        COMMAND resolver_getaddrinfo_shim_test)
+    add_dependencies(fuzzer_unit_tests resolver_getaddrinfo_shim_test)
+
     add_executable(full_coverage_mutator_test
         tests/full_coverage_mutator_test.cc
         full_coverage/legacy_mutator.cc
@@ -1962,6 +1972,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_https_h2)
     curl_add_proto_fuzzer(curl_fuzzer_proto_socks4)
     curl_add_proto_fuzzer(curl_fuzzer_proto_resolver)
+    target_sources(curl_fuzzer_proto_resolver PRIVATE
+        proto_fuzzer/resolver_getaddrinfo_shim.cc)
     if(BUILD_GNUTLS_VARIANT)
         curl_add_proto_fuzzer(curl_fuzzer_proto_https_gnutls
             CLIENT curl_proto_client_gnutls

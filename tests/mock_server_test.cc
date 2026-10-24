@@ -2216,6 +2216,42 @@ void TestDohHttpsRrDrivesAlpnSelection() {
   curl_slist_free_all(connect_to);
 }
 
+/// A complete loopback HTTP response carrying malformed DNS bytes must reach
+/// curl's DoH decoder and fail there. This distinguishes typed DoH diagnostics
+/// from listener/setup errors and native-resolver fallback.
+void TestDohMalformedAnswerReachesDecoder() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/doh-error");
+  scenario.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  scenario.set_doh_https_rr(true);
+
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "DoH malformed-answer test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to;
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
+                         "https://tls.test/doh-error");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
+
+  proto_fuzzer::DohHttpsRrMockServer server(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, true);
+  server.Install(easy.get());
+  proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
+  server.ConfigureRequestData(&request_data);
+
+  const CURLcode result = server.DriveScenario(easy.get(), scenario);
+  Expect(result == CURLE_COULDNT_RESOLVE_HOST,
+         "malformed DoH answer did not fail in name resolution");
+  Expect(server.doh_request_count() != 0,
+         "malformed DoH test served no complete probe");
+  Expect(server.httpsrr_answer_count() == 0,
+         "malformed DoH test recorded a valid HTTPS-RR answer");
+}
+
 /// A partial local-DoH setup must not perform the outer transfer. Otherwise an
 /// unset CURLOPT_DOH_URL silently selects the process's native resolver before
 /// the mock's socket callback gets a chance to confine the connection.
@@ -2270,6 +2306,7 @@ int main() {
   TestTlsWebSocketCompletesStreamingExchange();
   TestTlsWebSocketFlushesFinalManualFrame();
   TestDohHttpsRrDrivesAlpnSelection();
+  TestDohMalformedAnswerReachesDecoder();
   TestDohHttpsRrSetupFailureDoesNotDriveCurl();
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();

@@ -40,7 +40,7 @@ The main groups of fields are:
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   `socks_proxy_mode`, `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
-  `probe_multi_pollset`, filename-backed parser inputs, and
+  `probe_multi_pollset`, `resolver_mode`, filename-backed parser inputs, and
   `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
@@ -190,6 +190,20 @@ Other peers intentionally give those fields narrower meanings:
   queries; its HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer
   completes through the in-process TLS/ALPN h2 peer using `http2_plan`.
   `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records.
+- The resolver lane's non-default `resolver_mode` values select fixed,
+  target-owned states. Positive and negative threaded lookups, plus a
+  scope-less link-local result and AF_UNSPEC retry, use only the resolver
+  binary's local `getaddrinfo` backend. The threaded modes receive bounded
+  poll/wait turns; the partial backend intentionally staggers A behind AAAA
+  so curl consumes a live partial result instead of relying on scheduler luck.
+  Unix-socket mode passes `/curl-fuzzer-resolver.sock` to curl's address
+  builder, but the open-socket callback replaces it with an anonymous peer and
+  never opens that filesystem path. DoH-error mode returns HTTP 200 with a
+  one-byte DNS body and enables silent typed diagnostics, distinguishing DNS
+  decode failures from transport failures without writing per-input logs. The
+  global-lifecycle mode finishes a localhost transfer, calls the public global
+  cleanup entrypoint only after all resolver workers are gone, and reinstalls
+  the harness allocator callbacks before another input runs.
 - HTTP/2 origin and proxy lanes treat connection bytes as raw HTTP/2 frames
   after a fixed prior-knowledge or TLS/ALPN setup. The fast HTTP lane retains
   the HTTP/1.1 h2c Upgrade request and `101` transition instead.
