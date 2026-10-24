@@ -15,7 +15,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, input-selectable X25519 or provider-default key exchange, plus push and upkeep probes. |
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS/HTTP/2 CONNECT proxy; mutations control bounded raw proxy frames and origin request settings. |
-| `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4 or SOCKS4A proxy. |
+| `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4, SOCKS4A, SOCKS5, or SOCKS5-hostname proxy, including scripted SOCKS5 username/password authentication and an optional fixed HAProxy protocol-v1 prefix. The historical basename is retained for accumulated-corpus compatibility. |
 | `curl_fuzzer_proto_resolver` | Localhost resolution, bounded `CURLOPT_RESOLVE` host-cache operations, an opt-in real loopback happy-eyeballs race, and an opt-in loopback DoH responder whose synthesized HTTPS-RR drives the HTTPS-connect ALPN selection. |
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_wss` | Verified in-process TLS followed by the WebSocket handshake, framing, callbacks, and manual-drive paths. |
@@ -79,11 +79,13 @@ upload state and can write only to that fixed sink; the authority, query, and
 fragment remain mutation-controlled so URL parsing still has fuzzing value
 without granting access to host files.
 
-The fixed SMTP, IMAP, POP3, FTP/FTPS, and MQTT/MQTTS profiles retain
-`probe_multi_pollset`; every other fixed profile currently clears it. The flag
-adds zero-timeout public multi-poll calls only while those peers' perform loop
-has a live transfer and protocol socket, so ordinary false/default corpus
-entries do not pay for an unconditional polling syscall.
+The fixed SMTP, IMAP, POP3, FTP/FTPS, MQTT/MQTTS, and proxy-transport profiles
+retain `probe_multi_pollset`; every other fixed profile currently clears it.
+The flag adds zero-timeout public multi-poll calls only while those peers'
+perform loop has a live transfer and protocol socket, so ordinary false/default
+corpus entries do not pay for an unconditional polling syscall. The proxy lane
+may probe several bounded perform turns because its HAProxy filter is installed
+only after SOCKS negotiation completes.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
 inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would

@@ -1,0 +1,13 @@
+# The proxy selects username/password authentication, resolves the hostname,
+# then receives a fixed HAProxy v1 prefix before the tunneled HTTP request.
+scheme: SCHEME_HTTP
+socks_proxy_mode: SOCKS_PROXY_SOCKS5_HOSTNAME
+haproxy_protocol: true
+probe_multi_pollset: true
+host_path: "socks.test/auth-haproxy"
+connection {
+  on_readable: "\005\002"
+  on_readable: "\001\000"
+  on_readable: "\005\000\000\001\177\000\000\001\000\120"
+  on_readable: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+}

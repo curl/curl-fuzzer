@@ -39,7 +39,7 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_https_mbedtls": "kFastHttps",
     "curl_fuzzer_proto_http3": "kFastHttp3",
     "curl_fuzzer_proto_h2_proxy": "kH2Proxy",
-    "curl_fuzzer_proto_socks4": "kSocks4",
+    "curl_fuzzer_proto_socks4": "kProxyTransport",
     "curl_fuzzer_proto_resolver": "kResolver",
     "curl_fuzzer_proto_ws": "kFastWebSocket",
     "curl_fuzzer_proto_wss": "kFastSecureWebSocket",
