@@ -267,6 +267,64 @@ void TestDeepHttpTransportPolicy() {
          "a non-deep policy retained the HTTP transport selector");
 }
 
+void TestDeepHttpProxySocketOptionPolicy() {
+  struct Case {
+    curl::fuzzer::proto::ProxySocketOptionMode mode;
+    const char *host_path;
+  };
+  constexpr Case kCases[] = {
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME,
+       "service.proxy.test/path?query#fragment"},
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR,
+       "127.0.0.2/path?query#fragment"},
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR,
+       "[::1]/path?query#fragment"},
+      {curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY,
+       "proxy-origin.test/path?query#fragment"},
+      {curl::fuzzer::proto::
+           PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE,
+       "resolve.test/path?query#fragment"},
+  };
+
+  for (const auto &test_case : kCases) {
+    Scenario scenario;
+    scenario.set_host_path("mutated.example:8443/path?query#fragment");
+    scenario.set_proxy_socket_option_mode(test_case.mode);
+    scenario.set_http_transport_mode(
+        curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+    scenario.set_altsvc_file("must not replace the fixed route");
+    scenario.set_hsts_file("must not upgrade the plaintext option route");
+
+    NormalizeScenarioForTarget(&scenario, TargetProfile::kDeepHttp);
+
+    Expect(scenario.scheme() == SCHEME_HTTP &&
+               scenario.proxy_socket_option_mode() == test_case.mode &&
+               scenario.host_path() == test_case.host_path,
+           "deep HTTP policy did not canonicalize a proxy/socket mode");
+    Expect(scenario.altsvc_file().empty() && scenario.hsts_file().empty(),
+           "proxy/socket mode retained a conflicting routing file");
+    Expect(scenario.http_transport_mode() ==
+               curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT,
+           "proxy/socket mode retained a competing HTTP transport");
+  }
+
+  Scenario unknown;
+  unknown.set_proxy_socket_option_mode(
+      static_cast<curl::fuzzer::proto::ProxySocketOptionMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kDeepHttp);
+  Expect(unknown.proxy_socket_option_mode() ==
+             curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT,
+         "deep HTTP policy retained an unknown proxy/socket mode");
+
+  Scenario other;
+  other.set_proxy_socket_option_mode(
+      curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.proxy_socket_option_mode() ==
+             curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT,
+         "a non-deep policy retained the proxy/socket mode");
+}
+
 void TestFastHttpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_host_path("mutated.example:8443/a/path?query#fragment");
@@ -1727,6 +1785,7 @@ void TestFastLdapPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
   scenario.add_mail_rcpt("recipient@example.test");
+  scenario.set_ldap_starttls(true);
 
   auto *rejected = scenario.add_options();
   rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
@@ -1795,6 +1854,8 @@ void TestFastLdapPolicy() {
              scenario.options(3).string_value() == "authorization-id" &&
              scenario.options(4).bool_value(),
          "fast LDAP policy lost the SASL-bind configuration");
+  Expect(scenario.ldap_starttls(),
+         "fast LDAP policy discarded the bounded StartTLS mode");
 }
 
 void TestNonLdapPoliciesClearLdapScheme() {
@@ -1807,11 +1868,14 @@ void TestNonLdapPoliciesClearLdapScheme() {
     Scenario scenario;
     scenario.set_host_path("ldap.test/dc=example,dc=com");
     scenario.set_scheme(SCHEME_LDAP);
+    scenario.set_ldap_starttls(true);
 
     NormalizeScenarioForTarget(&scenario, profile);
 
     Expect(scenario.scheme() != SCHEME_LDAP,
            "a non-LDAP policy retained the LDAP scheme");
+    Expect(!scenario.ldap_starttls(),
+           "a non-LDAP policy retained the StartTLS mode");
 
     Scenario secure;
     secure.set_host_path("tls.test/dc=example,dc=com");
@@ -1826,9 +1890,10 @@ void TestNonLdapPoliciesClearLdapScheme() {
   Scenario compatibility;
   compatibility.set_host_path("ldap.test/dc=example,dc=com");
   compatibility.set_scheme(SCHEME_LDAP);
+  compatibility.set_ldap_starttls(true);
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
-  Expect(compatibility.scheme() == SCHEME_LDAP,
-         "compatibility unexpectedly rewrote the LDAP scheme");
+  Expect(compatibility.scheme() == SCHEME_LDAP && compatibility.ldap_starttls(),
+         "compatibility unexpectedly rewrote the LDAP StartTLS shape");
 
   Scenario secure_compatibility;
   secure_compatibility.set_host_path("tls.test/dc=example,dc=com");
@@ -1844,6 +1909,7 @@ void TestFastLdapsPolicy() {
   scenario.set_scheme(SCHEME_LDAPS);
   scenario.set_host_path(
       "untrusted.invalid:636/dc=example,dc=com?cn?sub?(objectclass=*)#frag");
+  scenario.set_ldap_starttls(true);
   scenario.add_request_headers("X-Ignored: ldaps");
   scenario.mutable_connection()->add_on_readable("search entry");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
@@ -1871,6 +1937,8 @@ void TestFastLdapsPolicy() {
              scenario.options(0).option_id() ==
                  curl::fuzzer::proto::CURLOPT_USERNAME,
          "fast LDAP lane retained a non-LDAP option for LDAPS");
+  Expect(!scenario.ldap_starttls(),
+         "fast LDAP lane retained StartTLS for implicit LDAPS");
 }
 
 void TestFastRtspPolicy() {
@@ -3761,6 +3829,7 @@ int main() {
   TestDeepHttpBoundsFileInputs();
   TestDeepHttpAltSvcCanonicalAuthority();
   TestDeepHttpTransportPolicy();
+  TestDeepHttpProxySocketOptionPolicy();
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
   TestFastHttp2Policy();

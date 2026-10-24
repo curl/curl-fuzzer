@@ -1,0 +1,8 @@
+# Ask OpenLDAP to send an RFC 4511 StartTLS ExtendedRequest over the confined
+# plaintext socketpair. The BER-aware peer returns a correlated successful
+# ExtendedResponse, after which curl installs its TLS filter. The peer then
+# closes the deliberately unimplemented TLS carrier, retaining a bounded
+# handshake-error path without consulting the network or host trust store.
+scheme: SCHEME_LDAP
+host_path: "ldap.test/dc=example,dc=com?cn?sub?(objectclass=*)"
+ldap_starttls: true
