@@ -26,12 +26,13 @@ set(MINIMAL_INSTALL_RECIPE minimal-install-v1)
 set(MINIMAL_INSTALL_STAMP_NAME .curl-fuzzer-${MINIMAL_INSTALL_RECIPE})
 
 # LLVM source-based coverage, driven by codecoverage.sh. When ON, libcurl and
-# the fuzzer binaries are compiled with -fprofile-instr-generate
-# -fcoverage-mapping; third-party deps (openssl, zlib, zstd, brotli, nghttp2,
-# libidn2, openldap, libprotobuf-mutator + its bundled protobuf/abseil) are
-# left uninstrumented. Only curl is what we want covered, and leaving deps
-# alone keeps the link size of the curl_fuzzer_proto binaries under the
-# memory limits of a stock GitHub runner.
+# the fuzzer binaries are compiled with -fprofile-instr-generate,
+# -fcoverage-mapping, and atomic profile counter updates; third-party deps
+# (openssl, zlib, zstd, brotli, nghttp2, libidn2, openldap,
+# libprotobuf-mutator + its bundled protobuf/abseil) are left uninstrumented.
+# Only curl is what we want covered, and leaving deps alone keeps the link size
+# of the curl_fuzzer_proto binaries under the memory limits of a stock GitHub
+# runner.
 option(ENABLE_COVERAGE "Instrument libcurl + fuzzer binaries for LLVM coverage" OFF)
 option(ENABLE_OPENSSL_CONTRACT_SHIM
     "Assert if OpenSSL I/O continues after a fatal result" ON)
@@ -42,7 +43,10 @@ option(ENABLE_NGHTTP2_CONTRACT_SHIM
 set(COVERAGE_COMPILE_FLAGS "")
 set(COVERAGE_LINK_FLAGS "")
 if(ENABLE_COVERAGE)
-    set(COVERAGE_COMPILE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
+    set(COVERAGE_COMPILE_FLAGS
+        -fprofile-instr-generate
+        -fcoverage-mapping
+        -fprofile-update=atomic)
     set(COVERAGE_LINK_FLAGS -fprofile-instr-generate)
     message(STATUS "Coverage instrumentation: ENABLED for libcurl and fuzzers")
 endif()

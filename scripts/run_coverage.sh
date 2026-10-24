@@ -3,7 +3,8 @@
 # Replay corpora through instrumented fuzzer binaries, merge the resulting
 # .profraw files, and emit separate reports for libcurl and the checked-in
 # fuzzer harness. Invoked by codecoverage.sh after compile_target.sh
-# has built the fuzz target with -fprofile-instr-generate -fcoverage-mapping.
+# has built the fuzz target with -fprofile-instr-generate, -fcoverage-mapping,
+# and -fprofile-update=atomic.
 
 set -euo pipefail
 

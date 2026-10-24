@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import lzma
 import os
 import shutil
 import tempfile
 import zipfile
+import zlib
 from collections.abc import Iterable
 from contextlib import suppress
 from pathlib import Path
@@ -110,14 +112,28 @@ class CorpusSnapshotBuilder:
             return
 
         if zipfile.is_zipfile(source):
-            with zipfile.ZipFile(source) as archive:
-                for member in sorted(
-                    archive.infolist(), key=lambda item: item.filename
-                ):
-                    if member.is_dir():
-                        continue
-                    with archive.open(member) as archived_file:
-                        self._record_stream(archived_file)
+            try:
+                with zipfile.ZipFile(source) as archive:
+                    for member in sorted(
+                        archive.infolist(), key=lambda item: item.filename
+                    ):
+                        if member.is_dir():
+                            continue
+                        with archive.open(member) as archived_file:
+                            self._record_stream(archived_file)
+            except (
+                OSError,
+                zipfile.BadZipFile,
+                zipfile.LargeZipFile,
+                RuntimeError,
+                NotImplementedError,
+                zlib.error,
+                lzma.LZMAError,
+                EOFError,
+            ) as error:
+                raise CorpusError(
+                    f"could not read corpus archive {source}: {error}"
+                ) from error
             return
 
         self._record_file(source)
