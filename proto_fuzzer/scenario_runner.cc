@@ -763,6 +763,14 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   } else {
     transfer_result = mock->DriveScenario(easy, scenario);
   }
+  if (api_plan != nullptr && api_plan->repeat_mime_post() && transfer_result == CURLE_OK) {
+    // Re-enter the public transfer setup with the same easy handle, MIME root,
+    // and callback cursor. A completed first body leaves a non-rewindable
+    // callback at EOF; curl's second MIME reader setup must then report its
+    // normal public rewind failure and clean up the unattached reader before
+    // it can send another request.
+    transfer_result = mock->DriveScenario(easy, scenario);
+  }
   if (api_lifecycle != nullptr) {
     const bool retains_internal_multi = drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM ||
                                         drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS ||
@@ -794,12 +802,14 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
                                                       stats.resolve_entries,
                                                       stats.telnet_options,
                                                       stats.mime_parts,
+                                                      stats.mime_callback_parts,
                                                       stats.mime_headers,
                                                       stats.generated_mime_bytes,
                                                       request_data->upload_callbacks_installed(),
                                                       upload.data_size(),
                                                       upload.read_step_count(),
                                                       upload.offset(),
+                                                      upload.seek_calls(),
                                                       upload.scripted()};
   (void)request_observation;
   ObserveProtocolPeerState(mock.get());

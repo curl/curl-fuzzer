@@ -32,7 +32,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_ldap` | Single-connection BER/ASN.1 LDAP simple or SASL PLAIN bind and search through OpenLDAP, including bounded root-DSE mechanism discovery, a scripted bind reply, scripted search-result entries, and synthesized search completion. `ldap_starttls` drives a correlated plaintext ExtendedRequest/ExtendedResponse before curl installs its TLS filter; `SCHEME_LDAPS` runs the ordinary exchange over implicit TLS against the in-process OpenSSL peer. |
 | `curl_fuzzer_proto_rtsp` | Single-connection, request-aligned RTSP method/CSeq exchanges, SDP response bodies, and PLAY responses with interleaved RTP packets. |
 | `curl_fuzzer_proto_ipfs` | `ipfs://` and `ipns://` gateway rewrites as ordinary HTTP GETs against the in-process HTTP peer, with a pinned CID/name and a mutation-controlled gateway path. |
-| `curl_fuzzer_proto_api` | Easy, share, multi, URL, connect-only, pause/resume, and typed result API lifecycles described by `api_plan`. |
+| `curl_fuzzer_proto_api` | Easy, share, multi, URL, connect-only, pause/resume, callback-MIME same-handle reuse, and typed result API lifecycles described by `api_plan`. |
 | `curl_fuzzer_proto_multi` | Two to four easy handles on one shared multi handle, with bounded scheduling actions, connection-cache controls, an opt-in closed progress/rate-limit probe, and a five-second packaged timeout. |
 | `curl_fuzzer_proto_timing` | Plain HTTP or WebSocket backpressure and timed-wait behavior; it guarantees a non-default bounded pressure configuration. |
 

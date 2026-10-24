@@ -2962,6 +2962,39 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
          "API policy changed the retained selector prefix");
 }
 
+void TestApiMimeRepeatRequiresCallbackShape() {
+  Scenario valid;
+  valid.set_scheme(SCHEME_HTTP);
+  valid.set_host_path("api.test/mime-repeat");
+  valid.mutable_upload()->set_data("callback body");
+  valid.mutable_mime_post()->add_parts()->set_upload_callback(true);
+  auto *plan = valid.mutable_api_plan();
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY);
+  plan->set_wake_multi(true);
+  plan->set_pause_response_once(true);
+  plan->set_repeat_mime_post(true);
+
+  Scenario missing_upload = valid;
+  missing_upload.clear_upload();
+  NormalizeScenarioForTarget(&missing_upload, TargetProfile::kApi);
+  Expect(!missing_upload.api_plan().repeat_mime_post(),
+         "API policy retained MIME reuse without callback bytes");
+
+  Scenario missing_callback = valid;
+  missing_callback.mutable_mime_post()->mutable_parts(0)->set_data("memory");
+  NormalizeScenarioForTarget(&missing_callback, TargetProfile::kApi);
+  Expect(!missing_callback.api_plan().repeat_mime_post(),
+         "API policy retained MIME reuse without a callback part");
+
+  NormalizeScenarioForTarget(&valid, TargetProfile::kApi);
+  Expect(valid.api_plan().repeat_mime_post() &&
+             valid.api_plan().drive_mode() ==
+                 curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM &&
+             !valid.api_plan().wake_multi() &&
+             !valid.api_plan().pause_response_once(),
+         "API policy did not isolate the same-easy MIME repeat lifecycle");
+}
+
 void TestProtocolPoliciesDiscardApiPlans() {
   constexpr TargetProfile kProtocolPolicies[] = {
       TargetProfile::kFastHttp,
@@ -3987,6 +4020,7 @@ int main() {
   TestFastHttpKeepsOnlyOwnedHttpVersions();
   TestFastHttpFiltersBeforeApplyingOptionBound();
   TestApiPolicyRetainsAndBoundsItsPlan();
+  TestApiMimeRepeatRequiresCallbackShape();
   TestProtocolPoliciesDiscardApiPlans();
   TestMultiPolicyRetainsAndBoundsItsPlan();
   TestOtherPoliciesDiscardMultiPlans();
