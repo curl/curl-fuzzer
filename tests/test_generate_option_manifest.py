@@ -60,6 +60,7 @@ def test_true_flags_use_boolean_mutations() -> None:
         "CURLOPT_HTTP09_ALLOWED",
         "CURLOPT_CRLF",
         "CURLOPT_CERTINFO",
+        "CURLOPT_SSL_VERIFYSTATUS",
         "CURLOPT_SASL_IR",
     ):
         assert _kind(name) == "bool"

@@ -422,6 +422,32 @@ void TestTlsPoliciesRejectUnknownCertificateChain() {
   }
 }
 
+void TestTlsClientCredentialProfilePolicy() {
+  Scenario https;
+  https.set_tls_client_credential_profile(
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12);
+  NormalizeScenarioForTarget(&https, TargetProfile::kFastHttps);
+  Expect(https.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12,
+         "HTTPS policy discarded a bounded client-credential profile");
+
+  Scenario unknown;
+  unknown.set_tls_client_credential_profile(
+      static_cast<curl::fuzzer::proto::TlsClientCredentialProfile>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastHttps);
+  Expect(unknown.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE,
+         "HTTPS policy retained an unknown client-credential profile");
+
+  Scenario plaintext;
+  plaintext.set_tls_client_credential_profile(
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL);
+  NormalizeScenarioForTarget(&plaintext, TargetProfile::kDeepHttp);
+  Expect(plaintext.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE,
+         "non-HTTPS policy retained client-credential setup work");
+}
+
 void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
   Scenario scenario;
   scenario.set_tls_group_profile(
@@ -3709,6 +3735,7 @@ int main() {
   TestHttpsH2Policy();
   TestFastHttp2Policy();
   TestTlsPoliciesRejectUnknownCertificateChain();
+  TestTlsClientCredentialProfilePolicy();
   TestHttpsH2PolicyRejectsUnknownTlsGroupProfile();
   TestOtherPoliciesDiscardTlsGroupProfiles();
   TestFastHttp3PolicyMaterializesUsefulPlan();
