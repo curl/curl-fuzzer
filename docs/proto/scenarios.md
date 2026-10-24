@@ -219,7 +219,10 @@ Other peers intentionally give those fields narrower meanings:
   points `CURLOPT_DOH_URL` at it. The responder answers address and HTTPS
   queries; its HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer
   completes through the in-process TLS/ALPN h2 peer using `http2_plan`.
-  `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records.
+  `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records. A
+  paired coverage seed repeats that exact exchange with `trace_config: "all"`;
+  tracing is reset at the input boundary and does not become a resolver-lane
+  default.
 - The resolver lane's non-default `resolver_mode` values select fixed,
   target-owned states. Positive and negative threaded lookups, plus a
   scope-less link-local result and AF_UNSPEC retry, use only the resolver
