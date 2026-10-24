@@ -213,6 +213,13 @@ message Scenario {
   // ExtendedResponse before curl installs its TLS connection filter. False
   // preserves the historical plaintext exchange; LDAPS clears this field.
   bool ldap_starttls = 37;
+  // Select a closed, harness-owned TLS handshake terminal in the verified
+  // HTTPS lane. The OpenSSL clean-close probe sends one fixed close_notify
+  // record before negotiation completes so curl observes SSL_ERROR_ZERO_RETURN
+  // with an empty provider error queue. Non-OpenSSL client variants treat it
+  // as DEFAULT, other fixed targets clear it, and compatibility preserves the
+  // append-only field without interpreting it.
+  TlsHandshakeProfile tls_handshake_profile = 38;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -240,6 +247,13 @@ enum TlsClientCredentialProfile {
   TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL = 2;
   TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL = 3;
   TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL = 4;
+}
+
+// Safe peer-side handshake terminals for OpenSSL error translation coverage.
+// These profiles contain no protobuf-controlled wire bytes or callback data.
+enum TlsHandshakeProfile {
+  TLS_HANDSHAKE_DEFAULT = 0;
+  TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY = 1;
 }
 
 enum SocksProxyMode {

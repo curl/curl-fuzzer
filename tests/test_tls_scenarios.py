@@ -111,6 +111,11 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL",
             "unreachable",
         ),
+        "https_tls_openssl_close_notify.textproto": (
+            "TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY",
+            "openssl-close-notify",
+            "unreachable",
+        ),
         "https_ech_success.textproto": (
             "CURLOPT_ECH",
             f"ecl:{_ech_config_list()}",
