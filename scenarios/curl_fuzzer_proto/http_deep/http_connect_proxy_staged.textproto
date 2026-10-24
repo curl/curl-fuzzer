@@ -1,0 +1,11 @@
+# Release the CONNECT response and tunneled origin response in separate event
+# loop turns. The explicit poll probe observes the tunnel filter while it is
+# waiting for CONNECT and again after the origin request becomes active.
+scheme: SCHEME_HTTP
+host_path: "transport.test/tunneled"
+http_transport_mode: HTTP_TRANSPORT_CONNECT_PROXY
+probe_multi_pollset: true
+connection {
+  on_readable: "HTTP/1.1 200 Connection Established\r\nProxy-Agent: proto-fuzzer\r\n\r\n"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\ntunneled"
+}

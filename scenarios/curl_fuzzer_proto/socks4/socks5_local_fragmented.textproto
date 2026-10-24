@@ -1,0 +1,11 @@
+# SOCKS5 resolves localhost inside curl, accepts the no-auth method, and reads
+# the successful IPv4 CONNECT reply across its minimum and trailing lengths.
+scheme: SCHEME_HTTP
+socks_proxy_mode: SOCKS_PROXY_SOCKS5
+host_path: "localhost/socks5-local"
+connection {
+  on_readable: "\005\000"
+  on_readable: "\005\000\000\001\177\000\000\001"
+  on_readable: "\000\120"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nsocks5"
+}

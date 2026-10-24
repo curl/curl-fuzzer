@@ -1,0 +1,9 @@
+# A failed username/password sub-negotiation must terminate before CONNECT or
+# any tunneled HAProxy/HTTP bytes are emitted.
+scheme: SCHEME_HTTP
+socks_proxy_mode: SOCKS_PROXY_SOCKS5_HOSTNAME
+host_path: "socks.test/rejected-auth"
+connection {
+  on_readable: "\005\002"
+  on_readable: "\001\001"
+}

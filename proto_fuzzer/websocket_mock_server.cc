@@ -402,6 +402,15 @@ bool WebSocketMockServer::TryAdvanceHandshake(bool* made_progress) {
       "Connection: Upgrade\r\n"
       "Sec-WebSocket-Accept: " +
       accept + "\r\n\r\n";
+  // CONNECT_ONLY may leave already-read bytes after the 101 headers. Put one
+  // bounded frame in the same peer write so curl has to preserve those bytes
+  // for the later curl_ws_recv call instead of discarding them when the
+  // opening transfer finishes. Remaining chunks still exercise the explicit
+  // manual-delivery tail below.
+  if (manual_delivery() && has_more_chunks()) {
+    response.append(PeekChunk(0));
+    ConsumeChunk();
+  }
   connection_->WriteAll(reinterpret_cast<const unsigned char*>(response.data()), response.size());
   FlushTransport();
   handshake_sent_ = true;

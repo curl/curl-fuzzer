@@ -117,7 +117,7 @@ void CanonicalizeTlsGroupProfile(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
-/// Keep the tunneled origin parseable while retaining every path, query, and
+/// Keep the proxied origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
 /// not additional HTTP/2 proxy behavior.
@@ -131,19 +131,36 @@ void CanonicalizeH2ProxyOriginAuthority(curl::fuzzer::proto::Scenario* scenario)
   scenario->set_host_path("origin.test" + host_path.substr(suffix_start));
 }
 
-/// SOCKS4 must resolve a real local name before constructing its request,
-/// while SOCKS4A deliberately carries a hostname to the proxy. Both
-/// authorities remain fixed and the path/query/fragment stays mutable.
+/// Local-resolution SOCKS modes use libc/curl's deterministic localhost path,
+/// while SOCKS4A and SOCKS5-hostname deliberately carry a fixed hostname to
+/// the proxy. The path/query/fragment stays mutation-controlled.
 void CanonicalizeSocksAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
-  const char* host =
-      scenario->socks_proxy_mode() == curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A ? "socks.test" : "localhost";
+  const auto mode = scenario->socks_proxy_mode();
+  const bool resolve_at_proxy =
+      mode == curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A || mode == curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME;
+  const char* host = resolve_at_proxy ? "socks.test" : "localhost";
   if (suffix_start == std::string::npos) {
     scenario->set_host_path(std::string(host) + "/");
     return;
   }
   scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
+}
+
+/// Keep proxy and Unix-domain HTTP transfers on one parseable origin while
+/// preserving the mutation-controlled path, query, and fragment. Routing is
+/// selected independently by a fixed numeric proxy or abstract socket name,
+/// so authority mutation would add early URL failures without new transport
+/// behavior.
+void CanonicalizeHttpTransportAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("transport.test/");
+    return;
+  }
+  scenario->set_host_path("transport.test" + host_path.substr(suffix_start));
 }
 
 /// Use libc/curl's localhost path when there are no structured entries, and a
@@ -1116,10 +1133,10 @@ bool IsCheapHttpOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
-/// Return whether an option can affect the HTTP/1.1 request carried inside the
-/// fixed HTTP/2 CONNECT tunnel. Proxy routing, ALPN, and TLS verification are
-/// owned by H2ProxyMockServer and must not be mutation-controlled; HTTP/2 as an
-/// inner origin protocol is also excluded because it would require a second
+/// Return whether an option can affect the origin request carried through the
+/// fixed HTTP/2 proxy. Proxy routing, ALPN, and TLS verification are owned by
+/// H2ProxyMockServer and must not be mutation-controlled; HTTP/2 as an inner
+/// tunneled origin protocol is also excluded because it would require a second
 /// frame script and obscure coverage of the outer proxy filter. Stateful HTTP
 /// options remain useful here because their wire effects traverse cf-h2-proxy.
 bool IsH2ProxyOriginOption(curl::fuzzer::proto::CurlOptionId option_id) {
@@ -2225,8 +2242,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http2_plan();
   }
 
-  if (profile != TargetProfile::kSocks4) {
+  if (profile != TargetProfile::kProxyTransport) {
     scenario->clear_socks_proxy_mode();
+    scenario->clear_haproxy_protocol();
+  }
+
+  if (profile != TargetProfile::kDeepHttp) {
+    scenario->clear_http_transport_mode();
   }
 
   if (profile != TargetProfile::kResolver) {
@@ -2248,8 +2270,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // contract; compatibility returned above and preserves its wire input.
   if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
       profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp &&
-      profile != TargetProfile::kFastMqtt) {
+      profile != TargetProfile::kFastMqtt && profile != TargetProfile::kProxyTransport &&
+      profile != TargetProfile::kDeepHttp) {
     scenario->clear_probe_multi_pollset();
+  }
+
+  // Direct forwarding changes the H2 proxy stream from CONNECT authority-form
+  // to an absolute-form origin request. No other peer implements that shape.
+  if (profile != TargetProfile::kH2Proxy) {
+    scenario->clear_h2_forward_proxy();
   }
 
   // Anonymous parser files add syscalls and line parsing that belong only in
@@ -2347,10 +2376,17 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
-  if (profile == TargetProfile::kSocks4) {
+  if (profile == TargetProfile::kProxyTransport) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
-    if (scenario->socks_proxy_mode() != curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A) {
-      scenario->set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4);
+    switch (scenario->socks_proxy_mode()) {
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS4:
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A:
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS5:
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME:
+        break;
+      default:
+        scenario->set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4);
+        break;
     }
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
@@ -2589,7 +2625,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       // The early path removes proxy-incompatible fields before general
       // bounds, keeping raw frame mutation dense.
       return;
-    case TargetProfile::kSocks4:
+    case TargetProfile::kProxyTransport:
       // The early path fixes proxy routing and request-triggered replies.
       return;
     case TargetProfile::kResolver:
@@ -2646,8 +2682,23 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
     case TargetProfile::kDeepHttp:
       ClearAllBackpressure(scenario);
-      if (!scenario->altsvc_file().empty()) {
+      switch (scenario->http_transport_mode()) {
+        case curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT:
+        case curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY:
+        case curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY:
+        case curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET:
+          break;
+        default:
+          scenario->clear_http_transport_mode();
+          break;
+      }
+      if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
+        CanonicalizeHttpTransportAuthority(scenario);
+      } else if (!scenario->altsvc_file().empty()) {
         CanonicalizeAltSvcAuthority(scenario);
+      }
+      if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY) {
+        scenario->clear_probe_multi_pollset();
       }
       return;
 
@@ -2697,7 +2748,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       // Handled by the protocol-specific early path above.
       return;
 
-    case TargetProfile::kSocks4:
+    case TargetProfile::kProxyTransport:
       // Handled by the protocol-specific early path above.
       return;
 
