@@ -1,0 +1,9 @@
+# Select a fixed abstract Unix-domain origin. Curl constructs its production
+# UDS peer and socket filter before OPENSOCKET replaces the descriptor with the
+# harness-owned socketpair; no filesystem pathname is created or mutated.
+scheme: SCHEME_HTTP
+host_path: "transport.test/unix"
+http_transport_mode: HTTP_TRANSPORT_UNIX_SOCKET
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nunix"
+}

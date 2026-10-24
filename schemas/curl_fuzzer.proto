@@ -181,6 +181,12 @@ message Scenario {
   // request-target parsing that a tunneled origin-form request cannot. Other
   // fixed lanes clear this field; false preserves existing proxy corpus bytes.
   bool h2_forward_proxy = 32;
+  // Select a harness-owned HTTP transport for the deep HTTP coverage lane.
+  // Proxy modes always use the fixed numeric loopback endpoint intercepted by
+  // the in-process socket callback; the Unix mode uses a fixed abstract socket
+  // name and never consumes a fuzz-controlled filesystem path. Other fixed
+  // lanes clear this field. Zero preserves the historical direct transport.
+  HttpTransportMode http_transport_mode = 33;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -211,6 +217,17 @@ enum SocksProxyMode {
   // Send the canonical hostname in a SOCKS5 CONNECT request for proxy-side
   // resolution.
   SOCKS_PROXY_SOCKS5_HOSTNAME = 3;
+}
+
+enum HttpTransportMode {
+  // Connect directly to the canonical origin through the socketpair peer.
+  HTTP_TRANSPORT_DIRECT = 0;
+  // Send an absolute-form HTTP request through the fixed plaintext proxy.
+  HTTP_TRANSPORT_FORWARD_PROXY = 1;
+  // Establish an HTTP/1.1 CONNECT tunnel through the fixed plaintext proxy.
+  HTTP_TRANSPORT_CONNECT_PROXY = 2;
+  // Reach the HTTP origin through a fixed abstract Unix-domain socket.
+  HTTP_TRANSPORT_UNIX_SOCKET = 3;
 }
 
 // A bounded, ordered HTTP/3 server script. Structured responses keep common

@@ -148,6 +148,21 @@ void CanonicalizeSocksAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
 }
 
+/// Keep proxy and Unix-domain HTTP transfers on one parseable origin while
+/// preserving the mutation-controlled path, query, and fragment. Routing is
+/// selected independently by a fixed numeric proxy or abstract socket name,
+/// so authority mutation would add early URL failures without new transport
+/// behavior.
+void CanonicalizeHttpTransportAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  if (suffix_start == std::string::npos) {
+    scenario->set_host_path("transport.test/");
+    return;
+  }
+  scenario->set_host_path("transport.test" + host_path.substr(suffix_start));
+}
+
 /// Use libc/curl's localhost path when there are no structured entries, and a
 /// fixed cache-backed name when entries are present. The DoH lane uses the
 /// certificate's tls.test authority because its outer transfer completes a
@@ -2232,6 +2247,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_haproxy_protocol();
   }
 
+  if (profile != TargetProfile::kDeepHttp) {
+    scenario->clear_http_transport_mode();
+  }
+
   if (profile != TargetProfile::kResolver) {
     scenario->clear_resolve_entries();
     scenario->clear_happy_eyeballs();
@@ -2251,7 +2270,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // contract; compatibility returned above and preserves its wire input.
   if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
       profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp &&
-      profile != TargetProfile::kFastMqtt && profile != TargetProfile::kProxyTransport) {
+      profile != TargetProfile::kFastMqtt && profile != TargetProfile::kProxyTransport &&
+      profile != TargetProfile::kDeepHttp) {
     scenario->clear_probe_multi_pollset();
   }
 
@@ -2662,8 +2682,23 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
     case TargetProfile::kDeepHttp:
       ClearAllBackpressure(scenario);
-      if (!scenario->altsvc_file().empty()) {
+      switch (scenario->http_transport_mode()) {
+        case curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT:
+        case curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY:
+        case curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY:
+        case curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET:
+          break;
+        default:
+          scenario->clear_http_transport_mode();
+          break;
+      }
+      if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
+        CanonicalizeHttpTransportAuthority(scenario);
+      } else if (!scenario->altsvc_file().empty()) {
         CanonicalizeAltSvcAuthority(scenario);
+      }
+      if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY) {
+        scenario->clear_probe_multi_pollset();
       }
       return;
 

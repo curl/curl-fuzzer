@@ -8,7 +8,7 @@ which peer is used, and how much work one mutation may create.
 |---|---|
 | `curl_fuzzer_proto` | Compatibility target for the historical mixed HTTP, HTTPS, WebSocket, and TELNET corpus. It deliberately has no profile postprocessor. |
 | `curl_fuzzer_proto_http` | High-throughput plaintext HTTP/1 and h2c upgrade negotiation. Retains cheap request options and raw response parsing; removes MIME, uploads, follow-on sockets, prior-knowledge HTTP/2, HTTP/3 selection, and timing controls. |
-| `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, authentication, MIME, uploads, result APIs, and bounded cookie, Alt-Svc, HSTS, and netrc files. |
+| `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, authentication, MIME, uploads, result APIs, bounded cookie, Alt-Svc, HSTS, and netrc files, plus harness-owned forward-proxy, HTTP CONNECT, and abstract Unix-domain transports. |
 | `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
 | `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, and bounded CRL-input coverage. |
 | `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a GnuTLS or mbedTLS curl client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
@@ -80,12 +80,13 @@ fragment remain mutation-controlled so URL parsing still has fuzzing value
 without granting access to host files.
 
 The fixed SMTP, IMAP, POP3, FTP/FTPS, MQTT/MQTTS, and proxy-transport profiles
-retain `probe_multi_pollset`; every other fixed profile currently clears it.
-The flag adds zero-timeout public multi-poll calls only while those peers'
-perform loop has a live transfer and protocol socket, so ordinary false/default
-corpus entries do not pay for an unconditional polling syscall. The proxy lane
-may probe several bounded perform turns because its HAProxy filter is installed
-only after SOCKS negotiation completes.
+retain `probe_multi_pollset`; deep HTTP retains it only for its CONNECT proxy
+mode. Every other fixed profile clears it. The flag adds zero-timeout public
+multi-poll calls only while those peers' perform loop has a live transfer and
+protocol socket, so ordinary false/default corpus entries do not pay for an
+unconditional polling syscall. The proxy-transport lane may probe several
+bounded perform turns because its HAProxy filter is installed only after SOCKS
+negotiation completes.
 
 The compatibility profile is intentionally different. Existing OSS-Fuzz
 inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would
