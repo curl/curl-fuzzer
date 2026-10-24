@@ -112,6 +112,16 @@ def test_optional_proto_targets_are_limited_to_supported_builds() -> None:
     assert targets.isdisjoint(_packaged_targets(architecture="i386"))
 
 
+def test_full_coverage_target_is_only_packaged_for_profiling() -> None:
+    """Do not expose the profiling helper as an ordinary fuzz target."""
+    target = "curl_fuzzer_full_coverage"
+
+    assert target not in _packaged_targets(sanitizer="address")
+    assert target not in _packaged_targets(sanitizer="memory")
+    assert target in _packaged_targets(sanitizer="coverage")
+    assert target in _packaged_targets(sanitizer="introspector")
+
+
 def _checked_in_cpp_sources() -> list[Path]:
     sources = list(REPO_ROOT.glob("*.cc"))
     sources.extend((REPO_ROOT / "fuzzer_entrypoints").glob("*.cc"))
@@ -123,7 +133,7 @@ def _checked_in_cpp_sources() -> list[Path]:
 
 def test_packaged_fuzzers_have_unique_same_named_entrypoints() -> None:
     """Keep Introspector's source basenames aligned with coverage reports."""
-    packaged = _packaged_targets()
+    packaged = _packaged_targets(sanitizer="introspector")
     discovered: dict[str, list[Path]] = {}
 
     for source in _checked_in_cpp_sources():
@@ -139,13 +149,13 @@ def test_packaged_fuzzers_have_unique_same_named_entrypoints() -> None:
 
 
 def test_cmake_builds_every_packaged_entrypoint() -> None:
-    """Prevent packaging and CMake's target declarations from drifting."""
+    """Prevent profiling packaging and CMake declarations from drifting."""
     cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     cmake_targets = set(LEGACY_TARGET_PATTERN.findall(cmake))
     cmake_targets.update(PROTO_TARGET_PATTERN.findall(cmake))
     cmake_targets.update(STANDALONE_TARGETS)
 
-    assert cmake_targets == _packaged_targets()
+    assert cmake_targets == _packaged_targets(sanitizer="coverage")
     assert cmake.count("fuzzer_entrypoints/${_name}.cc") == 2
 
 

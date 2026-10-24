@@ -168,9 +168,9 @@ Compare changes using the same curl revision, toolchain, features, and corpora.
 legacy mutator probes once per process during LLVM coverage or Fuzz Introspector
 builds
 (`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`/`introspector`). It supplements
-corpus replay without adding protocol lanes. Ordinary sanitizer builds exit
-successfully on the first callback, so this target consumes no mutation time.
-Its seed input only triggers the probes; its contents are ignored.
+corpus replay without adding protocol lanes. Ordinary sanitizer builds do not
+package this profiling helper as a fuzz target. Its seed input only triggers
+the probes; its contents are ignored.
 Mutator probes exercise framing, routing, capacity limits, and crossover on
 local byte buffers. They perform no transfers and cover the custom-mutator ABI
 adapters that corpus replay normally skips.
