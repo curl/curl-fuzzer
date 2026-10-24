@@ -31,6 +31,7 @@
 #include "proto_fuzzer/multi_transfer_runner.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/pop3_mock_server.h"
+#include "proto_fuzzer/proxy_option_mock_server.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/rtsp_mock_server.h"
 #include "proto_fuzzer/smtp_mock_server.h"
@@ -260,9 +261,16 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     return std::make_unique<ProxyTransportMockServer>(scenario.socks_proxy_mode(), scenario.haproxy_protocol());
   }
 
-  if (mode == ScenarioRunMode::kDeepHttpCoverage &&
-      scenario.http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
-    return std::make_unique<HttpTransportMockServer>(scenario.http_transport_mode());
+  if (mode == ScenarioRunMode::kDeepHttpCoverage) {
+    if (scenario.proxy_socket_option_mode() == curl::fuzzer::proto::PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE) {
+      return std::make_unique<InterfaceOptionMockServer>();
+    }
+    if (scenario.proxy_socket_option_mode() != curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT) {
+      return std::make_unique<ProxyOptionMockServer>(scenario.proxy_socket_option_mode());
+    }
+    if (scenario.http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
+      return std::make_unique<HttpTransportMockServer>(scenario.http_transport_mode());
+    }
   }
 
   if (mode == ScenarioRunMode::kResolverCoverage && scenario.doh_https_rr()) {
@@ -529,8 +537,8 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
 
   if (auto* ldap = dynamic_cast<LdapMockServer*>(mock)) {
     const volatile std::size_t ldap_observation[] = {ldap->packet_transcript().size(), ldap->bind_request_count(),
-                                                     ldap->search_request_count(), ldap->scripted_message_count(),
-                                                     ldap->synthesized_done_count()};
+                                                     ldap->search_request_count(),     ldap->scripted_message_count(),
+                                                     ldap->synthesized_done_count(),   ldap->starttls_request_count()};
     (void)ldap_observation;
   }
 
@@ -552,6 +560,11 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
   if (auto* transport = dynamic_cast<HttpTransportMockServer*>(mock)) {
     const volatile std::size_t transport_observation = transport->client_transcript().size();
     (void)transport_observation;
+  }
+
+  if (auto* options = dynamic_cast<ProxyOptionMockServer*>(mock)) {
+    const volatile std::size_t option_observation = options->client_transcript().size();
+    (void)option_observation;
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
@@ -678,6 +691,10 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
+    if (mode == ScenarioRunMode::kLdapCoverage && scenario.scheme() == curl::fuzzer::proto::SCHEME_LDAP &&
+        scenario.ldap_starttls()) {
+      (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
+    }
     if (mode == ScenarioRunMode::kResolverCoverage) {
       resolver_mode_ready = ApplyResolverMode(easy, scenario.resolver_mode());
     }

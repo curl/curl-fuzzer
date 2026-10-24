@@ -201,6 +201,18 @@ message Scenario {
   // file-backed probes use the fixed /dev/null path. Other fixed targets clear
   // this field, and zero preserves the ordinary no-client-certificate path.
   TlsClientCredentialProfile tls_client_credential_profile = 35;
+  // Select one closed proxy or socket-option setup in the deep HTTP lane.
+  // Every proxy address, no-proxy token, bind address, and interface value is
+  // fixed by the harness. The loopback TCP mode is the only mode that returns
+  // an unconnected INET socket; all others retain the in-process socketpair.
+  // Other fixed lanes clear this field. Zero preserves historical behavior.
+  ProxySocketOptionMode proxy_socket_option_mode = 36;
+  // Upgrade the plaintext LDAP lane with RFC 4511 StartTLS before bind/search.
+  // This is harness-owned rather than a general CURLOPT_USE_SSL option: only
+  // the BER-aware LDAP peer retains it, and the peer emits the correlated
+  // ExtendedResponse before curl installs its TLS connection filter. False
+  // preserves the historical plaintext exchange; LDAPS clears this field.
+  bool ldap_starttls = 37;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -253,6 +265,20 @@ enum HttpTransportMode {
   HTTP_TRANSPORT_CONNECT_PROXY = 2;
   // Reach the HTTP origin through a fixed abstract Unix-domain socket.
   HTTP_TRANSPORT_UNIX_SOCKET = 3;
+}
+
+enum ProxySocketOptionMode {
+  PROXY_SOCKET_OPTION_DEFAULT = 0;
+  // Match a fixed hostname suffix through CURLOPT_NOPROXY.
+  PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME = 1;
+  // Match a fixed loopback IPv4 CIDR through CURLOPT_NOPROXY.
+  PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR = 2;
+  // Match a fixed loopback IPv6 CIDR through CURLOPT_NOPROXY.
+  PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR = 3;
+  // Discover a fixed numeric loopback HTTP proxy from a scoped environment.
+  PROXY_SOCKET_OPTION_ENV_HTTP_PROXY = 4;
+  // Bind a real owned loopback TCP socket and enable fixed keepalive options.
+  PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE = 5;
 }
 
 enum ResolverMode {

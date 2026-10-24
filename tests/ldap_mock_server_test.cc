@@ -78,6 +78,7 @@ struct LdapRunResult {
   std::size_t binds = 0;
   std::size_t searches = 0;
   std::size_t mechanism_searches = 0;
+  std::size_t starttls_requests = 0;
   std::size_t unbinds = 0;
   std::size_t server_messages = 0;
   std::size_t scripted_messages = 0;
@@ -102,6 +103,11 @@ LdapRunResult RunScenario(const Scenario &scenario, const char *url = kUrl) {
              CURLE_OK,
          "LDAP write data setup failed");
   (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
+  if (scenario.ldap_starttls()) {
+    Expect(curl_easy_setopt(easy.get(), CURLOPT_USE_SSL,
+                            static_cast<long>(CURLUSESSL_ALL)) == CURLE_OK,
+           "LDAP StartTLS option setup failed");
+  }
 
   proto_fuzzer::LdapMockServer server;
   server.Install(easy.get());
@@ -113,6 +119,7 @@ LdapRunResult RunScenario(const Scenario &scenario, const char *url = kUrl) {
   result.binds = server.bind_request_count();
   result.searches = server.search_request_count();
   result.mechanism_searches = server.mechanism_search_request_count();
+  result.starttls_requests = server.starttls_request_count();
   result.unbinds = server.unbind_request_count();
   result.server_messages = server.server_message_count();
   result.scripted_messages = server.scripted_message_count();
@@ -220,6 +227,22 @@ void TestEmptySearchScriptSynthesizesSuccess() {
          "LDAP peer did not synthesize a successful searchResDone");
 }
 
+void TestStartTlsExtendedResponseInstallsUpgrade() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_LDAP);
+  scenario.set_ldap_starttls(true);
+
+  const LdapRunResult result = RunScenario(scenario);
+  Expect(result.code != CURLE_OK,
+         "plaintext peer unexpectedly completed the TLS upgrade");
+  Expect(result.starttls_requests == 1,
+         "LDAP peer did not observe one StartTLS ExtendedRequest");
+  Expect(result.binds == 0 && result.searches == 0,
+         "LDAP issued bind/search before the TLS upgrade completed");
+  Expect(result.server_messages == 1,
+         "LDAP peer did not write exactly one StartTLS ExtendedResponse");
+}
+
 void TestSaslMechanismDiscoveryAndPlainBind() {
   Scenario scenario;
   AddCredentials(&scenario);
@@ -294,6 +317,7 @@ int main() {
   TestRejectedBindStopsBeforeSearch();
   TestSearchErrorUsesScriptedDone();
   TestEmptySearchScriptSynthesizesSuccess();
+  TestStartTlsExtendedResponseInstallsUpgrade();
   TestSaslMechanismDiscoveryAndPlainBind();
   TestUnavailableSaslMechanismFailsClosed();
   TestDataSearchForMechanismAttributeIsNotDiscovery();

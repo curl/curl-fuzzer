@@ -1795,6 +1795,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         proto_fuzzer/option_model.cc
         proto_fuzzer/pingpong_mock_server.cc
         proto_fuzzer/pop3_mock_server.cc
+        proto_fuzzer/proxy_option_mock_server.cc
         proto_fuzzer/request_data.cc
         proto_fuzzer/rtsp_mock_server.cc
         proto_fuzzer/socks4_mock_server.cc
@@ -2825,6 +2826,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(http_transport_mock_server_test
             tests/http_transport_mock_server_test.cc
             proto_fuzzer/http_transport_mock_server.cc)
+        curl_add_proto_peer_test(proxy_option_mock_server_test
+            tests/proxy_option_mock_server_test.cc
+            proto_fuzzer/proxy_option_mock_server.cc
+            proto_fuzzer/happy_eyeballs_mock_server.cc)
         curl_add_proto_peer_test(dict_mock_server_test
             tests/dict_mock_server_test.cc
             proto_fuzzer/dict_mock_server.cc)

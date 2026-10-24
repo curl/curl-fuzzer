@@ -1,0 +1,9 @@
+# Match the fixed origin against a fixed hostname suffix. The ordinary
+# socketpair peer remains authoritative even if the host environment defines
+# proxy variables.
+scheme: SCHEME_HTTP
+host_path: "service.proxy.test/noproxy-host"
+proxy_socket_option_mode: PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nhost"
+}

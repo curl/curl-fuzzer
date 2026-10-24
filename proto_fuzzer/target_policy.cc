@@ -179,6 +179,37 @@ void CanonicalizeHttpTransportAuthority(curl::fuzzer::proto::Scenario* scenario)
   scenario->set_host_path("transport.test" + host_path.substr(suffix_start));
 }
 
+/// Select a fixed origin that drives the chosen no-proxy parser or owned TCP
+/// listener while retaining the mutation-controlled path, query, and fragment.
+void CanonicalizeProxySocketOptionAuthority(curl::fuzzer::proto::Scenario* scenario) {
+  const char* host;
+  switch (scenario->proxy_socket_option_mode()) {
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME:
+      host = "service.proxy.test";
+      break;
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR:
+      host = "127.0.0.2";
+      break;
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR:
+      host = "[::1]";
+      break;
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY:
+      host = "proxy-origin.test";
+      break;
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE:
+      host = "resolve.test";
+      break;
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT:
+    default:
+      return;
+  }
+
+  const std::string& host_path = scenario->host_path();
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  scenario->set_host_path(std::string(host) +
+                          (suffix_start == std::string::npos ? "/" : host_path.substr(suffix_start)));
+}
+
 /// Use libc/curl's localhost path when there are no structured entries, and a
 /// fixed cache-backed name when entries are present. The DoH lane uses the
 /// certificate's tls.test authority because its outer transfer completes a
@@ -2312,8 +2343,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_haproxy_protocol();
   }
 
+  // StartTLS is a correlated LDAP transport mode rather than a transferable
+  // scalar option. Other fixed lanes discard it before their early returns.
+  if (profile != TargetProfile::kFastLdap) {
+    scenario->clear_ldap_starttls();
+  }
+
   if (profile != TargetProfile::kDeepHttp) {
     scenario->clear_http_transport_mode();
+    scenario->clear_proxy_socket_option_mode();
   }
 
   if (profile != TargetProfile::kResolver) {
@@ -2659,6 +2697,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     const auto scheme = scenario->scheme();
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_LDAPS ? curl::fuzzer::proto::SCHEME_LDAPS
                                                                      : curl::fuzzer::proto::SCHEME_LDAP);
+    if (scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAPS) {
+      scenario->clear_ldap_starttls();
+    }
     RemoveIgnoredLdapShape(scenario);
     RetainLdapOptions(scenario);
     BoundScenarioShape(scenario);
@@ -2790,7 +2831,28 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
           scenario->clear_http_transport_mode();
           break;
       }
-      if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
+      switch (scenario->proxy_socket_option_mode()) {
+        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT:
+        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME:
+        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR:
+        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR:
+        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY:
+        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE:
+          break;
+        default:
+          scenario->clear_proxy_socket_option_mode();
+          break;
+      }
+      if (scenario->proxy_socket_option_mode() != curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT) {
+        // A scenario describes one owned route. Prefer the closed socket-option
+        // profile when a mutation selects both independent fields.
+        scenario->clear_http_transport_mode();
+        CanonicalizeProxySocketOptionAuthority(scenario);
+        // Alt-Svc or HSTS can replace this mode's fixed plaintext authority
+        // before its option path runs. Keep the focused route authoritative.
+        scenario->clear_altsvc_file();
+        scenario->clear_hsts_file();
+      } else if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
         CanonicalizeHttpTransportAuthority(scenario);
       } else if (!scenario->altsvc_file().empty()) {
         CanonicalizeAltSvcAuthority(scenario);
