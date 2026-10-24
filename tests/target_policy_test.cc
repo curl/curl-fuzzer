@@ -244,11 +244,15 @@ void TestDeepHttpTransportPolicy() {
   forward.set_http_transport_mode(
       curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY);
   forward.set_probe_multi_pollset(true);
+  forward.set_altsvc_file("must not replace the fixed route");
+  forward.set_hsts_file("must not upgrade the plaintext proxy route");
   NormalizeScenarioForTarget(&forward, TargetProfile::kDeepHttp);
   Expect(forward.http_transport_mode() ==
                  curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY &&
              !forward.probe_multi_pollset(),
          "forward-proxy policy retained unrelated repeated polling");
+  Expect(forward.altsvc_file().empty() && forward.hsts_file().empty(),
+         "forward-proxy policy retained a conflicting routing file");
 
   Scenario unknown;
   unknown.set_http_transport_mode(
