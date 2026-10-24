@@ -1,0 +1,18 @@
+# Exercise the RFC 2831 DIGEST-MD5 challenge parser and response builder, then
+# keep the authenticated connection alive through mailbox selection and SEARCH.
+# The challenge and rspauth values follow curl's deterministic test823 exchange;
+# the mock does not require a fixed client cnonce or response digest.
+scheme: SCHEME_IMAP
+host_path: "imap.test/INBOX?ALL"
+options { option_id: CURLOPT_USERNAME string_value: "user" }
+options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=DIGEST-MD5" }
+connection {
+  initial_response: "* OK imap.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1 AUTH=DIGEST-MD5\r\nOK CAPABILITY completed\r\n"
+  on_readable: "+ cmVhbG09ImN1cmwiLG5vbmNlPSI1MzAwZDE3YTFkNjk1YmQ0MTFlNGNkZjk2Zjk1NDhjMjNjZWQ2MTc1IixhbGdvcml0aG09bWQ1LXNlc3MscW9wPSJhdXRoIg==\r\n"
+  on_readable: "+ cnNwYXV0aD04MWY5MDNlYjQ4MjNhZTkyMmRiNWYwNGNiNThjY2RlYg==\r\n"
+  on_readable: "OK AUTHENTICATE completed\r\n"
+  on_readable: "* 2 EXISTS\r\nOK [READ-WRITE] SELECT completed\r\n"
+  on_readable: "* SEARCH 1 2\r\nOK SEARCH completed\r\n"
+}

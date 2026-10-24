@@ -2817,6 +2817,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(imap_mock_server_test
             tests/imap_mock_server_test.cc
             proto_fuzzer/imap_mock_server.cc)
+        target_compile_definitions(imap_mock_server_test PRIVATE
+            PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(pop3_mock_server_test
             tests/pop3_mock_server_test.cc
             proto_fuzzer/pop3_mock_server.cc)

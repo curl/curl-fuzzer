@@ -208,7 +208,8 @@ void PopulateSubparts(curl_mime* mime, const curl::fuzzer::proto::MimeSubparts& 
 /// Construct the top MIME tree. curl_mime_subparts transfers ownership only
 /// on success, so failed attachments are freed immediately while successful
 /// ones are left for the top-level root to release recursively.
-CurlMimePtr BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source, RequestBuildStats* stats) {
+CurlMimePtr BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& source, UploadScriptState* upload_state,
+                          RequestBuildStats* stats) {
   CurlMimePtr mime(curl_mime_init(easy));
   if (mime == nullptr) {
     return nullptr;
@@ -233,6 +234,11 @@ CurlMimePtr BuildMimePost(CURL* easy, const curl::fuzzer::proto::MimePost& sourc
         break;
       case curl::fuzzer::proto::MimePart::kGeneratedData:
         ApplyGeneratedPartData(part, proto_part.generated_data(), &remaining_generated_bytes, stats);
+        break;
+      case curl::fuzzer::proto::MimePart::kUploadCallback:
+        if (upload_state != nullptr && upload_state->InstallAsMimePart(part) == CURLE_OK) {
+          ++stats->mime_callback_parts;
+        }
         break;
       case curl::fuzzer::proto::MimePart::kSubparts: {
         CurlMimePtr subparts(curl_mime_init(easy));
@@ -271,6 +277,7 @@ UploadScriptState::UploadScriptState(const curl::fuzzer::proto::Scenario& scenar
                                                                              : scenario_limits::kMaxUploadReadSize),
       offset_(0),
       next_read_size_(0),
+      seek_calls_(0),
       terminal_(curl::fuzzer::proto::UPLOAD_TERMINAL_EOF),
       seek_result_(curl::fuzzer::proto::UPLOAD_SEEK_CANTSEEK),
       before_read_callback_(nullptr),
@@ -363,6 +370,7 @@ std::size_t UploadScriptState::Read(char* buffer, std::size_t capacity) {
 /// @param origin One of SEEK_SET, SEEK_CUR, or SEEK_END.
 /// @return A CURL_SEEKFUNC_* result.
 int UploadScriptState::Seek(curl_off_t requested_offset, int origin) {
+  ++seek_calls_;
   switch (seek_result_) {
     case curl::fuzzer::proto::UPLOAD_SEEK_CANTSEEK:
       return CURL_SEEKFUNC_CANTSEEK;
@@ -436,8 +444,24 @@ std::size_t UploadScriptState::read_step_count() const { return read_step_count_
 /// @return Current byte cursor, exposed for deterministic unit tests.
 std::size_t UploadScriptState::offset() const { return offset_; }
 
+/// @return Number of times libcurl asked the upload source to seek.
+std::size_t UploadScriptState::seek_calls() const { return seek_calls_; }
+
 /// @return Whether Scenario.upload was present instead of using fallback.
 bool UploadScriptState::scripted() const { return scripted_; }
+
+/// Install the same bounded read/seek cursor behind a public MIME callback
+/// part. curl retains `this` until the MIME root is freed, so ScenarioRequestData
+/// declares the root after the state and detaches it before either is released.
+/// @param part MIME part owned by the caller's live root.
+/// @return libcurl's setup result.
+CURLcode UploadScriptState::InstallAsMimePart(curl_mimepart* part) {
+  if (part == nullptr) {
+    return CURLE_BAD_FUNCTION_ARGUMENT;
+  }
+  return curl_mime_data_cb(part, static_cast<curl_off_t>(total_size_), &UploadScriptState::ReadCallback,
+                           &UploadScriptState::SeekCallback, nullptr, this);
+}
 
 /// Install a protocol hook without exposing the mutable cursor or curl's
 /// retained callback userdata outside its owner.
@@ -463,8 +487,8 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
       resolve_entries_(nullptr),
       telnet_options_(nullptr),
       mail_rcpt_(nullptr),
-      mime_post_(nullptr),
       upload_state_(scenario),
+      mime_post_(nullptr),
       upload_callbacks_installed_(false),
       resolve_entries_ready_(!apply_resolve_entries) {
   if (easy_ == nullptr) {
@@ -499,7 +523,7 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     request_headers_ = BuildStringList(scenario.request_headers(), scenario_limits::kMaxRequestHeaders,
                                        scenario_limits::kMaxMetadataBytes, &stats_.request_headers);
     if (scenario.has_mime_post()) {
-      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &stats_);
+      mime_post_ = BuildMimePost(easy_, scenario.mime_post(), &upload_state_, &stats_);
     }
   }
 
@@ -574,6 +598,10 @@ ScenarioRequestData::~ScenarioRequestData() {
       (void)curl_easy_setopt(easy_, CURLOPT_MAIL_RCPT, nullptr);
     }
   }
+  // Callback MIME parts retain upload_state_ as userdata. Release the root
+  // explicitly while that state is still live instead of relying only on
+  // reverse member destruction order.
+  mime_post_.reset();
 }
 
 /// Return resource counts after caps and allocation failures were applied,

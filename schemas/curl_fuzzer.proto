@@ -571,6 +571,12 @@ message ApiPlan {
   // Query the immutable public version/feature descriptor once for this
   // lifecycle. The runtime bounds feature-name traversal independently.
   bool probe_version_info = 11;
+  // Repeat a callback-backed MIME request on the same easy handle and MIME
+  // tree after the first transfer completes. The API target retains this only
+  // when Scenario.upload backs a top-level MIME callback part, and fixes the
+  // drive to the bounded multi-perform loop. This makes public MIME rewind
+  // failures observable without exposing an arbitrary call sequence.
+  bool repeat_mime_post = 12;
 }
 
 // Public transfer entrypoints covered by the API lane. An enum prevents
@@ -705,6 +711,11 @@ message MimePart {
     bytes data = 2;
     MimeSubparts subparts = 7;
     GeneratedBytes generated_data = 8;
+    // Feed this part from the containing Scenario.upload callbacks. Presence
+    // selects the callback even when the bool value is false; the oneof case
+    // is the mutation-significant choice. Only the top-level part supports the
+    // shared cursor so nested trees cannot multiply callback work.
+    bool upload_callback = 9;
   }
   bytes filename = 3;
   bytes content_type = 4;

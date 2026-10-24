@@ -6,9 +6,13 @@
 
 #include <curl/curl.h>
 
+#include <fstream>
 #include <initializer_list>
+#include <iterator>
 #include <string>
 #include <string_view>
+
+#include <google/protobuf/text_format.h>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -232,6 +236,31 @@ void TestPlainAuthenticationPreservesTagAcrossContinuation() {
       "IMAP AUTH PLAIN transcript was incomplete or out of order");
 }
 
+void TestLoginCustomFetchListingSeed() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/imap/imap_auth_login_custom_fetch.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the IMAP LOGIN custom FETCH seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the IMAP LOGIN custom FETCH seed");
+
+  const std::string url = "imap://" + scenario.host_path();
+  const ImapRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_OK,
+         "IMAP LOGIN custom FETCH seed did not complete");
+  Expect(result.body.empty(),
+         "IMAP custom FETCH listing unexpectedly produced a body");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE LOGIN\r\n", "ZnV6eg==\r\n",
+       "c2VjcmV0\r\n", "SELECT INBOX\r\n", "UID FETCH 1:* (FLAGS)\r\n",
+       "LOGOUT\r\n"},
+      "IMAP LOGIN custom FETCH transcript was incomplete or out of order");
+}
+
 void TestOauthBearerErrorUsesMultipleContinuationRounds() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
@@ -259,6 +288,56 @@ void TestOauthBearerErrorUsesMultipleContinuationRounds() {
       "continuation");
   Expect(result.transcript.find("SELECT ") == std::string::npos,
          "IMAP OAUTHBEARER denial unexpectedly selected a mailbox");
+}
+
+void TestXoauth2SeedCompletesAuthenticationAndFetch() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/imap/imap_auth_xoauth2_success.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the IMAP XOAUTH2 seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the IMAP XOAUTH2 seed");
+
+  const std::string url = "imap://" + scenario.host_path();
+  const ImapRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_OK,
+         "IMAP XOAUTH2 seed did not complete authentication and FETCH");
+  Expect(result.body == "hello",
+         "IMAP XOAUTH2 seed produced the wrong literal body");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE XOAUTH2\r\n",
+       "dXNlcj1mdXp6LXVzZXIBYXV0aD1CZWFyZXIgZnV6ei14b2F1dGgyLXRva2VuAQE="
+       "\r\n",
+       "SELECT INBOX\r\n", "FETCH 1 BODY[]\r\n"},
+      "IMAP XOAUTH2 seed transcript was incomplete or out of order");
+}
+
+void TestDigestMd5SeedCompletesAuthenticationAndSearch() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/imap/imap_auth_digest_md5_search.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the IMAP DIGEST-MD5 seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the IMAP DIGEST-MD5 seed");
+
+  const std::string url = "imap://" + scenario.host_path();
+  const ImapRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_OK,
+         "IMAP DIGEST-MD5 seed did not complete authentication and SEARCH");
+  Expect(result.body == "* SEARCH 1 2\r\n",
+         "IMAP DIGEST-MD5 seed produced the wrong SEARCH listing");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE DIGEST-MD5\r\n", "dXNlcm5hbWU9InVzZXIi",
+       "\r\n\r\n", "SELECT INBOX\r\n", "SEARCH ALL\r\n", "LOGOUT\r\n"},
+      "IMAP DIGEST-MD5 seed transcript was incomplete or out of order");
 }
 
 void TestInvalidCramChallengeFallsBackToPlain() {
@@ -304,7 +383,10 @@ int main() {
   TestAppendDrainsAnnouncedLiteral();
   TestLoginDenialIsTerminal();
   TestPlainAuthenticationPreservesTagAcrossContinuation();
+  TestLoginCustomFetchListingSeed();
   TestOauthBearerErrorUsesMultipleContinuationRounds();
+  TestXoauth2SeedCompletesAuthenticationAndFetch();
+  TestDigestMd5SeedCompletesAuthenticationAndSearch();
   TestInvalidCramChallengeFallsBackToPlain();
   curl_global_cleanup();
   return 0;

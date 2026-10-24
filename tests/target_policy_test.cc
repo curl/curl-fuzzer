@@ -1482,6 +1482,65 @@ void TestFastImapPolicy() {
          "fast IMAP policy changed retained option order");
 }
 
+void TestFastImapParitySeedsSurviveProductionNormalization() {
+  struct SeedExpectation {
+    const char *name;
+    const char *host_path;
+    const char *login_options;
+    curl::fuzzer::proto::CurlOptionId extra_option;
+    const char *extra_value;
+  };
+  constexpr SeedExpectation kSeeds[] = {
+      {"imap_auth_xoauth2_success.textproto", "imap.test/INBOX/;MAILINDEX=1",
+       "AUTH=XOAUTH2", curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER,
+       "fuzz-xoauth2-token"},
+      {"imap_auth_login_custom_fetch.textproto", "imap.test/INBOX",
+       "AUTH=LOGIN", curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
+       "UID FETCH 1:* (FLAGS)"},
+      {"imap_auth_digest_md5_search.textproto", "imap.test/INBOX?ALL",
+       "AUTH=DIGEST-MD5", curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED, ""},
+  };
+
+  for (const SeedExpectation &expected : kSeeds) {
+    const std::string path =
+        std::string(PROTO_FUZZER_SCENARIO_DIR) + "/imap/" + expected.name;
+    std::ifstream input(path);
+    Expect(input.is_open(), "could not read an IMAP parity seed");
+    const std::string text((std::istreambuf_iterator<char>(input)),
+                           std::istreambuf_iterator<char>());
+    Scenario scenario;
+    Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+           "could not parse an IMAP parity seed");
+    const std::string connection = scenario.connection().SerializeAsString();
+
+    NormalizeScenarioForTarget(&scenario, TargetProfile::kFastImap);
+    NormalizeScenarioForExecution(&scenario);
+
+    bool retained_login_options = false;
+    bool retained_extra_option =
+        expected.extra_option == curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED;
+    for (const auto &option : scenario.options()) {
+      if (option.option_id() == curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
+          option.string_value() == expected.login_options) {
+        retained_login_options = true;
+      }
+      if (option.option_id() == expected.extra_option &&
+          option.string_value() == expected.extra_value) {
+        retained_extra_option = true;
+      }
+    }
+
+    Expect(scenario.scheme() == SCHEME_IMAP &&
+               scenario.host_path() == expected.host_path,
+           "fast IMAP policy changed a parity seed's route or command path");
+    Expect(retained_login_options && retained_extra_option,
+           "fast IMAP policy removed a parity seed's authentication or "
+           "custom-command option");
+    Expect(scenario.connection().SerializeAsString() == connection,
+           "fast IMAP policy changed a parity seed's scripted exchange");
+  }
+}
+
 void TestFastPop3Policy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("untrusted.invalid:110/2?query");
@@ -2903,6 +2962,39 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
          "API policy changed the retained selector prefix");
 }
 
+void TestApiMimeRepeatRequiresCallbackShape() {
+  Scenario valid;
+  valid.set_scheme(SCHEME_HTTP);
+  valid.set_host_path("api.test/mime-repeat");
+  valid.mutable_upload()->set_data("callback body");
+  valid.mutable_mime_post()->add_parts()->set_upload_callback(true);
+  auto *plan = valid.mutable_api_plan();
+  plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY);
+  plan->set_wake_multi(true);
+  plan->set_pause_response_once(true);
+  plan->set_repeat_mime_post(true);
+
+  Scenario missing_upload = valid;
+  missing_upload.clear_upload();
+  NormalizeScenarioForTarget(&missing_upload, TargetProfile::kApi);
+  Expect(!missing_upload.api_plan().repeat_mime_post(),
+         "API policy retained MIME reuse without callback bytes");
+
+  Scenario missing_callback = valid;
+  missing_callback.mutable_mime_post()->mutable_parts(0)->set_data("memory");
+  NormalizeScenarioForTarget(&missing_callback, TargetProfile::kApi);
+  Expect(!missing_callback.api_plan().repeat_mime_post(),
+         "API policy retained MIME reuse without a callback part");
+
+  NormalizeScenarioForTarget(&valid, TargetProfile::kApi);
+  Expect(valid.api_plan().repeat_mime_post() &&
+             valid.api_plan().drive_mode() ==
+                 curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM &&
+             !valid.api_plan().wake_multi() &&
+             !valid.api_plan().pause_response_once(),
+         "API policy did not isolate the same-easy MIME repeat lifecycle");
+}
+
 void TestProtocolPoliciesDiscardApiPlans() {
   constexpr TargetProfile kProtocolPolicies[] = {
       TargetProfile::kFastHttp,
@@ -3894,6 +3986,7 @@ int main() {
   TestFastTftpPolicy();
   TestFastSmtpPolicy();
   TestFastImapPolicy();
+  TestFastImapParitySeedsSurviveProductionNormalization();
   TestFastPop3Policy();
   TestMailAuthenticationOptionPolicies();
   TestFastMqttPolicy();
@@ -3927,6 +4020,7 @@ int main() {
   TestFastHttpKeepsOnlyOwnedHttpVersions();
   TestFastHttpFiltersBeforeApplyingOptionBound();
   TestApiPolicyRetainsAndBoundsItsPlan();
+  TestApiMimeRepeatRequiresCallbackShape();
   TestProtocolPoliciesDiscardApiPlans();
   TestMultiPolicyRetainsAndBoundsItsPlan();
   TestOtherPoliciesDiscardMultiPlans();

@@ -51,7 +51,11 @@ class UploadScriptState {
 
   std::size_t offset() const;
 
+  std::size_t seek_calls() const;
+
   bool scripted() const;
+
+  CURLcode InstallAsMimePart(curl_mimepart* part);
 
  private:
   friend class ScenarioRequestData;
@@ -69,6 +73,7 @@ class UploadScriptState {
   std::size_t max_read_size_;
   std::size_t offset_;
   std::size_t next_read_size_;
+  std::size_t seek_calls_;
   curl::fuzzer::proto::UploadTerminal terminal_;
   curl::fuzzer::proto::UploadSeekResult seek_result_;
   BeforeReadCallback before_read_callback_;
@@ -91,6 +96,8 @@ struct RequestBuildStats {
   std::size_t mail_rcpt = 0;
   /// Number of top-level and nested curl_mimepart objects constructed.
   std::size_t mime_parts = 0;
+  /// Number of top-level parts backed by Scenario.upload callbacks.
+  std::size_t mime_callback_parts = 0;
   /// Number of per-part header entries transferred to curl MIME ownership.
   std::size_t mime_headers = 0;
   /// Materialized bytes supplied by compact generated MIME sources.
@@ -133,8 +140,10 @@ class ScenarioRequestData {
   CurlSlistPtr resolve_entries_;
   CurlSlistPtr telnet_options_;
   CurlSlistPtr mail_rcpt_;
-  CurlMimePtr mime_post_;
   UploadScriptState upload_state_;
+  // Declared after upload_state_ so the MIME root releases its retained
+  // callback userdata before the cursor is destroyed.
+  CurlMimePtr mime_post_;
   bool upload_callbacks_installed_;
   bool resolve_entries_ready_;
   RequestBuildStats stats_;
