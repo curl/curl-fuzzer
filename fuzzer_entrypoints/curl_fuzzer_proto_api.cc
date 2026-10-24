@@ -6,6 +6,10 @@
 
 #include "proto_fuzzer/fuzzer_main.h"
 
+#if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
+#include "proto_fuzzer/api_coverage_probes.h"
+#endif
+
 namespace {
 
 // Bind this source's visible target identity once so mutation, crossover, and
@@ -13,6 +17,15 @@ namespace {
 constexpr auto kProfile = proto_fuzzer::TargetProfile::kApi;
 
 } // namespace
+
+#if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
+// OSS-Fuzz can execute a coverage merge with an empty corpus. The optional
+// initialization hook keeps the API probes reachable in that case.
+extern "C" int LLVMFuzzerInitialize(int *, char ***) {
+  proto_fuzzer::RunApiCoverageProbesOnce();
+  return 0;
+}
+#endif
 
 // Keep all three libFuzzer ABI hooks in the same-named source. Besides making
 // the selected profile explicit, this lets Fuzz Introspector attribute the
@@ -36,5 +49,9 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
+#if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
+  // Standalone replay engines do not always call LLVMFuzzerInitialize.
+  proto_fuzzer::RunApiCoverageProbesOnce();
+#endif
   return proto_fuzzer::ProtoFuzzerTestOneInput(kProfile, data, size);
 }

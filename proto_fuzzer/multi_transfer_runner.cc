@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -39,6 +40,31 @@ struct TransferState {
 
 constexpr int kMaxDriveIterations = 512;
 constexpr int kMaxIdleIterations = 8;
+constexpr curl_off_t kStateProbeReceiveRate = 1;
+constexpr long kStateProbeTimeoutMs = 20;
+
+struct FileCloser {
+  void operator()(FILE* file) const {
+    if (file != nullptr) {
+      std::fclose(file);
+    }
+  }
+};
+
+using FilePtr = std::unique_ptr<FILE, FileCloser>;
+
+/// Install the one intentionally slow transfer shape without exposing its
+/// values through generic SetOption mutations. The anonymous stream is owned
+/// by RunMultiTransferScenario and outlives every configured easy handle.
+bool ApplyStateProbeOptions(CURL* easy, curl::fuzzer::proto::MultiStateProbeProfile profile, FILE* progress_sink) {
+  if (profile != curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT || progress_sink == nullptr) {
+    return false;
+  }
+  return curl_easy_setopt(easy, CURLOPT_STDERR, progress_sink) == CURLE_OK &&
+         curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, kStateProbeTimeoutMs) == CURLE_OK &&
+         curl_easy_setopt(easy, CURLOPT_NOPROGRESS, 0L) == CURLE_OK &&
+         curl_easy_setopt(easy, CURLOPT_MAX_RECV_SPEED_LARGE, kStateProbeReceiveRate) == CURLE_OK;
+}
 
 std::size_t RuntimeTransferCount(const curl::fuzzer::proto::MultiPlan& plan) {
   return std::max(scenario_limits::kMinMultiTransfers,
@@ -190,6 +216,11 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
   const std::size_t transfer_count = RuntimeTransferCount(plan);
   stats.configured_handles = transfer_count;
 
+  FilePtr progress_sink;
+  if (plan.state_probe_profile() == curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT) {
+    progress_sink.reset(std::tmpfile());
+  }
+
   // The peer and socket callback state must outlive multi cleanup, which can
   // synchronously announce socket removals and close cached connections.
   MockServer mock;
@@ -234,6 +265,9 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
     (void)curl_easy_setopt(transfer.session.easy(), CURLOPT_URL, url.c_str());
     mock.Install(transfer.session.easy());
     (void)ApplyScenarioOptions(transfer.session.easy(), scenario);
+    if (ApplyStateProbeOptions(transfer.session.easy(), plan.state_probe_profile(), progress_sink.get())) {
+      ++stats.state_probe_handles;
+    }
     mock.ConfigureRequestData(transfer.session.InstallRequestData(scenario));
     if (curl_multi_add_handle(multi.get(), transfer.session.easy()) == CURLM_OK) {
       transfer.attached = true;

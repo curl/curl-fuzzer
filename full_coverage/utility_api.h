@@ -12,6 +12,9 @@ namespace full_coverage {
 /** Exercise bounded version, date, and escaping APIs without a transfer. */
 void ExerciseUtilityApiCoverage();
 
+/** Exercise the same APIs while a caller-owned curl runtime is active. */
+void ExerciseUtilityApiCoverageWithInitializedCurl();
+
 }  // namespace full_coverage
 
 #endif  // FULL_COVERAGE_UTILITY_API_H_

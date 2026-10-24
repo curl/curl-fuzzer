@@ -2,12 +2,16 @@
 
 from pathlib import Path
 
-FUZZER_MAIN = Path(__file__).resolve().parent.parent / "proto_fuzzer" / "fuzzer_main.cc"
+GLOBAL_LIFECYCLE = (
+    Path(__file__).resolve().parent.parent / "proto_fuzzer" / "curl_global_lifecycle.cc"
+)
 
 
 def test_sslkeylogfile_is_set_before_curl_global_init() -> None:
-    source = FUZZER_MAIN.read_text(encoding="utf-8")
+    source = GLOBAL_LIFECYCLE.read_text(encoding="utf-8")
     setenv = '(void)setenv("SSLKEYLOGFILE", "/dev/null", 0);'
 
     assert setenv in source
-    assert source.index(setenv) < source.index("allocation_fault_injection::InitializeCurl()")
+    assert source.index(setenv) < source.index(
+        "allocation_fault_injection::InitializeCurl()"
+    )

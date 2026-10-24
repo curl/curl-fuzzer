@@ -118,6 +118,32 @@ void TestConsumesBoundedActions() {
          "multi runner did not consume exactly its bounded action prefix");
 }
 
+void TestAppliesClosedStateProbeToEveryHandle() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("multi.test/state-probe");
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable("a");
+  scenario.mutable_connection()->add_on_readable("b");
+  auto *second = scenario.add_subsequent_connections();
+  second->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n");
+  second->add_on_readable("c");
+  second->add_on_readable("d");
+  auto *plan = scenario.mutable_multi_plan();
+  plan->set_transfer_count(2);
+  plan->set_max_host_connections(2);
+  plan->set_max_total_connections(2);
+  plan->set_state_probe_profile(
+      curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT);
+
+  const proto_fuzzer::MultiTransferRunStats stats =
+      proto_fuzzer::RunMultiTransferScenario(scenario);
+  Expect(stats.added_handles == 2 && stats.state_probe_handles == 2,
+         "multi runner did not apply the complete closed state probe");
+}
+
 } // namespace
 
 int main() {
@@ -125,5 +151,6 @@ int main() {
   TestNotificationTypeValidation();
   TestQueuesAndReusesOneConnection();
   TestConsumesBoundedActions();
+  TestAppliesClosedStateProbeToEveryHandle();
   return 0;
 }
