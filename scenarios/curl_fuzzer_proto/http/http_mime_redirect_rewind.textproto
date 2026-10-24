@@ -1,0 +1,21 @@
+# A completed 307 response asks curl to rewind the MIME reader before it opens
+# the follow-on connection. Both requests must carry the same in-memory part,
+# exercising the MIME reader control path and its memory-backed seek callback.
+scheme: SCHEME_HTTP
+host_path: "mime.test/redirect/source"
+options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
+options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+request_headers: "Expect:"
+mime_post {
+  parts {
+    name: "payload"
+    content_type: "text/plain"
+    data: "mime-redirect-rewind-body"
+  }
+}
+connection {
+  on_readable: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://mime.test/redirect/destination\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+}
+subsequent_connections {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}
