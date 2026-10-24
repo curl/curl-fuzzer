@@ -30,6 +30,7 @@ PingpongMockServer::PingpongMockServer(MultiDrivePolicy drive_policy)
       scenario_(nullptr),
       control_reply_count_(0),
       next_control_reply_(0),
+      active_pollset_probe_count_(0),
       body_length_remaining_(0),
       body_terminator_remaining_(0),
       body_mode_(BodyMode::kCommand),
@@ -51,6 +52,14 @@ const std::string& PingpongMockServer::control_transcript() const { return contr
 /// @return Body bytes curl sent, or an empty string when the peer has no
 ///         upload direction.
 const std::string& PingpongMockServer::uploaded_data() const { return uploaded_data_; }
+
+/// Report how many requested zero-timeout multi-poll probes ran during the
+/// most recent drive. RunLoop increments this only after a successful perform
+/// turn while curl still owns an active transfer and the control socket is
+/// open, making the count a focused test assertion rather than a syscall
+/// counter for default scenarios.
+/// @return Number of active, connected pollset probes in the previous drive.
+std::size_t PingpongMockServer::active_pollset_probe_count() const { return active_pollset_probe_count_; }
 
 /// Create the default plaintext transport. The SMTPS subclass overrides this
 /// factory while retaining the command/reply parser.
@@ -145,6 +154,7 @@ void PingpongMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& s
   pending_control_bytes_.clear();
   control_transcript_.clear();
   uploaded_data_.clear();
+  active_pollset_probe_count_ = 0;
   body_marker_.clear();
   body_length_remaining_ = 0;
   body_terminator_remaining_ = 0;
@@ -431,6 +441,15 @@ void PingpongMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::p
     result = curl_multi_perform(multi, &still_running);
     if (result != CURLM_OK) {
       break;
+    }
+
+    // Pollset construction is coverage work, not part of the default driver:
+    // keep the extra public-API call behind the scenario opt-in. Waiting until
+    // the socket callback has run and the transfer remains active ensures the
+    // pollset belongs to a live protocol state rather than setup or cleanup.
+    if (scenario.probe_multi_pollset() && still_running && control_opened_) {
+      ProbeMultiPollset(multi);
+      ++active_pollset_probe_count_;
     }
 
     bool made_progress = still_running != running_before;

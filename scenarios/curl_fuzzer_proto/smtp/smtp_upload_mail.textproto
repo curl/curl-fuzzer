@@ -1,6 +1,7 @@
 # Complete SMTP mail upload. The URL path is the EHLO client domain in this
 # curl revision; the envelope recipients come from CURLOPT_MAIL_RCPT.
 scheme: SCHEME_SMTP
+probe_multi_pollset: true
 host_path: "smtp.test/client.test"
 options { option_id: CURLOPT_UPLOAD bool_value: true }
 options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 54 }

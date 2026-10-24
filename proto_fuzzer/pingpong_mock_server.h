@@ -56,6 +56,10 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   // without an upload direction keep this empty.
   const std::string& uploaded_data() const;
 
+  // Number of opt-in multi-poll probes issued while the most recent transfer
+  // was active and its control socket had been handed to curl.
+  std::size_t active_pollset_probe_count() const;
+
  protected:
   explicit PingpongMockServer(MultiDrivePolicy drive_policy = MultiDrivePolicy::kPerform);
 
@@ -163,6 +167,8 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   std::string control_transcript_;
   /// Bounded test-facing prefix of the body drained in the last body phase.
   std::string uploaded_data_;
+  /// Opt-in probes made only while the transfer and control socket were live.
+  std::size_t active_pollset_probe_count_;
   /// Opaque terminator for BodyMode::kMarker.
   std::string body_marker_;
   /// Literal bytes still to drain for BodyMode::kLiteral.
