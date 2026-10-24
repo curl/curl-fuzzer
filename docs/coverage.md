@@ -69,12 +69,12 @@ compatibility API probes, such as formatting and legacy form serialization.
 The initialization-safe probes execute once per process in coverage builds
 (`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`) and Fuzz Introspector builds
 (`SANITIZER=introspector`).
-Ordinary sanitizer builds exit successfully on the first callback, before any
-mutation fuzzing. The checked-in nonempty seed triggers standalone replay;
-the target ignores its contents. The libFuzzer initialization hook also runs
-the probes, because OSS-Fuzz's `-merge=1` coverage pass can have an empty saved
-corpus and therefore make no input callbacks. Keep additional bounded
-profiling probes in this target rather than creating another protocol lane.
+Ordinary sanitizer builds do not package this profiling helper as a fuzz
+target. The checked-in nonempty seed triggers standalone replay; the target
+ignores its contents. The libFuzzer initialization hook also runs the probes,
+because OSS-Fuzz's `-merge=1` coverage pass can have an empty saved corpus and
+therefore make no input callbacks. Keep additional bounded profiling probes in
+this target rather than creating another protocol lane.
 The legacy-mutator probe remains on the input hook because it exercises
 `LLVMFuzzerMutate`, which libFuzzer does not make usable until initialization
 has returned.

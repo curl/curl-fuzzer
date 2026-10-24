@@ -1361,8 +1361,9 @@ curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
 curl_add_fuzzer(curl_fuzzer_ws        WS)
 
 # Deterministic profiling probes share one target rather than adding lanes
-# that compete with the existing fuzzers. Ordinary sanitizer builds exit on
-# their first callback; coverage and Introspector builds execute the probes.
+# that compete with the existing fuzzers. The packaging inventory omits this
+# helper from ordinary sanitizer builds; coverage and Introspector builds
+# execute the probes.
 add_executable(curl_fuzzer_full_coverage
     fuzzer_entrypoints/curl_fuzzer_full_coverage.cc)
 target_compile_features(curl_fuzzer_full_coverage PRIVATE cxx_std_11)
