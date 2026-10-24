@@ -48,6 +48,8 @@ class H2PlanDriver final : public IncomingDataObserver {
 
   std::size_t observed_client_settings_count() const;
 
+  std::size_t observed_client_priority_count() const;
+
  private:
   struct ClientStreamState {
     std::size_t headers = 0;
@@ -71,6 +73,7 @@ class H2PlanDriver final : public IncomingDataObserver {
   bool client_settings_ack_sent_;
   bool expect_client_preface_;
   std::size_t observed_client_settings_;
+  std::size_t observed_client_priority_;
   std::string client_bytes_;
   std::vector<std::uint32_t> request_streams_;
   std::vector<std::uint32_t> pushed_streams_;

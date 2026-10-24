@@ -59,6 +59,29 @@ void H2Runtime::AttachConnection(MockConnection* connection) {
 /// @param authority Authority used in generated push-request pseudo-headers.
 void H2Runtime::ResetPlan(const curl::fuzzer::proto::Http2Plan& plan, std::string scheme, std::string authority) {
   plan_driver_.Reset(plan, std::move(scheme), std::move(authority));
+  stream_weight_after_headers_ = plan.stream_weight_after_headers();
+  post_headers_transition_applied_ = false;
+  stream_weight_setopt_result_ = CURLE_FAILED_INIT;
+  stream_weight_egress_result_ = CURLE_FAILED_INIT;
+}
+
+/// Apply the plan's one state transition only after a real request stream has
+/// been observed. Changing the public option at this point makes curl compare
+/// the desired weight against the live stream's effective weight.
+/// @param easy Active easy handle whose live stream weight is changed.
+void H2Runtime::ApplyPostHeadersTransition(CURL* easy) {
+  if (stream_weight_after_headers_ == 0 || post_headers_transition_applied_ ||
+      plan_driver_.observed_request_count() == 0) {
+    return;
+  }
+  post_headers_transition_applied_ = true;
+  stream_weight_setopt_result_ =
+      curl_easy_setopt(easy, CURLOPT_STREAM_WEIGHT, static_cast<long>(stream_weight_after_headers_));
+  // Unpausing an already-running H2 stream is a documented no-op at the
+  // transfer layer, but it deliberately asks the live filter to flush its
+  // updated flow/priority state. This public call provides a deterministic
+  // egress boundary without sleeping or depending on socket readiness.
+  stream_weight_egress_result_ = curl_easy_pause(easy, CURLPAUSE_CONT);
 }
 
 /// Alternate curl and one bounded H2 plan boundary. Carrier observation and
@@ -153,6 +176,18 @@ std::size_t H2Runtime::observed_request_count() const { return plan_driver_.obse
 
 /// @return Non-ACK client SETTINGS frames observed since the latest plan reset.
 std::size_t H2Runtime::observed_client_settings_count() const { return plan_driver_.observed_client_settings_count(); }
+
+/// @return PRIORITY frames observed in curl's client byte stream.
+std::size_t H2Runtime::observed_client_priority_count() const { return plan_driver_.observed_client_priority_count(); }
+
+/// @return Whether request observation triggered the configured transition.
+bool H2Runtime::post_headers_transition_applied() const { return post_headers_transition_applied_; }
+
+/// @return Result of the live CURLOPT_STREAM_WEIGHT update.
+CURLcode H2Runtime::stream_weight_setopt_result() const { return stream_weight_setopt_result_; }
+
+/// @return Result of the public resume used as the deterministic egress edge.
+CURLcode H2Runtime::stream_weight_egress_result() const { return stream_weight_egress_result_; }
 
 int H2Runtime::PushCallback(CURL* /*parent*/, CURL* pushed, std::size_t header_count, struct curl_pushheaders* headers,
                             void* userdata) {

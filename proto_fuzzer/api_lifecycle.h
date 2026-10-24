@@ -58,6 +58,12 @@ class ApiLifecycle {
 
   std::size_t reentrant_recursive_rejections() const;
 
+  bool guessed_scheme_url() const;
+
+  bool version_info_probed() const;
+
+  bool https_proxy_feature_present() const;
+
  private:
   /// Counters provide real callback userdata without synchronization: this
   /// fuzzer drives one easy handle on one thread.
@@ -97,6 +103,9 @@ class ApiLifecycle {
   CURLSH* share_;
   ShareCallbackState share_callback_state_;
   CURLM* active_multi_;
+  bool guessed_scheme_url_;
+  bool version_info_probed_;
+  bool https_proxy_feature_present_;
 };
 
 }  // namespace proto_fuzzer

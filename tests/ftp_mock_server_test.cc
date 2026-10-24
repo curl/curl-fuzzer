@@ -7,9 +7,13 @@
 #include <curl/curl.h>
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <string_view>
+
+#include <google/protobuf/text_format.h>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -118,6 +122,31 @@ void TestEpsvDownloadAndFinalReply() {
          "FTP download did not issue RETR");
   Expect(result.active_pollset_probes == 0,
          "FTP default path unexpectedly issued a pollset probe");
+}
+
+void TestAsciiUrlTypeSeedCompletesDataTransfer() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/ftp/ftp_url_type_ascii.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the FTP ASCII seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the FTP ASCII seed");
+
+  const std::string url = "ftp://" + scenario.host_path();
+  const FtpRunResult result = RunScenario(scenario, url.c_str());
+  const std::size_t type = result.transcript.find("TYPE A\r\n");
+  const std::size_t retr = result.transcript.find("RETR file.txt\r\n");
+  Expect(result.code == CURLE_OK && result.body == "ascii",
+         "FTP ASCII seed did not complete its scripted download");
+  Expect(result.data_connections == 1,
+         "FTP ASCII seed did not open exactly one data connection");
+  Expect(type != std::string::npos && retr != std::string::npos && type < retr,
+         "FTP ASCII seed did not issue TYPE A before RETR");
+  Expect(result.transcript.find("SIZE ") == std::string::npos,
+         "FTP ASCII seed unexpectedly issued SIZE in ASCII mode");
 }
 
 void TestEpsvFailureFallsBackToPasv() {
@@ -405,6 +434,7 @@ int main() {
     Fail("curl_global_init failed");
   }
   TestEpsvDownloadAndFinalReply();
+  TestAsciiUrlTypeSeedCompletesDataTransfer();
   TestEpsvFailureFallsBackToPasv();
   TestMalformedEpsvFallsBackToPasv();
   TestMalformed229EpsvIsTerminal();

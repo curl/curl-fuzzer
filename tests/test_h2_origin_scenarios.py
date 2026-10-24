@@ -49,6 +49,16 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
             "http2_plan",
             'data: "provider-default"',
         ),
+        "https_h2_priority_transition.textproto": (
+            "stream_weight_after_headers: 32",
+            "HTTP2_CLIENT_EVENT_HEADERS",
+            "yield_turns: 2",
+        ),
+        "https_h2_fatal_continuations.textproto": (
+            "unterminated response HEADERS",
+            "nine empty",
+            "raw_bytes:",
+        ),
     }
 
     assert {path.name for path in SCENARIO_ROOT.glob("*.textproto")} == set(
