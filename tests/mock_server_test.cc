@@ -1004,6 +1004,7 @@ void TestAwsSigV4SeedsEmitVerifiedTranscripts() {
 struct TlsTransferResult {
   CURLcode code = CURLE_FAILED_INIT;
   std::string response;
+  std::string trace;
   long verify_result = -1;
   int certificate_count = 0;
   std::vector<std::string> certificate_info;
@@ -1247,7 +1248,8 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   const std::string url = "https://" + scenario.host_path();
   curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
 
-  proto_fuzzer::TlsMockServer server(scenario.tls_certificate_chain());
+  proto_fuzzer::TlsMockServer server(scenario.tls_certificate_chain(),
+                                     scenario.tls_handshake_profile());
   server.Install(easy);
   for (const auto &option : scenario.options()) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
@@ -1258,8 +1260,16 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
          "TLS client-credential profile was rejected during setup");
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
+  TraceCapture trace;
+  if (scenario.tls_handshake_profile() ==
+      curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY) {
+    curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
+    curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
+  }
 
   result.code = server.DriveScenario(easy, scenario);
+  result.trace = trace.text;
   struct curl_certinfo *certificate_info = nullptr;
   (void)curl_easy_getinfo(easy, CURLINFO_SSL_VERIFYRESULT,
                           &result.verify_result);
@@ -1418,6 +1428,38 @@ void TestTlsPublicKeyPins() {
          "curl delivered HTTP data after rejecting the peer's public key");
   Expect(mismatch_result.verify_result == 0,
          "ordinary certificate verification failed before the pin comparison");
+}
+
+void TestTlsOpenSslCloseNotifyProfile() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/https/https_tls_openssl_close_notify.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the OpenSSL close-notify seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the OpenSSL close-notify seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::TargetProfile::kFastHttps);
+  Expect(scenario.tls_handshake_profile() ==
+             curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY,
+         "HTTPS policy discarded the OpenSSL close-notify profile");
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+#if defined(CURL_FUZZER_EXPECT_GNUTLS) || defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  Expect(result.code == CURLE_OK && result.response == "unreachable" &&
+             result.verify_result == 0 && result.handshake_count == 1,
+         "non-OpenSSL client did not treat the OpenSSL close as a normal TLS "
+         "transfer");
+#else
+  Expect(result.code == CURLE_SSL_CONNECT_ERROR,
+         "pre-handshake close_notify was not a terminal TLS error");
+  Expect(result.trace.find("SSL_ERROR_ZERO_RETURN") != std::string::npos,
+         "curl did not identify the clean OpenSSL handshake close");
+  Expect(result.response.empty() && result.handshake_count == 0,
+         "clean handshake close reached encrypted application data");
+#endif
 }
 
 #if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
@@ -2608,6 +2650,7 @@ int main() {
 #endif
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
+  TestTlsOpenSslCloseNotifyProfile();
 #if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
   TestTlsClientCredentialProfilesFailInsideOwnedInputs();
   TestTlsCertificateStatusRequestIsBackendChecked();
