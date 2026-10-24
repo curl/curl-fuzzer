@@ -763,6 +763,15 @@ void BoundMultiPlanShape(curl::fuzzer::proto::MultiPlan* plan) {
       break;
   }
 
+  switch (plan->state_probe_profile()) {
+    case curl::fuzzer::proto::MULTI_STATE_PROBE_NONE:
+    case curl::fuzzer::proto::MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT:
+      break;
+    default:
+      plan->set_state_probe_profile(curl::fuzzer::proto::MULTI_STATE_PROBE_NONE);
+      break;
+  }
+
   for (auto& action : *plan->mutable_actions()) {
     action.set_transfer_selector(action.transfer_selector() % transfer_count);
     switch (action.kind()) {
@@ -1612,16 +1621,19 @@ void RetainMqttOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatching
 
 /// Return whether an option can change the single-connection LDAP exchange.
 /// The base DN, attributes, scope, and filter come from the URL path, and
-/// OpenLDAP's simple bind takes its DN/password from the credential options.
-/// CURLOPT_CUSTOMREQUEST is deliberately absent: this curl revision's
-/// OpenLDAP handler ignores it. Upload, HTTP, and transfer-shape controls would
-/// add option work that the LDAP state machine never consumes.
+/// OpenLDAP's simple or SASL bind takes its credentials and mechanism controls
+/// from scalar options. CURLOPT_CUSTOMREQUEST is deliberately absent: this curl
+/// revision's OpenLDAP handler ignores it. Upload, HTTP, and transfer-shape
+/// controls would add option work that the LDAP state machine never consumes.
 bool IsLdapOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
     case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
+    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
     case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
     case curl::fuzzer::proto::CURLOPT_PASSWORD:
+    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
+    case curl::fuzzer::proto::CURLOPT_SASL_IR:
     case curl::fuzzer::proto::CURLOPT_USERNAME:
     case curl::fuzzer::proto::CURLOPT_USERPWD:
       return true;
@@ -1632,8 +1644,9 @@ bool IsLdapOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
-/// Keep the LDAP target's option budget focused on bind credentials and the
-/// bounded download path its BER-aware peer can advance.
+/// Keep the LDAP target's option budget focused on bind credentials,
+/// deterministic SASL discovery, and the bounded download path its BER-aware
+/// peer can advance.
 void RetainLdapOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsLdapOption); }
 
 /// Return whether an option can change curl's RTSP request construction,

@@ -579,11 +579,22 @@ message MultiPlan {
   // One action is consumed per bounded event-loop turn. Ordered actions can
   // therefore pause then resume, or remove then re-add, the same easy handle.
   repeated MultiAction actions = 9;
+  // Select a closed, harness-owned generic state-machine probe. The non-zero
+  // profile redirects curl's internal progress meter to an anonymous stream,
+  // applies a fixed receive limit, and shortens the transfer timeout. Keeping
+  // those controls out of SetOption prevents arbitrary mutations from turning
+  // other targets into slow or noisy transfers.
+  MultiStateProbeProfile state_probe_profile = 10;
 }
 
 enum MultiDriveMode {
   MULTI_DRIVE_PERFORM = 0;
   MULTI_DRIVE_SOCKET = 1;
+}
+
+enum MultiStateProbeProfile {
+  MULTI_STATE_PROBE_NONE = 0;
+  MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT = 1;
 }
 
 message MultiAction {

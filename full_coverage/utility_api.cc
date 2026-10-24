@@ -94,16 +94,21 @@ void ExerciseEscaping()
 
 }  // namespace
 
-void ExerciseUtilityApiCoverage()
+void ExerciseUtilityApiCoverageWithInitializedCurl()
 {
-  if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
-    return;
-
   // The returned version string has static storage and must not be freed.
   const char *volatile version = curl_version();
   (void)version;
   ExerciseDates();
   ExerciseEscaping();
+}
+
+void ExerciseUtilityApiCoverage()
+{
+  if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+    return;
+
+  ExerciseUtilityApiCoverageWithInitializedCurl();
   curl_global_cleanup();
 }
 

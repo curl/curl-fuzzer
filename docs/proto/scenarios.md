@@ -37,7 +37,8 @@ The main groups of fields are:
   and `telnet_options`.
 - Peer work: `connection`, `subsequent_connections`, structured WebSocket
   frames, and `http3_plan`.
-- Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
+- Focused lanes: `api_plan`, `multi_plan` and its closed state-probe profile,
+  `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential profiles, `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
@@ -172,7 +173,10 @@ Other peers intentionally give those fields narrower meanings:
   peer to synthesize a successful bind. Each readable chunk is one complete
   server LDAPMessage (for example a searchResEntry) forwarded after the
   searchRequest and likewise renumbered. A scripted searchResDone ends the
-  search; otherwise the peer synthesizes one. The URL path carries the base DN,
+  search; otherwise the peer synthesizes one. When login options request SASL,
+  the peer recognizes OpenLDAP's root-DSE `supportedSASLMechanisms` search,
+  advertises bounded PLAIN support, and preserves the readable script for the
+  later URL-derived search. The URL path carries the base DN,
   attributes, scope, and filter, because this curl revision's OpenLDAP handler
   does not consult `CURLOPT_CUSTOMREQUEST`. An `SCHEME_LDAPS` scenario runs the
   identical BER exchange over implicit TLS. In this curl revision OpenLDAP
@@ -181,6 +185,9 @@ Other peers intentionally give those fields narrower meanings:
   callbacks, so the in-process peer terminates ordinary TLS records and then
   parses decrypted LDAPMessages. The fixed authority is `tls.test`, matching
   the checked-in trust anchor, and the handshake carries no ALPN extension.
+  `CURLOPT_USE_SSL` is intentionally not retained: LDAP StartTLS would require
+  a successful ExtendedResponse followed by upgrading that same plaintext
+  carrier, while the current TLS peer supports implicit TLS from byte zero.
 - RTSP is request-aligned and has no server greeting. The peer consumes each
   request start line and header block, releases the next `on_readable` entry
   only after the terminating empty line, and drains any announced

@@ -14,12 +14,11 @@
 
 #include <array>
 #include <cassert>
-#include <csignal>
 #include <cstdio>
-#include <cstdlib>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/allocation_fault_injection.h"
+#include "proto_fuzzer/curl_global_lifecycle.h"
 #include "proto_fuzzer/scenario_runner.h"
 #include "proto_fuzzer/target_policy.h"
 
@@ -56,29 +55,9 @@ void EnsureTargetPostProcessor(proto_fuzzer::TargetProfile profile) {
   (void)policy_registration;
 }
 
-// Wire curl_global_init once so repeated fuzz iterations don't pay for it on every call. libFuzzer reuses the process;
-// static ctors run once.
-struct CurlGlobalBootstrap {
-  CurlGlobalBootstrap() {
-    // Open curl's TLS keylog at backend init. Curl_tls_keylog_open() runs once
-    // inside curl_global_init, so setting this after bootstrap would be too
-    // late. Keep the output in /dev/null and let a reproducer override it.
-    (void)setenv("SSLKEYLOGFILE", "/dev/null", 0);
-
-    // Keep parity with the legacy harness. libcurl normally suppresses
-    // SIGPIPE for its own writes, but fuzzed connection lifecycles also race
-    // mock-peer teardown; those failures should be reported as socket errors,
-    // not mistaken for process crashes.
-    std::signal(SIGPIPE, SIG_IGN);
-    if (!proto_fuzzer::allocation_fault_injection::InitializeCurl()) {
-      std::fputs("warning: libcurl allocation fault injection is unavailable\n", stderr);
-      (void)curl_global_init(CURL_GLOBAL_ALL);
-    }
-  }
-
-  ~CurlGlobalBootstrap() { curl_global_cleanup(); }
-};
-const CurlGlobalBootstrap kGlobalBootstrap;
+// libFuzzer reuses one process, so the static object initializes curl once and
+// releases its global resolver/TLS state only after the engine has stopped.
+proto_fuzzer::CurlGlobalLifecycle kGlobalBootstrap;
 
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
 /// Exercise the mutation ABI once in the profiling-only timing lane. Corpus

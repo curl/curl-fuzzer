@@ -52,6 +52,9 @@ namespace proto_fuzzer {
 ///   messageID to match, so a seed can script both success and failure without
 ///   hard-coding OpenLDAP's message counter. When empty, the peer synthesizes
 ///   a successful bindResponse.
+/// - Before any bind, OpenLDAP's exact root-DSE supportedSASLMechanisms query
+///   receives a peer-owned entry advertising only PLAIN and a successful done.
+///   This discovery exchange never consumes mutation-controlled result chunks.
 /// - Each `on_readable` chunk is one complete server LDAPMessage (for example a
 ///   searchResEntry). Chunks are forwarded in order after the searchRequest and
 ///   are renumbered to the search message id when their envelope parses.
@@ -62,9 +65,10 @@ namespace proto_fuzzer {
 ///
 /// BER scope: this is intentionally a minimal encoder/decoder. It understands
 /// definite-length, one-byte and long-form lengths up to four bytes, and the
-/// INTEGER/SEQUENCE tags needed to delimit LDAPMessage envelopes. Everything
-/// else is opaque payload so malformed server data still reaches OpenLDAP's
-/// full parser. All sizes are bounded by kMaxClientMessageBytes.
+/// primitive tags needed to delimit LDAPMessage envelopes and recognize the
+/// fixed mechanism query. Scripted server operation bodies remain opaque so
+/// malformed server data still reaches OpenLDAP's full parser. All sizes are
+/// bounded by kMaxClientMessageBytes.
 class LdapMockServer : public MockServerBase, public IncomingDataObserver {
  public:
   LdapMockServer();
@@ -85,6 +89,9 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
 
   // Number of searchRequest messages observed.
   std::size_t search_request_count() const;
+
+  // Number of root-DSE supportedSASLMechanisms searches observed.
+  std::size_t mechanism_search_request_count() const;
 
   // Number of unbindRequest messages observed during teardown.
   std::size_t unbind_request_count() const;
@@ -131,9 +138,10 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
 
   /// Decoded LDAPMessage envelope: enough to route a request and echo its id.
   struct MessageView {
-    unsigned char op_tag = 0;      ///< Protocol operation identifier.
-    std::uint32_t message_id = 0;  ///< Envelope INTEGER value.
-    std::size_t total_length = 0;  ///< Encoded LDAPMessage size.
+    unsigned char op_tag = 0;           ///< Protocol operation identifier.
+    std::uint32_t message_id = 0;       ///< Envelope INTEGER value.
+    std::size_t total_length = 0;       ///< Encoded LDAPMessage size.
+    bool sasl_mechanism_query = false;  ///< Root-DSE mechanism query shape.
   };
 
   // Decode one definite-length TLV starting at `offset`.
@@ -141,6 +149,9 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
 
   // Decode an LDAPMessage SEQUENCE { messageID INTEGER, protocolOp ... }.
   static ParseResult ParseMessage(std::string_view bytes, MessageView* message);
+
+  // Recognize OpenLDAP's fixed root-DSE SASL mechanism query.
+  static bool IsSaslMechanismSearch(std::string_view value);
 
   static void AppendBerLength(std::string* out, std::size_t length);
 
@@ -150,6 +161,9 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
 
   // Encode LDAPResult-shaped protocol operations (bindResponse, searchResDone).
   static void BuildResultMessage(std::uint32_t message_id, unsigned char op_tag, int result_code, std::string* out);
+
+  // Encode a root-DSE entry advertising the bounded PLAIN SASL mechanism.
+  static void BuildSaslMechanismsEntry(std::uint32_t message_id, std::string* out);
 
   // Replace the envelope messageID while preserving the rest of the message.
   static bool RewriteMessageId(std::string_view message, std::uint32_t message_id, std::string* out);
@@ -167,6 +181,8 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
   void HandleBindRequest(std::uint32_t message_id);
 
   void HandleSearchRequest(std::uint32_t message_id);
+
+  void HandleMechanismSearchRequest(std::uint32_t message_id);
 
   bool ReleaseNextServerChunk();
 
@@ -197,6 +213,7 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
   std::size_t next_server_chunk_;
   std::size_t bind_request_count_;
   std::size_t search_request_count_;
+  std::size_t mechanism_search_request_count_;
   std::size_t unbind_request_count_;
   std::size_t server_message_count_;
   std::size_t scripted_message_count_;

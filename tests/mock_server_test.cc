@@ -24,7 +24,11 @@
 
 #include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/api_lifecycle.h"
+#if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
+#include "proto_fuzzer/api_coverage_probes.h"
+#endif
 #include "proto_fuzzer/curl_raii.h"
+#include "proto_fuzzer/curl_global_lifecycle.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/ipfs_url.h"
@@ -2319,7 +2323,9 @@ void TestDohHttpsRrSetupFailureDoesNotDriveCurl() {
 } // namespace
 
 int main() {
-  Expect(proto_fuzzer::allocation_fault_injection::InitializeCurl(),
+  proto_fuzzer::CurlGlobalLifecycle curl_lifecycle;
+  Expect(curl_lifecycle.initialized() &&
+             proto_fuzzer::allocation_fault_injection::InitializeCurl(),
          "mock-server tests could not install allocation callbacks");
   TestAllocationFailureReachesHttpParser();
   TestCopyPostFieldsSuppressesAllocationFailures();
@@ -2364,6 +2370,13 @@ int main() {
 #endif
   TestTransferSessionRejectsUnsafeReconfiguration();
   TestTransferSessionCleansIncompleteSharedTransfers();
+#if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
+  // The compatibility probes must leave the process-wide curl runtime usable
+  // by the API lane. Calling twice also exercises the process-once guard before
+  // the ordinary socket-action scenario below.
+  proto_fuzzer::RunApiCoverageProbesOnce();
+  proto_fuzzer::RunApiCoverageProbesOnce();
+#endif
   TestApiLifecycleCompletesSocketActionTransfer();
   TestEasyPerformPreloadsIncrementalResponse();
   TestEasyEventsPreloadsIncrementalResponse();

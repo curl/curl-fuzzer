@@ -1423,6 +1423,23 @@ if(BUILD_TESTING)
     add_test(NAME fault_injection_test COMMAND fault_injection_test)
     add_dependencies(fuzzer_unit_tests fault_injection_test)
 
+    add_executable(curl_global_lifecycle_test
+        tests/curl_global_lifecycle_test.cc
+        proto_fuzzer/allocation_fault_injection.cc
+        proto_fuzzer/curl_global_lifecycle.cc)
+    target_compile_features(curl_global_lifecycle_test PRIVATE cxx_std_17)
+    target_compile_options(curl_global_lifecycle_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(curl_global_lifecycle_test PRIVATE
+        ${CMAKE_SOURCE_DIR})
+    target_link_libraries(curl_global_lifecycle_test PRIVATE
+        curl_client_default)
+    target_link_options(curl_global_lifecycle_test PRIVATE
+        ${COVERAGE_LINK_FLAGS})
+    add_dependencies(curl_global_lifecycle_test curl_external ${CURL_DEPS})
+    add_test(NAME curl_global_lifecycle_test
+        COMMAND curl_global_lifecycle_test)
+    add_dependencies(fuzzer_unit_tests curl_global_lifecycle_test)
+
     if(OPENSSL_CONTRACT_SHIM_ACTIVE)
         add_executable(openssl_contract_shim_test
             tests/openssl_contract_shim_test.cc)
@@ -1762,6 +1779,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_library(curl_fuzzer_proto_runtime OBJECT
         proto_fuzzer/allocation_fault_injection.cc
         proto_fuzzer/api_lifecycle.cc
+        proto_fuzzer/curl_global_lifecycle.cc
         proto_fuzzer/dict_mock_server.cc
         proto_fuzzer/fuzzer_main.cc
         proto_fuzzer/ftp_mock_server.cc
@@ -2010,6 +2028,24 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     curl_add_proto_fuzzer(curl_fuzzer_proto_rtsp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ipfs)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api)
+    if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
+       "$ENV{SANITIZER}" STREQUAL "introspector")
+        # Keep deterministic compatibility probes in the existing API lane.
+        # They run once from its initialization hook (or first-callback
+        # fallback), so no ordinary fuzz iteration pays their cost.
+        target_sources(curl_fuzzer_proto_api PRIVATE
+            proto_fuzzer/api_coverage_probes.cc
+            full_coverage/public_api.cc
+            full_coverage/utility_api.cc
+            full_coverage/dynamic_formatting.cc)
+        target_compile_definitions(curl_fuzzer_proto_api PRIVATE
+            PROTO_FUZZER_API_COVERAGE_PROBES
+            BUILDING_LIBCURL
+            DEBUGBUILD
+            HAVE_CONFIG_H)
+        target_include_directories(curl_fuzzer_proto_api BEFORE PRIVATE
+            ${CURL_PRIVATE_INCLUDE_DIRS})
+    endif()
     curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
     curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
 
@@ -2497,6 +2533,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
             proto_fuzzer/allocation_fault_injection.cc
             proto_fuzzer/bounded_anonymous_input_file.cc
             proto_fuzzer/api_lifecycle.cc
+            proto_fuzzer/curl_global_lifecycle.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/h2_runtime.cc
             proto_fuzzer/ftp_mock_server.cc
@@ -2565,6 +2602,18 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 CURL_FUZZER_HAS_HTTPSIG
                 CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES
                 CURL_FUZZER_HAS_ECH)
+        target_sources(mock_server_test PRIVATE
+            proto_fuzzer/api_coverage_probes.cc
+            full_coverage/public_api.cc
+            full_coverage/utility_api.cc
+            full_coverage/dynamic_formatting.cc)
+        target_compile_definitions(mock_server_test PRIVATE
+            PROTO_FUZZER_API_COVERAGE_PROBES
+            BUILDING_LIBCURL
+            DEBUGBUILD
+            HAVE_CONFIG_H)
+        target_include_directories(mock_server_test BEFORE PRIVATE
+            ${CURL_PRIVATE_INCLUDE_DIRS})
         if(BUILD_GNUTLS_VARIANT)
             curl_add_mock_server_test(mock_server_gnutls_test
                 curl_proto_client_gnutls
