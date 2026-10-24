@@ -195,6 +195,12 @@ message Scenario {
   // Other fixed lanes clear this field. Zero preserves the historical
   // localhost/CURLOPT_RESOLVE/DoH behavior.
   ResolverMode resolver_mode = 34;
+  // Select one bounded, harness-owned client-credential setup in the verified
+  // HTTPS lane. The profile never exposes a mutated filename, provider, or
+  // engine name: malformed blobs are compiled into the harness and the only
+  // file-backed probes use the fixed /dev/null path. Other fixed targets clear
+  // this field, and zero preserves the ordinary no-client-certificate path.
+  TlsClientCredentialProfile tls_client_credential_profile = 35;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -211,6 +217,17 @@ enum TlsCertificateChainProfile {
 enum TlsGroupProfile {
   TLS_GROUP_X25519 = 0;
   TLS_GROUP_PROVIDER_DEFAULT = 1;
+}
+
+// Safe client-side credential configurations for OpenSSL option coverage.
+// These profiles deliberately exercise setup and rejection paths rather than
+// accepting arbitrary filesystem or provider identifiers from protobuf data.
+enum TlsClientCredentialProfile {
+  TLS_CLIENT_CREDENTIAL_NONE = 0;
+  TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12 = 1;
+  TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL = 2;
+  TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL = 3;
+  TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL = 4;
 }
 
 enum SocksProxyMode {
@@ -934,6 +951,7 @@ enum CurlOptionId {
   CURLOPT_SSL_SIGNATURE_ALGORITHMS = 10328;
   CURLOPT_SSL_VERIFYHOST = 81;
   CURLOPT_SSL_VERIFYPEER = 64;
+  CURLOPT_SSL_VERIFYSTATUS = 232;
   CURLOPT_TFTP_BLKSIZE = 178;
   CURLOPT_TFTP_NO_OPTIONS = 242;
   CURLOPT_TIMECONDITION = 33;

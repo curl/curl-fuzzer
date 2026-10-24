@@ -39,7 +39,8 @@ The main groups of fields are:
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
-  `socks_proxy_mode`, `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
+  bounded HTTPS client-credential profiles, `socks_proxy_mode`,
+  `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
   `probe_multi_pollset`, `resolver_mode`, filename-backed parser inputs, and
   `fail_allocations`.
 
@@ -76,7 +77,17 @@ Other peers intentionally give those fields narrower meanings:
   by the manual-drive tail.
 - The dedicated HTTPS peer encrypts connection-script bytes as HTTP
   application data. The compatibility target preserves its older behavior and
-  treats HTTPS script bytes as raw TLS records.
+  treats HTTPS script bytes as raw TLS records. Its optional
+  `tls_client_credential_profile` selects only harness-owned malformed blobs or
+  fixed `/dev/null` engine/provider probes; protobuf bytes never become a
+  filename, engine name, or provider name.
+  This control deliberately leaves `Curl_ssl_cfilter_add` to a protocol peer
+  capable of an in-place STARTTLS upgrade. `SSL_ERROR_to_str` also remains a
+  measured residual because these credentials are rejected before a
+  deterministic post-handshake OpenSSL I/O error exists. Process-lifecycle
+  probes for `ossl_cleanup`, `Curl_ssl_cleanup`, `Curl_ssl_version`, and
+  `Curl_tls_keylog_close` belong in the one-shot API lane instead of a
+  per-input HTTPS path.
 - TELNET preloads a bounded response before entering curl's blocking protocol
   loop.
 - FTP treats the primary connection as command-aligned control replies and

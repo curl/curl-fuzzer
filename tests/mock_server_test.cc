@@ -1095,6 +1095,9 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
            "TLS scenario option was rejected by curl");
   }
+  Expect(proto_fuzzer::ApplyTlsClientCredentialProfile(
+             easy, scenario.tls_client_credential_profile()) == CURLE_OK,
+         "TLS client-credential profile was rejected during setup");
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
 
@@ -1258,6 +1261,36 @@ void TestTlsPublicKeyPins() {
   Expect(mismatch_result.verify_result == 0,
          "ordinary certificate verification failed before the pin comparison");
 }
+
+#if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+void TestTlsClientCredentialProfilesFailInsideOwnedInputs() {
+  constexpr curl::fuzzer::proto::TlsClientCredentialProfile kProfiles[] = {
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12,
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL,
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL,
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL,
+  };
+  for (const auto profile : kProfiles) {
+    Scenario scenario = MakeTlsScenario("client-credential", "unreachable");
+    scenario.set_tls_client_credential_profile(profile);
+    const TlsTransferResult result = DriveTlsScenario(scenario);
+    Expect(result.code != CURLE_OK,
+           "invalid harness-owned client credential unexpectedly completed");
+    Expect(result.response.empty() && result.handshake_count == 0,
+           "client credential failure reached encrypted application data");
+  }
+}
+
+void TestTlsCertificateStatusRequestIsBackendChecked() {
+  Scenario scenario = MakeTlsScenario("cert-status", "status-probe");
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS, true);
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_SSL_INVALIDCERTSTATUS,
+         "missing stapled status did not reach OpenSSL status validation");
+  Expect(result.response.empty(),
+         "curl delivered HTTP data after rejecting missing certificate status");
+}
+#endif
 
 void TestTlsRedirectReusesSession() {
   Scenario scenario;
@@ -2317,6 +2350,10 @@ int main() {
 #endif
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
+#if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  TestTlsClientCredentialProfilesFailInsideOwnedInputs();
+  TestTlsCertificateStatusRequestIsBackendChecked();
+#endif
   TestTlsRedirectReusesSession();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)

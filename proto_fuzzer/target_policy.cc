@@ -117,6 +117,22 @@ void CanonicalizeTlsGroupProfile(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep the client-side TLS probe inside the closed set whose backing bytes,
+/// paths, and provider names are owned by the harness.
+void CanonicalizeTlsClientCredentialProfile(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->tls_client_credential_profile()) {
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_NONE:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL:
+      return;
+    default:
+      scenario->clear_tls_client_credential_profile();
+      return;
+  }
+}
+
 /// Keep the proxied origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
@@ -2333,6 +2349,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // early TLS-option failure.
   if (profile != TargetProfile::kFastHttps) {
     scenario->clear_crl_file();
+    scenario->clear_tls_client_credential_profile();
   }
 
   if (profile == TargetProfile::kFastHttp3) {
@@ -2797,6 +2814,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       ClearAllBackpressure(scenario);
       CanonicalizeTlsAuthority(scenario);
       CanonicalizeTlsCertificateChain(scenario);
+      CanonicalizeTlsClientCredentialProfile(scenario);
       return;
 
     case TargetProfile::kHttpsH2:

@@ -681,6 +681,9 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     if (mode == ScenarioRunMode::kResolverCoverage) {
       resolver_mode_ready = ApplyResolverMode(easy, scenario.resolver_mode());
     }
+    if (mode == ScenarioRunMode::kTlsCoverage) {
+      (void)ApplyTlsClientCredentialProfile(easy, scenario.tls_client_credential_profile());
+    }
   };
   configure_easy();
   if (!resolver_mode_ready) {
