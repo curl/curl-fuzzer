@@ -26,7 +26,7 @@ namespace proto_fuzzer {
 /// inherited socketpair callback, and no fuzzed byte selects a destination.
 class HttpTransportMockServer final : public MockServer, public IncomingDataObserver {
  public:
-  explicit HttpTransportMockServer(curl::fuzzer::proto::HttpTransportMode mode);
+  HttpTransportMockServer(curl::fuzzer::proto::HttpTransportMode mode, bool haproxy_protocol);
   ~HttpTransportMockServer() override = default;
 
   HttpTransportMockServer(const HttpTransportMockServer&) = delete;
@@ -47,6 +47,7 @@ class HttpTransportMockServer final : public MockServer, public IncomingDataObse
   static constexpr std::size_t kMaxTranscriptBytes = 64 * 1024;
 
   curl::fuzzer::proto::HttpTransportMode mode_;
+  bool haproxy_protocol_;
   std::string client_transcript_;
 };
 

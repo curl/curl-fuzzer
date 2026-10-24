@@ -420,7 +420,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       return std::make_unique<ProxyOptionMockServer>(scenario.proxy_socket_option_mode());
     }
     if (scenario.http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT) {
-      return std::make_unique<HttpTransportMockServer>(scenario.http_transport_mode());
+      return std::make_unique<HttpTransportMockServer>(scenario.http_transport_mode(), scenario.haproxy_protocol());
     }
   }
 

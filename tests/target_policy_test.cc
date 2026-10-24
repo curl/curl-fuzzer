@@ -240,17 +240,35 @@ void TestDeepHttpTransportPolicy() {
              connect.probe_multi_pollset(),
          "deep HTTP transport policy discarded CONNECT poll work");
 
+  Scenario haproxy = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 1024);
+  haproxy.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+  haproxy.set_haproxy_protocol(true);
+  haproxy.set_probe_multi_pollset(true);
+  haproxy.add_subsequent_connections()->mutable_backpressure()->set_drain_limit(
+      1);
+  NormalizeScenarioForTarget(&haproxy, TargetProfile::kDeepHttp);
+  Expect(haproxy.haproxy_protocol() && haproxy.probe_multi_pollset() &&
+             haproxy.connection().backpressure().recv_buf_bytes() == 2048 &&
+             haproxy.connection().backpressure().drain_limit() == 48 &&
+             !haproxy.subsequent_connections(0).has_backpressure(),
+         "deep CONNECT policy did not install bounded HAProxy pressure");
+
   Scenario forward;
   forward.set_http_transport_mode(
       curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY);
+  forward.set_haproxy_protocol(true);
+  forward.mutable_connection()->mutable_backpressure()->set_drain_limit(1);
   forward.set_probe_multi_pollset(true);
   forward.set_altsvc_file("must not replace the fixed route");
   forward.set_hsts_file("must not upgrade the plaintext proxy route");
   NormalizeScenarioForTarget(&forward, TargetProfile::kDeepHttp);
   Expect(forward.http_transport_mode() ==
                  curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY &&
+             !forward.haproxy_protocol() &&
+             !forward.connection().has_backpressure() &&
              !forward.probe_multi_pollset(),
-         "forward-proxy policy retained unrelated repeated polling");
+         "forward-proxy policy retained unrelated HAProxy timing work");
   Expect(forward.altsvc_file().empty() && forward.hsts_file().empty(),
          "forward-proxy policy retained a conflicting routing file");
 

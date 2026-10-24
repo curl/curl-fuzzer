@@ -66,7 +66,12 @@ HTTP/1.1 CONNECT proxy, or a fixed abstract Unix-domain origin with
 endpoint and every socket is replaced by the in-process peer; Unix mode uses a
 harness-owned abstract name and creates no filesystem entry. Use
 request-triggered `on_readable` chunks for these modes. A CONNECT script puts
-the tunnel response first and the origin response second.
+the tunnel response first and the origin response second. The correlated
+`haproxy_protocol` CONNECT profile instead sends the bounded request headers to
+both the proxy and origin and applies fixed bounded send pressure. The long
+valid CONNECT request, small peer drains, and repeated pollset probes make the
+pending fixed IPv6 HAProxy v1 setup state reachable without allowing the
+scenario to select either endpoint.
 
 The deep HTTP lane's `proxy_socket_option_mode` selects a closed set of option
 paths. Fixed hostname, IPv4-CIDR, and IPv6-CIDR lists exercise

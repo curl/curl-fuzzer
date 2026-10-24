@@ -2880,6 +2880,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(http_transport_mock_server_test
             tests/http_transport_mock_server_test.cc
             proto_fuzzer/http_transport_mock_server.cc)
+        target_compile_definitions(http_transport_mock_server_test PRIVATE
+            PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(proxy_option_mock_server_test
             tests/proxy_option_mock_server_test.cc
             proto_fuzzer/proxy_option_mock_server.cc

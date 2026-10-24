@@ -36,6 +36,8 @@ constexpr std::uint32_t kDefaultBackpressureBufferBytes = 2048;
 constexpr std::uint32_t kMinBackpressureBufferBytes = 2048;
 constexpr std::uint32_t kMaxBackpressureBufferBytes = 4096;
 constexpr std::uint32_t kMaxDrainBytesPerIteration = 1024;
+constexpr std::uint32_t kHaproxyConnectBufferBytes = 2048;
+constexpr std::uint32_t kHaproxyConnectDrainBytes = 48;
 
 // CURLOPT_LOCALPORTRANGE performs one synchronous bind attempt per selected
 // port. Retain a useful retry window without letting one mutation request tens
@@ -2413,9 +2415,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http2_plan();
   }
 
+  const bool deep_http_haproxy = profile == TargetProfile::kDeepHttp &&
+                                 scenario->http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY;
   if (profile != TargetProfile::kProxyTransport) {
     scenario->clear_socks_proxy_mode();
-    scenario->clear_haproxy_protocol();
+    if (!deep_http_haproxy) {
+      scenario->clear_haproxy_protocol();
+    }
   }
 
   // StartTLS is a correlated LDAP transport mode rather than a transferable
@@ -2915,7 +2921,6 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       return;
 
     case TargetProfile::kDeepHttp:
-      ClearAllBackpressure(scenario);
       switch (scenario->http_transport_mode()) {
         case curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT:
         case curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY:
@@ -2956,6 +2961,22 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
         scenario->clear_hsts_file();
       } else if (!scenario->altsvc_file().empty()) {
         CanonicalizeAltSvcAuthority(scenario);
+      }
+      if (scenario->http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY &&
+          scenario->haproxy_protocol()) {
+        // This closed combination makes the pending HAProxy setup state
+        // reachable after CONNECT. A large checked-in request fills the
+        // tightened socket, while bounded peer drains and repeated public
+        // multi polling expose the filter's write-only pollset.
+        auto* backpressure = scenario->mutable_connection()->mutable_backpressure();
+        backpressure->set_recv_buf_bytes(kHaproxyConnectBufferBytes);
+        backpressure->set_drain_limit(kHaproxyConnectDrainBytes);
+        for (auto& connection : *scenario->mutable_subsequent_connections()) {
+          connection.clear_backpressure();
+        }
+      } else {
+        scenario->clear_haproxy_protocol();
+        ClearAllBackpressure(scenario);
       }
       if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY) {
         scenario->clear_probe_multi_pollset();
