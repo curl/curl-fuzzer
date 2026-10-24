@@ -60,6 +60,7 @@ def test_resolver_lane_has_target_local_threaded_outcomes() -> None:
     assert 'host_path: "resolver-partial.test/' in partial
     assert "RESOLVER_MODE_THREADED_QUEUED_CANCEL" in queued_cancel
     assert 'host_path: "resolver-queued-cancel.test/' in queued_cancel
+    assert 'trace_config: "+THREADS"' in queued_cancel
     for scenario in (positive, negative, link_local, partial, queued_cancel):
         assert "resolve_entries:" not in scenario
 

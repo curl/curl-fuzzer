@@ -2424,7 +2424,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
                 --llvm-cov ${RESOLVER_COVERAGE_LLVM_COV}
                 --curl-source ${RESOLVER_COVERAGE_CURL_SOURCE_DIR})
         set_tests_properties(resolver_queued_cancel_coverage_test
-            PROPERTIES TIMEOUT 15)
+            PROPERTIES TIMEOUT 30)
         add_dependencies(fuzzer_unit_tests curl_fuzzer_proto_resolver)
     endif()
 

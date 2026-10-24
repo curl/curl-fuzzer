@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require the production queued-resolver seed to cover both curl callbacks."""
+"""Require the production queued-resolver seed to cover its curl lifecycle."""
 
 from __future__ import annotations
 
@@ -11,12 +11,16 @@ import tempfile
 from pathlib import Path
 
 REQUIRED_FUNCTIONS = {
+    "Curl_cond_timedwait",
     "asyn-thrdd.c:async_thrdd_match_item",
     "thrdqueue.c:thrdq_item_list_dtor",
+    "thrdqueue.c:thrdq_tpool_take",
 }
 REQUIRED_SOURCE_BY_FUNCTION = {
+    "Curl_cond_timedwait": "lib/curl_threads.c",
     "asyn-thrdd.c:async_thrdd_match_item": "lib/vdns/asyn-thrdd.c",
     "thrdqueue.c:thrdq_item_list_dtor": "lib/thrdqueue.c",
+    "thrdqueue.c:thrdq_tpool_take": "lib/thrdqueue.c",
 }
 # The measured gap contained the matcher function region plus one region for
 # each short-circuit operand, and one destructor function region. Discover the
@@ -26,6 +30,7 @@ MINIMUM_OLD_GAP_REGIONS = {
     "asyn-thrdd.c:async_thrdd_match_item": 3,
     "thrdqueue.c:thrdq_item_list_dtor": 1,
 }
+REPEAT_RUNS = 3
 
 
 def curl_relative_path(filename: object, source_root: Path) -> str | None:
@@ -35,6 +40,38 @@ def curl_relative_path(filename: object, source_root: Path) -> str | None:
         return Path(filename).resolve().relative_to(source_root.resolve()).as_posix()
     except ValueError:
         return None
+
+
+def export_document(args: argparse.Namespace, profdata: Path) -> dict[str, object]:
+    exported = subprocess.run(
+        [
+            str(args.llvm_cov),
+            "export",
+            str(args.binary),
+            f"-instr-profile={profdata}",
+            "--sources",
+            str(args.curl_source / "lib/vdns/asyn-thrdd.c"),
+            str(args.curl_source / "lib/thrdqueue.c"),
+            str(args.curl_source / "lib/curl_threads.c"),
+        ],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+    document = json.loads(exported.stdout)
+    if not isinstance(document, dict):
+        raise SystemExit("llvm-cov export did not produce an object")
+    return document
+
+
+def function_counts(document: dict[str, object]) -> dict[str, int]:
+    return {
+        function["name"]: function["count"]
+        for datum in document.get("data", [])
+        for function in datum.get("functions", [])
+        if function.get("name") in REQUIRED_FUNCTIONS
+        and isinstance(function.get("count"), int)
+    }
 
 
 def main() -> int:
@@ -48,57 +85,62 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="resolver-queued-cancel-") as raw_tmp:
         tmp = Path(raw_tmp)
-        environment = os.environ.copy()
-        environment["LLVM_PROFILE_FILE"] = str(tmp / "resolver-%m-%p.profraw")
-        subprocess.run([str(args.binary), str(args.seed)], check=True, env=environment)
+        all_profiles: list[Path] = []
+        per_run_counts: list[dict[str, int]] = []
+        for run_index in range(REPEAT_RUNS):
+            environment = os.environ.copy()
+            environment["LLVM_PROFILE_FILE"] = str(
+                tmp / f"resolver-{run_index}-%m-%p.profraw"
+            )
+            subprocess.run(
+                [str(args.binary), str(args.seed)], check=True, env=environment
+            )
 
-        profiles = sorted(tmp.glob("resolver-*.profraw"))
-        if not profiles:
-            raise SystemExit("queued resolver regression emitted no raw profile")
-        profdata = tmp / "resolver.profdata"
+            profiles = sorted(tmp.glob(f"resolver-{run_index}-*.profraw"))
+            if not profiles:
+                raise SystemExit(
+                    f"queued resolver regression run {run_index + 1} emitted no raw profile"
+                )
+            all_profiles.extend(profiles)
+            run_profdata = tmp / f"resolver-{run_index}.profdata"
+            subprocess.run(
+                [
+                    str(args.llvm_profdata),
+                    "merge",
+                    "-sparse",
+                    *map(str, profiles),
+                    "-o",
+                    str(run_profdata),
+                ],
+                check=True,
+            )
+            counts = function_counts(export_document(args, run_profdata))
+            missing = sorted(
+                name for name in REQUIRED_FUNCTIONS if counts.get(name, 0) <= 0
+            )
+            if missing:
+                rendered = ", ".join(
+                    f"{name}={counts.get(name, 'missing')}" for name in missing
+                )
+                raise SystemExit(
+                    f"queued resolver run {run_index + 1}/{REPEAT_RUNS} "
+                    f"did not cover required functions: {rendered}"
+                )
+            per_run_counts.append(counts)
+
+        profdata = tmp / "resolver-combined.profdata"
         subprocess.run(
             [
                 str(args.llvm_profdata),
                 "merge",
                 "-sparse",
-                *map(str, profiles),
+                *map(str, all_profiles),
                 "-o",
                 str(profdata),
             ],
             check=True,
         )
-        exported = subprocess.run(
-            [
-                str(args.llvm_cov),
-                "export",
-                str(args.binary),
-                f"-instr-profile={profdata}",
-                "--sources",
-                str(args.curl_source / "lib/vdns/asyn-thrdd.c"),
-                str(args.curl_source / "lib/thrdqueue.c"),
-            ],
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE,
-        )
-
-    document = json.loads(exported.stdout)
-    counts = {
-        function["name"]: function["count"]
-        for datum in document.get("data", [])
-        for function in datum.get("functions", [])
-        if function.get("name") in REQUIRED_FUNCTIONS
-    }
-    missing = sorted(
-        name
-        for name in REQUIRED_FUNCTIONS
-        if not isinstance(counts.get(name), int) or counts[name] <= 0
-    )
-    if missing:
-        rendered = ", ".join(
-            f"{name}={counts.get(name, 'missing')}" for name in missing
-        )
-        raise SystemExit(f"queued resolver callbacks were not covered: {rendered}")
+        document = export_document(args, profdata)
 
     observed_regions: set[tuple[str, str, int, int, int, int]] = set()
     covered_regions: set[tuple[str, str, int, int, int, int]] = set()
@@ -107,7 +149,7 @@ def main() -> int:
             name = function.get("name")
             filenames = function.get("filenames")
             regions = function.get("regions")
-            if name not in REQUIRED_FUNCTIONS or not isinstance(filenames, list):
+            if name not in MINIMUM_OLD_GAP_REGIONS or not isinstance(filenames, list):
                 continue
             if not isinstance(regions, list):
                 continue
@@ -153,12 +195,18 @@ def main() -> int:
             f"{source}:{start_line}:{start_column}-{end_line}:{end_column}"
             for source, _name, start_line, start_column, end_line, end_column in missing_regions
         )
-        raise SystemExit(f"queued resolver old-gap regions were not covered: {rendered}")
+        raise SystemExit(
+            f"queued resolver old-gap regions were not covered: {rendered}"
+        )
 
     function_summary = ", ".join(
-        f"{name}={counts[name]}" for name in sorted(counts)
+        f"{name}=min({min(counts[name] for counts in per_run_counts)})"
+        for name in sorted(REQUIRED_FUNCTIONS)
     )
-    print(f"{function_summary}, old_gap_regions={len(covered_regions)}")
+    print(
+        f"runs={REPEAT_RUNS}, {function_summary}, "
+        f"old_gap_regions={len(covered_regions)}"
+    )
     return 0
 
 

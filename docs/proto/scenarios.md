@@ -231,6 +231,11 @@ Other peers intentionally give those fields narrower meanings:
   binary's local `getaddrinfo` backend. The threaded modes receive bounded
   poll/wait turns; the partial backend intentionally staggers A behind AAAA
   so curl consumes a live partial result instead of relying on scheduler luck.
+  Queued-cancellation mode limits the public resolver pool to one worker,
+  holds its first lookup while a duplicated easy queues later work, cancels
+  that duplicate, then observes the worker's public `THREADS` idle trace after
+  releasing the gate. The observation proves entry to the configured timed
+  condition wait without using elapsed time as the coverage contract.
   Unix-socket mode passes `/curl-fuzzer-resolver.sock` to curl's address
   builder, but the open-socket callback replaces it with an anonymous peer and
   never opens that filesystem path. DoH-error mode returns HTTP 200 with a

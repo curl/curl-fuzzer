@@ -2633,6 +2633,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     if (IsThreadedResolverMode(scenario->resolver_mode())) {
       scenario->mutable_connection()->mutable_backpressure()->set_drain_limit(1);
     }
+    if (scenario->resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL) {
+      // The runner observes the pool's public THREADS trace after releasing
+      // its lookup gate. Seeing an idle worker proves it entered the configured
+      // timed condition wait; mutated trace controls must not remove that
+      // lifecycle contract.
+      scenario->set_trace_config("+THREADS");
+    }
     if (doh_https_rr) {
       RetainDohHttpsRrOptions(scenario);
     } else {

@@ -2465,7 +2465,8 @@ void TestResolverPolicy() {
   NormalizeScenarioForTarget(&queued_cancel, TargetProfile::kResolver);
   Expect(queued_cancel.host_path() ==
                  "resolver-queued-cancel.test/queued-cancel" &&
-             queued_cancel.connection().backpressure().drain_limit() == 1,
+             queued_cancel.connection().backpressure().drain_limit() == 1 &&
+             queued_cancel.trace_config() == "+THREADS",
          "queued-cancellation resolver policy did not select its deterministic "
          "drive");
 

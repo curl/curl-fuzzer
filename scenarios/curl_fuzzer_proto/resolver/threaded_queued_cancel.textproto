@@ -1,7 +1,10 @@
 # Cap curl's public resolver pool at one worker, hold its first target-local
 # address lookup, and drive a duplicated easy while later queries remain
 # queue-owned. This covers matching and destruction of cancelled resolver
-# items without relying on the host name service or scheduler timing.
+# items, then observes the worker's idle THREADS trace after the gate release.
+# The trace proves entry to the pool's configured timed wait without treating
+# a sleep or elapsed duration as coverage evidence.
 scheme: SCHEME_HTTP
 host_path: "resolver-queued-cancel.test/threaded-queued-cancel"
 resolver_mode: RESOLVER_MODE_THREADED_QUEUED_CANCEL
+trace_config: "+THREADS"
