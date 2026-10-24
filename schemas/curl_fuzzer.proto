@@ -316,6 +316,9 @@ enum ResolverMode {
   // Complete one ordinary local transfer, then exercise curl's balanced
   // global cleanup and reinitialization lifecycle between fuzz inputs.
   RESOLVER_MODE_GLOBAL_LIFECYCLE = 7;
+  // Limit curl's public resolver pool to one worker, hold its first lookup,
+  // and drive a duplicated easy while later queries remain queue-owned.
+  RESOLVER_MODE_THREADED_QUEUED_CANCEL = 8;
 }
 
 // A bounded, ordered HTTP/3 server script. Structured responses keep common

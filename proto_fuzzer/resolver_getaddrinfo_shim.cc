@@ -19,12 +19,15 @@
 #include <cstring>
 #include <thread>
 
+#include "proto_fuzzer/resolver_cancel_gate.h"
+
 namespace {
 
 constexpr char kPositiveHost[] = "resolver-positive.test";
 constexpr char kPartialHost[] = "resolver-partial.test";
 constexpr char kNegativeHost[] = "resolver-negative.test";
 constexpr char kLinkLocalHost[] = "resolver-link-local.test";
+constexpr char kQueuedCancelHost[] = "resolver-queued-cancel.test";
 
 unsigned short ParsePort(const char* service) {
   if (service == nullptr || *service == '\0') {
@@ -132,8 +135,18 @@ extern "C" int getaddrinfo(const char* nodename, const char* service, const addr
   const bool positive = std::strcmp(nodename, kPositiveHost) == 0;
   const bool partial = std::strcmp(nodename, kPartialHost) == 0;
   const bool link_local = std::strcmp(nodename, kLinkLocalHost) == 0;
-  if (!positive && !negative && !partial && !link_local) {
+  const bool queued_cancel = std::strcmp(nodename, kQueuedCancelHost) == 0;
+  if (!positive && !negative && !partial && !link_local && !queued_cancel) {
     return EAI_NONAME;
+  }
+
+  // This hostname is selected only by the queued-cancellation resolver mode.
+  // The main thread waits until the first handle's first family is stopped
+  // here, then adds and starts a duplicate handle. With the public resolver
+  // pool capped at one worker, no later family can be dequeued before the
+  // duplicate's pending resolver work is cancelled.
+  if (queued_cancel) {
+    proto_fuzzer::WaitAtResolverCancelGate();
   }
 
   // Hold every owned answer for one bounded interval so curl's first public
@@ -159,7 +172,7 @@ extern "C" int getaddrinfo(const char* nodename, const char* service, const addr
   addrinfo* head = nullptr;
   addrinfo* tail = nullptr;
   bool ok = true;
-  if (positive || partial) {
+  if (positive || partial || queued_cancel) {
     if (family == AF_UNSPEC || family == AF_INET6) {
       ok = AppendAddress(&head, &tail, AF_INET6, hints, port, "::1") &&
            AppendAddress(&head, &tail, AF_INET6, hints, port, "::2");

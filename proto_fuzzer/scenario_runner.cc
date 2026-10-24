@@ -12,6 +12,7 @@
 #include <curl/curl.h>
 #include <curl/header.h>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -33,6 +34,7 @@
 #include "proto_fuzzer/pop3_mock_server.h"
 #include "proto_fuzzer/proxy_option_mock_server.h"
 #include "proto_fuzzer/request_data.h"
+#include "proto_fuzzer/resolver_cancel_gate.h"
 #include "proto_fuzzer/rtsp_mock_server.h"
 #include "proto_fuzzer/smtp_mock_server.h"
 #include "proto_fuzzer/socks4_mock_server.h"
@@ -66,6 +68,13 @@ namespace {
 constexpr unsigned int kAllHeaderOrigins = CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX | CURLH_PSEUDO;
 constexpr std::size_t kMaxResultHeaders = 16;
 constexpr char kResolverUnixSocketPath[] = "/curl-fuzzer-resolver.sock";
+constexpr char kResolverCancelDuplicateUrl[] = "http://resolver-queued-cancel.test:81/queued-cancel-duplicate";
+constexpr auto kResolverCancelGateWait = std::chrono::milliseconds(500);
+
+int CountResolverStart(void* /*resolver_state*/, void* /*reserved*/, void* client_data) {
+  ++*static_cast<int*>(client_data);
+  return 0;
+}
 
 /// Apply only harness-owned resolver controls. Target policy has already
 /// replaced the URL authority with a fixed name understood by the target-local
@@ -76,6 +85,7 @@ bool ApplyResolverMode(CURL* easy, curl::fuzzer::proto::ResolverMode mode) {
       return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4) == CURLE_OK &&
              curl_easy_setopt(easy, CURLOPT_DNS_SHUFFLE_ADDRESSES, 1L) == CURLE_OK;
     case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
+    case curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL:
       return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER) == CURLE_OK;
     case curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE:
       return curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER) == CURLE_OK;
@@ -90,6 +100,88 @@ bool ApplyResolverMode(CURL* easy, curl::fuzzer::proto::ResolverMode mode) {
       return true;
   }
 }
+
+/// Resolve two public easy handles through one worker. The first handle queues
+/// AAAA then A. Its first getaddrinfo call cannot return through the target
+/// gate, so the sole worker cannot take the second family. Only then is the
+/// duplicate added on a distinct origin and allowed to queue its own AAAA and
+/// A work behind the blocked lookup.
+///
+/// The resolver-start callback fires before curl submits the duplicate's
+/// queries, but curl_multi_perform cannot return until that synchronous
+/// submission finishes. A successful perform, a live duplicate, and the
+/// observed callback therefore prove the duplicate resolver work is queued.
+/// Removing that active duplicate is the public cancellation operation: curl
+/// synchronously shuts down its live async resolver, scans the queue, and
+/// destroys the matching items before clearing the handle's multi pointer.
+/// The gate's scope ends after this removal and before cleanup can join the
+/// worker, so teardown cannot wait in a cycle with the shim.
+CURLcode RunQueuedResolverCancellation(CURL* easy, MockServer* mock, const curl::fuzzer::proto::Scenario& scenario) {
+  int duplicate_resolver_starts = 0;
+  // Keep callback data alive until both handles are gone. Declaring the
+  // duplicate before the multi also makes exceptional teardown destroy the
+  // multi (and detach any handle whose public removal failed) first.
+  CurlEasyPtr duplicate(curl_easy_duphandle(easy));
+  CurlMultiPtr multi(curl_multi_init());
+  // This drive is bounded by the gate wait and explicit removals. Clear the
+  // ordinary 200 ms transfer/connect settings (zero selects no operation
+  // deadline and curl's default connect deadline) so host scheduling cannot
+  // cancel either handle before the queue invariant is established.
+  if (multi == nullptr || duplicate == nullptr ||
+      curl_multi_setopt(multi.get(), CURLMOPT_RESOLVE_THREADS_MAX, 1L) != CURLM_OK ||
+      curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, 0L) != CURLE_OK ||
+      curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 0L) != CURLE_OK ||
+      curl_easy_setopt(duplicate.get(), CURLOPT_TIMEOUT_MS, 0L) != CURLE_OK ||
+      curl_easy_setopt(duplicate.get(), CURLOPT_CONNECTTIMEOUT_MS, 0L) != CURLE_OK ||
+      curl_easy_setopt(duplicate.get(), CURLOPT_URL, kResolverCancelDuplicateUrl) != CURLE_OK ||
+      curl_easy_setopt(duplicate.get(), CURLOPT_FRESH_CONNECT, 1L) != CURLE_OK ||
+      curl_easy_setopt(duplicate.get(), CURLOPT_RESOLVER_START_FUNCTION, &CountResolverStart) != CURLE_OK ||
+      curl_easy_setopt(duplicate.get(), CURLOPT_RESOLVER_START_DATA, &duplicate_resolver_starts) != CURLE_OK) {
+    return CURLE_FAILED_INIT;
+  }
+
+  mock->SetScripts(scenario);
+  CURLMcode add_easy_result = curl_multi_add_handle(multi.get(), easy);
+  CURLMcode add_duplicate_result = CURLM_BAD_HANDLE;
+  CURLMcode perform_result = CURLM_BAD_HANDLE;
+  CURLMcode remove_duplicate_result = CURLM_BAD_HANDLE;
+  bool lookup_started = false;
+  bool duplicate_resolver_queued = false;
+  int still_running = 0;
+  if (add_easy_result == CURLM_OK) {
+    ScopedResolverCancelGate gate;
+    perform_result = curl_multi_perform(multi.get(), &still_running);
+    if (perform_result == CURLM_OK && still_running > 0) {
+      lookup_started = WaitForResolverCancelLookup(kResolverCancelGateWait);
+    }
+    // The signal is sent from inside Q1's getaddrinfo. Q1 is worker-owned,
+    // and the only worker cannot return to the queue to take original Q2.
+    if (lookup_started) {
+      add_duplicate_result = curl_multi_add_handle(multi.get(), duplicate.get());
+    }
+    if (add_duplicate_result == CURLM_OK) {
+      perform_result = curl_multi_perform(multi.get(), &still_running);
+    }
+    // Resolver-start precedes the two sends, but the public perform call does
+    // not return until Curl_async_getaddrinfo has submitted them. Since Q1 is
+    // still blocked, a live duplicate here has queue-owned work to cancel.
+    duplicate_resolver_queued = perform_result == CURLM_OK && still_running == 2 && duplicate_resolver_starts > 0;
+    // Always detach a successfully added duplicate before its easy handle can
+    // be destroyed. On the proved path this is the intentional cancellation;
+    // on a failed proof it is bounded cleanup while Q1 still owns the worker.
+    if (add_duplicate_result == CURLM_OK) {
+      remove_duplicate_result = curl_multi_remove_handle(multi.get(), duplicate.get());
+    }
+  }
+
+  const CURLMcode remove_easy_result =
+      add_easy_result == CURLM_OK ? curl_multi_remove_handle(multi.get(), easy) : CURLM_BAD_HANDLE;
+  return lookup_started && duplicate_resolver_queued && perform_result == CURLM_OK &&
+                 remove_duplicate_result == CURLM_OK && remove_easy_result == CURLM_OK
+             ? CURLE_OK
+             : CURLE_FAILED_INIT;
+}
+
 /// Probe each public getinfo return family and the response-header API after
 /// curl has settled the transfer. Applications commonly inspect these APIs,
 /// but a harness that only drives I/O leaves their type dispatch and
@@ -754,7 +846,13 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   mock->ConfigureRequestData(request_data);
   const auto drive_mode = api_plan == nullptr ? curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM : api_plan->drive_mode();
   CURLcode transfer_result = CURLE_FAILED_INIT;
-  if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM) {
+  if (mode == ScenarioRunMode::kResolverCoverage &&
+      scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL) {
+    auto* resolver_mock = dynamic_cast<MockServer*>(mock.get());
+    if (resolver_mock != nullptr) {
+      transfer_result = RunQueuedResolverCancellation(easy, resolver_mock, scenario);
+    }
+  } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_PERFORM) {
     transfer_result = mock->DriveEasyScenario(easy, scenario);
   } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_EASY_EVENTS) {
     transfer_result = mock->DriveEasyScenario(easy, scenario, true);
