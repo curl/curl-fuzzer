@@ -1,0 +1,14 @@
+# Cover resume handling in file_upload while the destination remains the fixed
+# /dev/null sink. Curl skips the first four source bytes, then writes the rest
+# through its bounded callback loop.
+scheme: SCHEME_FILE
+host_path: "localhost/also-not-created"
+upload {
+  data: "skip-and-upload"
+  read_sizes: 2
+  read_sizes: 7
+  terminal: UPLOAD_TERMINAL_EOF
+}
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_RESUME_FROM_LARGE uint_value: 4 }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 15 }

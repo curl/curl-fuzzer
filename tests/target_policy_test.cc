@@ -822,6 +822,7 @@ void TestFastTelnetPolicy() {
 
 void TestFastFtpPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("mutated.invalid:9999/a/b/file");
   scenario.add_request_headers("X-Ignored: ftp");
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
@@ -858,6 +859,8 @@ void TestFastFtpPolicy() {
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFtp);
 
   Expect(scenario.scheme() == SCHEME_FTP, "fast FTP policy did not force FTP");
+  Expect(scenario.probe_multi_pollset(),
+         "fast FTP policy removed the pollset-probe opt-in");
   Expect(scenario.host_path() == "ftp.test/a/b/file",
          "fast FTP policy did not retain only the URL path");
   Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
@@ -890,6 +893,7 @@ void TestFastFtpPolicy() {
 void TestFastFtpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_scheme(SCHEME_FTPS);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("untrusted.invalid:990/secure.bin?query#fragment");
   scenario.add_request_headers("X-Ignored: ftps");
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
@@ -913,6 +917,8 @@ void TestFastFtpsPolicy() {
 
   Expect(scenario.scheme() == SCHEME_FTPS,
          "fast FTP lane did not preserve an explicit FTPS scheme");
+  Expect(scenario.probe_multi_pollset(),
+         "fast FTP lane removed the FTPS pollset-probe opt-in");
   Expect(scenario.host_path() == "tls.test/secure.bin?query#fragment",
          "fast FTP lane did not give FTPS the certifiable authority");
   Expect(scenario.request_headers_size() == 0 && !scenario.has_mime_post() &&
@@ -963,7 +969,7 @@ void TestFastFilePolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
-  scenario.mutable_upload()->set_data("must never be written");
+  scenario.mutable_upload()->set_data("bounded upload bytes");
   scenario.mutable_connection()->set_initial_response("ignored peer script");
   scenario.add_subsequent_connections()->set_initial_response("ignored");
   scenario.set_cookie_file("ignored parser input");
@@ -977,6 +983,12 @@ void TestFastFilePolicy() {
   auto *append = scenario.add_options();
   append->set_option_id(curl::fuzzer::proto::CURLOPT_APPEND);
   append->set_bool_value(true);
+  auto *infile_size = scenario.add_options();
+  infile_size->set_option_id(curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE);
+  infile_size->set_uint_value(20);
+  auto *upload_buffer = scenario.add_options();
+  upload_buffer->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE);
+  upload_buffer->set_uint_value(16384);
   auto *range = scenario.add_options();
   range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
   range->set_string_value("0-0");
@@ -1002,25 +1014,37 @@ void TestFastFilePolicy() {
              scenario.connection().on_readable_size() == 0 &&
              scenario.connection().server_frames_size() == 0 &&
              !scenario.connection().has_backpressure() &&
-             !scenario.has_upload() && !scenario.has_mime_post() &&
-             !scenario.has_api_plan() && !scenario.has_multi_plan() &&
+             scenario.has_upload() &&
+             scenario.upload().data() == "bounded upload bytes" &&
+             !scenario.has_mime_post() && !scenario.has_api_plan() &&
+             !scenario.has_multi_plan() &&
              scenario.subsequent_connections_size() == 0 &&
              scenario.request_headers_size() == 0 &&
              scenario.telnet_options_size() == 0 &&
              scenario.resolve_entries_size() == 0 &&
              scenario.cookie_file().empty(),
-         "fast FILE policy retained a shape the peerless lane cannot consume");
-  Expect(scenario.options_size() == 3 &&
+         "fast FILE policy retained an inert shape or dropped upload data");
+  Expect(scenario.options_size() == 6 &&
              scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RANGE &&
+                 curl::fuzzer::proto::CURLOPT_UPLOAD &&
              scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_NOBODY &&
+                 curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE &&
              scenario.options(2).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE &&
+             scenario.options(3).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_RANGE &&
+             scenario.options(4).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_NOBODY &&
+             scenario.options(5).option_id() ==
                  curl::fuzzer::proto::CURLOPT_FILETIME,
-         "fast FILE policy retained a write or non-file option");
-  Expect(scenario.options(0).string_value() == "0-0" &&
-             scenario.options(1).bool_value() &&
-             scenario.options(2).bool_value(),
+         "fast FILE policy dropped a local-transfer option or retained an "
+         "unrelated one");
+  Expect(scenario.options(0).bool_value() &&
+             scenario.options(1).uint_value() == 20 &&
+             scenario.options(2).uint_value() == 16384 &&
+             scenario.options(3).string_value() == "0-0" &&
+             scenario.options(4).bool_value() &&
+             scenario.options(5).bool_value(),
          "fast FILE policy changed a retained local-transfer option");
 
   Scenario bare;
@@ -1421,6 +1445,7 @@ void TestMailAuthenticationOptionPolicies() {
 
 void TestFastMqttPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path(
       "untrusted.invalid:1883/sensors/kitchen?query#fragment");
   scenario.add_request_headers("X-Ignored: mqtt");
@@ -1448,6 +1473,8 @@ void TestFastMqttPolicy() {
 
   Expect(scenario.scheme() == SCHEME_MQTT,
          "fast MQTT policy did not force MQTT");
+  Expect(scenario.probe_multi_pollset(),
+         "fast MQTT policy removed its pollset-probe opt-in");
   Expect(scenario.host_path() == "mqtt.test/sensors/kitchen?query#fragment",
          "fast MQTT policy did not retain the publish topic suffix");
   Expect(scenario.subsequent_connections_size() == 0 &&
@@ -1475,6 +1502,7 @@ void TestFastMqttPolicy() {
 void TestFastMqttsPolicy() {
   Scenario scenario;
   scenario.set_scheme(SCHEME_MQTTS);
+  scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("untrusted.invalid:8883/sensors/kitchen?query#fragment");
   auto *payload = scenario.add_options();
   payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
@@ -1486,6 +1514,8 @@ void TestFastMqttsPolicy() {
 
   Expect(scenario.scheme() == SCHEME_MQTTS,
          "fast MQTT lane did not preserve an explicit MQTTS scheme");
+  Expect(scenario.probe_multi_pollset(),
+         "fast MQTT lane removed the MQTTS pollset-probe opt-in");
   Expect(scenario.host_path() == "tls.test/sensors/kitchen?query#fragment",
          "fast MQTT lane did not give MQTTS the certifiable authority");
   Expect(scenario.options_size() == 1 &&
@@ -2910,7 +2940,7 @@ void TestCompatibilityProfileIsNoOp() {
          "compatibility profile changed an accumulated-corpus input");
 }
 
-void TestOnlyMailPoliciesRetainPollsetProbe() {
+void TestOnlySupportedPoliciesRetainPollsetProbe() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
@@ -2924,9 +2954,7 @@ void TestOnlyMailPoliciesRetainPollsetProbe() {
       TargetProfile::kFastWebSocket,
       TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,
-      TargetProfile::kFastFtp,
       TargetProfile::kFastTftp,
-      TargetProfile::kFastMqtt,
       TargetProfile::kFastDict,
       TargetProfile::kFastGopher,
       TargetProfile::kFastFile,
@@ -2945,7 +2973,7 @@ void TestOnlyMailPoliciesRetainPollsetProbe() {
     NormalizeScenarioForTarget(&scenario, profile);
 
     Expect(!scenario.probe_multi_pollset(),
-           "a fixed non-mail policy retained pollset-probe work");
+           "an unsupported fixed policy retained pollset-probe work");
   }
 
   Scenario compatibility;
@@ -3542,7 +3570,7 @@ int main() {
   TestAllocationFailuresAvoidDanglingMimeReader();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();
-  TestOnlyMailPoliciesRetainPollsetProbe();
+  TestOnlySupportedPoliciesRetainPollsetProbe();
   TestAllocationFailurePlansAreCanonicalized();
   TestNonH2OriginPoliciesDiscardAcceptedPushMode();
   TestGeneratedMimePolicyPreservesBoundariesAndSharesBudget();

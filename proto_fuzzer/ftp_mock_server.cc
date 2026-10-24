@@ -41,6 +41,7 @@ FtpMockServer::FtpMockServer()
       pending_active_channel_(kMaxDataChannels),
       control_reply_count_(0),
       next_control_reply_(0),
+      active_pollset_probe_count_(0),
       control_opened_(false) {}
 
 /// Release server-owned descriptors and socketpair peers after curl has returned
@@ -102,6 +103,13 @@ const std::string& FtpMockServer::uploaded_data() const { return uploaded_data_;
 /// @return Number of bounded data scripts assigned to a transfer socket.
 std::size_t FtpMockServer::opened_data_connection_count() const { return next_data_script_; }
 
+/// Report how many requested zero-timeout multi-poll probes ran during the
+/// most recent drive. RunLoop increments this only after a successful perform
+/// turn while curl still owns an active transfer and the control socket is
+/// open.
+/// @return Number of active FTP pollset probes in the previous drive.
+std::size_t FtpMockServer::active_pollset_probe_count() const { return active_pollset_probe_count_; }
+
 /// Close every server-owned transport before the borrowed scenario or a
 /// subclass transport disappears. The out-of-line definition keeps
 /// MockConnection complete here while the header only forward-declares it.
@@ -134,6 +142,7 @@ void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenar
   pending_control_bytes_.clear();
   control_transcript_.clear();
   uploaded_data_.clear();
+  active_pollset_probe_count_ = 0;
   control_opened_ = false;
 }
 
@@ -791,6 +800,14 @@ void FtpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto:
     result = curl_multi_perform(multi, &still_running);
     if (result != CURLM_OK) {
       break;
+    }
+
+    // Pollset construction is opt-in coverage work. Waiting until the socket
+    // callback has run and the transfer remains active reaches FTP's protocol
+    // and DO_MORE pollsets without adding a syscall to the default hot loop.
+    if (scenario.probe_multi_pollset() && still_running && control_opened_) {
+      ProbeMultiPollset(multi);
+      ++active_pollset_probe_count_;
     }
 
     bool made_progress = still_running != running_before;
