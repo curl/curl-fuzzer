@@ -4,6 +4,7 @@
 # finishes without reading another packet.
 scheme: SCHEME_MQTTS
 host_path: "tls.test/sensors/kitchen"
+probe_multi_pollset: true
 options { option_id: CURLOPT_POSTFIELDS string_value: "hello mqtt" }
 options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
 options { option_id: CURLOPT_PASSWORD string_value: "secret" }

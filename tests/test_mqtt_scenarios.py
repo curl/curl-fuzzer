@@ -36,6 +36,7 @@ def test_mqtt_publish_seed_preloads_connack_before_publish() -> None:
     assert "scheme: SCHEME_MQTT" in publish
     assert 'host_path: "mqtt.test/sensors/kitchen"' in publish
     assert 'CURLOPT_POSTFIELDS string_value: "hello mqtt"' in publish
+    assert "probe_multi_pollset: true" in publish
     assert 'initial_response: "\\040\\002\\000\\000"' in publish
 
 
@@ -64,6 +65,7 @@ def test_mqtts_publish_seed_uses_certifiable_authority() -> None:
     assert "scheme: SCHEME_MQTTS" in publish
     assert 'host_path: "tls.test/sensors/kitchen"' in publish
     assert 'CURLOPT_POSTFIELDS string_value: "hello mqtt"' in publish
+    assert "probe_multi_pollset: true" in publish
     assert 'initial_response: "\\040\\002\\000\\000"' in publish
 
 

@@ -329,8 +329,8 @@ int MockServerBase::WaitOnMultiFdset(CURLM* multi, CURLMcode* rc) {
 /// Ask curl to construct and inspect its connection-filter pollset without
 /// waiting. A perform-only harness can complete local socketpair transfers
 /// while skipping the public multi-poll path used by event-driven
-/// applications. Timing scenarios make one zero-timeout probe to retain
-/// that coverage without taxing the fixed fast lanes. The result is ignored:
+/// applications. Selected opt-in scenarios make zero-timeout probes to retain
+/// that coverage without taxing the default fast path. The result is ignored:
 /// the protocol-specific perform loop determines transfer progress.
 /// @param multi The active multi handle after at least one perform call.
 void MockServerBase::ProbeMultiPollset(CURLM* multi) {

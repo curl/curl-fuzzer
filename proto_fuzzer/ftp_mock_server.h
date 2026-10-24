@@ -52,6 +52,8 @@ class FtpMockServer : public MockServerBase, public IncomingDataObserver {
 
   std::size_t opened_data_connection_count() const;
 
+  std::size_t active_pollset_probe_count() const;
+
  protected:
   // Create one transport for the control or a passive data connection.
   // Implicit-TLS subclasses override this factory while retaining the FTP
@@ -196,6 +198,8 @@ class FtpMockServer : public MockServerBase, public IncomingDataObserver {
   std::string control_transcript_;
   /// Bounded test-facing prefix of bytes drained from upload peers.
   std::string uploaded_data_;
+  /// Opt-in probes made only while the transfer and control socket were live.
+  std::size_t active_pollset_probe_count_;
   /// Prevent a second control socket from displacing the live first one.
   bool control_opened_;
 };

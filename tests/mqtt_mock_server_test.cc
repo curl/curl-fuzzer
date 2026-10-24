@@ -66,6 +66,7 @@ struct MqttRunResult {
   std::size_t publishes = 0;
   std::size_t subscribes = 0;
   std::size_t qos1_publishes = 0;
+  std::size_t active_pollset_probes = 0;
 };
 
 MqttRunResult RunScenario(const Scenario &scenario, const char *url) {
@@ -100,6 +101,7 @@ MqttRunResult RunScenario(const Scenario &scenario, const char *url) {
   result.publishes = server.publish_count();
   result.subscribes = server.subscribe_count();
   result.qos1_publishes = server.qos1_publish_count();
+  result.active_pollset_probes = server.active_pollset_probe_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -139,6 +141,22 @@ void TestPublishSendsConnectAndDisconnect() {
          "MQTT packet transcript lost the topic bytes");
 }
 
+void TestPublishProbesLivePollsetWhenRequested() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
+  scenario.set_probe_multi_pollset(true);
+  auto *fields = scenario.add_options();
+  fields->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
+  fields->set_string_value(kPayload);
+  scenario.mutable_connection()->set_initial_response(kAcceptedConnack);
+
+  const MqttRunResult result =
+      RunScenario(scenario, "mqtt://mqtt.test/sensors/kitchen");
+  Expect(result.code == CURLE_OK, "MQTT pollset scenario did not complete");
+  Expect(result.active_pollset_probes != 0,
+         "MQTT opt-in did not probe a live protocol pollset");
+}
+
 void TestSubscribeDeliversServerPublish() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
@@ -166,6 +184,8 @@ void TestSubscribeDeliversServerPublish() {
          "MQTT subscribe forwarded the wrong PUBLISH body");
   Expect(result.transcript.find("sensors/kitchen") != std::string::npos,
          "MQTT subscribe transcript lost the SUBSCRIBE topic");
+  Expect(result.active_pollset_probes == 0,
+         "MQTT default path unexpectedly issued a pollset probe");
 }
 
 void TestRejectedConnackStopsBeforePublish() {
@@ -197,6 +217,7 @@ int main() {
     Fail("curl_global_init failed");
   }
   TestPublishSendsConnectAndDisconnect();
+  TestPublishProbesLivePollsetWhenRequested();
   TestSubscribeDeliversServerPublish();
   TestRejectedConnackStopsBeforePublish();
   curl_global_cleanup();

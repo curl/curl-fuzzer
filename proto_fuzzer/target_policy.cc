@@ -285,9 +285,9 @@ void CanonicalizeDictAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("dict.test" + host_path.substr(suffix_start));
 }
 
-/// Pin a file:// URL to a fixed, read-only local target. The path component is
-/// what libcurl opens, so retaining a fuzzed path would let a mutated input
-/// read any file visible to the fuzzer process. Keep the fuzz-controlled
+/// Pin a file:// URL to a fixed local source/sink. The path component is what
+/// libcurl opens, so retaining a fuzzed path would let a mutated input read or
+/// write any file visible to the fuzzer process. Keep the fuzz-controlled
 /// authority and any query/fragment so URL parsing still sees mutated bytes,
 /// but always replace the path with /dev/null. An input with no path keeps its
 /// authority and gains /dev/null, so the canonical empty-authority form is
@@ -1324,12 +1324,12 @@ void RemoveFtpActiveModeOptions(curl::fuzzer::proto::Scenario* scenario) {
   });
 }
 
-/// Return whether an option can change a local file:// transfer without
-/// turning it into a write. Upload and append controls are deliberately
-/// excluded: the FILE handler opens the canonical path for writing in that
-/// mode, while this lane must only observe a fixed read-only target. Range,
-/// resume, size, metadata, and conversion controls remain useful because curl
-/// implements them directly in file.c.
+/// Return whether an option can change a local file:// transfer against the
+/// fixed /dev/null target. Upload controls are safe only because
+/// CanonicalizeFileAuthority replaces every mutation-controlled path before
+/// execution; they let the lane cover file.c's write path without creating or
+/// changing a named host file. Range, resume, size, metadata, and conversion
+/// controls remain useful because curl implements them directly in file.c.
 bool IsFileOption(curl::fuzzer::proto::CurlOptionId option_id) {
   switch (option_id) {
     case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
@@ -1339,6 +1339,7 @@ bool IsFileOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_FAILONERROR:
     case curl::fuzzer::proto::CURLOPT_FILETIME:
     case curl::fuzzer::proto::CURLOPT_HEADER:
+    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
     case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
     case curl::fuzzer::proto::CURLOPT_NOBODY:
     case curl::fuzzer::proto::CURLOPT_PATH_AS_IS:
@@ -1347,6 +1348,8 @@ bool IsFileOption(curl::fuzzer::proto::CurlOptionId option_id) {
     case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
     case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
     case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD:
+    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
       return true;
 
     case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
@@ -1355,9 +1358,9 @@ bool IsFileOption(curl::fuzzer::proto::CurlOptionId option_id) {
   }
 }
 
-/// Keep the FILE target's option budget on local-transfer semantics. This is
-/// also the write barrier: CURLOPT_UPLOAD, CURLOPT_APPEND, and the upload-size
-/// controls never reach the easy handle in this lane.
+/// Keep the FILE target's option budget on local-transfer semantics. The URL
+/// canonicalizer, rather than this allowlist, is the write barrier: every
+/// retained upload option can target only /dev/null.
 void RetainFileOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFileOption); }
 
 /// Return whether an option can change the single-connection SMTP exchange.
@@ -1996,17 +1999,14 @@ void RemoveIgnoredMqttShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
 }
 
-/// FILE has no peer and no request body, so response scripts, connection
-/// controls, MIME, uploads, and HTTP/TELNET/API state are all inert. Removing
-/// them before the general bounds keeps mutation work on the URL and the small
-/// file-transfer option set. The upload clear is a safety invariant as well as
-/// a throughput choice: file:// writes when CURLOPT_UPLOAD is set.
+/// FILE has no peer, so response scripts, connection controls, MIME, and
+/// HTTP/TELNET/API state are inert. Retain the bounded upload script because
+/// the fixed /dev/null URL makes curl's local write path safe to exercise.
 void RemoveIgnoredFileShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_connection();
   scenario->clear_subsequent_connections();
   scenario->clear_request_headers();
   scenario->clear_mime_post();
-  scenario->clear_upload();
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
   RemoveMultiOnlyShape(scenario);
@@ -2242,12 +2242,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_mail_rcpt();
   }
 
-  // Only these command/reply peers currently interleave zero-timeout public
-  // multi polling with immediate service of their live control connection.
+  // Only these protocol peers currently interleave zero-timeout public multi
+  // polling with immediate service of their live connection.
   // Keep the opt-in out of fixed lanes whose driver cannot honor that timing
   // contract; compatibility returned above and preserves its wire input.
   if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
-      profile != TargetProfile::kFastPop3) {
+      profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp &&
+      profile != TargetProfile::kFastMqtt) {
     scenario->clear_probe_multi_pollset();
   }
 

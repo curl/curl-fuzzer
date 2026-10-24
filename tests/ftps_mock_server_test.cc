@@ -41,6 +41,7 @@ struct FtpsRunResult {
   int tls_version = 0;
   std::size_t handshakes = 0;
   std::string alpn;
+  std::size_t active_pollset_probes = 0;
 };
 
 FtpsRunResult RunScenario(const Scenario &scenario, const char *url) {
@@ -73,6 +74,7 @@ FtpsRunResult RunScenario(const Scenario &scenario, const char *url) {
   result.tls_version = server.negotiated_tls_version();
   result.handshakes = server.completed_handshake_count();
   result.alpn = server.negotiated_alpn();
+  result.active_pollset_probes = server.active_pollset_probe_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -93,6 +95,7 @@ void AddLoginAndProtectionReplies(Scenario *scenario) {
 void TestEpsvDownloadOverImplicitTls() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_FTPS);
+  scenario.set_probe_multi_pollset(true);
   AddLoginAndProtectionReplies(&scenario);
   auto *control = scenario.mutable_connection();
   control->add_on_readable(
@@ -125,6 +128,8 @@ void TestEpsvDownloadOverImplicitTls() {
          "FTPS download did not issue EPSV");
   Expect(result.transcript.find("RETR file.bin\r\n") != std::string::npos,
          "FTPS download did not issue RETR");
+  Expect(result.active_pollset_probes != 0,
+         "FTPS opt-in did not probe a live protocol pollset");
 }
 
 void TestUploadOverImplicitTls() {
@@ -159,6 +164,8 @@ void TestUploadOverImplicitTls() {
          "FTPS upload did not complete control and data TLS handshakes");
   Expect(result.transcript.find("STOR upload.bin\r\n") != std::string::npos,
          "FTPS upload did not issue STOR");
+  Expect(result.active_pollset_probes == 0,
+         "FTPS default path unexpectedly issued a pollset probe");
 }
 
 void TestActiveModeIsRejectedBoundedly() {

@@ -1,0 +1,13 @@
+# Exercise file.c's synchronous upload path against the target policy's fixed
+# /dev/null sink. The mutation-controlled path below is never opened.
+scheme: SCHEME_FILE
+host_path: "localhost/should-not-exist"
+upload {
+  data: "file upload payload\n"
+  read_sizes: 3
+  read_sizes: 5
+  terminal: UPLOAD_TERMINAL_EOF
+}
+options { option_id: CURLOPT_UPLOAD bool_value: true }
+options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 20 }
+options { option_id: CURLOPT_UPLOAD_BUFFERSIZE uint_value: 16384 }
