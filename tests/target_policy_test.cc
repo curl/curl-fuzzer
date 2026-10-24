@@ -3298,6 +3298,24 @@ void TestAllocationFailuresAvoidDanglingMimeReader() {
              compatibility.fail_allocations(0) == 102,
          "compatibility execution retained the unsafe MIME reader shape");
 
+  for (const auto scheme :
+       {SCHEME_SMTP, SCHEME_SMTPS, SCHEME_IMAP, SCHEME_IMAPS}) {
+    Scenario mail;
+    mail.set_scheme(scheme);
+    mail.mutable_mime_post();
+    mail.add_fail_allocations(91);
+    auto *mail_crlf = mail.add_options();
+    mail_crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
+    mail_crlf->set_bool_value(true);
+
+    NormalizeScenarioForExecution(&mail);
+
+    Expect(mail.options_size() == 0 && mail.has_mime_post() &&
+               mail.fail_allocations_size() == 1 &&
+               mail.fail_allocations(0) == 91,
+           "mail MIME allocation safety retained CRLF conversion");
+  }
+
   Scenario non_http;
   non_http.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
   non_http.mutable_mime_post()->add_parts()->set_data("inert");

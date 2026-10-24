@@ -705,8 +705,10 @@ void CanonicalizeAllocationFailureDrive(curl::fuzzer::proto::Scenario* scenario)
   }
 }
 
-/// Return whether a scenario can install MIME through curl's HTTP reader path.
-bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
+/// Return whether a scenario can install MIME through curl's client-reader
+/// stack. HTTP-family requests, SMTP mail bodies, and IMAP APPEND bodies all
+/// call Curl_creader_set_mime().
+bool UsesMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
@@ -714,6 +716,10 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_WSS:
     case curl::fuzzer::proto::SCHEME_IPFS:
     case curl::fuzzer::proto::SCHEME_IPNS:
+    case curl::fuzzer::proto::SCHEME_IMAP:
+    case curl::fuzzer::proto::SCHEME_IMAPS:
+    case curl::fuzzer::proto::SCHEME_SMTP:
+    case curl::fuzzer::proto::SCHEME_SMTPS:
       return true;
 
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
@@ -721,16 +727,12 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_FTPS:
     case curl::fuzzer::proto::SCHEME_TFTP:
-    case curl::fuzzer::proto::SCHEME_IMAP:
-    case curl::fuzzer::proto::SCHEME_IMAPS:
     case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_POP3S:
     case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_MQTTS:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
-    case curl::fuzzer::proto::SCHEME_SMTP:
-    case curl::fuzzer::proto::SCHEME_SMTPS:
     case curl::fuzzer::proto::SCHEME_DICT:
     case curl::fuzzer::proto::SCHEME_FILE:
     default:
@@ -744,10 +746,11 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
 /// fails, the current error path frees the MIME reader without clearing the
 /// installed stack pointer. Ordinary inputs still cover MIME plus conversion;
 /// failure plans retain MIME processing and use curl's unconverted reader
-/// path. Non-HTTP schemes do not install this reader, so their conversion
-/// options remain useful and safe even if a compatibility input carries MIME.
+/// path. Schemes outside the HTTP and mail MIME paths do not install this
+/// reader, so their conversion options remain useful and safe even if a
+/// compatibility input carries MIME.
 void CanonicalizeAllocationFailureOptions(curl::fuzzer::proto::Scenario* scenario) {
-  if (scenario->fail_allocations().empty() || !scenario->has_mime_post() || !UsesHttpMimeReader(*scenario)) {
+  if (scenario->fail_allocations().empty() || !scenario->has_mime_post() || !UsesMimeReader(*scenario)) {
     return;
   }
 
