@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/dict_mock_server.h"
@@ -70,6 +71,35 @@ constexpr std::size_t kMaxResultHeaders = 16;
 constexpr char kResolverUnixSocketPath[] = "/curl-fuzzer-resolver.sock";
 constexpr char kResolverCancelDuplicateUrl[] = "http://resolver-queued-cancel.test:81/queued-cancel-duplicate";
 constexpr auto kResolverCancelGateWait = std::chrono::milliseconds(500);
+constexpr int kResolverIdlePollAttempts = 4;
+constexpr int kResolverIdlePollTimeoutMs = 250;
+
+struct ResolverIdleTraceState {
+  explicit ResolverIdleTraceState(CURL* handle) : easy(handle) {}
+
+  ~ResolverIdleTraceState() {
+    // The callback is static, but its data is stack-owned. Disable tracing and
+    // clear that pointer before the easy handle outlives this focused drive.
+    (void)curl_easy_setopt(easy, CURLOPT_VERBOSE, 0L);
+    (void)curl_easy_setopt(easy, CURLOPT_DEBUGDATA, nullptr);
+  }
+
+  CURL* easy;
+  bool observe_idle = false;
+  bool saw_idle = false;
+};
+
+int ObserveResolverIdleTrace(CURL* /*easy*/, curl_infotype type, char* data, std::size_t size, void* client_data) {
+  auto* state = static_cast<ResolverIdleTraceState*>(client_data);
+  if (state == nullptr || !state->observe_idle || type != CURLINFO_TEXT || data == nullptr) {
+    return 0;
+  }
+  const std::string_view trace(data, size);
+  if (trace.find("[TPOOL-DNS]") != std::string_view::npos && trace.find("idle for") != std::string_view::npos) {
+    state->saw_idle = true;
+  }
+  return 0;
+}
 
 int CountResolverStart(void* /*resolver_state*/, void* /*reserved*/, void* client_data) {
   ++*static_cast<int*>(client_data);
@@ -118,6 +148,7 @@ bool ApplyResolverMode(CURL* easy, curl::fuzzer::proto::ResolverMode mode) {
 /// worker, so teardown cannot wait in a cycle with the shim.
 CURLcode RunQueuedResolverCancellation(CURL* easy, MockServer* mock, const curl::fuzzer::proto::Scenario& scenario) {
   int duplicate_resolver_starts = 0;
+  ResolverIdleTraceState idle_trace(easy);
   // Keep callback data alive until both handles are gone. Declaring the
   // duplicate before the multi also makes exceptional teardown destroy the
   // multi (and detach any handle whose public removal failed) first.
@@ -136,7 +167,10 @@ CURLcode RunQueuedResolverCancellation(CURL* easy, MockServer* mock, const curl:
       curl_easy_setopt(duplicate.get(), CURLOPT_URL, kResolverCancelDuplicateUrl) != CURLE_OK ||
       curl_easy_setopt(duplicate.get(), CURLOPT_FRESH_CONNECT, 1L) != CURLE_OK ||
       curl_easy_setopt(duplicate.get(), CURLOPT_RESOLVER_START_FUNCTION, &CountResolverStart) != CURLE_OK ||
-      curl_easy_setopt(duplicate.get(), CURLOPT_RESOLVER_START_DATA, &duplicate_resolver_starts) != CURLE_OK) {
+      curl_easy_setopt(duplicate.get(), CURLOPT_RESOLVER_START_DATA, &duplicate_resolver_starts) != CURLE_OK ||
+      curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &ObserveResolverIdleTrace) != CURLE_OK ||
+      curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &idle_trace) != CURLE_OK ||
+      curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L) != CURLE_OK) {
     return CURLE_FAILED_INIT;
   }
 
@@ -147,6 +181,7 @@ CURLcode RunQueuedResolverCancellation(CURL* easy, MockServer* mock, const curl:
   CURLMcode remove_duplicate_result = CURLM_BAD_HANDLE;
   bool lookup_started = false;
   bool duplicate_resolver_queued = false;
+  bool resolver_worker_idle = false;
   int still_running = 0;
   if (add_easy_result == CURLM_OK) {
     ScopedResolverCancelGate gate;
@@ -174,9 +209,32 @@ CURLcode RunQueuedResolverCancellation(CURL* easy, MockServer* mock, const curl:
     }
   }
 
+  // Releasing the gate lets the worker finish the original handle's two
+  // queries. Wait on curl's public internal wakeup and perform until the
+  // THREADS trace reports that the pool is idle. Curl emits that observation
+  // while holding the pool lock; the main thread can acquire it only after the
+  // worker has entered Curl_cond_timedwait and released the lock. The trace is
+  // therefore the proof, while the poll timeout merely bounds a failed run.
+  if (lookup_started && duplicate_resolver_queued && remove_duplicate_result == CURLM_OK) {
+    idle_trace.observe_idle = true;
+    for (int attempt = 0; attempt < kResolverIdlePollAttempts && !idle_trace.saw_idle; ++attempt) {
+      int numfds = 0;
+      const CURLMcode poll_result = curl_multi_poll(multi.get(), nullptr, 0, kResolverIdlePollTimeoutMs, &numfds);
+      if (poll_result != CURLM_OK) {
+        perform_result = poll_result;
+        break;
+      }
+      perform_result = curl_multi_perform(multi.get(), &still_running);
+      if (perform_result != CURLM_OK) {
+        break;
+      }
+    }
+    resolver_worker_idle = idle_trace.saw_idle;
+  }
+
   const CURLMcode remove_easy_result =
       add_easy_result == CURLM_OK ? curl_multi_remove_handle(multi.get(), easy) : CURLM_BAD_HANDLE;
-  return lookup_started && duplicate_resolver_queued && perform_result == CURLM_OK &&
+  return lookup_started && duplicate_resolver_queued && resolver_worker_idle && perform_result == CURLM_OK &&
                  remove_duplicate_result == CURLM_OK && remove_easy_result == CURLM_OK
              ? CURLE_OK
              : CURLE_FAILED_INIT;
