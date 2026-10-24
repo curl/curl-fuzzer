@@ -320,6 +320,8 @@ void TestScriptedSeekOutcomes() {
          "out-of-range seek changed the cursor");
   Expect(rewindable.Seek(0, 99) == CURL_SEEKFUNC_FAIL,
          "invalid seek origin was accepted");
+  Expect(rewindable.seek_calls() == 4,
+         "scripted source did not count each public seek callback");
 
   upload->set_seek_result(curl::fuzzer::proto::UPLOAD_SEEK_CANTSEEK);
   proto_fuzzer::UploadScriptState cannot_seek(scenario);
@@ -627,6 +629,17 @@ void TestUploadCallbackInstallationIsDemandDriven() {
     proto_fuzzer::ScenarioRequestData request_data(easy, scripted);
     Expect(request_data.upload_callbacks_installed(),
            "scripted upload did not install callbacks");
+  }
+
+  curl::fuzzer::proto::Scenario mime_callback;
+  mime_callback.mutable_upload()->set_data("mime callback body");
+  mime_callback.mutable_mime_post()->add_parts()->set_upload_callback(true);
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, mime_callback);
+    Expect(request_data.upload_callbacks_installed(),
+           "callback MIME source did not retain its bounded callback state");
+    Expect(request_data.stats().mime_callback_parts == 1,
+           "callback MIME source was not installed on its selected part");
   }
 
   curl::fuzzer::proto::Scenario option_only;

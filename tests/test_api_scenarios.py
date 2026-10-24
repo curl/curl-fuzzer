@@ -64,6 +64,13 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
             "guess_scheme_url: true",
             "probe_version_info: true",
         ),
+        "api_mime_callback_reuse.textproto": (
+            "upload_callback: true",
+            'data: "callback-mime-reuse-body"',
+            "UPLOAD_SEEK_CANTSEEK",
+            "repeat_mime_post: true",
+            "Content-Length: 0",
+        ),
     }
 
     for name, tokens in expected_tokens.items():

@@ -1,0 +1,30 @@
+# Reuse the same easy handle and callback-backed MIME tree after a complete
+# upload. The first POST advances the part cursor to EOF; the second public
+# perform opens a fresh transport, then asks the MIME part to rewind, receives
+# CANTSEEK, and returns CURLE_SEND_FAIL_REWIND without sending another request.
+scheme: SCHEME_HTTP
+host_path: "api.test/mime-callback-reuse"
+mime_post {
+  parts {
+    name: "payload"
+    filename: "payload.txt"
+    content_type: "text/plain"
+    upload_callback: true
+  }
+}
+upload {
+  data: "callback-mime-reuse-body"
+  read_sizes: 7
+  read_sizes: 5
+  seek_result: UPLOAD_SEEK_CANTSEEK
+}
+api_plan {
+  drive_mode: API_DRIVE_MULTI_PERFORM
+  repeat_mime_post: true
+}
+connection {
+  # Give the mock one service turn to drain the callback-fragmented POST before
+  # releasing the final response.
+  on_readable: ""
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}
