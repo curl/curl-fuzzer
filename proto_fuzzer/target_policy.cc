@@ -2343,6 +2343,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_haproxy_protocol();
   }
 
+  // StartTLS is a correlated LDAP transport mode rather than a transferable
+  // scalar option. Other fixed lanes discard it before their early returns.
+  if (profile != TargetProfile::kFastLdap) {
+    scenario->clear_ldap_starttls();
+  }
+
   if (profile != TargetProfile::kDeepHttp) {
     scenario->clear_http_transport_mode();
     scenario->clear_proxy_socket_option_mode();
@@ -2691,6 +2697,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     const auto scheme = scenario->scheme();
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_LDAPS ? curl::fuzzer::proto::SCHEME_LDAPS
                                                                      : curl::fuzzer::proto::SCHEME_LDAP);
+    if (scenario->scheme() == curl::fuzzer::proto::SCHEME_LDAPS) {
+      scenario->clear_ldap_starttls();
+    }
     RemoveIgnoredLdapShape(scenario);
     RetainLdapOptions(scenario);
     BoundScenarioShape(scenario);

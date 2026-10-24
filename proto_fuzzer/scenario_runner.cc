@@ -537,8 +537,8 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
 
   if (auto* ldap = dynamic_cast<LdapMockServer*>(mock)) {
     const volatile std::size_t ldap_observation[] = {ldap->packet_transcript().size(), ldap->bind_request_count(),
-                                                     ldap->search_request_count(), ldap->scripted_message_count(),
-                                                     ldap->synthesized_done_count()};
+                                                     ldap->search_request_count(),     ldap->scripted_message_count(),
+                                                     ldap->synthesized_done_count(),   ldap->starttls_request_count()};
     (void)ldap_observation;
   }
 
@@ -691,6 +691,10 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
+    if (mode == ScenarioRunMode::kLdapCoverage && scenario.scheme() == curl::fuzzer::proto::SCHEME_LDAP &&
+        scenario.ldap_starttls()) {
+      (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
+    }
     if (mode == ScenarioRunMode::kResolverCoverage) {
       resolver_mode_ready = ApplyResolverMode(easy, scenario.resolver_mode());
     }

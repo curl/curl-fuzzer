@@ -207,6 +207,12 @@ message Scenario {
   // an unconnected INET socket; all others retain the in-process socketpair.
   // Other fixed lanes clear this field. Zero preserves historical behavior.
   ProxySocketOptionMode proxy_socket_option_mode = 36;
+  // Upgrade the plaintext LDAP lane with RFC 4511 StartTLS before bind/search.
+  // This is harness-owned rather than a general CURLOPT_USE_SSL option: only
+  // the BER-aware LDAP peer retains it, and the peer emits the correlated
+  // ExtendedResponse before curl installs its TLS connection filter. False
+  // preserves the historical plaintext exchange; LDAPS clears this field.
+  bool ldap_starttls = 37;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
