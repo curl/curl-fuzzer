@@ -37,7 +37,8 @@ The main groups of fields are:
   and `telnet_options`.
 - Peer work: `connection`, `subsequent_connections`, structured WebSocket
   frames, and `http3_plan`.
-- Focused lanes: `api_plan`, `multi_plan`, `resolve_entries`, `happy_eyeballs`,
+- Focused lanes: `api_plan`, `multi_plan` and its closed state-probe profile,
+  `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential profiles, `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `trace_ids`,
