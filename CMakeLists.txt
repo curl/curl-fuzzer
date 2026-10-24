@@ -2758,6 +2758,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
         curl_add_proto_peer_test(mqtt_mock_server_test
             tests/mqtt_mock_server_test.cc
             proto_fuzzer/mqtt_mock_server.cc)
+        curl_add_proto_peer_test(proxy_transport_mock_server_test
+            tests/proxy_transport_mock_server_test.cc
+            proto_fuzzer/socks4_mock_server.cc)
         curl_add_proto_peer_test(dict_mock_server_test
             tests/dict_mock_server_test.cc
             proto_fuzzer/dict_mock_server.cc)

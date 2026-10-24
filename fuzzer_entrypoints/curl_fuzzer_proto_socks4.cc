@@ -8,7 +8,10 @@
 
 namespace {
 
-constexpr auto kProfile = proto_fuzzer::TargetProfile::kSocks4;
+// Keep the historical executable basename because OSS-Fuzz keys its corpus
+// and reproducers by that name. The compile-time profile now describes the
+// complete append-only SOCKS/HAProxy transport surface.
+constexpr auto kProfile = proto_fuzzer::TargetProfile::kProxyTransport;
 
 } // namespace
 

@@ -229,8 +229,8 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 #endif
   }
 
-  if (mode == ScenarioRunMode::kSocks4Coverage) {
-    return std::make_unique<Socks4MockServer>(scenario.socks_proxy_mode());
+  if (mode == ScenarioRunMode::kProxyTransportCoverage) {
+    return std::make_unique<ProxyTransportMockServer>(scenario.socks_proxy_mode(), scenario.haproxy_protocol());
   }
 
   if (mode == ScenarioRunMode::kResolverCoverage && scenario.doh_https_rr()) {
@@ -509,6 +509,11 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                      rtsp->last_request_line().size(),
                                                      rtsp->last_stream_uri().size()};
     (void)rtsp_observation;
+  }
+
+  if (auto* proxy = dynamic_cast<ProxyTransportMockServer*>(mock)) {
+    const volatile std::size_t proxy_observation = proxy->client_transcript().size();
+    (void)proxy_observation;
   }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)

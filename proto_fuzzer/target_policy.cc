@@ -131,14 +131,16 @@ void CanonicalizeH2ProxyOriginAuthority(curl::fuzzer::proto::Scenario* scenario)
   scenario->set_host_path("origin.test" + host_path.substr(suffix_start));
 }
 
-/// SOCKS4 must resolve a real local name before constructing its request,
-/// while SOCKS4A deliberately carries a hostname to the proxy. Both
-/// authorities remain fixed and the path/query/fragment stays mutable.
+/// Local-resolution SOCKS modes use libc/curl's deterministic localhost path,
+/// while SOCKS4A and SOCKS5-hostname deliberately carry a fixed hostname to
+/// the proxy. The path/query/fragment stays mutation-controlled.
 void CanonicalizeSocksAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
-  const char* host =
-      scenario->socks_proxy_mode() == curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A ? "socks.test" : "localhost";
+  const auto mode = scenario->socks_proxy_mode();
+  const bool resolve_at_proxy =
+      mode == curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A || mode == curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME;
+  const char* host = resolve_at_proxy ? "socks.test" : "localhost";
   if (suffix_start == std::string::npos) {
     scenario->set_host_path(std::string(host) + "/");
     return;
@@ -2225,8 +2227,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http2_plan();
   }
 
-  if (profile != TargetProfile::kSocks4) {
+  if (profile != TargetProfile::kProxyTransport) {
     scenario->clear_socks_proxy_mode();
+    scenario->clear_haproxy_protocol();
   }
 
   if (profile != TargetProfile::kResolver) {
@@ -2248,7 +2251,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // contract; compatibility returned above and preserves its wire input.
   if (profile != TargetProfile::kFastSmtp && profile != TargetProfile::kFastImap &&
       profile != TargetProfile::kFastPop3 && profile != TargetProfile::kFastFtp &&
-      profile != TargetProfile::kFastMqtt) {
+      profile != TargetProfile::kFastMqtt && profile != TargetProfile::kProxyTransport) {
     scenario->clear_probe_multi_pollset();
   }
 
@@ -2347,10 +2350,17 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     return;
   }
 
-  if (profile == TargetProfile::kSocks4) {
+  if (profile == TargetProfile::kProxyTransport) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
-    if (scenario->socks_proxy_mode() != curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A) {
-      scenario->set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4);
+    switch (scenario->socks_proxy_mode()) {
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS4:
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS4A:
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS5:
+      case curl::fuzzer::proto::SOCKS_PROXY_SOCKS5_HOSTNAME:
+        break;
+      default:
+        scenario->set_socks_proxy_mode(curl::fuzzer::proto::SOCKS_PROXY_SOCKS4);
+        break;
     }
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
@@ -2589,7 +2599,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       // The early path removes proxy-incompatible fields before general
       // bounds, keeping raw frame mutation dense.
       return;
-    case TargetProfile::kSocks4:
+    case TargetProfile::kProxyTransport:
       // The early path fixes proxy routing and request-triggered replies.
       return;
     case TargetProfile::kResolver:
@@ -2697,7 +2707,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       // Handled by the protocol-specific early path above.
       return;
 
-    case TargetProfile::kSocks4:
+    case TargetProfile::kProxyTransport:
       // Handled by the protocol-specific early path above.
       return;
 
