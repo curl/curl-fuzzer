@@ -2458,6 +2458,18 @@ void TestResolverPolicy() {
              partial.connection().backpressure().drain_limit() == 1,
          "partial resolver policy did not select its deterministic drive");
 
+  Scenario queued_cancel;
+  queued_cancel.set_host_path("untrusted.invalid/queued-cancel");
+  queued_cancel.set_resolver_mode(
+      curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL);
+  NormalizeScenarioForTarget(&queued_cancel, TargetProfile::kResolver);
+  Expect(queued_cancel.host_path() ==
+                 "resolver-queued-cancel.test/queued-cancel" &&
+             queued_cancel.connection().backpressure().drain_limit() == 1 &&
+             queued_cancel.trace_config() == "+THREADS",
+         "queued-cancellation resolver policy did not select its deterministic "
+         "drive");
+
   Scenario unix_socket;
   unix_socket.set_host_path("untrusted.invalid/unix");
   unix_socket.set_resolver_mode(curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET);

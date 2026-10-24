@@ -1397,11 +1397,32 @@ if(BUILD_TESTING)
         proto_fuzzer/resolver_getaddrinfo_shim.cc)
     target_compile_features(resolver_getaddrinfo_shim_test PRIVATE cxx_std_17)
     target_compile_options(resolver_getaddrinfo_shim_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(resolver_getaddrinfo_shim_test PRIVATE
+        ${CMAKE_SOURCE_DIR})
+    target_link_libraries(resolver_getaddrinfo_shim_test PRIVATE pthread)
     target_link_options(resolver_getaddrinfo_shim_test PRIVATE ${COVERAGE_LINK_FLAGS})
     add_test(NAME resolver_getaddrinfo_shim_test
         COMMAND resolver_getaddrinfo_shim_test)
     add_dependencies(fuzzer_unit_tests resolver_getaddrinfo_shim_test)
 
+    add_executable(resolver_queued_cancel_test
+        tests/resolver_queued_cancel_test.cc
+        proto_fuzzer/resolver_getaddrinfo_shim.cc)
+    target_compile_features(resolver_queued_cancel_test PRIVATE cxx_std_17)
+    target_compile_options(resolver_queued_cancel_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(resolver_queued_cancel_test PRIVATE
+        ${CMAKE_SOURCE_DIR})
+    target_link_libraries(resolver_queued_cancel_test PRIVATE
+        curl_client_default
+        pthread)
+    target_link_options(resolver_queued_cancel_test PRIVATE
+        ${COVERAGE_LINK_FLAGS})
+    add_dependencies(resolver_queued_cancel_test
+        curl_external ${CURL_DEPS})
+    add_test(NAME resolver_queued_cancel_test
+        COMMAND resolver_queued_cancel_test)
+    set_tests_properties(resolver_queued_cancel_test PROPERTIES TIMEOUT 10)
+    add_dependencies(fuzzer_unit_tests resolver_queued_cancel_test)
     add_executable(full_coverage_mutator_test
         tests/full_coverage_mutator_test.cc
         full_coverage/legacy_mutator.cc
@@ -2379,6 +2400,34 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
     add_dependencies(curl_fuzzer_proto_api curl_fuzzer_proto_api_corpus)
     add_dependencies(curl_fuzzer_proto_multi curl_fuzzer_proto_multi_corpus)
     add_dependencies(curl_fuzzer_proto_timing curl_fuzzer_proto_timing_corpus)
+
+    # Assert the production normalization, runner branch, and checked-in seed
+    # reach the exact curl queue callbacks that motivated this scenario. Keep
+    # the smaller standalone lifecycle executable above as a fast public-API
+    # cleanup check, but do not let its reimplementation stand in for the
+    # production target's coverage contract.
+    if(BUILD_TESTING AND ENABLE_COVERAGE)
+        find_program(RESOLVER_COVERAGE_PYTHON NAMES python3 REQUIRED)
+        find_program(RESOLVER_COVERAGE_LLVM_PROFDATA
+            NAMES llvm-profdata REQUIRED)
+        find_program(RESOLVER_COVERAGE_LLVM_COV NAMES llvm-cov REQUIRED)
+        ExternalProject_Get_Property(curl_external SOURCE_DIR)
+        set(RESOLVER_COVERAGE_CURL_SOURCE_DIR ${SOURCE_DIR})
+        unset(SOURCE_DIR)
+        set(RESOLVER_QUEUED_CANCEL_SEED
+            ${CMAKE_BINARY_DIR}/generated_corpora/curl_fuzzer_proto_resolver/threaded_queued_cancel.scenario)
+        add_test(NAME resolver_queued_cancel_coverage_test
+            COMMAND ${RESOLVER_COVERAGE_PYTHON}
+                ${CMAKE_SOURCE_DIR}/tests/check_resolver_queued_cancel_coverage.py
+                --binary $<TARGET_FILE:curl_fuzzer_proto_resolver>
+                --seed ${RESOLVER_QUEUED_CANCEL_SEED}
+                --llvm-profdata ${RESOLVER_COVERAGE_LLVM_PROFDATA}
+                --llvm-cov ${RESOLVER_COVERAGE_LLVM_COV}
+                --curl-source ${RESOLVER_COVERAGE_CURL_SOURCE_DIR})
+        set_tests_properties(resolver_queued_cancel_coverage_test
+            PROPERTIES TIMEOUT 30)
+        add_dependencies(fuzzer_unit_tests curl_fuzzer_proto_resolver)
+    endif()
 
     # Policy tests need only the generated message and protobuf runtime. Keep
     # them separate from the full harness object library so CTest can validate

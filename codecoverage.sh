@@ -58,4 +58,6 @@ export SANITIZER=coverage
 export EXTRA_CMAKE_ARGS="-DENABLE_COVERAGE=ON"
 
 "${SCRIPTDIR}"/compile_target.sh fuzz
+ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error \
+  -R '^resolver_queued_cancel_coverage_test$'
 "${SCRIPTDIR}"/run_coverage.sh
