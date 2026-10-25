@@ -35,11 +35,30 @@ python -m pip install -e .
 | `corpus_to_pcap`           | Convert response TLVs to a packet capture; requires Scapy from the development dependency group |
 | `generate_matrix`          | Package built fuzzers into balanced artifact shards and produce the CI matrix                    |
 | `prepare_fuzzer`           | Extract one fuzzer and its supporting files from a CI artifact shard                             |
-| `generate_option_manifest` | Validate and stage the protobuf schema, then generate its C++ curl-option manifest              |
+| `generate_schema_eligibility` | Validate annotated schema eligibility and emit authoring, runtime, profile, adapter, report, and machine-contract artifacts |
 | `compare_fuzzers`          | Compare repeatable throughput and source coverage measurements between fuzzer builds            |
 | `profile_fuzzer`           | Collect a reproducible Linux perf profile from one production libFuzzer target                  |
 
 Run any command with `--help` for its complete interface.
+
+## Schema generation and seed encoding
+
+CMake invokes `generate_schema_eligibility` after host `protoc` has compiled
+the annotated schema to a descriptor set. The command validates the profile
+registry, contextual field shapes, native option names and types, and the
+mapping to the C++ `TargetProfile` enum. Its generated files live under
+`build/schema_eligibility/`; the metadata-free full authoring schema is staged
+separately at `build/schemas/curl_fuzzer.proto`.
+
+Normal checked-in textprotos need no projection command. CMake encodes the full
+authoring `Scenario` with ordinary `protoc --encode`, and each restricted target
+root preserves retained field tags while discarding unknown fields. Generated
+conditional pruning and C++ target normalization run after the target parses
+those bytes.
+
+The typed-option edit was a breaking in-place schema change. Historical binary
+inputs are not detected or converted by current tooling; reproduce them with
+the curl-fuzzer revision and target that produced them.
 
 ## Proto migration function-parity ratchet
 
@@ -57,6 +76,9 @@ uv run compare_fuzzers \
   --public-corpus-root /path/to/downloaded-corpora \
   --output build/measurements/proto-parity.json
 ```
+
+For structured targets, a `--public-corpus-root` is accepted only with the
+current epoch marker documented in [Corpus management](corpora.md).
 
 For the initial bootstrap, the same audited v1 artifact can be supplied as
 both the current and trusted prior manifest. After a ratchet update, retain
@@ -200,8 +222,11 @@ The [published decoder](https://fuzz.curl.se/corpus-decoder/)
 accepts legacy TLV and protobuf `Scenario` inputs. It detects the format
 automatically, allows manual selection, and does not upload the selected file.
 Empty, unknown-only, or damaged inputs may require selecting a format manually.
-The generator bundles the locked protobuf.js runtime and the checked-in schema
-into the HTML, so the resulting page does not load a decoder from a CDN.
+The generator bundles the locked protobuf.js runtime and a metadata-free full
+authoring schema into the HTML, so the resulting page does not need the
+generator-only eligibility import and does not load a decoder from a CDN. It
+reuses `build/schemas/curl_fuzzer.proto` when available; otherwise it invokes
+`protoc` on the annotated checked-in schema and strips the metadata in memory.
 Build the complete documentation site and decoder locally with:
 
 ```shell

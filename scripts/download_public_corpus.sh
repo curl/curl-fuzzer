@@ -2,8 +2,8 @@
 #
 # Download the public OSS-Fuzz corpora for each fuzz target into
 # ossfuzz_corpus/<target>/. Intended to be replayed alongside the
-# checked-in corpora (scripts/run_coverage.sh already picks this up) so
-# local coverage numbers reflect everything the fleet has discovered.
+# checked-in corpora. scripts/run_coverage.sh picks up legacy corpora directly;
+# structured corpora additionally require the explicit schema-epoch marker.
 #
 # Usage:
 #   scripts/download_public_corpus.sh [-f]
@@ -19,6 +19,9 @@
 #
 # New targets take a while to land after first upload; a non-200 response
 # is logged and skipped rather than failing the whole run.
+#
+# This script cannot verify the schema of a public ZIP and deliberately does
+# not create the structured-corpus epoch marker. See docs/corpora.md.
 
 set -eu
 

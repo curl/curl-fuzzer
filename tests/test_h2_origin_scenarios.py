@@ -32,13 +32,13 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
         ),
         "https_h2_push_flow_control.textproto": (
             "accept_h2_push: true",
-            "CURLOPT_POSTFIELDS",
+            "postfields:",
             "SETTINGS_INITIAL_WINDOW_SIZE=0",
             "window_update",
             "increment: 65535",
         ),
         "https_h2_reuse_ping_upkeep.textproto": (
-            "CURLOPT_FOLLOWLOCATION",
+            "followlocation: 1",
             "stream { request_index: 1 }",
             'opaque_data: "h2-reuse"',
             'data: "reused"',
@@ -67,7 +67,7 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
     for name, tokens in expected_tokens.items():
         scenario = (SCENARIO_ROOT / name).read_text(encoding="utf-8")
         assert "scheme: SCHEME_HTTPS" in scenario
-        assert "CURLOPT_HTTP_VERSION" not in scenario
+        assert "http_version:" not in scenario
         assert all(token in scenario for token in tokens), name
 
 
@@ -90,8 +90,8 @@ def test_https_h2_does_not_replay_http1_public_corpora() -> None:
     assert result.stdout.splitlines() == ["curl_fuzzer_proto_https_h2"]
 
 
-def test_http2_reuses_only_the_compatible_h2_public_corpus() -> None:
-    """Bootstrap h2c from frame-aware H2 inputs without mixed HTTP/1 bytes."""
+def test_http2_does_not_reuse_a_different_profile() -> None:
+    """Cross-profile inputs require explicit projection despite shared frames."""
     helper = REPO_ROOT / "scripts" / "fuzz_corpus_helpers.sh"
     result = subprocess.run(
         [
@@ -106,7 +106,4 @@ def test_http2_reuses_only_the_compatible_h2_public_corpus() -> None:
         encoding="utf-8",
     )
 
-    assert result.stdout.splitlines() == [
-        "curl_fuzzer_proto_http2",
-        "curl_fuzzer_proto_https_h2",
-    ]
+    assert result.stdout.splitlines() == ["curl_fuzzer_proto_http2"]

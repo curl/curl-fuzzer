@@ -47,8 +47,8 @@ jobs:
       - name: Install documentation packages
         uses: $/.github/actions/apt-install
         with:
-          packages: cmake doxygen
-          tools: cmake doxygen
+          packages: cmake doxygen protobuf-compiler
+          tools: cmake doxygen protoc
 
       - name: Install documentation tools
         run: |

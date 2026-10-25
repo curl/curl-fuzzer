@@ -5,8 +5,8 @@
 # in the timing and compatibility corpora, out of fixed fast lanes.
 scheme: SCHEME_HTTP
 host_path: "upgrade.test/stream"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { upload: true }
+options { customrequest: "POST" }
 request_headers: "Connection: Upgrade"
 request_headers: "Upgrade: fuzzer-stream"
 connection {

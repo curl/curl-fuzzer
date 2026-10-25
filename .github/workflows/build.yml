@@ -39,6 +39,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install schema generator dependencies
+        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
+
       - name: Install Dependencies
         uses: $/.github/actions/apt-install
         with:
@@ -97,6 +104,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install schema generator dependencies
+        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
+
       - name: Install Dependencies
         uses: $/.github/actions/apt-install
         with:
@@ -120,6 +134,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+
+      - name: Install protoc
+        uses: $/.github/actions/apt-install
+        with:
+          packages: protobuf-compiler
+          tools: protoc
 
       - name: Install test dependencies
         run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[python-tests]'

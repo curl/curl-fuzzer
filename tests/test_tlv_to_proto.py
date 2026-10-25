@@ -7,9 +7,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from google.protobuf import descriptor_pb2
 
 from curl_fuzzer_tools.corpus import BaseType
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
+from curl_fuzzer_tools.schema_eligibility import FieldRule
 from curl_fuzzer_tools.tlv_to_proto import (
     BOOL_TAGS,
     SCHEME_NAMES,
@@ -17,6 +18,7 @@ from curl_fuzzer_tools.tlv_to_proto import (
     UINT_TAGS,
     ConversionError,
     convert_stream,
+    curlopt_field_name,
     curlopt_name,
     render_textproto,
     run,
@@ -42,8 +44,8 @@ def test_url_becomes_runner_fields_instead_of_an_option() -> None:
 
     assert "scheme: SCHEME_HTTP" in rendered
     assert 'host_path: "example.test:8080/a\\x00b"' in rendered
-    assert "option_id: CURLOPT_FOLLOWLOCATION uint_value: 1" in rendered
-    assert "option_id: CURLOPT_URL" not in rendered
+    assert "options { followlocation: 1 }" in rendered
+    assert "options { url:" not in rendered
 
 
 def test_unsupported_url_is_reported_without_populating_runner_fields() -> None:
@@ -101,7 +103,7 @@ def test_option_absent_from_manifest_is_reported_instead_of_emitted() -> None:
     )
 
     assert "# skipped TLV CURLOPT_POSTFIELDSIZE_LARGE" in rendered
-    assert "option_id: CURLOPT_POSTFIELDSIZE_LARGE" not in rendered
+    assert "options { postfieldsize_large:" not in rendered
 
 
 def test_ssl_verifypeer_is_preserved_for_secure_proto_seeds() -> None:
@@ -114,7 +116,7 @@ def test_ssl_verifypeer_is_preserved_for_secure_proto_seeds() -> None:
     )
 
     assert "scheme: SCHEME_HTTPS" in rendered
-    assert "option_id: CURLOPT_SSL_VERIFYPEER bool_value: true" in rendered
+    assert "options { ssl_verifypeer: true }" in rendered
 
 
 def test_followlocation_preserves_new_non_boolean_modes() -> None:
@@ -123,7 +125,7 @@ def test_followlocation_preserves_new_non_boolean_modes() -> None:
         convert_stream(tlv(BaseType.TYPE_FOLLOWLOCATION, b"\x00\x00\x00\x03")),
     )
 
-    assert "option_id: CURLOPT_FOLLOWLOCATION uint_value: 3" in rendered
+    assert "options { followlocation: 3 }" in rendered
 
 
 def test_http09_allowed_uses_the_manifest_boolean_field() -> None:
@@ -132,7 +134,7 @@ def test_http09_allowed_uses_the_manifest_boolean_field() -> None:
         convert_stream(tlv(BaseType.TYPE_HTTP09_ALLOWED, b"\x00\x00\x00\x01")),
     )
 
-    assert "option_id: CURLOPT_HTTP09_ALLOWED bool_value: true" in rendered
+    assert "options { http09_allowed: true }" in rendered
 
 
 @pytest.mark.parametrize("tag", sorted(BOOL_TAGS | UINT_TAGS), ids=curlopt_name)
@@ -252,14 +254,10 @@ def test_mail_authentication_options_preserve_their_value_kinds() -> None:
         ),
     )
 
-    assert 'option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in rendered
-    assert (
-        'option_id: CURLOPT_MAIL_AUTH string_value: "sender@example.test"' in rendered
-    )
-    assert (
-        'option_id: CURLOPT_SASL_AUTHZID string_value: "authorization-id"' in rendered
-    )
-    assert "option_id: CURLOPT_SASL_IR bool_value: true" in rendered
+    assert 'options { login_options: "AUTH=PLAIN" }' in rendered
+    assert 'options { mail_auth: "sender@example.test" }' in rendered
+    assert 'options { sasl_authzid: "authorization-id" }' in rendered
+    assert "options { sasl_ir: true }" in rendered
 
 
 def _all_converter_option_textproto() -> str:
@@ -273,25 +271,26 @@ def _all_converter_option_textproto() -> str:
     return render_textproto("all-options", convert_stream(bytes(stream)))
 
 
-def test_every_converter_option_exists_and_uses_its_declared_value_field() -> None:
-    schema = (REPO_ROOT / "schemas" / "curl_fuzzer.proto").read_text()
-    schema_names = {option.name for option in parse_proto_options(schema)}
-
-    expected_fields = (
-        (STRING_TAGS, "string_value"),
-        (BOOL_TAGS, "bool_value"),
-        (UINT_TAGS, "uint_value"),
+def test_every_converter_option_exists_with_its_declared_typed_field(
+    active_option_fields: dict[str, FieldRule],
+) -> None:
+    expected_types = (
+        (STRING_TAGS, descriptor_pb2.FieldDescriptorProto.TYPE_BYTES),
+        (BOOL_TAGS, descriptor_pb2.FieldDescriptorProto.TYPE_BOOL),
+        (UINT_TAGS, descriptor_pb2.FieldDescriptorProto.TYPE_UINT64),
     )
-    for tags, field in expected_fields:
+    for tags, proto_type in expected_types:
         for tag in tags:
             name = curlopt_name(tag)
-            assert name in schema_names
-            if field == "string_value":
+            field = active_option_fields[name]
+            assert field.name == curlopt_field_name(tag)
+            assert field.proto_type == proto_type
+            if proto_type == descriptor_pb2.FieldDescriptorProto.TYPE_BYTES:
                 value = b"value"
             else:
                 value = b"\x00\x00\x00\x01"
             rendered = render_textproto("option", convert_stream(tlv(tag, value)))
-            assert f"option_id: {name} {field}:" in rendered
+            assert f"options {{ {field.name}:" in rendered
             assert f"# skipped TLV {name}" not in rendered
 
 
@@ -329,10 +328,10 @@ def test_smtp_upload_translates_to_mail_rcpt_and_upload_script() -> None:
 
     assert "scheme: SCHEME_SMTP" in rendered
     assert 'host_path: "127.0.0.1:9005/900"' in rendered
-    assert 'option_id: CURLOPT_MAIL_FROM string_value: "sender@example.com"' in rendered
+    assert 'options { mail_from: "sender@example.com" }' in rendered
     assert 'mail_rcpt: "recipient@example.com"' in rendered
-    assert "option_id: CURLOPT_UPLOAD bool_value: true" in rendered
-    assert "option_id: CURLOPT_INFILESIZE_LARGE uint_value: 4" in rendered
+    assert "options { upload: true }" in rendered
+    assert "options { infilesize_large: 4 }" in rendered
     assert "upload {" in rendered and 'data: "body"' in rendered
     assert 'initial_response: "220 smtp.test ESMTP\\r\\n"' in rendered
     assert 'on_readable: "250 OK\\r\\n"' in rendered

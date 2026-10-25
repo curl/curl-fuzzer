@@ -1,8 +1,8 @@
 # A short callback upload completes both sides of an ordinary request stream.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/upload/put"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 4 }
+options { upload: true }
+options { infilesize_large: 4 }
 request_headers: "Expect:"
 upload {
   data: "data"

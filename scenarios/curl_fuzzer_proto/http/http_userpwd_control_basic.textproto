@@ -6,10 +6,9 @@
 scheme: SCHEME_HTTP
 host_path: "auth.test/control-basic?still=parse-query"
 options {
-  option_id: CURLOPT_USERPWD
-  string_value: "user\x01name:password"
+  userpwd: "user\x01name:password"
 }
-options { option_id: CURLOPT_HTTPAUTH uint_value: 1 }
+options { httpauth: 1 }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
 }

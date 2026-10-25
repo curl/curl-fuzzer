@@ -3,8 +3,8 @@
 # necessarily processed across bounded receive chunks.
 scheme: SCHEME_POP3
 host_path: "pop3.test/"
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "TOP 1 0" }
-options { option_id: CURLOPT_BUFFERSIZE uint_value: 1024 }
+options { customrequest: "TOP 1 0" }
+options { buffersize: 1024 }
 connection {
   initial_response: "+OK pop3.test ready\r\n"
   on_readable: "+OK capabilities\r\nUSER\r\n.\r\n"

@@ -4,7 +4,7 @@
 # of the legacy test_invalid_prior_http2 error-path seed.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/http2-truncated"
-options { option_id: CURLOPT_HTTP_VERSION uint_value: 5 }
+options { http_version: 5 }
 connection {
   initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
   on_readable: "\x00\x00\x00\x04\x01\x00\x00\x00\x00\x00\x00\x08\x01\x04\x00\x00\x00\x01\x88"

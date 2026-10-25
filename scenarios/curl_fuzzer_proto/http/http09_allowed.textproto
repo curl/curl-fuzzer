@@ -3,5 +3,5 @@
 # modern parser's rejection branch.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/http09"
-options { option_id: CURLOPT_HTTP09_ALLOWED bool_value: true }
+options { http09_allowed: true }
 connection { initial_response: "a headerless HTTP/0.9 body\n" }

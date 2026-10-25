@@ -2,8 +2,8 @@
 # The peer therefore consumes no upload bytes and must not enter body mode.
 scheme: SCHEME_SMTP
 host_path: "smtp.test/rejected.test"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_MAIL_FROM string_value: "sender@example.test" }
+options { upload: true }
+options { mail_from: "sender@example.test" }
 mail_rcpt: "recipient@example.test"
 upload { data: "never sent\r\n" }
 connection {

@@ -5,9 +5,9 @@
 # source/timing metadata that the current Connection script does not carry.
 scheme: SCHEME_TFTP
 host_path: "tftp.test/options-ignored-retry"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 8 }
-options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+options { upload: true }
+options { infilesize_large: 8 }
+options { tftp_blksize: 8 }
 upload { data: "abcdefgh" terminal: UPLOAD_TERMINAL_EOF }
 connection {
   initial_response: "\000\004\000\000"

@@ -3,10 +3,9 @@
 # punctuation before reaching the backend's TLS 1.2 handshake paths.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/gnutls-tls12"
-options { option_id: CURLOPT_SSLVERSION uint_value: 393222 }
+options { sslversion: 393222 }
 options {
-  option_id: CURLOPT_SSL_CIPHER_LIST
-  string_value: "NORMAL:-VERS-ALL:+VERS-TLS1.2"
+  ssl_cipher_list: "NORMAL:-VERS-ALL:+VERS-TLS1.2"
 }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\ntls12"

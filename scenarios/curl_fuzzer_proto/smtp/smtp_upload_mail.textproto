@@ -3,10 +3,10 @@
 scheme: SCHEME_SMTP
 probe_multi_pollset: true
 host_path: "smtp.test/client.test"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 54 }
-options { option_id: CURLOPT_MAIL_FROM string_value: "sender@example.test" }
-options { option_id: CURLOPT_FORBID_REUSE bool_value: true }
+options { upload: true }
+options { infilesize_large: 54 }
+options { mail_from: "sender@example.test" }
+options { forbid_reuse: true }
 mail_rcpt: "recipient@example.test"
 upload {
   data: "Subject: fuzz\r\n\r\nfirst line\r\n.leading dot\r\nlast line\r\n"

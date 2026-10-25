@@ -4,7 +4,7 @@
 # after exercising the separate cache-file grammar.
 scheme: SCHEME_HTTP
 host_path: "hsts-file.test/cache"
-options { option_id: CURLOPT_HSTS_CTRL uint_value: 1 }
+options { hsts_ctrl: 1 }
 hsts_file: ".other.test \"20351231 23:59:59\"\nunlimited.test \"unlimited\"\n"
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"

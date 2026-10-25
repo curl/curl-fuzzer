@@ -2,8 +2,8 @@
 # retry and complete the download over the replacement listener.
 scheme: SCHEME_FTP
 host_path: "ftp.test/eprt-port-fallback.bin"
-options { option_id: CURLOPT_FTPPORT string_value: "127.0.0.1" }
-options { option_id: CURLOPT_FTP_USE_EPRT bool_value: true }
+options { ftpport: "127.0.0.1" }
+options { ftp_use_eprt: 1 }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "331 password required\r\n"

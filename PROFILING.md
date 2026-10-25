@@ -53,6 +53,10 @@ deduplicates inputs by SHA-256 and runs with a fixed libFuzzer seed. Repeat
 `--corpus PATH` to replace these default sources. Each path may be a directory,
 ZIP archive, or individual input.
 
+For structured targets, the public root must contain
+`.structured-schema-owned-eligibility-v1`; see [Corpus management](docs/corpora.md).
+An explicit `--corpus` path remains the caller's schema/revision assertion.
+
 By default, the profiler loads `<target>.options` beside the binary, falling
 back to `ossconfig/<target>.options` when a source checkout is available. Use
 `--options-file` to select another file and `--fuzzer-arg=-name=value` for

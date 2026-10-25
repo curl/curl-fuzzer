@@ -41,7 +41,7 @@ def test_h2_proxy_seeds_preserve_frame_correlations() -> None:
             "close-delimited",
         ),
         "h2_proxy_flow_control_upload.textproto": (
-            "CURLOPT_POSTFIELDS",
+            "postfields:",
             "SETTINGS_INITIAL_WINDOW_SIZE=0",
             "\\x00\\xff\\xff",
         ),
@@ -57,8 +57,8 @@ def test_h2_proxy_seeds_preserve_frame_correlations() -> None:
         ),
         "h1_proxy_preemptive_auth.textproto": (
             "PROXY_PROTOCOL_HTTP1",
-            "CURLOPT_PROXYAUTH",
-            "CURLOPT_PROXYUSERPWD",
+            "proxyauth: 1",
+            'proxyuserpwd: "fuzz:secret"',
             "Proxy-Authorization",
         ),
     }
@@ -69,7 +69,7 @@ def test_h2_proxy_seeds_preserve_frame_correlations() -> None:
     for name, tokens in expected_tokens.items():
         scenario = (SCENARIO_ROOT / name).read_text(encoding="utf-8")
         assert "scheme: SCHEME_HTTP" in scenario
-        assert "CURLOPT_HTTP_VERSION" not in scenario
+        assert "http_version:" not in scenario
         assert all(token in scenario for token in tokens), name
 
 

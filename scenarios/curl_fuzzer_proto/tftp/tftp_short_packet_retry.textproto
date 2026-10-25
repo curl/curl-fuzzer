@@ -2,7 +2,7 @@
 # allowing that state transition to be fuzzed without a wall-clock sleep.
 scheme: SCHEME_TFTP
 host_path: "tftp.test/retry"
-options { option_id: CURLOPT_TFTP_NO_OPTIONS bool_value: true }
+options { tftp_no_options: true }
 connection {
   initial_response: "\000"
   on_readable: "\000\003\000\001ok"

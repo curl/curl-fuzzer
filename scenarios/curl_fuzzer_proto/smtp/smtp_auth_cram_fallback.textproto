@@ -2,8 +2,8 @@
 # the cancellation reply, and retry with the remaining PLAIN mechanism.
 scheme: SCHEME_SMTP
 host_path: "smtp.test/fallback.test"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { username: "fuzz" }
+options { password: "secret" }
 connection {
   initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
   on_readable: "250-smtp.test\r\n250-AUTH CRAM-MD5 PLAIN\r\n250 8BITMIME\r\n"

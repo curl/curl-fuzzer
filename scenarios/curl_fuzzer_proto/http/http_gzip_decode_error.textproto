@@ -2,7 +2,7 @@
 # through curl's ordinary content-decoding writer.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/gzip-error"
-options { option_id: CURLOPT_ACCEPT_ENCODING string_value: "gzip" }
+options { accept_encoding: "gzip" }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 8\r\n\r\nnot-gzip"
 }

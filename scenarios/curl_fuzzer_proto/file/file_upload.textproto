@@ -8,6 +8,6 @@ upload {
   read_sizes: 5
   terminal: UPLOAD_TERMINAL_EOF
 }
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 20 }
-options { option_id: CURLOPT_UPLOAD_BUFFERSIZE uint_value: 16384 }
+options { upload: true }
+options { infilesize_large: 20 }
+options { upload_buffersize: 16384 }

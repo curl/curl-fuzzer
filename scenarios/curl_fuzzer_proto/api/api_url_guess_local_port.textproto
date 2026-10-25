@@ -3,8 +3,8 @@
 # inert for routing while preserving their validation paths.
 scheme: SCHEME_HTTP
 host_path: "api.test/url-guess"
-options { option_id: CURLOPT_LOCALPORT uint_value: 12345 }
-options { option_id: CURLOPT_LOCALPORTRANGE uint_value: 3 }
+options { localport: 12345 }
+options { localportrange: 3 }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
 }

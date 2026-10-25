@@ -2,8 +2,8 @@
 # reaching PASS or RETR.
 scheme: SCHEME_POP3
 host_path: "pop3.test/1"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "wrong" }
+options { username: "fuzz" }
+options { password: "wrong" }
 connection {
   initial_response: "+OK pop3.test ready\r\n"
   on_readable: "+OK capabilities\r\nUSER\r\n.\r\n"

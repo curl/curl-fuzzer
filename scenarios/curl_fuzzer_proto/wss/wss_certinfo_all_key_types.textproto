@@ -3,9 +3,9 @@
 scheme: SCHEME_WSS
 host_path: "tls.test/certinfo-all-key-types"
 tls_certificate_chain: TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES
-options { option_id: CURLOPT_SSL_VERIFYPEER bool_value: true }
-options { option_id: CURLOPT_SSL_VERIFYHOST uint_value: 2 }
-options { option_id: CURLOPT_CERTINFO bool_value: true }
+options { ssl_verifypeer: true }
+options { ssl_verifyhost: 2 }
+options { certinfo: true }
 connection {
   server_frames {
     fin: true

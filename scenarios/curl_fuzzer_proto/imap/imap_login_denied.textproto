@@ -2,8 +2,8 @@
 # peer supplies the tag; the seed controls only the status keyword and text.
 scheme: SCHEME_IMAP
 host_path: "imap.test/INBOX"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "wrong" }
+options { username: "fuzz" }
+options { password: "wrong" }
 connection {
   initial_response: "* OK imap.test ready\r\n"
   on_readable: "* CAPABILITY IMAP4rev1\r\nOK CAPABILITY completed\r\n"

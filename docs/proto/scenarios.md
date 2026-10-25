@@ -20,16 +20,20 @@ connection {
 
 `scheme` and `host_path` form the request URL. Most byte-bearing fields use
 protobuf `bytes`, so textproto escape sequences can represent arbitrary wire
-data. `SetOption` entries use a checked-in `CURLOPT_*` identifier and a `oneof`
-typed value. At most one value member can be present; authored seeds should use
-the kind expected by that option:
+data. `SetOption` is an ordered oneof whose field names and protobuf types
+identify the curl options directly. At most one option can be selected in each
+entry, and oneof presence preserves explicit false, zero, and empty values:
 
 ```protobuf
 options {
-  option_id: CURLOPT_NOBODY
-  bool_value: true
+  nobody: true
 }
 ```
+
+The typed field carries build-time metadata naming `CURLOPT_NOBODY` and listing
+the profiles allowed to retain it. There is no separate option ID or value-kind
+field in authored input. Repeating `options` preserves setopt order and
+duplicates.
 
 The main groups of fields are:
 
@@ -47,11 +51,13 @@ The main groups of fields are:
   `fail_allocations`.
 
 Read the comments in `schemas/curl_fuzzer.proto` for the complete field
-contract. Its checked-in `CurlOptionId` numbers are part of the serialized
-corpus format. During the build, the option-manifest generator validates them
-against the selected curl checkout's `curl.h`, then stages an identical schema
-at `build/schemas/curl_fuzzer.proto`. The entries between the schema's
-`CURL-OPTIONS` markers are the active options available to `SetOption`.
+contract. It is the annotated authoring schema: typed option fields declare
+their native curl identity and profile membership, and structured fields
+declare their own eligibility. During the build, the schema-eligibility
+generator validates those declarations against the selected curl checkout's
+`curl.h`, emits restricted target roots, and stages a metadata-free authoring
+view at `build/schemas/curl_fuzzer.proto` for ordinary `protoc` and browser
+tools.
 
 ## Peer scripts depend on the target
 
@@ -319,8 +325,10 @@ threads deliberately do not inherit the calling thread's plan.
    not the complete assignment rule: the fast HTTP set is explicit, the deep
    and compatibility sets combine selected directories, and the timing set is
    selected by a `backpressure` filename pattern.
-3. Build the destination target. CMake encodes the source with the staged
-   schema and creates `<name>.scenario` in the corpus assigned to that target.
+3. Build the destination target. CMake encodes the full authoring `Scenario`
+   with ordinary `protoc --encode` and creates `<name>.scenario` in the corpus
+   assigned to that target. The target's generated root preserves retained
+   field tags and discards fields outside its profile when it parses the file.
 4. Decode the generated file and replay it through the matching executable.
 
 For example:
@@ -340,7 +348,9 @@ check in `CMakeLists.txt`.
 
 For interactive inspection, use the published
 [corpus decoder](../corpus-decoder/). It recognizes protobuf `Scenario` files
-and reads the selected file entirely in the browser.
+and reads the selected file entirely in the browser. The decoder embeds the
+metadata-free full authoring view prepared from the annotated schema, so it can
+inspect any current profile payload without loading eligibility annotations.
 
 `read_proto_corpus` wraps `protoc` and prints named textproto fields using the
 checked-in schema. It falls back to the staged build copy when the source
@@ -361,5 +371,10 @@ wire-level field numbers; request that form explicitly with `--raw`:
 uv run read_proto_corpus --raw path/to/crash-input
 ```
 
-Use the schema from the curl-fuzzer revision that produced the input when
-investigating `CURLOPT_*` values.
+Use the schema from the curl-fuzzer revision that produced the input. The typed
+option cutover changed the existing format in place: pre-cutover generic-option
+binaries can parse misleadingly under a current schema and are not detected
+automatically. Reproduce them with their original revision and the target that
+produced them. Current checked-in seeds are ordinary authoring
+textprotos encoded directly by `protoc`; there is no separate per-profile seed
+encoder.

@@ -75,10 +75,18 @@ baseline and candidate layouts. Add a downloaded fleet corpus with
 with one or more `--corpus TARGET=PATH` arguments; `PATH` may be a directory,
 zip archive, or individual input.
 
-For every fixed proto lane, `--public-corpus-root` also includes the historical
-`curl_fuzzer_proto` public corpus. The protobuf wire format is shared, and the
-lane postprocessor normalizes scheme and timing controls before replay, so this
-preserves accumulated fleet coverage while the new target corpora grow.
+Structured targets accept `--public-corpus-root` only when the root contains
+`.structured-schema-owned-eligibility-v1`. Create that marker only after the
+upstream structured corpora have been replaced and the local root has been
+refreshed as described in [Corpus management](docs/corpora.md). Explicit
+`--corpus` overrides remain the caller's schema/revision assertion.
+
+Proto corpus inheritance is limited to binaries that use the exact same
+generated profile, currently the GnuTLS and mbedTLS HTTPS variants reusing the
+OpenSSL HTTPS profile. The typed-option cutover does not treat compatibility or
+other profile corpora as interchangeable merely because retained protobuf tags
+can parse. Cross-profile corpora are not reused, and pre-cutover public corpora
+must be benchmarked with the revision and target that produced them.
 
 Every run gets a fresh copy of one content-addressed snapshot. Repeat `N` uses
 the deterministic seed `--seed-base + N - 1`; baseline/candidate order

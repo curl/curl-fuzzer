@@ -8,5 +8,5 @@ upload {
   read_sizes: 7
   terminal: UPLOAD_TERMINAL_ABORT
 }
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 8 }
+options { upload: true }
+options { infilesize_large: 8 }

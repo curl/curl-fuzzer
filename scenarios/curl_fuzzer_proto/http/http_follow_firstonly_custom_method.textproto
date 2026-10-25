@@ -3,9 +3,9 @@
 # default GET state isolates this mode-specific PURGE-to-GET transition.
 scheme: SCHEME_HTTP
 host_path: "follow-mode.test/first/start"
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "PURGE" }
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 3 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { customrequest: "PURGE" }
+options { followlocation: 3 }
+options { maxredirs: 2 }
 connection {
   initial_response: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://follow-mode.test/first/end\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
 }

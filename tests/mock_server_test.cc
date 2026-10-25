@@ -20,8 +20,11 @@
 #include <string_view>
 #include <vector>
 
-#include <google/protobuf/text_format.h>
-
+#include "generated/api/api_traits.h"
+#include "generated/deep_http/deep_http_traits.h"
+#include "generated/fast_http/fast_http_traits.h"
+#include "generated/fast_https/fast_https_traits.h"
+#include "generated/h2_proxy/h2_proxy_traits.h"
 #include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/api_lifecycle.h"
 #if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
@@ -40,6 +43,7 @@
 #include "proto_fuzzer/websocket_mock_server.h"
 #include "proto_fuzzer/ws_frame.h"
 #include "test_assertions.h"
+#include "tests/projected_scenario_loader.h"
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 #include <openssl/ech.h>
@@ -671,11 +675,13 @@ void TestH2cUpgradeTransitionsToHttp2() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastHttpTraits>(text, &scenario),
          "could not parse the h2c upgrade seed");
   const std::string response_script = scenario.connection().SerializeAsString();
   proto_fuzzer::NormalizeScenarioForTarget(
-      &scenario, proto_fuzzer::TargetProfile::kFastHttp);
+      &scenario, proto_fuzzer::generated::FastHttpTraits::kProfile,
+      &proto_fuzzer::generated::FastHttpTraits::PruneConditionalEligibility);
   Expect(scenario.connection().SerializeAsString() == response_script,
          "fast HTTP policy changed the h2c response script");
   Expect(scenario.connection().on_readable_size() == 0,
@@ -736,10 +742,12 @@ HttpSeedTranscript CaptureHttpSeed(const char *name) {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::DeepHttpTraits>(text, &scenario),
          "could not parse HTTP transcript seed");
   proto_fuzzer::NormalizeScenarioForTarget(
-      &scenario, proto_fuzzer::TargetProfile::kDeepHttp);
+      &scenario, proto_fuzzer::generated::DeepHttpTraits::kProfile,
+      &proto_fuzzer::generated::DeepHttpTraits::PruneConditionalEligibility);
 
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
@@ -781,10 +789,12 @@ void TestCallbackMimeSeedFailsSecondSameEasyRewind() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::ApiTraits>(text, &scenario),
          "could not parse callback MIME reuse seed");
-  proto_fuzzer::NormalizeScenarioForTarget(&scenario,
-                                           proto_fuzzer::TargetProfile::kApi);
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::generated::ApiTraits::kProfile,
+      &proto_fuzzer::generated::ApiTraits::PruneConditionalEligibility);
   Expect(scenario.has_api_plan() && scenario.api_plan().repeat_mime_post(),
          "API policy discarded callback MIME reuse");
 
@@ -1438,10 +1448,12 @@ void TestTlsOpenSslCloseNotifyProfile() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastHttpsTraits>(text, &scenario),
          "could not parse the OpenSSL close-notify seed");
   proto_fuzzer::NormalizeScenarioForTarget(
-      &scenario, proto_fuzzer::TargetProfile::kFastHttps);
+      &scenario, proto_fuzzer::generated::FastHttpsTraits::kProfile,
+      &proto_fuzzer::generated::FastHttpsTraits::PruneConditionalEligibility);
   Expect(scenario.tls_handshake_profile() ==
              curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY,
          "HTTPS policy discarded the OpenSSL close-notify profile");
@@ -1628,10 +1640,12 @@ void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::H2ProxyTraits>(text, &scenario),
          "could not parse the H2 forward-proxy seed");
   proto_fuzzer::NormalizeScenarioForTarget(
-      &scenario, proto_fuzzer::TargetProfile::kH2Proxy);
+      &scenario, proto_fuzzer::generated::H2ProxyTraits::kProfile,
+      &proto_fuzzer::generated::H2ProxyTraits::PruneConditionalEligibility);
   Expect(scenario.h2_forward_proxy(),
          "H2 proxy policy discarded the seed's forwarding mode");
 

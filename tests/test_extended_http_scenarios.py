@@ -4,23 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 HTTP_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "http"
 
 
-def _supported_options() -> set[str]:
-    return {
-        option.name
-        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
-    }
-
-
-def test_extended_http_options_are_reachable_without_pointer_hazards() -> None:
+def test_extended_http_options_are_reachable_without_pointer_hazards(
+    active_option_names: frozenset[str],
+) -> None:
     """Expose only copied strings/scalars; keep routing and path ownership fixed."""
-    supported = _supported_options()
     assert {
         "CURLOPT_RANGE",
         "CURLOPT_RESUME_FROM_LARGE",
@@ -49,7 +40,7 @@ def test_extended_http_options_are_reachable_without_pointer_hazards() -> None:
         "CURLOPT_HTTPSIG_KEY",
         "CURLOPT_HTTPSIG_KEYID",
         "CURLOPT_HTTPSIG_HEADERS",
-    } <= supported
+    } <= active_option_names
     assert {
         "CURLOPT_CONNECT_TO",
         "CURLOPT_RESOLVE",
@@ -58,25 +49,25 @@ def test_extended_http_options_are_reachable_without_pointer_hazards() -> None:
         "CURLOPT_COOKIEFILE",
         "CURLOPT_CRLFILE",
         "CURLOPT_MAXCONNECTS",
-    }.isdisjoint(supported)
+    }.isdisjoint(active_option_names)
 
 
 def test_extended_http_seeds_retain_correlated_wire_state() -> None:
     """Protect the option/response pairs mutation is unlikely to rediscover."""
     expected_tokens = {
         "http_range_206.textproto": (
-            "CURLOPT_RANGE",
+            'range: "5-11"',
             "206 Partial Content",
             "Content-Range: bytes 5-11/20",
         ),
         "http_resume_filetime_206.textproto": (
-            "CURLOPT_RESUME_FROM_LARGE",
-            "CURLOPT_FILETIME",
+            "resume_from_large: 8",
+            "filetime: true",
             "Last-Modified:",
         ),
         "http_request_target_path_as_is.textproto": (
-            "CURLOPT_REQUEST_TARGET",
-            "CURLOPT_PATH_AS_IS",
+            'request_target: "/wire/../target?encoded=%2F"',
+            "path_as_is: true",
             "/wire/../target",
         ),
         "http_expect_417_retry.textproto": (
@@ -86,40 +77,40 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
         ),
         "http_early_413_keep_sending.textproto": (
             "413 Content Too Large",
-            "CURLOPT_KEEP_SENDING_ON_ERROR",
+            "keep_sending_on_error: true",
             "Expect: 100-continue",
         ),
         "http_postredir_preserve_method.textproto": (
-            "CURLOPT_POSTREDIR",
+            "postredir: 1",
             "301 Moved Permanently",
             "subsequent_connections {",
         ),
         "http_follow_obeycode_custom_method.textproto": (
-            "CURLOPT_FOLLOWLOCATION uint_value: 2",
-            'CURLOPT_CUSTOMREQUEST string_value: "PATCH"',
+            "followlocation: 2",
+            'customrequest: "PATCH"',
             "302 Found",
         ),
         "http_follow_firstonly_custom_method.textproto": (
-            "CURLOPT_FOLLOWLOCATION uint_value: 3",
-            'CURLOPT_CUSTOMREQUEST string_value: "PURGE"',
+            "followlocation: 3",
+            'customrequest: "PURGE"',
             "307 Temporary Redirect",
         ),
         "http_decoding_controls_conflicting_length.textproto": (
-            "CURLOPT_TRANSFER_ENCODING",
-            "CURLOPT_HTTP_TRANSFER_DECODING",
+            "transfer_encoding: true",
+            "http_transfer_decoding: false",
             "Content-Length: 999",
         ),
         "http_brotli_decode.textproto": (
-            "CURLOPT_ACCEPT_ENCODING",
+            'accept_encoding: ""',
             "Content-Encoding: br",
             "Content-Length: 31",
         ),
         "url_disallow_userinfo.textproto": (
-            "CURLOPT_DISALLOW_USERNAME_IN_URL",
+            "disallow_username_in_url: true",
             "user:pass@userinfo.test",
         ),
         "http_certinfo_result_probe.textproto": (
-            "CURLOPT_CERTINFO bool_value: true",
+            "certinfo: true",
             "Content-Type: text/plain",
         ),
         "http_relative_redirect_chain.textproto": (
@@ -140,30 +131,30 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
             "204 No Content",
         ),
         "http2_prior_knowledge.textproto": (
-            "CURLOPT_HTTP_VERSION uint_value: 5",
+            "http_version: 5",
             "text/plain",
         ),
         "http2_upgrade.textproto": (
-            "CURLOPT_HTTP_VERSION uint_value: 3",
+            "http_version: 3",
             "101 Switching Protocols",
             "Upgrade: h2c",
             r"\x00\x00\x00\x04",
         ),
         "http_httpsig_ed25519.textproto": (
-            "CURLOPT_HTTPSIG_ALGORITHM uint_value: 1",
+            "httpsig_algorithm: 1",
             "9f8362f87a484a954e6e740c5b4c0e84229139a20aa8ab56ff66586f6a7d29c5",
-            'string_value: "fuzz-ed25519"',
-            'string_value: "date: method path authority query content-type: x-fuzz-meta:"',
+            'httpsig_keyid: "fuzz-ed25519"',
+            'httpsig_headers: "date: method path authority query content-type: x-fuzz-meta:"',
             'request_headers: "Date: Tue, 20 Apr 2021 02:07:55 GMT"',
             'request_headers: "Content-Type: application/json"',
             'request_headers: "X-Fuzz-Meta: first"',
             'request_headers: "X-Fuzz-Meta: second"',
-            "CURLOPT_POSTFIELDS",
+            "postfields:",
         ),
         "http_httpsig_hmac_sha256.textproto": (
-            "CURLOPT_HTTPSIG_ALGORITHM uint_value: 2",
-            'string_value: "7365637265742d66757a7a2d6b6579"',
-            'string_value: "fuzz-hmac-sha256"',
+            "httpsig_algorithm: 2",
+            'httpsig_key: "7365637265742d66757a7a2d6b6579"',
+            'httpsig_keyid: "fuzz-hmac-sha256"',
             "mode=default",
         ),
     }

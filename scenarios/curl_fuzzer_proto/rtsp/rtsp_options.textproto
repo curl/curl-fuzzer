@@ -3,8 +3,8 @@
 # even though RTSP has no server greeting.
 scheme: SCHEME_RTSP
 host_path: "rtsp.test/stream"
-options { option_id: CURLOPT_RTSP_REQUEST uint_value: 1 }
-options { option_id: CURLOPT_USERAGENT string_value: "curl-fuzzer-rtsp" }
+options { rtsp_request: 1 }
+options { useragent: "curl-fuzzer-rtsp" }
 connection {
   on_readable: "RTSP/1.0 200 OK\r\nCSeq: 1\r\nPublic: DESCRIBE, OPTIONS, SETUP, PLAY, PAUSE, TEARDOWN, GET_PARAMETER, SET_PARAMETER\r\n\r\n"
 }

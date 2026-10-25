@@ -1611,6 +1611,17 @@ add_custom_target(fuzz
 if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
    "$ENV{SANITIZER}" STREQUAL "address")
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c
+            "import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split('.')[:2]); sys.exit(0 if (5, 29) <= p < (7, 0) else 1)"
+        RESULT_VARIABLE PROTOBUF_PYTHON_RESULT
+        ERROR_VARIABLE PROTOBUF_PYTHON_ERROR)
+    if(NOT PROTOBUF_PYTHON_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "The structured fuzzer schema generator requires Python protobuf >=5.29,<7. "
+            "Install the repository tooling dependencies for ${Python3_EXECUTABLE} "
+            "(for example, `uv sync`) and reconfigure. ${PROTOBUF_PYTHON_ERROR}")
+    endif()
 
     # renovate: datasource=github-tags depName=google/libprotobuf-mutator
     set(LPM_VERSION v1.5)
@@ -1717,39 +1728,162 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         set(GENERATOR_PROTOC_DEP host_protoc)
     endif()
 
-    # Validate the checked-in CurlOptionId values against curl.h, stage the
-    # schema in the build tree, and generate the C++ option manifest.
+    # The checked-in schema is the authoring and eligibility authority. Compile
+    # it to a descriptor first, then derive a metadata-free authoring view, the
+    # generic runtime representation, and one restricted mutation root per
+    # TargetProfile. Only those derived schemas are compiled into binaries.
     set(CURL_HEADER ${CURL_INSTALL_DIR}/include/curl/curl.h)
     set(PROTO_FUZZER_SCHEMA_DIR ${CMAKE_BINARY_DIR}/schemas)
+    set(PROTO_FUZZER_GENERATED_DIR ${CMAKE_BINARY_DIR}/schema_eligibility)
+    set(PROTO_FUZZER_PROFILE_DIR ${PROTO_FUZZER_GENERATED_DIR}/profiles)
+    set(PROTO_FUZZER_RUNTIME_DIR ${PROTO_FUZZER_GENERATED_DIR}/runtime)
+    set(PROTO_FUZZER_ANNOTATED_DESCRIPTOR
+        ${PROTO_FUZZER_GENERATED_DIR}/annotated.desc)
+    set(PROTO_FUZZER_AUTHORING_DESCRIPTOR
+        ${PROTO_FUZZER_GENERATED_DIR}/authoring.desc)
+    set(PROTO_FUZZER_RUNTIME_DESCRIPTOR
+        ${PROTO_FUZZER_RUNTIME_DIR}/runtime.desc)
     set(GEN_PROTO ${PROTO_FUZZER_SCHEMA_DIR}/curl_fuzzer.proto)
     set(GEN_MANIFEST ${CMAKE_BINARY_DIR}/curl_fuzzer_option_manifest.inc)
     set(GEN_PB_CC ${CMAKE_BINARY_DIR}/curl_fuzzer.pb.cc)
     set(GEN_PB_H ${CMAKE_BINARY_DIR}/curl_fuzzer.pb.h)
 
     add_custom_command(
-        OUTPUT ${GEN_PROTO} ${GEN_MANIFEST}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${PROTO_FUZZER_SCHEMA_DIR}
-        COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
-                --curl-header    ${CURL_HEADER}
-                --proto-schema   ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
-                --proto-out      ${GEN_PROTO}
-                --manifest-out   ${GEN_MANIFEST}
-        DEPENDS curl_external
+        OUTPUT ${PROTO_FUZZER_ANNOTATED_DESCRIPTOR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+                ${PROTO_FUZZER_GENERATED_DIR}
+        COMMAND ${GENERATOR_PROTOC}
+                --proto_path=${CMAKE_SOURCE_DIR}/schemas
+                --proto_path=${LPM_PB_INCLUDE}
+                --include_imports
+                --include_source_info
+                --descriptor_set_out=${PROTO_FUZZER_ANNOTATED_DESCRIPTOR}
                 ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
-                ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
-        COMMENT "Validating CurlOptionId enum and generating option manifest"
+        DEPENDS ${CMAKE_SOURCE_DIR}/schemas/curl_fuzzer.proto
+                ${CMAKE_SOURCE_DIR}/schemas/eligibility_options.proto
+                ${GENERATOR_PROTOC}
+                ${GENERATOR_PROTOC_DEP}
+        COMMENT "Compiling annotated curl fuzzer schema"
         VERBATIM
     )
+
+    set(PROTO_FUZZER_PROFILE_SLUGS
+        compatibility
+        fast_http
+        deep_http
+        fast_https
+        https_h2
+        fast_http2
+        fast_http3
+        h2_proxy
+        proxy_transport
+        resolver
+        fast_websocket
+        fast_secure_websocket
+        fast_telnet
+        fast_ftp
+        fast_tftp
+        fast_smtp
+        fast_imap
+        fast_pop3
+        fast_mqtt
+        fast_dict
+        fast_gopher
+        fast_file
+        fast_ldap
+        fast_rtsp
+        fast_ipfs
+        api
+        multi
+        timing)
+
+    function(curl_generate_proto_profile _slug)
+        set(_root ${PROTO_FUZZER_PROFILE_DIR}/${_slug})
+        set(_descriptor ${_root}/${_slug}.desc)
+        set(_report ${_root}/${_slug}.json)
+        set(_schema ${_root}/generated/${_slug}/${_slug}.proto)
+        set(_adapter ${_root}/generated/${_slug}/${_slug}_traits.h)
+        set(_pb_cc ${_root}/generated/${_slug}/${_slug}.pb.cc)
+        set(_pb_h ${_root}/generated/${_slug}/${_slug}.pb.h)
+        set(_global_outputs)
+        set(_global_arguments)
+        if(_slug STREQUAL "compatibility")
+            list(APPEND _global_outputs
+                ${GEN_PROTO}
+                ${GEN_MANIFEST}
+                ${PROTO_FUZZER_AUTHORING_DESCRIPTOR}
+                ${PROTO_FUZZER_RUNTIME_DESCRIPTOR}
+                ${PROTO_FUZZER_RUNTIME_DIR}/curl_fuzzer.proto)
+            list(APPEND _global_arguments
+                --authoring-descriptor-out ${PROTO_FUZZER_AUTHORING_DESCRIPTOR}
+                --authoring-schema-out-dir ${PROTO_FUZZER_SCHEMA_DIR}
+                --runtime-descriptor-out ${PROTO_FUZZER_RUNTIME_DESCRIPTOR}
+                --runtime-schema-out-dir ${PROTO_FUZZER_RUNTIME_DIR}
+                --native-manifest-out ${GEN_MANIFEST})
+        endif()
+        add_custom_command(
+            OUTPUT ${_descriptor} ${_report} ${_schema} ${_adapter}
+                   ${_global_outputs}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${_root}
+            COMMAND ${CMAKE_COMMAND} -E env
+                    PYTHONPATH=${CMAKE_SOURCE_DIR}/src
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/schema_eligibility.py
+                    --descriptor-set ${PROTO_FUZZER_ANNOTATED_DESCRIPTOR}
+                    --curl-header ${CURL_HEADER}
+                    --target-profile-header
+                        ${CMAKE_SOURCE_DIR}/proto_fuzzer/target_profile.h
+                    --profile ${_slug}
+                    --projected-descriptor-out ${_descriptor}
+                    --report-out ${_report}
+                    --schema-out-dir ${_root}
+                    --adapter-out ${_adapter}
+                    ${_global_arguments}
+            DEPENDS curl_external
+                    ${PROTO_FUZZER_ANNOTATED_DESCRIPTOR}
+                    ${CMAKE_SOURCE_DIR}/proto_fuzzer/target_profile.h
+                    ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/generate_option_manifest.py
+                    ${CMAKE_SOURCE_DIR}/src/curl_fuzzer_tools/schema_eligibility.py
+            COMMENT "Generating restricted protobuf profile ${_slug}"
+            VERBATIM)
+        add_custom_target(curl_fuzzer_profile_${_slug}_generated
+            DEPENDS ${_descriptor} ${_report} ${_schema} ${_adapter})
+
+        add_custom_command(
+            OUTPUT ${_pb_cc} ${_pb_h}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${_root}
+            COMMAND ${GENERATOR_PROTOC}
+                    --descriptor_set_in=${_descriptor}
+                    --cpp_out=${_root}
+                    generated/${_slug}/${_slug}.proto
+            DEPENDS ${_descriptor} ${GENERATOR_PROTOC}
+                    ${GENERATOR_PROTOC_DEP}
+            COMMENT "protoc restricted profile ${_slug}"
+            VERBATIM)
+        add_library(curl_fuzzer_profile_${_slug} OBJECT ${_pb_cc})
+        target_compile_features(curl_fuzzer_profile_${_slug} PRIVATE cxx_std_17)
+        target_compile_options(curl_fuzzer_profile_${_slug} PRIVATE ${COMMON_FLAGS})
+        target_include_directories(curl_fuzzer_profile_${_slug} PRIVATE
+            ${_root}
+            ${LPM_PB_INCLUDE})
+        add_dependencies(curl_fuzzer_profile_${_slug}
+            curl_fuzzer_profile_${_slug}_generated
+            libprotobuf_mutator_external)
+    endfunction()
+
+    foreach(_profile_slug IN LISTS PROTO_FUZZER_PROFILE_SLUGS)
+        curl_generate_proto_profile(${_profile_slug})
+    endforeach()
 
     add_custom_command(
         OUTPUT ${GEN_PB_CC} ${GEN_PB_H}
         COMMAND ${GENERATOR_PROTOC}
+                --descriptor_set_in=${PROTO_FUZZER_RUNTIME_DESCRIPTOR}
                 --cpp_out=${CMAKE_BINARY_DIR}
-                --proto_path=${PROTO_FUZZER_SCHEMA_DIR}
-                ${GEN_PROTO}
-        DEPENDS ${GEN_PROTO} ${GENERATOR_PROTOC} ${GENERATOR_PROTOC_DEP}
-        COMMENT "protoc curl_fuzzer.proto"
+                curl_fuzzer.proto
+        DEPENDS ${PROTO_FUZZER_RUNTIME_DESCRIPTOR}
+                ${GENERATOR_PROTOC} ${GENERATOR_PROTOC_DEP}
+        COMMENT "protoc internal curl fuzzer runtime schema"
         VERBATIM
     )
     add_custom_target(curl_fuzzer_proto_generated
@@ -1937,12 +2071,20 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
     # wiring independent of mutation and execution behaviour.
     function(curl_add_proto_fuzzer _name)
-        cmake_parse_arguments(PROTO "" "CLIENT;RUNNER"
+        cmake_parse_arguments(PROTO "" "PROFILE;CLIENT;RUNNER"
             "INCLUDE_DIRS;DEPENDS" ${ARGN})
         if(PROTO_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR
                 "Unsupported arguments for ${_name}: ${PROTO_UNPARSED_ARGUMENTS}")
         endif()
+        if(NOT PROTO_PROFILE)
+            message(FATAL_ERROR "${_name} must select one generated PROFILE")
+        endif()
+        if(NOT TARGET curl_fuzzer_profile_${PROTO_PROFILE})
+            message(FATAL_ERROR
+                "${_name} selected unknown generated profile ${PROTO_PROFILE}")
+        endif()
+        set(_profile_root ${PROTO_FUZZER_PROFILE_DIR}/${PROTO_PROFILE})
         set(_curl_client curl_client_default)
         set(_curl_runner curl_fuzzer_proto_runner)
         set(_curl_target_deps ${FUZZ_DEPS})
@@ -1965,12 +2107,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             fuzzer_entrypoints/${_name}.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
             $<TARGET_OBJECTS:${_curl_runner}>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_${PROTO_PROFILE}>
         )
         target_compile_features(${_name} PRIVATE cxx_std_17)
         target_compile_options(${_name} PRIVATE
             ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
         target_include_directories(${_name} PRIVATE
             ${_curl_include_dirs}
+            ${_profile_root}
             ${CMAKE_BINARY_DIR}
             ${CMAKE_SOURCE_DIR}
             ${LPM_INSTALL_DIR}/include
@@ -1997,61 +2141,67 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             ${_curl_target_deps}
             curl_fuzzer_proto_runtime
             ${_curl_runner}
+            curl_fuzzer_profile_${PROTO_PROFILE}
+            curl_fuzzer_profile_${PROTO_PROFILE}_generated
             libprotobuf_mutator_external
             lpm_link_rsp
         )
         add_dependencies(fuzz ${_name})
     endfunction()
 
-    # Preserve the original mixed target's behavior under its original name:
-    # OSS-Fuzz keys accumulated corpora and regression testcases by target
-    # basename, so changing its profile would silently change their semantics.
-    curl_add_proto_fuzzer(curl_fuzzer_proto)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_http)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_http2)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_https)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_https_h2)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_socks4)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_resolver)
+    # Preserve the original mixed target's execution behavior under its
+    # original name, but with the new broad typed compatibility root. Its
+    # pre-cutover corpus remains tied to the revision that produced it.
+    curl_add_proto_fuzzer(curl_fuzzer_proto PROFILE compatibility)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http PROFILE fast_http)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http_deep PROFILE deep_http)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_http2 PROFILE fast_http2)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_https PROFILE fast_https)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_https_h2 PROFILE https_h2)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_socks4 PROFILE proxy_transport)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_resolver PROFILE resolver)
     target_sources(curl_fuzzer_proto_resolver PRIVATE
         proto_fuzzer/resolver_getaddrinfo_shim.cc)
     if(BUILD_GNUTLS_VARIANT)
         curl_add_proto_fuzzer(curl_fuzzer_proto_https_gnutls
+            PROFILE fast_https
             CLIENT curl_proto_client_gnutls
             INCLUDE_DIRS ${CURL_GNUTLS_INCLUDE_DIRS}
             DEPENDS curl_gnutls_external ${CURL_GNUTLS_DEPS})
     endif()
     if(BUILD_MBEDTLS_VARIANT)
         curl_add_proto_fuzzer(curl_fuzzer_proto_https_mbedtls
+            PROFILE fast_https
             CLIENT curl_proto_client_mbedtls
             INCLUDE_DIRS ${CURL_MBEDTLS_INCLUDE_DIRS}
             DEPENDS curl_mbedtls_external ${CURL_MBEDTLS_DEPS})
     endif()
     if(BUILD_HTTP3_VARIANT)
         curl_add_proto_fuzzer(curl_fuzzer_proto_http3
+            PROFILE fast_http3
             CLIENT curl_client_http3
             RUNNER curl_fuzzer_proto_http3_runner
             INCLUDE_DIRS ${CURL_HTTP3_INCLUDE_DIRS}
             DEPENDS curl_http3_external ${CURL_HTTP3_DEPS})
     endif()
-    curl_add_proto_fuzzer(curl_fuzzer_proto_h2_proxy)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_ws)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_wss)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_telnet)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_ftp)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_tftp)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_smtp)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_imap)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_pop3)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_mqtt)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_dict)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_gopher)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_file)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_ldap)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_rtsp)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_ipfs)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_api)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_h2_proxy PROFILE h2_proxy)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ws PROFILE fast_websocket)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_wss
+        PROFILE fast_secure_websocket)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_telnet PROFILE fast_telnet)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ftp PROFILE fast_ftp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_tftp PROFILE fast_tftp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_smtp PROFILE fast_smtp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_imap PROFILE fast_imap)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_pop3 PROFILE fast_pop3)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_mqtt PROFILE fast_mqtt)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_dict PROFILE fast_dict)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_gopher PROFILE fast_gopher)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_file PROFILE fast_file)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ldap PROFILE fast_ldap)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_rtsp PROFILE fast_rtsp)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_ipfs PROFILE fast_ipfs)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_api PROFILE api)
     if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
        "$ENV{SANITIZER}" STREQUAL "introspector")
         # Keep deterministic compatibility probes in the existing API lane.
@@ -2070,8 +2220,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         target_include_directories(curl_fuzzer_proto_api BEFORE PRIVATE
             ${CURL_PRIVATE_INCLUDE_DIRS})
     endif()
-    curl_add_proto_fuzzer(curl_fuzzer_proto_multi)
-    curl_add_proto_fuzzer(curl_fuzzer_proto_timing)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_multi PROFILE multi)
+    curl_add_proto_fuzzer(curl_fuzzer_proto_timing PROFILE timing)
 
     # Compile textproto seed scenarios into binary corpus entries. These are
     # derived artefacts — the textprotos in scenarios/ are the source of truth,
@@ -2443,8 +2593,6 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         )
         target_compile_features(target_policy_test PRIVATE cxx_std_17)
         target_compile_options(target_policy_test PRIVATE ${COMMON_FLAGS})
-        target_compile_definitions(target_policy_test PRIVATE
-            PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         target_include_directories(target_policy_test PRIVATE
             ${CURL_INSTALL_DIR}/include
             ${CMAKE_BINARY_DIR}
@@ -2464,6 +2612,40 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         )
         add_test(NAME target_policy_test COMMAND target_policy_test)
         add_dependencies(fuzzer_unit_tests target_policy_test)
+
+        # Exercise the same lower/normalize/lift and mutation-cache bridge used
+        # by the live generated profile roots. Identity and connection-only
+        # traits isolate the bridge mechanics from any one generated schema.
+        add_executable(profile_fuzzer_test
+            tests/profile_fuzzer_test.cc
+            proto_fuzzer/target_policy.cc
+            proto_fuzzer/option_model.cc
+            proto_fuzzer/telnet_scenario.cc
+            ${GEN_PB_CC}
+        )
+        target_compile_features(profile_fuzzer_test PRIVATE cxx_std_17)
+        target_compile_options(profile_fuzzer_test PRIVATE ${COMMON_FLAGS})
+        target_include_directories(profile_fuzzer_test PRIVATE
+            ${CURL_INSTALL_DIR}/include
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${LPM_INSTALL_DIR}/include
+            ${LPM_INSTALL_DIR}/include/libprotobuf-mutator
+            ${LPM_PB_INCLUDE}
+        )
+        target_link_libraries(profile_fuzzer_test PRIVATE
+            "-Wl,@${LPM_LINK_RSP}"
+            pthread
+            m
+        )
+        target_link_options(profile_fuzzer_test PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(profile_fuzzer_test
+            curl_fuzzer_proto_generated
+            libprotobuf_mutator_external
+            lpm_link_rsp
+        )
+        add_test(NAME profile_fuzzer_test COMMAND profile_fuzzer_test)
+        add_dependencies(fuzzer_unit_tests profile_fuzzer_test)
 
         # This test links the real public MIME/header/callback APIs so
         # ownership, allocation budgets, and upload replay are checked under
@@ -2611,6 +2793,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             ${PROTO_FUZZER_TLS_SOURCES}
             proto_fuzzer/websocket_mock_server.cc
             proto_fuzzer/ws_frame.cc
+            $<TARGET_OBJECTS:curl_fuzzer_profile_api>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_compatibility>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_deep_http>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_fast_http>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_fast_https>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_h2_proxy>
             ${GEN_PB_CC}
         )
 
@@ -2623,6 +2811,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
             target_include_directories(${_name} PRIVATE
                 ${CMAKE_BINARY_DIR}
+                ${PROTO_FUZZER_PROFILE_DIR}/api
+                ${PROTO_FUZZER_PROFILE_DIR}/compatibility
+                ${PROTO_FUZZER_PROFILE_DIR}/deep_http
+                ${PROTO_FUZZER_PROFILE_DIR}/fast_http
+                ${PROTO_FUZZER_PROFILE_DIR}/fast_https
+                ${PROTO_FUZZER_PROFILE_DIR}/h2_proxy
                 ${CMAKE_SOURCE_DIR}
                 ${LPM_PB_INCLUDE}
                 ${NGHTTP2_INSTALL_DIR}/include)
@@ -2642,6 +2836,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             target_link_options(${_name} PRIVATE ${COVERAGE_LINK_FLAGS})
             add_dependencies(${_name}
                 ${_curl_client}
+                curl_fuzzer_profile_api
+                curl_fuzzer_profile_compatibility
+                curl_fuzzer_profile_deep_http
+                curl_fuzzer_profile_fast_http
+                curl_fuzzer_profile_fast_https
+                curl_fuzzer_profile_h2_proxy
                 libprotobuf_mutator_external
                 lpm_link_rsp)
             add_test(NAME ${_name} COMMAND ${_name})
@@ -2859,6 +3059,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         curl_add_proto_peer_test(ftp_mock_server_test
             tests/ftp_mock_server_test.cc
             proto_fuzzer/ftp_mock_server.cc)
+        target_sources(ftp_mock_server_test PRIVATE
+            $<TARGET_OBJECTS:curl_fuzzer_profile_compatibility>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_fast_ftp>)
+        target_include_directories(ftp_mock_server_test PRIVATE
+            ${PROTO_FUZZER_PROFILE_DIR}/compatibility
+            ${PROTO_FUZZER_PROFILE_DIR}/fast_ftp)
+        add_dependencies(ftp_mock_server_test
+            curl_fuzzer_profile_compatibility
+            curl_fuzzer_profile_fast_ftp)
         target_compile_definitions(ftp_mock_server_test PRIVATE
             PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(smtp_mock_server_test
@@ -2867,6 +3076,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         curl_add_proto_peer_test(imap_mock_server_test
             tests/imap_mock_server_test.cc
             proto_fuzzer/imap_mock_server.cc)
+        target_sources(imap_mock_server_test PRIVATE
+            $<TARGET_OBJECTS:curl_fuzzer_profile_compatibility>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_fast_imap>)
+        target_include_directories(imap_mock_server_test PRIVATE
+            ${PROTO_FUZZER_PROFILE_DIR}/compatibility
+            ${PROTO_FUZZER_PROFILE_DIR}/fast_imap)
+        add_dependencies(imap_mock_server_test
+            curl_fuzzer_profile_compatibility
+            curl_fuzzer_profile_fast_imap)
         target_compile_definitions(imap_mock_server_test PRIVATE
             PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(pop3_mock_server_test
@@ -2880,7 +3098,18 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             proto_fuzzer/socks4_mock_server.cc)
         curl_add_proto_peer_test(http_transport_mock_server_test
             tests/http_transport_mock_server_test.cc
-            proto_fuzzer/http_transport_mock_server.cc)
+            proto_fuzzer/http_transport_mock_server.cc
+            proto_fuzzer/target_policy.cc
+            proto_fuzzer/telnet_scenario.cc)
+        target_sources(http_transport_mock_server_test PRIVATE
+            $<TARGET_OBJECTS:curl_fuzzer_profile_compatibility>
+            $<TARGET_OBJECTS:curl_fuzzer_profile_deep_http>)
+        target_include_directories(http_transport_mock_server_test PRIVATE
+            ${PROTO_FUZZER_PROFILE_DIR}/compatibility
+            ${PROTO_FUZZER_PROFILE_DIR}/deep_http)
+        add_dependencies(http_transport_mock_server_test
+            curl_fuzzer_profile_compatibility
+            curl_fuzzer_profile_deep_http)
         target_compile_definitions(http_transport_mock_server_test PRIVATE
             PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(proxy_option_mock_server_test

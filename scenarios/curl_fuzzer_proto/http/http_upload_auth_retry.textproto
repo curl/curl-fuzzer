@@ -3,11 +3,11 @@
 # credential options. The redirect seeds separately exercise real rewind.
 scheme: SCHEME_HTTP
 host_path: "upload.test/auth/retry"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 11 }
-options { option_id: CURLOPT_USERPWD string_value: "user:password" }
-options { option_id: CURLOPT_HTTPAUTH uint_value: 2 }
+options { upload: true }
+options { customrequest: "POST" }
+options { infilesize_large: 11 }
+options { userpwd: "user:password" }
+options { httpauth: 2 }
 request_headers: "Expect:"
 upload {
   data: "auth-replay"

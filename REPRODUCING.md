@@ -34,8 +34,11 @@ The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) also decodes
 protobuf `Scenario` files entirely in the browser. It normally detects the
 format, or you can select it manually for ambiguous inputs.
 
-From a source checkout, `read_proto_corpus` uses the checked-in schema to print
-field names. It can also use a staged copy under `build/schemas/` when the
+From a source checkout, `read_proto_corpus` uses the full authoring schema to
+print field names. Current generated profile roots preserve its retained field
+numbers and wire types, so the authoring view can inspect target payloads even
+though libprotobuf-mutator uses a restricted target-specific type. The command
+can also use the metadata-free staged copy under `build/schemas/` when the
 source schema is unavailable:
 
 ```shell
@@ -46,8 +49,15 @@ read_proto_corpus \
 The command requires `protoc`. If it cannot find either schema, it falls back
 to `protoc --decode_raw`; pass `--proto-file` to select one explicitly.
 
-Published reproduction images also include the staged schema and a
-`decode-scenario` command:
+The typed-option cutover changed `schemas/curl_fuzzer.proto` in place. Always
+pair a structured testcase with the curl-fuzzer revision and target that
+produced it. A pre-cutover generic-option input can parse without error under
+the current schema but mean something different; the runtime deliberately does
+not auto-detect or fall back to the old format. Reproduce such an input at the
+original revision and with the target that produced it.
+
+Published reproduction images also include the metadata-free staged authoring
+schema and a `decode-scenario` command:
 
 ```shell
 docker run --rm -i \

@@ -15,7 +15,7 @@ repository supplies the harnesses used by curl's
 | Family | Purpose | Seed source |
 | --- | --- | --- |
 | Legacy `curl_fuzzer` and protocol variants | Protocol-specific libcurl transfers driven by the established TLV format | `corpora/<target>/` |
-| Structured `curl_fuzzer_proto*` | Protobuf scenarios with target-specific policies and in-process protocol peers | `scenarios/curl_fuzzer_proto/` |
+| Structured `curl_fuzzer_proto*` | Typed protobuf scenarios projected into generated target-specific mutation roots, with in-process protocol peers | `scenarios/curl_fuzzer_proto/` |
 | Direct `fuzz_*` targets | Focused fuzzing of URL, buffer queue, DoH, and netrc parsing | `corpora/<target>/` |
 
 The conditional list in [`scripts/fuzz_targets`](scripts/fuzz_targets) is the
@@ -26,8 +26,15 @@ mbedTLS, and HTTP/3 variants are omitted from i386 and MemorySanitizer builds.
 ## Build and replay locally
 
 The primary local workflow targets Linux and requires Bash, Clang, CMake 3.24
-or newer, Python 3, a build tool such as Ninja or Make, and network access for
-the initial dependency build.
+or newer, Python 3.10 or newer, the Protocol Buffers compiler (`protoc`), the
+project Python dependencies, a build tool such as Ninja or Make, and network
+access for the initial dependency build. The schema generator runs during CMake
+configuration, so install its dependencies before building:
+
+```shell
+uv sync
+# Or, in an activated virtual environment: python -m pip install -e .
+```
 
 Build all targets against the latest curl source:
 
@@ -86,6 +93,9 @@ Useful commands include:
 - `generate_decoder_html` for the standalone browser decoder for legacy TLV
   and protobuf `Scenario` inputs. Run `npm ci --ignore-scripts` once before
   building it so the pinned protobuf.js runtime can be bundled into the page.
+  For an annotated schema, the generator uses `protoc` to produce the current
+  metadata-free authoring view; it falls back to a staged build copy only when
+  `protoc` is unavailable.
 - `compare_fuzzers` for repeatable throughput and source-coverage comparisons
   between production libFuzzer builds.
 
@@ -104,7 +114,22 @@ Inputs are extracted to `ossfuzz_corpus/<target>/`. Existing non-empty target
 directories are retained; pass `-f` to refresh them. Missing public corpora are
 reported and skipped because newly added targets may not have one yet.
 
-Bootstrap the dedicated HTTP/2 corpus from historical Scenario inputs after
+Automatic replay of structured public corpora is fail-closed across the typed
+schema cutover. After the upstream structured corpora have been replaced, move
+any existing `ossfuzz_corpus` aside, download a fresh snapshot, then explicitly
+mark that root current:
+
+```shell
+mv ossfuzz_corpus ossfuzz_corpus.pre-schema-owned-eligibility
+./scripts/download_public_corpus.sh
+touch ossfuzz_corpus/.structured-schema-owned-eligibility-v1
+```
+
+The downloader never creates this marker because public ZIPs do not identify
+their schema. Do not mark a root that still contains pre-cutover structured
+directories.
+
+Bootstrap the dedicated HTTP/2 corpus from current typed Scenario inputs after
 downloading them (requires `protoc`, provided by `protobuf-compiler`):
 
 ```shell
@@ -112,13 +137,17 @@ uv run bootstrap_http2_corpus
 ```
 
 This adds byte-identical inputs whose final explicit `CURLOPT_HTTP_VERSION`
-setting in the first 64 options is prior knowledge (`uint_value: 5`) to
+setting in the first 64 options is prior knowledge (`http_version: 5`) to
 `ossfuzz_corpus/curl_fuzzer_proto_http2/`. It excludes HTTP/1 version selections, overridden
 version settings, and malformed protobufs. The predicate is conservative;
 it does not simulate curl's validation or target normalization. Native inputs
 are retained, and the manifest under `ossfuzz_corpus/.manifests/` records source,
 schema, and selected corpus hashes plus rejected input hashes. Existing corpus
 routing picks up this native directory for coverage, benchmarking, and profiling.
+The command does not migrate pre-cutover generic-option bytes; use those only
+with the curl-fuzzer revision and target that produced them. Default source
+discovery requires the same structured-corpus epoch marker; explicit `--source`
+inputs remain the caller's responsibility.
 
 The bootstrap is additive. Before refreshing public corpora, use the downloader's
 `-f` flag so the bootstrapped directory does not hide a newly published native
@@ -128,8 +157,13 @@ a one-time upload to the dedicated OSS-Fuzz target. Keep ZIPs and manifests
 outside replay directories. Run `uv run bootstrap_http2_corpus --help` for paths.
 
 For legacy targets, checked-in binary seeds live in `corpora/`. For structured
-targets, checked-in textproto files under `scenarios/` are the source of truth;
-CMake generates their binary corpus entries in the build tree.
+targets, checked-in textproto files under `scenarios/` are the source of truth.
+They use the full typed authoring schema; CMake encodes them with ordinary
+`protoc --encode` into the build tree. Generated profile roots preserve the
+authoring field numbers, so each target reads the same bytes and discards fields
+and option cases outside its schema-owned surface. Historical binaries from the
+pre-cutover generic-option schema must be reproduced with their original
+revision; they are not auto-detected or converted by the runtime.
 
 ## Coverage
 

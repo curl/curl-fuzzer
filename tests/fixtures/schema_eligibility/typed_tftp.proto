@@ -1,0 +1,432 @@
+syntax = "proto3";
+
+package curl.fuzzer.test;
+
+import "eligibility_options.proto";
+
+option (curl.fuzzer.schema.eligibility_registry) = {
+  profiles {
+    profile: TARGET_PROFILE_COMPATIBILITY
+    cpp_target_profile: "kCompatibility"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "CompatibilityScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_PRESERVE_SLOT
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTP
+    cpp_target_profile: "kFastHttp"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastHttpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_DEEP_HTTP
+    cpp_target_profile: "kDeepHttp"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "DeepHttpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTPS
+    cpp_target_profile: "kFastHttps"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastHttpsScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_HTTPS_H2
+    cpp_target_profile: "kHttpsH2"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "HttpsH2Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTP2
+    cpp_target_profile: "kFastHttp2"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastHttp2Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTP3
+    cpp_target_profile: "kFastHttp3"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastHttp3Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_H2_PROXY
+    cpp_target_profile: "kH2Proxy"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "H2ProxyScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_PROXY_TRANSPORT
+    cpp_target_profile: "kProxyTransport"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "ProxyTransportScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_RESOLVER
+    cpp_target_profile: "kResolver"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "ResolverScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_WEBSOCKET
+    cpp_target_profile: "kFastWebSocket"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastWebSocketScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+    cpp_target_profile: "kFastSecureWebSocket"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastSecureWebSocketScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_TELNET
+    cpp_target_profile: "kFastTelnet"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastTelnetScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_FTP
+    cpp_target_profile: "kFastFtp"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastFtpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_TFTP
+    cpp_target_profile: "kFastTftp"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastTftpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_SMTP
+    cpp_target_profile: "kFastSmtp"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastSmtpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_IMAP
+    cpp_target_profile: "kFastImap"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastImapScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_POP3
+    cpp_target_profile: "kFastPop3"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastPop3Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_MQTT
+    cpp_target_profile: "kFastMqtt"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastMqttScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_DICT
+    cpp_target_profile: "kFastDict"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastDictScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_GOPHER
+    cpp_target_profile: "kFastGopher"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastGopherScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_FILE
+    cpp_target_profile: "kFastFile"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastFileScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_LDAP
+    cpp_target_profile: "kFastLdap"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastLdapScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_RTSP
+    cpp_target_profile: "kFastRtsp"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastRtspScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_IPFS
+    cpp_target_profile: "kFastIpfs"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "FastIpfsScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_API
+    cpp_target_profile: "kApi"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "ApiScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_MULTI
+    cpp_target_profile: "kMulti"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "MultiScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_TIMING
+    cpp_target_profile: "kTiming"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "TimingScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+};
+
+message SetOption {
+  oneof setting {
+    uint64 tftp_blksize = 1 [(curl.fuzzer.schema.curl_option) = {
+      native_name: "CURLOPT_TFTP_BLKSIZE"
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }];
+    bool tftp_no_options = 2 [(curl.fuzzer.schema.curl_option) = {
+      native_name: "CURLOPT_TFTP_NO_OPTIONS"
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }];
+    bytes user_agent = 3 [(curl.fuzzer.schema.curl_option) = {
+      native_name: "CURLOPT_USERAGENT"
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+      }
+    }];
+    bytes range = 4 [(curl.fuzzer.schema.curl_option) = {
+      native_name: "CURLOPT_RANGE"
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        guards {
+          fact: SELECTOR_FACT_IMPLICIT_FTPS
+          expected: false
+          profiles: TARGET_PROFILE_FAST_TFTP
+        }
+      }
+    }];
+  }
+}
+
+message Connection {
+  bytes initial_response = 1 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_HTTP
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_FAST_FTP
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+  bytes http_only = 2 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_HTTP
+      profiles: TARGET_PROFILE_DEEP_HTTP
+    }
+  }];
+}
+
+message SharedState {
+  bytes common = 1 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+      profiles: TARGET_PROFILE_COMPATIBILITY
+      profiles: TARGET_PROFILE_TIMING
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_RESOLVER
+      profiles: TARGET_PROFILE_FAST_HTTP3
+    }
+  }];
+  bytes primary_only = 2 [(curl.fuzzer.schema.scenario_field) = {
+    contextual_eligibility {
+      context: "primary"
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }
+  }];
+  bytes secondary_only = 3 [(curl.fuzzer.schema.scenario_field) = {
+    contextual_eligibility {
+      context: "secondary"
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }
+  }];
+  bytes mixed_membership = 4 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_COMPATIBILITY
+      profiles: TARGET_PROFILE_TIMING
+    }
+    contextual_eligibility {
+      context: "primary"
+      eligibility {
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_TFTP
+        guards {
+          fact: SELECTOR_FACT_IMPLICIT_FTPS
+          expected: false
+          profiles: TARGET_PROFILE_FAST_TFTP
+        }
+      }
+    }
+  }];
+}
+
+message RecursiveNode {
+  bytes payload = 1 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+  RecursiveNode child = 2 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+}
+
+enum Scheme {
+  SCHEME_UNSPECIFIED = 0;
+  SCHEME_TFTP = 7;
+  SCHEME_FTPS = 23;
+}
+
+message ChoicePayload {
+  oneof choice {
+    uint64 amount = 1 [(curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }];
+    Scheme selected_scheme = 2 [(curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }];
+    RecursiveNode node = 3 [(curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }];
+  }
+}
+
+message Scenario {
+  repeated SetOption options = 1 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_COMPATIBILITY
+      profiles: TARGET_PROFILE_FAST_FTP
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+  Connection connection = 2 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_HTTP
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_FAST_FTP
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+  bytes http_only = 3 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_HTTP
+      profiles: TARGET_PROFILE_DEEP_HTTP
+    }
+  }];
+  bytes host_path = 4 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+      guards {
+        fact: SELECTOR_FACT_IMPLICIT_FTPS
+        expected: false
+        profiles: TARGET_PROFILE_FAST_TFTP
+      }
+    }
+  }];
+  Scheme scheme = 5 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_HTTP
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_FAST_FTP
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+  SharedState primary_state = 6 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+      profiles: TARGET_PROFILE_COMPATIBILITY
+      profiles: TARGET_PROFILE_TIMING
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_RESOLVER
+      profiles: TARGET_PROFILE_FAST_HTTP3
+    }
+    child_context: "primary"
+  }];
+  SharedState secondary_state = 7 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+      profiles: TARGET_PROFILE_COMPATIBILITY
+      profiles: TARGET_PROFILE_TIMING
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_RESOLVER
+      profiles: TARGET_PROFILE_FAST_HTTP3
+    }
+    child_context: "secondary"
+  }];
+  SharedState primary_state_again = 8 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+      profiles: TARGET_PROFILE_COMPATIBILITY
+      profiles: TARGET_PROFILE_TIMING
+      profiles: TARGET_PROFILE_DEEP_HTTP
+      profiles: TARGET_PROFILE_RESOLVER
+      profiles: TARGET_PROFILE_FAST_HTTP3
+    }
+    child_context: "primary"
+  }];
+  RecursiveNode recursive = 9 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+  ChoicePayload choice_payload = 10 [(curl.fuzzer.schema.scenario_field) = {
+    eligibility {
+      profiles: TARGET_PROFILE_FAST_TFTP
+    }
+  }];
+}

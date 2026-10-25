@@ -12,14 +12,14 @@
 #include <string>
 #include <string_view>
 
-#include <google/protobuf/text_format.h>
-
 #include "curl_fuzzer.pb.h"
+#include "generated/fast_imap/fast_imap_traits.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/imap_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "test_assertions.h"
+#include "tests/projected_scenario_loader.h"
 
 namespace {
 
@@ -244,7 +244,8 @@ void TestLoginCustomFetchListingSeed() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastImapTraits>(text, &scenario),
          "could not parse the IMAP LOGIN custom FETCH seed");
 
   const std::string url = "imap://" + scenario.host_path();
@@ -298,7 +299,8 @@ void TestXoauth2SeedCompletesAuthenticationAndFetch() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastImapTraits>(text, &scenario),
          "could not parse the IMAP XOAUTH2 seed");
 
   const std::string url = "imap://" + scenario.host_path();
@@ -324,7 +326,8 @@ void TestDigestMd5SeedCompletesAuthenticationAndSearch() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastImapTraits>(text, &scenario),
          "could not parse the IMAP DIGEST-MD5 seed");
 
   const std::string url = "imap://" + scenario.host_path();

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -21,6 +22,10 @@ message Scenario {
   bytes payload = 1;
 }
 """
+ANNOTATED_PROTO_SOURCE = PROTO_SOURCE.replace(
+    "package curl.fuzzer.proto;\n",
+    'package curl.fuzzer.proto;\n\nimport "eligibility_options.proto";\n',
+)
 
 
 def _embedded_json(document: str, element_id: str) -> object:
@@ -112,6 +117,80 @@ def test_find_node_modules_returns_none_when_dependencies_are_absent(
     monkeypatch.setattr(generate_decoder_html, "__file__", str(module))
 
     assert generate_decoder_html.find_node_modules(None) is None
+
+
+def test_browser_schema_keeps_an_explicit_metadata_free_schema(tmp_path: Path) -> None:
+    schema = tmp_path / "curl_fuzzer.proto"
+    schema.write_text(PROTO_SOURCE)
+
+    assert generate_decoder_html.load_browser_proto_source(schema) == PROTO_SOURCE
+
+
+def test_browser_schema_regenerates_annotated_source_even_when_stage_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "schemas" / "curl_fuzzer.proto"
+    source.parent.mkdir()
+    source.write_text(ANNOTATED_PROTO_SOURCE)
+    staged = tmp_path / "build" / "schemas" / "curl_fuzzer.proto"
+    staged.parent.mkdir(parents=True)
+    staged.write_text("stale staged schema\n")
+    monkeypatch.setattr(generate_decoder_html.shutil, "which", lambda _name: "protoc")
+    monkeypatch.setattr(
+        generate_decoder_html,
+        "_generate_authoring_proto_source",
+        lambda path, protoc: (
+            PROTO_SOURCE
+            if (path, protoc) == (source, "protoc")
+            else pytest.fail("unexpected generator arguments")
+        ),
+    )
+
+    assert generate_decoder_html.load_browser_proto_source(source) == PROTO_SOURCE
+
+
+def test_browser_schema_uses_staged_authoring_view_when_protoc_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "schemas" / "curl_fuzzer.proto"
+    source.parent.mkdir()
+    source.write_text(ANNOTATED_PROTO_SOURCE)
+    staged = tmp_path / "build" / "schemas" / "curl_fuzzer.proto"
+    staged.parent.mkdir(parents=True)
+    staged.write_text(PROTO_SOURCE)
+    monkeypatch.setattr(generate_decoder_html.shutil, "which", lambda _name: None)
+
+    assert generate_decoder_html.load_browser_proto_source(source) == PROTO_SOURCE
+
+
+@pytest.mark.skipif(shutil.which("protoc") is None, reason="protoc unavailable")
+def test_browser_schema_generates_an_authoring_view_without_a_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
+    monkeypatch.setattr(
+        generate_decoder_html, "_find_staged_authoring_schema", lambda _path: None
+    )
+
+    rendered = generate_decoder_html.load_browser_proto_source(source)
+
+    assert 'import "eligibility_options.proto";' not in rendered
+    assert "curl.fuzzer.schema" not in rendered
+    assert "message SetOption" in rendered
+    assert "bytes accept_encoding = 1;" in rendered
+
+
+def test_browser_schema_reports_missing_protoc_without_a_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
+    monkeypatch.setattr(
+        generate_decoder_html, "_find_staged_authoring_schema", lambda _path: None
+    )
+    monkeypatch.setattr(generate_decoder_html.shutil, "which", lambda _name: None)
+
+    with pytest.raises(FileNotFoundError, match=r"protoc.*protobuf-compiler"):
+        generate_decoder_html.load_browser_proto_source(source)
 
 
 def test_javascript_bundle_invokes_esbuild_and_escapes_script_end(

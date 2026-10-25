@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: curl
  */
 
+#include "generated/proxy_transport/proxy_transport_traits.h"
 #include "proto_fuzzer/fuzzer_main.h"
 
 namespace {
@@ -11,7 +12,7 @@ namespace {
 // Keep the historical executable basename because OSS-Fuzz keys its corpus
 // and reproducers by that name. The compile-time profile now describes the
 // complete append-only SOCKS/HAProxy transport surface.
-constexpr auto kProfile = proto_fuzzer::TargetProfile::kProxyTransport;
+using Traits = proto_fuzzer::generated::ProxyTransportTraits;
 
 } // namespace
 
@@ -19,8 +20,8 @@ extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t *data,
                                                std::size_t size,
                                                std::size_t max_size,
                                                unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomMutator(kProfile, data, size, max_size,
-                                                seed);
+  return proto_fuzzer::ProtoFuzzerCustomMutator<Traits>(data, size, max_size,
+                                                        seed);
 }
 
 extern "C" std::size_t
@@ -28,11 +29,11 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
                           const std::uint8_t *data2, std::size_t size2,
                           std::uint8_t *out, std::size_t max_out_size,
                           unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomCrossOver(
-      kProfile, data1, size1, data2, size2, out, max_out_size, seed);
+  return proto_fuzzer::ProtoFuzzerCustomCrossOver<Traits>(
+      data1, size1, data2, size2, out, max_out_size, seed);
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
-  return proto_fuzzer::ProtoFuzzerTestOneInput(kProfile, data, size);
+  return proto_fuzzer::ProtoFuzzerTestOneInput<Traits>(data, size);
 }

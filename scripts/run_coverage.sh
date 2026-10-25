@@ -90,16 +90,21 @@ for TARGET in ${TARGETS}; do
     CORPUS_ARGS+=("${CORPUS_DIR}")
   fi
   # Public OSS-Fuzz corpus (if downloaded by scripts/download_public_corpus.sh)
-  # contributes additional coverage without being checked in. Fixed proto
-  # lanes also replay the compatibility target's historical mixed corpus; all
-  # inputs share the Scenario wire format and lane postprocessors normalize
-  # scheme/timing fields before execution.
-  while IFS= read -r PUBLIC_CORPUS_NAME; do
-    PUBLIC_CORPUS_DIR="${BUILD_ROOT}/ossfuzz_corpus/${PUBLIC_CORPUS_NAME}"
-    if [[ -d "${PUBLIC_CORPUS_DIR}" ]]; then
-      CORPUS_ARGS+=("${PUBLIC_CORPUS_DIR}")
-    fi
-  done < <(fuzz_public_corpus_names "${TARGET}")
+  # contributes additional coverage without being checked in. The helper
+  # returns only the target itself and exact same-profile aliases: pre-cutover
+  # bytes remain tied to their original revision, and cross-profile bytes are
+  # not reused merely because protobuf can parse them.
+  PUBLIC_CORPUS_ROOT="${BUILD_ROOT}/ossfuzz_corpus"
+  if fuzz_public_corpus_epoch_ready "${TARGET}" "${PUBLIC_CORPUS_ROOT}"; then
+    while IFS= read -r PUBLIC_CORPUS_NAME; do
+      PUBLIC_CORPUS_DIR="${PUBLIC_CORPUS_ROOT}/${PUBLIC_CORPUS_NAME}"
+      if [[ -d "${PUBLIC_CORPUS_DIR}" ]]; then
+        CORPUS_ARGS+=("${PUBLIC_CORPUS_DIR}")
+      fi
+    done < <(fuzz_public_corpus_names "${TARGET}")
+  else
+    echo "warning: skipping ${TARGET} public corpus: missing ${PUBLIC_CORPUS_ROOT}/${STRUCTURED_CORPUS_EPOCH_MARKER}" >&2
+  fi
   if [[ ${#CORPUS_ARGS[@]} -eq 0 ]]; then
     echo "Skipping ${TARGET}: no corpus dirs"
     record_replay no_corpus null

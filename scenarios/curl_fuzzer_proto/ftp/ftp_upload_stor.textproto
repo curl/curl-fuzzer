@@ -1,8 +1,8 @@
 # Callback-backed STOR covers the FTP upload state machine and data drain.
 scheme: SCHEME_FTP
 host_path: "ftp.test/upload.bin"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 12 }
+options { upload: true }
+options { infilesize_large: 12 }
 upload {
   data: "upload-bytes"
   read_sizes: 3

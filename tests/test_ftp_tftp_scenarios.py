@@ -4,23 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 SCENARIO_ROOT = REPO_ROOT / "scenarios" / "curl_fuzzer_proto"
 
 
-def _supported_options() -> set[str]:
-    return {
-        option.name
-        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
-    }
-
-
-def test_file_transfer_controls_are_reachable_with_owned_networking() -> None:
+def test_file_transfer_controls_are_reachable_with_owned_networking(
+    active_option_names: frozenset[str],
+) -> None:
     """Expose passive/active controls while the harness owns all routing."""
-    supported = _supported_options()
     assert {
         "CURLOPT_DIRLISTONLY",
         "CURLOPT_APPEND",
@@ -37,13 +29,13 @@ def test_file_transfer_controls_are_reachable_with_owned_networking() -> None:
         "CURLOPT_WILDCARDMATCH",
         "CURLOPT_TFTP_BLKSIZE",
         "CURLOPT_TFTP_NO_OPTIONS",
-    } <= supported
+    } <= active_option_names
     assert {
         "CURLOPT_USE_SSL",
         "CURLOPT_QUOTE",
         "CURLOPT_PREQUOTE",
         "CURLOPT_POSTQUOTE",
-    }.isdisjoint(supported)
+    }.isdisjoint(active_option_names)
 
 
 def test_ftp_seeds_retain_control_and_data_correlations() -> None:
@@ -69,17 +61,17 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             'initial_response: "pasv-fallback"',
         ),
         "ftp_upload_stor.textproto": (
-            "CURLOPT_UPLOAD bool_value: true",
+            "upload: true",
             'data: "upload-bytes"',
             "226 stored",
         ),
         "ftp_create_directories.textproto": (
-            "CURLOPT_FTP_CREATE_MISSING_DIRS uint_value: 2",
+            "ftp_create_missing_dirs: 2",
             "550 missing a",
             "257 a created",
         ),
         "ftp_custom_list.textproto": (
-            'CURLOPT_CUSTOMREQUEST string_value: "X-LIST"',
+            'customrequest: "X-LIST"',
             "150 custom listing",
             'initial_response: "custom-entry\\r\\n"',
         ),
@@ -89,33 +81,33 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             'initial_response: "body"',
         ),
         "ftp_active_eprt.textproto": (
-            'CURLOPT_FTPPORT string_value: "127.0.0.1"',
+            'ftpport: "127.0.0.1"',
             "200 EPRT accepted",
             'initial_response: "active-eprt"',
         ),
         "ftp_active_port.textproto": (
-            "CURLOPT_FTP_USE_EPRT bool_value: false",
+            "ftp_use_eprt: 0",
             "200 PORT accepted",
             'initial_response: "active-port"',
         ),
         "ftp_active_listener_allocation_failure.textproto": (
-            'CURLOPT_FTPPORT string_value: "127.0.0.1"',
+            'ftpport: "127.0.0.1"',
             "fail_allocations: 86",
             "harness-owned loopback socket",
         ),
         "ftp_eprt_port_fallback.textproto": (
-            "CURLOPT_FTP_USE_EPRT bool_value: true",
+            "ftp_use_eprt: 1",
             "500 EPRT unsupported",
             "200 PORT accepted",
         ),
         "ftp_wildcard_unix_symlink.textproto": (
             "probe_multi_pollset: true",
-            "CURLOPT_WILDCARDMATCH bool_value: true",
+            "wildcardmatch: true",
             "link.txt -> match.txt",
             'initial_response: "match"',
         ),
         "ftp_wildcard_windows_list.textproto": (
-            "CURLOPT_WILDCARDMATCH bool_value: true",
+            "wildcardmatch: true",
             "04-27-26  11:01AM",
             'initial_response: "match"',
         ),
@@ -143,7 +135,7 @@ def test_ftps_seeds_pair_tls_data_and_protection() -> None:
     assert "229 Entering Extended Passive Mode" in retr
     assert "150 opening secure data connection" in retr
     assert 'initial_response: "secret over tls"' in retr
-    assert "CURLOPT_FTPPORT" not in retr
+    assert "ftpport:" not in retr
 
     rejected = (ftp_root / "ftps_prot_rejected.textproto").read_text(encoding="utf-8")
     assert "500 PROT unsupported" in rejected
@@ -159,7 +151,7 @@ def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
             "\\000\\003\\000\\002ijk",
         ),
         "tftp_wrq_oack_exact_block.textproto": (
-            "CURLOPT_INFILESIZE_LARGE uint_value: 8",
+            "infilesize_large: 8",
             "\\000\\004\\000\\001",
             "\\000\\004\\000\\002",
         ),
@@ -182,8 +174,8 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "scheme: SCHEME_SMTP" in upload
     assert "probe_multi_pollset: true" in upload
     assert 'host_path: "smtp.test/client.test"' in upload
-    assert "CURLOPT_UPLOAD bool_value: true" in upload
-    assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in upload
+    assert "upload: true" in upload
+    assert 'mail_from: "sender@example.test"' in upload
     assert 'mail_rcpt: "recipient@example.test"' in upload
     assert "250 sender accepted" in upload
     assert "250 recipient accepted" in upload
@@ -197,12 +189,12 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     smtps = (smtp_root / "smtps_upload_mail.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_SMTPS" in smtps
     assert 'host_path: "tls.test/client.test"' in smtps
-    assert 'CURLOPT_MAIL_FROM string_value: "sender@example.test"' in smtps
+    assert 'mail_from: "sender@example.test"' in smtps
     assert "354 send the message" in smtps
     assert "250 message queued" in smtps
 
     cram = (smtp_root / "smtp_auth_cram_md5_mail.textproto").read_text(encoding="utf-8")
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5"' in cram
+    assert 'login_options: "AUTH=CRAM-MD5"' in cram
     assert "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UuZXhhbXBsZS5uZXQ+" in cram
     assert "235 2.7.0 authentication succeeded" in cram
     assert "354 send the message" in cram
@@ -220,8 +212,8 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     plain_ir = (smtp_root / "smtp_auth_plain_sasl_ir.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain_ir
-    assert "CURLOPT_SASL_IR bool_value: true" in plain_ir
+    assert 'login_options: "AUTH=PLAIN"' in plain_ir
+    assert "sasl_ir: true" in plain_ir
     assert "250-AUTH PLAIN" in plain_ir
 
     helo = (smtp_root / "smtp_ehlo_helo_fallback.textproto").read_text(encoding="utf-8")
@@ -230,15 +222,15 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "214 smtp.test help" in helo
 
     expn = (smtp_root / "smtp_custom_expn.textproto").read_text(encoding="utf-8")
-    assert 'CURLOPT_CUSTOMREQUEST string_value: "EXPN"' in expn
+    assert 'customrequest: "EXPN"' in expn
     assert 'mail_rcpt: "list@example.test"' in expn
-    assert "CURLOPT_UPLOAD" not in expn
+    assert "upload:" not in expn
     assert "250 member@example.test" in expn
 
     unavailable = (smtp_root / "smtp_auth_unavailable_ntlm.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM"' in unavailable
+    assert 'login_options: "AUTH=NTLM"' in unavailable
     assert "250-AUTH NTLM" in unavailable
     assert "235" not in unavailable
 
@@ -256,7 +248,7 @@ def test_dict_seeds_keep_lookup_paths_and_response_terminators() -> None:
     no_match = (dict_root / "dict_no_match.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_DICT" in no_match
     assert 'host_path: "dict.test/d:missing"' in no_match
-    assert 'CURLOPT_USERNAME string_value: "fuzz"' in no_match
+    assert 'username: "fuzz"' in no_match
     assert "552 no match" in no_match
 
 
@@ -276,8 +268,8 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "A001" not in fetch
 
     append = (imap_root / "imap_append_upload.textproto").read_text(encoding="utf-8")
-    assert "CURLOPT_UPLOAD bool_value: true" in append
-    assert "CURLOPT_INFILESIZE_LARGE uint_value: 17" in append
+    assert "upload: true" in append
+    assert "infilesize_large: 17" in append
     assert "+ Ready for literal" in append
     assert "OK APPEND completed" in append
 
@@ -287,16 +279,16 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     plain = (imap_root / "imap_auth_plain_continuation.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain
-    assert 'CURLOPT_SASL_AUTHZID string_value: "authorization-id"' in plain
+    assert 'login_options: "AUTH=PLAIN"' in plain
+    assert 'sasl_authzid: "authorization-id"' in plain
     assert "* OK authentication continues\\r\\n+ \\r\\n" in plain
     assert "OK AUTHENTICATE completed" in plain
     assert "OK FETCH completed" in plain
 
-    login_listing = (
-        imap_root / "imap_auth_login_custom_fetch.textproto"
-    ).read_text(encoding="utf-8")
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=LOGIN"' in login_listing
+    login_listing = (imap_root / "imap_auth_login_custom_fetch.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'login_options: "AUTH=LOGIN"' in login_listing
     assert "* CAPABILITY IMAP4rev1 AUTH=LOGIN" in login_listing
     assert login_listing.count('on_readable: "+') == 2
     assert "UID FETCH 1:* (FLAGS)" in login_listing
@@ -305,18 +297,16 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     oauth = (imap_root / "imap_auth_oauthbearer_error.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=OAUTHBEARER"' in oauth
-    assert 'CURLOPT_XOAUTH2_BEARER string_value: "invalid-token"' in oauth
+    assert 'login_options: "AUTH=OAUTHBEARER"' in oauth
+    assert 'xoauth2_bearer: "invalid-token"' in oauth
     assert oauth.count('on_readable: "+') == 2
     assert "NO Authentication failed" in oauth
 
     xoauth2 = (imap_root / "imap_auth_xoauth2_success.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=XOAUTH2"' in xoauth2
-    assert (
-        'CURLOPT_XOAUTH2_BEARER string_value: "fuzz-xoauth2-token"' in xoauth2
-    )
+    assert 'login_options: "AUTH=XOAUTH2"' in xoauth2
+    assert 'xoauth2_bearer: "fuzz-xoauth2-token"' in xoauth2
     assert "A002 OK AUTHENTICATE completed" in xoauth2
     assert "A004 OK FETCH completed" in xoauth2
 
@@ -324,7 +314,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
         encoding="utf-8"
     )
     assert 'host_path: "imap.test/INBOX?ALL"' in digest
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=DIGEST-MD5"' in digest
+    assert 'login_options: "AUTH=DIGEST-MD5"' in digest
     assert "AUTH=DIGEST-MD5\\r\\nOK CAPABILITY completed" in digest
     assert digest.count('on_readable: "+') == 2
     assert "OK AUTHENTICATE completed" in digest
@@ -373,7 +363,7 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "-ERR no such user" in rejected
 
     cram = (pop3_root / "pop3_auth_cram_md5_retr.textproto").read_text(encoding="utf-8")
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=CRAM-MD5"' in cram
+    assert 'login_options: "AUTH=CRAM-MD5"' in cram
     assert "SASL CRAM-MD5" in cram
     assert "PDE4OTYuNjk3MTcwOTUy" in cram
     assert "+OK authentication succeeded" in cram
@@ -389,36 +379,36 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     plain_ir = (pop3_root / "pop3_auth_plain_sasl_ir.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN"' in plain_ir
-    assert "CURLOPT_SASL_IR bool_value: true" in plain_ir
+    assert 'login_options: "AUTH=PLAIN"' in plain_ir
+    assert "sasl_ir: true" in plain_ir
     assert "SASL PLAIN" in plain_ir
 
     apop = (pop3_root / "pop3_apop_retr.textproto").read_text(encoding="utf-8")
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP"' in apop
+    assert 'login_options: "AUTH=+APOP"' in apop
     assert "<id@host>" in apop
     assert "+OK authentication succeeded" in apop
 
     apop_denied = (pop3_root / "pop3_apop_denied.textproto").read_text(encoding="utf-8")
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=+APOP"' in apop_denied
+    assert 'login_options: "AUTH=+APOP"' in apop_denied
     assert "-ERR invalid digest" in apop_denied
 
     unavailable = (pop3_root / "pop3_auth_unavailable_ntlm.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_LOGIN_OPTIONS string_value: "AUTH=NTLM"' in unavailable
+    assert 'login_options: "AUTH=NTLM"' in unavailable
     assert "SASL NTLM" in unavailable
     assert "+OK authentication succeeded" not in unavailable
 
     uidl = (pop3_root / "pop3_uidl_mailbox.textproto").read_text(encoding="utf-8")
-    assert 'CURLOPT_CUSTOMREQUEST string_value: "UIDL"' in uidl
+    assert 'customrequest: "UIDL"' in uidl
     assert "+OK unique ids follow" in uidl
     assert "whqtswO00QHEf7kmZ" in uidl
 
     top = (pop3_root / "pop3_top_long_dot_stuffed.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'CURLOPT_CUSTOMREQUEST string_value: "TOP 1 0"' in top
-    assert "CURLOPT_BUFFERSIZE uint_value: 1024" in top
+    assert 'customrequest: "TOP 1 0"' in top
+    assert "buffersize: 1024" in top
     assert "..dot-stuffed\\r\\n" in top
     assert "...two-leading-dots\\r\\n.\\r\\n" in top
     assert top.count("A" * 80) >= 16

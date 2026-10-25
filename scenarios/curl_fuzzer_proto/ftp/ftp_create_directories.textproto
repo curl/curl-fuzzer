@@ -1,9 +1,9 @@
 # CWD failure followed by MKD/CWD drives missing-directory recovery.
 scheme: SCHEME_FTP
 host_path: "ftp.test/a/b/file"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 1 }
-options { option_id: CURLOPT_FTP_CREATE_MISSING_DIRS uint_value: 2 }
+options { upload: true }
+options { infilesize_large: 1 }
+options { ftp_create_missing_dirs: 2 }
 upload { data: "x" terminal: UPLOAD_TERMINAL_EOF }
 connection {
   initial_response: "220 ready\r\n"

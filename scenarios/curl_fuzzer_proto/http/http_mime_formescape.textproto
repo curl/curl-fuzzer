@@ -3,7 +3,7 @@
 # body reaches the alternate escaping path that a scalar option seed cannot.
 scheme: SCHEME_HTTP
 host_path: "mime.test/formescape"
-options { option_id: CURLOPT_MIME_OPTIONS uint_value: 1 }
+options { mime_options: 1 }
 mime_post {
   parts {
     name: "field\"\\name"

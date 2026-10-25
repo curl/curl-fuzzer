@@ -2,8 +2,8 @@
 # success replies before RETR can reach the data state.
 scheme: SCHEME_FTP
 host_path: "ftp.test/resume.bin"
-options { option_id: CURLOPT_FTP_USE_PRET bool_value: true }
-options { option_id: CURLOPT_RESUME_FROM_LARGE uint_value: 4 }
+options { ftp_use_pret: true }
+options { resume_from_large: 4 }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "331 password\r\n"

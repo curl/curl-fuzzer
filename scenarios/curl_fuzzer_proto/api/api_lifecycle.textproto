@@ -5,8 +5,7 @@ connection {
   on_readable: "ok"
 }
 options {
-  option_id: CURLOPT_REFERER
-  string_value: "https://referrer.test/"
+  referer: "https://referrer.test/"
 }
 api_plan {
   duplicate_easy: true

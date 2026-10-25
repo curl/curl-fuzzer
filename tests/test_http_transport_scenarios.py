@@ -23,8 +23,6 @@ def test_http_transport_seeds_cover_proxy_and_unix_modes() -> None:
             "HTTP_TRANSPORT_CONNECT_PROXY",
             "haproxy_protocol: true",
             "probe_multi_pollset: true",
-            "recv_buf_bytes: 2048",
-            "drain_limit: 48",
             "HTTP/1.1 200 Connection Established",
             "proxied",
         ),
@@ -42,6 +40,8 @@ def test_http_transport_seeds_cover_proxy_and_unix_modes() -> None:
     haproxy = (SCENARIO_ROOT / "http_connect_haproxy_backpressure.textproto").read_text(
         encoding="utf-8"
     )
+    assert "recv_buf_bytes:" not in haproxy
+    assert "drain_limit:" not in haproxy
     assert haproxy.count('request_headers: "X-Haproxy-Pad-') == 1
     pad_line = next(
         line

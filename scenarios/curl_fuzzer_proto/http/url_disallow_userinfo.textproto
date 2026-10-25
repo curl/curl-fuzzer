@@ -3,7 +3,7 @@
 # a low-probability correlation between a mutated URL and option bit.
 scheme: SCHEME_HTTP
 host_path: "user:pass@userinfo.test/private"
-options { option_id: CURLOPT_DISALLOW_USERNAME_IN_URL bool_value: true }
+options { disallow_username_in_url: true }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
 }

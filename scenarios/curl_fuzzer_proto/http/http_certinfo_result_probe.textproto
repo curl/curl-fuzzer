@@ -4,7 +4,7 @@
 # without allocating an application-owned certificate list.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/certinfo-probe"
-options { option_id: CURLOPT_CERTINFO bool_value: true }
+options { certinfo: true }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
 }

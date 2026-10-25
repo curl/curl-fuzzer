@@ -2,8 +2,8 @@
 # can consume curl's final stream-reset traffic after the client completes.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/upload/callback-abort"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 4 }
+options { upload: true }
+options { infilesize_large: 4 }
 request_headers: "Expect:"
 upload {
   data: "ab"

@@ -4,7 +4,7 @@
 # while still exercising curl/nghttp2's closed-stream control handling.
 scheme: SCHEME_HTTP
 host_path: "127.0.0.1/http2-controls"
-options { option_id: CURLOPT_HTTP_VERSION uint_value: 5 }
+options { http_version: 5 }
 connection {
   initial_response: "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
   # SETTINGS ack, empty HEADERS, then :status=200 in CONTINUATION.

@@ -4,28 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 SCENARIO_ROOT = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "mqtt"
 
 
-def _supported_options() -> set[str]:
-    return {
-        option.name
-        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
-    }
-
-
-def test_mqtt_schema_exposes_publish_and_credential_controls() -> None:
+def test_mqtt_schema_exposes_publish_and_credential_controls(
+    active_option_names: frozenset[str],
+) -> None:
     """Keep the publish body and CONNECT credentials reachable."""
     assert {
         "CURLOPT_POSTFIELDS",
         "CURLOPT_USERNAME",
         "CURLOPT_PASSWORD",
         "CURLOPT_USERPWD",
-    } <= _supported_options()
+    } <= active_option_names
     assert "SCHEME_MQTT = 13;" in SCENARIO_SCHEMA.read_text(encoding="utf-8")
     assert "SCHEME_MQTTS = 22;" in SCENARIO_SCHEMA.read_text(encoding="utf-8")
 
@@ -35,7 +28,7 @@ def test_mqtt_publish_seed_preloads_connack_before_publish() -> None:
     publish = (SCENARIO_ROOT / "mqtt_publish.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_MQTT" in publish
     assert 'host_path: "mqtt.test/sensors/kitchen"' in publish
-    assert 'CURLOPT_POSTFIELDS string_value: "hello mqtt"' in publish
+    assert 'postfields: "hello mqtt"' in publish
     assert "probe_multi_pollset: true" in publish
     assert 'initial_response: "\\040\\002\\000\\000"' in publish
 
@@ -64,7 +57,7 @@ def test_mqtts_publish_seed_uses_certifiable_authority() -> None:
     publish = (SCENARIO_ROOT / "mqtts_publish.textproto").read_text(encoding="utf-8")
     assert "scheme: SCHEME_MQTTS" in publish
     assert 'host_path: "tls.test/sensors/kitchen"' in publish
-    assert 'CURLOPT_POSTFIELDS string_value: "hello mqtt"' in publish
+    assert 'postfields: "hello mqtt"' in publish
     assert "probe_multi_pollset: true" in publish
     assert 'initial_response: "\\040\\002\\000\\000"' in publish
 

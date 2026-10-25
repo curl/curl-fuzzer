@@ -3,8 +3,8 @@
 # transfer stays bounded and never reaches an external origin.
 scheme: SCHEME_HTTP
 host_path: "origin.test/h1-proxy-auth"
-options { option_id: CURLOPT_PROXYAUTH uint_value: 1 }
-options { option_id: CURLOPT_PROXYUSERPWD string_value: "fuzz:secret" }
+options { proxyauth: 1 }
+options { proxyuserpwd: "fuzz:secret" }
 connection {
   proxy_protocol: PROXY_PROTOCOL_HTTP1
   on_readable: "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"fuzz\"\r\nContent-Length: 0\r\n\r\n"

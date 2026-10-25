@@ -2,8 +2,8 @@
 # reaches curl's data-channel TLS policy error before any passive socket opens.
 scheme: SCHEME_FTPS
 host_path: "tls.test/protected.bin"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { username: "fuzz" }
+options { password: "secret" }
 connection {
   initial_response: "220 ftps fuzz peer ready\r\n"
   on_readable: "331 password required\r\n"

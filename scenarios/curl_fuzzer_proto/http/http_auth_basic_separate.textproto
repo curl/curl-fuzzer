@@ -3,9 +3,9 @@
 # first request, so this remains useful even with a single mock connection.
 scheme: SCHEME_HTTP
 host_path: "auth.test/basic/separate"
-options { option_id: CURLOPT_USERNAME string_value: "separate-user" }
-options { option_id: CURLOPT_PASSWORD string_value: "p@ss:word" }
-options { option_id: CURLOPT_HTTPAUTH uint_value: 1 }
+options { username: "separate-user" }
+options { password: "p@ss:word" }
+options { httpauth: 1 }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
 }

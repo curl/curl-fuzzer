@@ -14,43 +14,40 @@ from contextlib import suppress
 from pathlib import Path
 from typing import IO
 
+STRUCTURED_CORPUS_EPOCH = "schema-owned-eligibility-v1"
+STRUCTURED_CORPUS_EPOCH_MARKER = f".structured-{STRUCTURED_CORPUS_EPOCH}"
+
 COMPATIBLE_CORPUS_TARGETS = {
-    "curl_fuzzer_proto_http2": ("curl_fuzzer_proto_https_h2",),
+    # These binaries use the exact same generated profile as the OpenSSL
+    # HTTPS lane. Cross-profile protobufs are not interchangeable merely
+    # because their tags happen to parse.
     "curl_fuzzer_proto_https_gnutls": ("curl_fuzzer_proto_https",),
     "curl_fuzzer_proto_https_mbedtls": ("curl_fuzzer_proto_https",),
-    "curl_fuzzer_proto_http3": ("curl_fuzzer_proto_https",),
 }
-HISTORICAL_PROTO_CORPUS_TARGETS = frozenset(
-    {
-        "curl_fuzzer_proto_http",
-        "curl_fuzzer_proto_http_deep",
-        "curl_fuzzer_proto_https",
-        "curl_fuzzer_proto_https_gnutls",
-        "curl_fuzzer_proto_https_mbedtls",
-        "curl_fuzzer_proto_http3",
-        "curl_fuzzer_proto_ws",
-        "curl_fuzzer_proto_wss",
-        "curl_fuzzer_proto_telnet",
-        "curl_fuzzer_proto_ftp",
-        "curl_fuzzer_proto_tftp",
-        "curl_fuzzer_proto_smtp",
-        "curl_fuzzer_proto_imap",
-        "curl_fuzzer_proto_pop3",
-        "curl_fuzzer_proto_mqtt",
-        "curl_fuzzer_proto_dict",
-        "curl_fuzzer_proto_file",
-        "curl_fuzzer_proto_ldap",
-        "curl_fuzzer_proto_rtsp",
-        "curl_fuzzer_proto_ipfs",
-        "curl_fuzzer_proto_api",
-        "curl_fuzzer_proto_multi",
-        "curl_fuzzer_proto_timing",
-    }
-)
 
 
 class CorpusError(RuntimeError):
     """Raised for invalid or unavailable corpus inputs."""
+
+
+def is_structured_fuzzer_target(target: str) -> bool:
+    """Return whether a target consumes the breaking structured schema."""
+    return target == "curl_fuzzer_proto" or target.startswith("curl_fuzzer_proto_")
+
+
+def has_current_structured_corpus_epoch(root: Path) -> bool:
+    """Return whether a public-corpus root is explicitly marked current."""
+    return (root / STRUCTURED_CORPUS_EPOCH_MARKER).is_file()
+
+
+def require_current_structured_corpus_epoch(root: Path) -> None:
+    """Reject a public-corpus root not explicitly marked for this schema."""
+    if not has_current_structured_corpus_epoch(root):
+        raise CorpusError(
+            f"structured public corpus root {root} is missing epoch marker "
+            f"{STRUCTURED_CORPUS_EPOCH_MARKER}; only create it after replacing "
+            "pre-cutover structured corpora"
+        )
 
 
 def sha256_file(path: Path) -> str:
@@ -234,9 +231,9 @@ def resolve_corpus_sources(
             sources.append(seed_archive)
 
     if public_corpus_root is not None:
+        if is_structured_fuzzer_target(target):
+            require_current_structured_corpus_epoch(public_corpus_root)
         public_targets = list(compatible_targets)
-        if target in HISTORICAL_PROTO_CORPUS_TARGETS:
-            public_targets.append("curl_fuzzer_proto")
         for public_target in public_targets:
             public = public_corpus_root / public_target
             searched.append(public)

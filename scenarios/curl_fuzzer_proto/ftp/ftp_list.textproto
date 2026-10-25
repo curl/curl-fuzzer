@@ -1,8 +1,8 @@
 # A directory transfer reaches LIST/NLST parsing and the passive data channel.
 scheme: SCHEME_FTP
 host_path: "ftp.test/pub/"
-options { option_id: CURLOPT_DIRLISTONLY bool_value: true }
-options { option_id: CURLOPT_TRANSFERTEXT bool_value: true }
+options { dirlistonly: true }
+options { transfertext: true }
 connection {
   initial_response: "220-list peer\r\n220 ready\r\n"
   on_readable: "331 password\r\n"
