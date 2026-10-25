@@ -36,7 +36,8 @@ void curl_global_cleanup(void);
     generated_include = tmp_path / "generated" / "api"
     generated_include.mkdir(parents=True)
     (generated_include / "api_traits.h").write_text(
-        "namespace proto_fuzzer::generated { struct ApiTraits {}; }\n",
+        "namespace proto_fuzzer::generated { "
+        "struct ApiTraits { static constexpr int kProfile = 0; }; }\n",
         encoding="utf-8",
     )
     proto_include = tmp_path / "proto_fuzzer"
@@ -49,8 +50,16 @@ void curl_global_cleanup(void);
 #include <cstdint>
 #include <cstdio>
 namespace proto_fuzzer {
+using ProfileInputLoader = bool (*)(const std::uint8_t *, std::size_t);
 template <typename Traits>
-int ProtoFuzzerTestOneInput(const std::uint8_t *, std::size_t) {
+bool LoadProfileInput(const std::uint8_t *, std::size_t) {
+  return true;
+}
+inline int ProtoFuzzerTestOneInput(const std::uint8_t *data, std::size_t size,
+                                   int, ProfileInputLoader load_profile_input) {
+  if (!load_profile_input(data, size)) {
+    return 0;
+  }
   std::puts("ordinary API scenario");
   return 0;
 }

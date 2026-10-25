@@ -54,5 +54,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
   // Standalone replay engines do not always call LLVMFuzzerInitialize.
   proto_fuzzer::RunApiCoverageProbesOnce();
 #endif
-  return proto_fuzzer::ProtoFuzzerTestOneInput<Traits>(data, size);
+  return proto_fuzzer::ProtoFuzzerTestOneInput(
+      data, size, Traits::kProfile, &proto_fuzzer::LoadProfileInput<Traits>);
 }

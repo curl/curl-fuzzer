@@ -83,37 +83,6 @@ def test_parse_and_verify_variable_width_indentation() -> None:
     assert nodes[4].parent == 2
 
 
-def test_verify_accepts_the_generated_template_spelling() -> None:
-    module = _load_module()
-    calltree = _valid_calltree().replace(
-        "proto_fuzzer::ProtoFuzzerTestOneInput /src/entry.cc 20",
-        "proto_fuzzer::ProtoFuzzerTestOneInput<Traits> /src/entry.cc 20",
-    )
-
-    module.verify_calltree(module.parse_calltree(calltree))
-
-
-@pytest.mark.parametrize(
-    "lookalike",
-    [
-        "proto_fuzzer::ProtoFuzzerTestOneInputHelper<Traits>",
-        "proto_fuzzer::ProtoFuzzerTestOneInput<Traits>Helper",
-        "proto_fuzzer::ProtoFuzzerTestOneInput<>",
-    ],
-)
-def test_verify_rejects_template_name_lookalikes(lookalike: str) -> None:
-    module = _load_module()
-    calltree = _valid_calltree().replace(
-        "proto_fuzzer::ProtoFuzzerTestOneInput /src/entry.cc 20",
-        f"{lookalike} /src/entry.cc 20",
-    )
-
-    with pytest.raises(module.IntrospectorCheckError) as raised:
-        module.verify_calltree(module.parse_calltree(calltree))
-
-    assert "missing direct call-tree edge" in str(raised.value)
-
-
 def test_verify_rejects_a_required_function_on_the_wrong_branch() -> None:
     module = _load_module()
     calltree = _valid_calltree().replace(

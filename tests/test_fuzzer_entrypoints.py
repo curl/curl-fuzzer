@@ -177,7 +177,9 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
 
         assert contents.count(f'"generated/{slug}/{slug}_traits.h"') == 1
         assert contents.count(f"proto_fuzzer::generated::{traits}") == 1
-        assert contents.count("ProtoFuzzerTestOneInput<Traits>(") == 1
+        assert contents.count("proto_fuzzer::ProtoFuzzerTestOneInput(") == 1
+        assert contents.count("Traits::kProfile") == 1
+        assert contents.count("&proto_fuzzer::LoadProfileInput<Traits>") == 1
         assert contents.count("ProtoFuzzerCustomMutator<Traits>(") == 1
         assert contents.count("ProtoFuzzerCustomCrossOver<Traits>(") == 1
         assert "ProtoFuzzerEntrypoint" not in contents
@@ -193,5 +195,23 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
     )
     cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     assert "ProtoFuzzerEntrypoint" not in shared_header
+    assert "using ProfileInputLoader" in shared_header
+    assert "bool LoadProfileInput(" in shared_header
+    assert "ProtoFuzzerTestOneInput<Traits>" not in shared_header
+    assert "ExecuteProfileScenario" not in shared_header
+    assert "ExecuteProfileScenario" not in shared_main
+    assert shared_main.count("int ProtoFuzzerTestOneInput(") == 1
+    assert shared_main.count("proto_fuzzer::RunScenario(") == 1
+    dispatcher = shared_main[shared_main.index("int ProtoFuzzerTestOneInput(") :]
+    reset_before_load = dispatcher.index("allocation_fault_injection::Reset()")
+    load = dispatcher.index("load_profile_input(data, size, &scenario)")
+    normalize = dispatcher.index("NormalizeScenarioForExecution(&scenario)")
+    configure = dispatcher.index("allocation_fault_injection::Configure(")
+    arm = dispatcher.index("allocation_fault_injection::Arm()")
+    run = dispatcher.index("proto_fuzzer::RunScenario(")
+    reset_after_run = dispatcher.index("allocation_fault_injection::Reset()", run)
+    assert (
+        reset_before_load < load < normalize < configure < arm < run < reset_after_run
+    )
     assert "PROTO_FUZZER_TARGET_" not in shared_main
     assert "PROTO_FUZZER_TARGET_" not in cmake

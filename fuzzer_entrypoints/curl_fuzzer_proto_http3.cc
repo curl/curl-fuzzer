@@ -34,5 +34,6 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
-  return proto_fuzzer::ProtoFuzzerTestOneInput<Traits>(data, size);
+  return proto_fuzzer::ProtoFuzzerTestOneInput(
+      data, size, Traits::kProfile, &proto_fuzzer::LoadProfileInput<Traits>);
 }

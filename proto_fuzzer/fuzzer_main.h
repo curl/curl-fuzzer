@@ -25,7 +25,11 @@
 
 namespace proto_fuzzer {
 
-void ExecuteProfileScenario(TargetProfile profile, curl::fuzzer::proto::Scenario* scenario);
+/// Type-erased bridge from one generated profile root into runtime state.
+using ProfileInputLoader = bool (*)(const std::uint8_t*, std::size_t, curl::fuzzer::proto::Scenario*);
+
+int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size, TargetProfile profile,
+                            ProfileInputLoader load_profile_input);
 
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
 /// Exercise the typed mutation ABI once for the profiling timing target.
@@ -92,14 +96,14 @@ std::size_t ProtoFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t si
   return ProfileFuzzerHooks<Traits>::CustomCrossOver(data1, size1, data2, size2, out, max_out_size, seed);
 }
 
-/// Load one generated profile message, lower it, and execute runtime state.
+/// Load one generated profile message and lower it into runtime state.
 /// @tparam Traits Generated profile adapter defining the concrete message type.
 /// @param data Serialized profile message bytes.
 /// @param size Number of bytes available at `data`.
-/// @return Always zero, as required by the libFuzzer entrypoint contract.
+/// @param runtime Destination for the owned, lowered runtime Scenario.
+/// @return Whether the generated profile input loaded and lowered successfully.
 template <typename Traits>
-int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-  allocation_fault_injection::Reset();
+bool LoadProfileInput(const std::uint8_t* data, std::size_t size, curl::fuzzer::proto::Scenario* runtime) {
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
   if constexpr (Traits::kProfile == TargetProfile::kTiming) {
     static const bool mutation_helpers_probed = [] {
@@ -109,11 +113,7 @@ int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     (void)mutation_helpers_probed;
   }
 #endif
-  curl::fuzzer::proto::Scenario runtime;
-  if (ProfileFuzzerHooks<Traits>::LoadAndLower(data, size, &runtime)) {
-    ExecuteProfileScenario(Traits::kProfile, &runtime);
-  }
-  return 0;
+  return ProfileFuzzerHooks<Traits>::LoadAndLower(data, size, runtime);
 }
 
 }  // namespace proto_fuzzer
