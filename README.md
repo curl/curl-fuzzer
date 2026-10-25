@@ -19,9 +19,9 @@ repository supplies the harnesses used by curl's
 | Direct `fuzz_*` targets | Focused fuzzing of URL, buffer queue, DoH, and netrc parsing | `corpora/<target>/` |
 
 The conditional list in [`scripts/fuzz_targets`](scripts/fuzz_targets) is the
-source of truth for targets packaged for OSS-Fuzz. Structured targets are not
-built for i386, and some TLS and HTTP/3 variants are omitted from
-MemorySanitizer builds.
+source of truth for targets packaged for OSS-Fuzz. The base structured targets
+are built for OSS-Fuzz's AddressSanitizer/i386 configuration. The GnuTLS,
+mbedTLS, and HTTP/3 variants are omitted from i386 and MemorySanitizer builds.
 
 ## Build and replay locally
 

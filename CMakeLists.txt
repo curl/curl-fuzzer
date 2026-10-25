@@ -1605,10 +1605,11 @@ add_custom_target(fuzz
 # Structured (libprotobuf-mutator) network target suite
 #
 # These binaries live entirely under proto_fuzzer/ and share no source with
-# the TLV fuzzers above. They are skipped on 32-bit builds so we don't have to
-# drag LPM/protobuf through the i386 toolchain.
+# the TLV fuzzers above. OSS-Fuzz supports i386 with AddressSanitizer, where
+# the LPM/protobuf dependency stack is built and executed as 32-bit code.
 # -----------------------------------------------------------------------------
-if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386")
+if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
+   "$ENV{SANITIZER}" STREQUAL "address")
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
     # renovate: datasource=github-tags depName=google/libprotobuf-mutator
