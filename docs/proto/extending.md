@@ -102,9 +102,9 @@ A new lane normally requires all of the following:
 4. A bounded peer or runner path. It must not consult ambient DNS, proxies,
    trust stores, or remote endpoints, and malformed scripts must terminate by
    operation or idle budgets rather than long wall-clock waits.
-5. A thin `fuzzer_entrypoints/curl_fuzzer_proto_<name>.cc` including its
-   generated Traits and binding all three libFuzzer entrypoints to that same
-   concrete message type.
+5. A thin `fuzzer_entrypoints/curl_fuzzer_proto_<name>.cc` binding its generated
+   Traits once into a `kProfile` descriptor and passing that descriptor to all
+   three ordinary libFuzzer entrypoint helpers.
 6. A CMake executable and profile-generation declaration, generated corpus
    declaration (or an explicit reuse mapping in
    `scripts/fuzz_corpus_helpers.sh`), and dependency from the executable to

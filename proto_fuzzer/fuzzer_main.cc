@@ -28,17 +28,56 @@ proto_fuzzer::CurlGlobalLifecycle kGlobalBootstrap;
 
 namespace proto_fuzzer {
 
+/// Mutate one serialized generated profile message.
+/// @param data Serialized profile message buffer to mutate in place.
+/// @param size Number of input bytes currently stored in `data`.
+/// @param max_size Capacity of `data` available for the mutated message.
+/// @param seed Deterministic mutation seed supplied by libFuzzer.
+/// @param traits Generated profile binding for this executable.
+/// @return Number of serialized bytes in the mutated message.
+std::size_t ProtoFuzzerCustomMutator(std::uint8_t* data, std::size_t size, std::size_t max_size, unsigned int seed,
+                                     const ProfileFuzzerTraits& traits) {
+  allocation_fault_injection::Reset();
+  if (traits.custom_mutator == nullptr) {
+    return 0;
+  }
+  return traits.custom_mutator(data, size, max_size, seed);
+}
+
+/// Cross two serialized generated profile messages of the same concrete type.
+/// @param data1 Serialized first parent message.
+/// @param size1 Number of bytes in `data1`.
+/// @param data2 Serialized second parent message.
+/// @param size2 Number of bytes in `data2`.
+/// @param out Destination buffer for the crossed message.
+/// @param max_out_size Capacity of `out`.
+/// @param seed Deterministic crossover seed supplied by libFuzzer.
+/// @param traits Generated profile binding for this executable.
+/// @return Number of serialized bytes written to `out`.
+std::size_t ProtoFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t size1, const std::uint8_t* data2,
+                                       std::size_t size2, std::uint8_t* out, std::size_t max_out_size,
+                                       unsigned int seed, const ProfileFuzzerTraits& traits) {
+  allocation_fault_injection::Reset();
+  if (traits.custom_crossover == nullptr) {
+    return 0;
+  }
+  return traits.custom_crossover(data1, size1, data2, size2, out, max_out_size, seed);
+}
+
 /// Load and execute one generated-profile input under its fixed target lane.
 /// @param data Serialized generated-profile input bytes.
 /// @param size Number of bytes available at `data`.
-/// @param profile Mutation and execution policy selected by the entrypoint.
-/// @param load_profile_input Typed bridge that owns profile parsing/lowering.
+/// @param traits Generated profile binding selected by the entrypoint.
 /// @return Always zero, as required by the libFuzzer entrypoint contract.
-int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size, TargetProfile profile,
-                            ProfileInputLoader load_profile_input) {
+int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size, const ProfileFuzzerTraits& traits) {
   allocation_fault_injection::Reset();
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  if (traits.probe_mutation_helpers != nullptr) {
+    traits.probe_mutation_helpers();
+  }
+#endif
   curl::fuzzer::proto::Scenario scenario;
-  if (load_profile_input == nullptr || !load_profile_input(data, size, &scenario)) {
+  if (traits.load_input == nullptr || !traits.load_input(data, size, &scenario)) {
     return 0;
   }
 
@@ -46,9 +85,9 @@ int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size, TargetPr
   allocation_fault_injection::Configure(scenario.fail_allocations().data(),
                                         static_cast<std::size_t>(scenario.fail_allocations_size()));
   allocation_fault_injection::Arm();
-  proto_fuzzer::RunScenario(scenario, RunModeFor(profile));
+  proto_fuzzer::RunScenario(scenario, RunModeFor(traits.profile));
   allocation_fault_injection::Reset();
-  if (profile == TargetProfile::kResolver &&
+  if (traits.profile == TargetProfile::kResolver &&
       scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE) {
     curl_global_cleanup();
     if (!allocation_fault_injection::ReinitializeCurl()) {

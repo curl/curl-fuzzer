@@ -50,29 +50,30 @@ void curl_global_cleanup(void);
 #include <cstdint>
 #include <cstdio>
 namespace proto_fuzzer {
-using ProfileInputLoader = bool (*)(const std::uint8_t *, std::size_t);
+struct ProfileFuzzerTraits {
+  int profile;
+};
 template <typename Traits>
-bool LoadProfileInput(const std::uint8_t *, std::size_t) {
-  return true;
+constexpr ProfileFuzzerTraits BindProfileFuzzer() {
+  return {Traits::kProfile};
 }
 inline int ProtoFuzzerTestOneInput(const std::uint8_t *data, std::size_t size,
-                                   int, ProfileInputLoader load_profile_input) {
-  if (!load_profile_input(data, size)) {
-    return 0;
-  }
+                                   const ProfileFuzzerTraits &) {
+  (void)data;
+  (void)size;
   std::puts("ordinary API scenario");
   return 0;
 }
-template <typename Traits>
 std::size_t ProtoFuzzerCustomMutator(std::uint8_t *, std::size_t size,
-                                     std::size_t, unsigned int) {
+                                     std::size_t, unsigned int,
+                                     const ProfileFuzzerTraits &) {
   return size;
 }
-template <typename Traits>
 std::size_t ProtoFuzzerCustomCrossOver(const std::uint8_t *, std::size_t size1,
                                        const std::uint8_t *, std::size_t,
                                        std::uint8_t *, std::size_t,
-                                       unsigned int) {
+                                       unsigned int,
+                                       const ProfileFuzzerTraits &) {
   return size1;
 }
 }  // namespace proto_fuzzer

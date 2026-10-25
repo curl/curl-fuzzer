@@ -13,6 +13,7 @@ namespace {
 // and reproducers by that name. The compile-time profile now describes the
 // complete append-only SOCKS/HAProxy transport surface.
 using Traits = proto_fuzzer::generated::ProxyTransportTraits;
+constexpr auto kProfile = proto_fuzzer::BindProfileFuzzer<Traits>();
 
 } // namespace
 
@@ -20,8 +21,8 @@ extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t *data,
                                                std::size_t size,
                                                std::size_t max_size,
                                                unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomMutator<Traits>(data, size, max_size,
-                                                        seed);
+  return proto_fuzzer::ProtoFuzzerCustomMutator(data, size, max_size, seed,
+                                                kProfile);
 }
 
 extern "C" std::size_t
@@ -29,12 +30,11 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
                           const std::uint8_t *data2, std::size_t size2,
                           std::uint8_t *out, std::size_t max_out_size,
                           unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomCrossOver<Traits>(
-      data1, size1, data2, size2, out, max_out_size, seed);
+  return proto_fuzzer::ProtoFuzzerCustomCrossOver(
+      data1, size1, data2, size2, out, max_out_size, seed, kProfile);
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
-  return proto_fuzzer::ProtoFuzzerTestOneInput(
-      data, size, Traits::kProfile, &proto_fuzzer::LoadProfileInput<Traits>);
+  return proto_fuzzer::ProtoFuzzerTestOneInput(data, size, kProfile);
 }

@@ -177,11 +177,15 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
 
         assert contents.count(f'"generated/{slug}/{slug}_traits.h"') == 1
         assert contents.count(f"proto_fuzzer::generated::{traits}") == 1
+        assert contents.count("BindProfileFuzzer<Traits>()") == 1
         assert contents.count("proto_fuzzer::ProtoFuzzerTestOneInput(") == 1
-        assert contents.count("Traits::kProfile") == 1
-        assert contents.count("&proto_fuzzer::LoadProfileInput<Traits>") == 1
-        assert contents.count("ProtoFuzzerCustomMutator<Traits>(") == 1
-        assert contents.count("ProtoFuzzerCustomCrossOver<Traits>(") == 1
+        assert contents.count("proto_fuzzer::ProtoFuzzerCustomMutator(") == 1
+        assert contents.count("proto_fuzzer::ProtoFuzzerCustomCrossOver(") == 1
+        assert contents.count("kProfile)") == 3
+        assert "Traits::kProfile" not in contents
+        assert "LoadProfileInput<Traits>" not in contents
+        assert "ProtoFuzzerCustomMutator<Traits>" not in contents
+        assert "ProtoFuzzerCustomCrossOver<Traits>" not in contents
         assert "ProtoFuzzerEntrypoint" not in contents
         assert len(ENTRYPOINT_PATTERN.findall(contents)) == 1
         assert len(CUSTOM_MUTATOR_PATTERN.findall(contents)) == 1
@@ -195,16 +199,19 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
     )
     cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     assert "ProtoFuzzerEntrypoint" not in shared_header
-    assert "using ProfileInputLoader" in shared_header
-    assert "bool LoadProfileInput(" in shared_header
+    assert "const ProfileFuzzerTraits& traits" in shared_header
     assert "ProtoFuzzerTestOneInput<Traits>" not in shared_header
+    assert "ProtoFuzzerCustomMutator<Traits>" not in shared_header
+    assert "ProtoFuzzerCustomCrossOver<Traits>" not in shared_header
     assert "ExecuteProfileScenario" not in shared_header
     assert "ExecuteProfileScenario" not in shared_main
     assert shared_main.count("int ProtoFuzzerTestOneInput(") == 1
+    assert shared_main.count("std::size_t ProtoFuzzerCustomMutator(") == 1
+    assert shared_main.count("std::size_t ProtoFuzzerCustomCrossOver(") == 1
     assert shared_main.count("proto_fuzzer::RunScenario(") == 1
     dispatcher = shared_main[shared_main.index("int ProtoFuzzerTestOneInput(") :]
     reset_before_load = dispatcher.index("allocation_fault_injection::Reset()")
-    load = dispatcher.index("load_profile_input(data, size, &scenario)")
+    load = dispatcher.index("traits.load_input(data, size, &scenario)")
     normalize = dispatcher.index("NormalizeScenarioForExecution(&scenario)")
     configure = dispatcher.index("allocation_fault_injection::Configure(")
     arm = dispatcher.index("allocation_fault_injection::Arm()")
@@ -213,5 +220,6 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
     assert (
         reset_before_load < load < normalize < configure < arm < run < reset_after_run
     )
+    assert "RunModeFor(traits.profile)" in dispatcher
     assert "PROTO_FUZZER_TARGET_" not in shared_main
     assert "PROTO_FUZZER_TARGET_" not in cmake

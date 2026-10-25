@@ -74,10 +74,12 @@ roots keep the same field numbers and wire types, so a target can parse those
 bytes directly and discard unknown fields. No separate per-profile seed encoder
 is required.
 
-Each thin entrypoint binds the shared runtime to generated Traits for one
-profile. Mutation, crossover, and loading all use that exact concrete message
-type. Static profile projection prevents unsupported fields from entering the
-mutation graph. Generated conditional pruning runs after selector
+Each thin entrypoint binds its generated Traits once into an ordinary `kProfile`
+descriptor and passes that descriptor to non-template entrypoint helpers.
+Mutation, crossover, and loading therefore use the same concrete message type
+without exposing template specializations to Fuzz Introspector. Static profile
+projection prevents unsupported fields from entering the mutation graph.
+Generated conditional pruning runs after selector
 normalization and before limits, while C++ continues to own scheme fixing,
 selector canonicalization, work bounds, resource lifetimes, and peer behavior.
 The compatibility target uses a generated broad root and keeps its historical

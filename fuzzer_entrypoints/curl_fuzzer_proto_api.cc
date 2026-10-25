@@ -16,6 +16,7 @@ namespace {
 // Bind this source's visible target identity once so mutation, crossover, and
 // execution cannot drift onto different policies as the shared runner evolves.
 using Traits = proto_fuzzer::generated::ApiTraits;
+constexpr auto kProfile = proto_fuzzer::BindProfileFuzzer<Traits>();
 
 } // namespace
 
@@ -35,8 +36,8 @@ extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t *data,
                                                std::size_t size,
                                                std::size_t max_size,
                                                unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomMutator<Traits>(data, size, max_size,
-                                                        seed);
+  return proto_fuzzer::ProtoFuzzerCustomMutator(data, size, max_size, seed,
+                                                kProfile);
 }
 
 extern "C" std::size_t
@@ -44,8 +45,8 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
                           const std::uint8_t *data2, std::size_t size2,
                           std::uint8_t *out, std::size_t max_out_size,
                           unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomCrossOver<Traits>(
-      data1, size1, data2, size2, out, max_out_size, seed);
+  return proto_fuzzer::ProtoFuzzerCustomCrossOver(
+      data1, size1, data2, size2, out, max_out_size, seed, kProfile);
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
@@ -54,6 +55,5 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
   // Standalone replay engines do not always call LLVMFuzzerInitialize.
   proto_fuzzer::RunApiCoverageProbesOnce();
 #endif
-  return proto_fuzzer::ProtoFuzzerTestOneInput(
-      data, size, Traits::kProfile, &proto_fuzzer::LoadProfileInput<Traits>);
+  return proto_fuzzer::ProtoFuzzerTestOneInput(data, size, kProfile);
 }

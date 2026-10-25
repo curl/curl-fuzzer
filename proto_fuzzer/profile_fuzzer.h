@@ -12,6 +12,7 @@
 
 #include <libprotobuf-mutator/src/libfuzzer/libfuzzer_macro.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -20,6 +21,34 @@
 #include "proto_fuzzer/target_profile.h"
 
 namespace proto_fuzzer {
+
+/// Ordinary runtime binding for one generated protobuf profile.
+///
+/// A single binding owns the target profile and every typed LPM callback. This
+/// keeps libFuzzer entrypoints non-template while guaranteeing mutation,
+/// crossover, and loading all use the same concrete protobuf message type.
+struct ProfileFuzzerTraits {
+  /// libFuzzer custom-mutator callback for the bound message type.
+  using CustomMutator = std::size_t (*)(std::uint8_t*, std::size_t, std::size_t, unsigned int);
+  /// libFuzzer custom-crossover callback for the bound message type.
+  using CustomCrossOver = std::size_t (*)(const std::uint8_t*, std::size_t, const std::uint8_t*, std::size_t,
+                                          std::uint8_t*, std::size_t, unsigned int);
+  /// Parse and lower one input using the bound message type.
+  using InputLoader = bool (*)(const std::uint8_t*, std::size_t, curl::fuzzer::proto::Scenario*);
+  /// Optional profiling-only callback that exercises typed mutation helpers.
+  using MutationProbe = void (*)();
+
+  /// Runtime policy permanently associated with all callbacks.
+  TargetProfile profile;
+  /// Typed mutation callback.
+  CustomMutator custom_mutator;
+  /// Typed crossover callback.
+  CustomCrossOver custom_crossover;
+  /// Typed parse-and-lower callback.
+  InputLoader load_input;
+  /// Timing-profile probe, or nullptr for ordinary profiles.
+  MutationProbe probe_mutation_helpers;
+};
 
 /// Bind all LPM operations for one process to one protobuf message type.
 ///
@@ -136,6 +165,63 @@ class ProfileFuzzerHooks {
     return true;
   }
 };
+
+/// Load one generated profile message and lower it into runtime state.
+/// @tparam Traits Generated adapter defining the concrete message type.
+/// @param data Serialized generated-profile bytes.
+/// @param size Number of bytes available at `data`.
+/// @param runtime Destination for the owned runtime Scenario.
+/// @return Whether parsing and lowering succeeded.
+template <typename Traits>
+bool LoadProfileInput(const std::uint8_t* data, std::size_t size, curl::fuzzer::proto::Scenario* runtime) {
+  return ProfileFuzzerHooks<Traits>::LoadAndLower(data, size, runtime);
+}
+
+/// Exercise the typed mutation ABI once for the profiling timing target.
+/// @tparam Traits Generated adapter defining the concrete message type.
+template <typename Traits>
+void ProbeTimingMutationHelpers() {
+  static const bool mutation_helpers_probed = [] {
+    constexpr std::size_t kBufferSize = 1024;
+    constexpr unsigned int kMutationSeed = 0x4355524cU;
+
+    curl::fuzzer::proto::Scenario runtime;
+    NormalizeScenarioForTarget(&runtime, Traits::kProfile, &Traits::PruneConditionalEligibility);
+
+    typename Traits::Message message;
+    Traits::Lift(&runtime, &message);
+    std::array<std::uint8_t, kBufferSize> first = {};
+    const std::size_t original_size = message.ByteSizeLong();
+    if (original_size > first.size()) {
+      return true;
+    }
+    (void)message.SerializeWithCachedSizesToArray(first.data());
+
+    using Hooks = ProfileFuzzerHooks<Traits>;
+    std::array<std::uint8_t, kBufferSize> second = first;
+    std::array<std::uint8_t, kBufferSize> child = {};
+    const std::size_t mutated_size = Hooks::CustomMutator(first.data(), original_size, first.size(), kMutationSeed);
+    const std::size_t crossed_size = Hooks::CustomCrossOver(first.data(), mutated_size, second.data(), original_size,
+                                                            child.data(), child.size(), kMutationSeed);
+    const volatile std::size_t result_sizes[] = {mutated_size, crossed_size};
+    (void)result_sizes;
+    return true;
+  }();
+  (void)mutation_helpers_probed;
+}
+
+/// Bind one generated adapter to the ordinary entrypoint helper interface.
+/// @tparam Traits Generated adapter defining the concrete message type.
+/// @return Immutable runtime descriptor binding all callbacks to `Traits`.
+template <typename Traits>
+constexpr ProfileFuzzerTraits BindProfileFuzzer() {
+  using Hooks = ProfileFuzzerHooks<Traits>;
+  if constexpr (Traits::kProfile == TargetProfile::kTiming) {
+    return {Traits::kProfile, &Hooks::CustomMutator, &Hooks::CustomCrossOver, &LoadProfileInput<Traits>,
+            &ProbeTimingMutationHelpers<Traits>};
+  }
+  return {Traits::kProfile, &Hooks::CustomMutator, &Hooks::CustomCrossOver, &LoadProfileInput<Traits>, nullptr};
+}
 
 }  // namespace proto_fuzzer
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the focused source-level call tree used by Introspector CI."""
+"""Generate focused source-level call trees for every proto fuzzer."""
 
 from __future__ import annotations
 
@@ -10,11 +10,16 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CALLTREE_BASENAME = "fuzzerLogFile-curl_fuzzer_proto_multi.data"
+ENTRYPOINT_PATHS = tuple(
+    str(path.relative_to(REPO_ROOT))
+    for path in sorted(
+        (REPO_ROOT / "fuzzer_entrypoints").glob("curl_fuzzer_proto*.cc")
+    )
+)
 
 # Put the unrelated helpers first so the check also catches regressions where
 # Introspector resolves RunScenario by its unqualified name.
-SOURCE_PATHS = (
+DISTRACTOR_SOURCE_PATHS = (
     "tests/http3_mock_server_test.cc",
     "tests/tftp_mock_server_test.cc",
     "tests/ftp_mock_server_test.cc",
@@ -31,7 +36,8 @@ SOURCE_PATHS = (
     "tests/imaps_mock_server_test.cc",
     "tests/pop3s_mock_server_test.cc",
     "tests/mqtts_mock_server_test.cc",
-    "fuzzer_entrypoints/curl_fuzzer_proto_multi.cc",
+)
+SHARED_SOURCE_PATHS = (
     "proto_fuzzer/fuzzer_main.cc",
     "proto_fuzzer/scenario_runner.cc",
     "proto_fuzzer/transfer_session.cc",
@@ -89,50 +95,85 @@ def _install_tree_sitter_compatibility() -> None:
     Language.query = query
 
 
-def generate_calltree(
+def _calltree_basename(entrypoint_path: str) -> str:
+    return f"fuzzerLogFile-{Path(entrypoint_path).stem}.data"
+
+
+def generate_calltrees(
     output_directory: Path, analyse_folder: Callable[..., object]
-) -> Path:
-    """Generate one call tree in a clean staging directory."""
+) -> tuple[Path, ...]:
+    """Generate one isolated call tree for every proto fuzzer entrypoint."""
     output_directory = output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    sources = [REPO_ROOT / source for source in SOURCE_PATHS]
+    if not ENTRYPOINT_PATHS:
+        raise IntrospectorGenerationError("no proto fuzzer entrypoints were found")
+
+    source_paths = (
+        *DISTRACTOR_SOURCE_PATHS,
+        *ENTRYPOINT_PATHS,
+        *SHARED_SOURCE_PATHS,
+    )
+    sources = [REPO_ROOT / source for source in source_paths]
     missing = [str(source) for source in sources if not source.is_file()]
     if missing:
         raise IntrospectorGenerationError(
             f"Introspector input files are missing: {', '.join(missing)}"
         )
 
-    destination = output_directory / CALLTREE_BASENAME
-    destination.unlink(missing_ok=True)
+    # Never let output from an earlier run satisfy the completeness check.
+    for stale in output_directory.glob("fuzzerLogFile-curl_fuzzer_proto*.data"):
+        stale.unlink()
+
+    destinations = tuple(
+        output_directory / _calltree_basename(entrypoint)
+        for entrypoint in ENTRYPOINT_PATHS
+    )
     with tempfile.TemporaryDirectory(
         prefix=".curl-fuzzer-introspector-", dir=output_directory
     ) as temporary:
         temporary_directory = Path(temporary)
-        empty_source_directory = temporary_directory / "source"
-        staged_output_directory = temporary_directory / "output"
-        empty_source_directory.mkdir()
-        staged_output_directory.mkdir()
+        generated_calltrees: list[Path] = []
+        for entrypoint in ENTRYPOINT_PATHS:
+            target = Path(entrypoint).stem
+            target_directory = temporary_directory / target
+            empty_source_directory = target_directory / "source"
+            staged_output_directory = target_directory / "output"
+            empty_source_directory.mkdir(parents=True)
+            staged_output_directory.mkdir()
 
-        # analyse_folder scans directory recursively in addition to
-        # files_to_include. Give it an empty directory so this check remains
-        # focused and deterministic.
-        analyse_folder(
-            language="c++",
-            directory=str(empty_source_directory),
-            entrypoint="LLVMFuzzerTestOneInput",
-            out=str(staged_output_directory),
-            files_to_include=[str(source) for source in sources],
-        )
-
-        generated = staged_output_directory / CALLTREE_BASENAME
-        if not generated.is_file():
-            raise IntrospectorGenerationError(
-                f"Fuzz Introspector did not generate {CALLTREE_BASENAME}"
+            # Every wrapper exports the same LLVMFuzzerTestOneInput symbol.
+            # Analyse them separately so Introspector cannot attach one
+            # target's root to another target's source file.
+            selected_paths = (
+                *DISTRACTOR_SOURCE_PATHS,
+                entrypoint,
+                *SHARED_SOURCE_PATHS,
             )
-        generated.replace(destination)
+            analyse_folder(
+                language="c++",
+                directory=str(empty_source_directory),
+                entrypoint="LLVMFuzzerTestOneInput",
+                out=str(staged_output_directory),
+                files_to_include=[
+                    str(REPO_ROOT / source) for source in selected_paths
+                ],
+            )
 
-    return destination
+            basename = _calltree_basename(entrypoint)
+            generated = staged_output_directory / basename
+            if not generated.is_file():
+                raise IntrospectorGenerationError(
+                    f"Fuzz Introspector did not generate {basename}"
+                )
+            generated_calltrees.append(generated)
+
+        for generated, destination in zip(
+            generated_calltrees, destinations, strict=True
+        ):
+            generated.replace(destination)
+
+    return destinations
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
@@ -149,12 +190,15 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        calltree = generate_calltree(parsed.output_directory, oss_fuzz.analyse_folder)
+        calltrees = generate_calltrees(
+            parsed.output_directory, oss_fuzz.analyse_folder
+        )
     except (IntrospectorGenerationError, OSError) as error:
         print(f"Could not generate Introspector call tree: {error}", file=sys.stderr)
         return 1
 
-    print(calltree)
+    for calltree in calltrees:
+        print(calltree)
     return 0
 
 

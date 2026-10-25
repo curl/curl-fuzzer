@@ -17,6 +17,7 @@
 namespace {
 
 using curl::fuzzer::proto::Scenario;
+using proto_fuzzer::BindProfileFuzzer;
 using proto_fuzzer::ProfileFuzzerHooks;
 using proto_fuzzer::TargetProfile;
 using test_support::Expect;
@@ -46,6 +47,25 @@ struct IdentityFtpTraits {
 };
 
 using Hooks = ProfileFuzzerHooks<IdentityFtpTraits>;
+constexpr auto kFtpProfile = BindProfileFuzzer<IdentityFtpTraits>();
+
+struct IdentityTimingTraits : IdentityFtpTraits {
+  static constexpr TargetProfile kProfile = TargetProfile::kTiming;
+  static inline int lift_calls = 0;
+
+  static void Lift(Scenario *source, Message *destination) {
+    ++lift_calls;
+    IdentityFtpTraits::Lift(source, destination);
+  }
+};
+
+constexpr auto kTimingProfile = BindProfileFuzzer<IdentityTimingTraits>();
+static_assert(kFtpProfile.profile == TargetProfile::kFastFtp);
+static_assert(kFtpProfile.custom_mutator != nullptr);
+static_assert(kFtpProfile.custom_crossover != nullptr);
+static_assert(kFtpProfile.load_input != nullptr);
+static_assert(kFtpProfile.probe_mutation_helpers == nullptr);
+static_assert(kTimingProfile.probe_mutation_helpers != nullptr);
 
 /// Stand in for a generated restricted root which has no scheme field. Its
 /// postprocessor can lift the normalized connection back, but cannot encode
@@ -173,7 +193,7 @@ std::size_t SerializeInto(const Scenario &scenario,
 void TestMutationCacheAndLoad() {
   std::array<std::uint8_t, 4096> storage = {};
   const std::size_t original_size = SerializeInto(MakeScenario(), &storage);
-  const std::size_t mutated_size = Hooks::CustomMutator(
+  const std::size_t mutated_size = kFtpProfile.custom_mutator(
       storage.data(), original_size, storage.size(), 0x465450U);
   Expect(mutated_size > 0 && mutated_size <= storage.size(),
          "profile mutation did not produce bounded output");
@@ -181,15 +201,15 @@ void TestMutationCacheAndLoad() {
   // This load consumes LPM's last-mutation cache. A different Message type
   // would make its reflection Swap unsafe before protobuf could parse bytes.
   Scenario runtime;
-  Expect(Hooks::LoadAndLower(storage.data(), mutated_size, &runtime),
+  Expect(kFtpProfile.load_input(storage.data(), mutated_size, &runtime),
          "cached profile mutation did not load");
   Expect(runtime.scheme() == curl::fuzzer::proto::SCHEME_FTP,
          "cached profile mutation was not normalized before lowering");
 
   std::array<std::uint8_t, 1> invalid = {0x80};
-  Expect(!Hooks::LoadAndLower(invalid.data(), invalid.size(), &runtime),
+  Expect(!kFtpProfile.load_input(invalid.data(), invalid.size(), &runtime),
          "invalid protobuf unexpectedly loaded");
-  Expect(!Hooks::LoadAndLower(storage.data(), mutated_size, nullptr),
+  Expect(!kFtpProfile.load_input(storage.data(), mutated_size, nullptr),
          "null runtime destination was accepted");
 }
 
@@ -203,14 +223,14 @@ void TestCrossOverCacheAndLoad() {
   std::array<std::uint8_t, 4096> child = {};
   const std::size_t first_size = SerializeInto(MakeScenario(), &first_bytes);
   const std::size_t second_size = SerializeInto(second, &second_bytes);
-  const std::size_t child_size = Hooks::CustomCrossOver(
+  const std::size_t child_size = kFtpProfile.custom_crossover(
       first_bytes.data(), first_size, second_bytes.data(), second_size,
       child.data(), child.size(), 0x43524f53U);
   Expect(child_size > 0 && child_size <= child.size(),
          "profile crossover did not produce bounded output");
 
   Scenario runtime;
-  Expect(Hooks::LoadAndLower(child.data(), child_size, &runtime),
+  Expect(kFtpProfile.load_input(child.data(), child_size, &runtime),
          "cached profile crossover did not load");
   Expect(runtime.scheme() == curl::fuzzer::proto::SCHEME_FTP,
          "cached profile crossover was not normalized before lowering");
@@ -219,13 +239,24 @@ void TestCrossOverCacheAndLoad() {
 void TestEmptyInputAndSizeFailure() {
   std::array<std::uint8_t, 1> empty = {};
   Scenario runtime;
-  Expect(Hooks::LoadAndLower(empty.data(), 0, &runtime),
+  Expect(kFtpProfile.load_input(empty.data(), 0, &runtime),
          "empty protobuf input did not load");
   Expect(runtime.scheme() == curl::fuzzer::proto::SCHEME_FTP,
          "empty protobuf input did not pass through the profile policy");
 
-  Expect(Hooks::CustomMutator(empty.data(), 0, 0, 1) == 0,
+  Expect(kFtpProfile.custom_mutator(empty.data(), 0, 0, 1) == 0,
          "zero-capacity mutation unexpectedly produced output");
+}
+
+void TestTimingMutationProbeRunsOnce() {
+  IdentityTimingTraits::lift_calls = 0;
+  kTimingProfile.probe_mutation_helpers();
+  const int first_probe_lifts = IdentityTimingTraits::lift_calls;
+  Expect(first_probe_lifts > 0,
+         "timing profile descriptor did not exercise typed mutation helpers");
+  kTimingProfile.probe_mutation_helpers();
+  Expect(IdentityTimingTraits::lift_calls == first_probe_lifts,
+         "timing profile descriptor repeated its process-once probe");
 }
 
 } // namespace
@@ -236,5 +267,6 @@ int main() {
   TestMutationCacheAndLoad();
   TestCrossOverCacheAndLoad();
   TestEmptyInputAndSizeFailure();
+  TestTimingMutationProbeRunsOnce();
   return 0;
 }
