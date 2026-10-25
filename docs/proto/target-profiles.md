@@ -37,9 +37,10 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_timing` | Plain HTTP or WebSocket backpressure and timed-wait behavior; it guarantees a non-default bounded pressure configuration. |
 
 The exact target inventory and platform gates are maintained in
-`scripts/fuzz_targets`. Structured targets are excluded from i386 builds. The
-GnuTLS, mbedTLS, and HTTP/3 variants are also excluded from MemorySanitizer
-builds, and HTTP/3 is created only when its dependency variant is enabled.
+`scripts/fuzz_targets`. The base structured targets are included in OSS-Fuzz's
+AddressSanitizer/i386 build. The GnuTLS, mbedTLS, and HTTP/3 variants are
+excluded from i386 and MemorySanitizer builds, and HTTP/3 is created only when
+its dependency variant is enabled.
 MemorySanitizer omits OpenSSL and the TLS mock peer. The plaintext
 `curl_fuzzer_proto_http2` lane remains active in that build. In contrast,
 `curl_fuzzer_proto_https_h2` and `curl_fuzzer_proto_h2_proxy` return without

@@ -60,6 +60,12 @@ PROTO_TARGET_PROFILES = {
     "curl_fuzzer_proto_multi": "kMulti",
     "curl_fuzzer_proto_timing": "kTiming",
 }
+OPTIONAL_PROTO_TARGETS = {
+    "curl_fuzzer_proto_https_gnutls",
+    "curl_fuzzer_proto_https_mbedtls",
+    "curl_fuzzer_proto_http3",
+}
+BASE_PROTO_TARGETS = set(PROTO_TARGET_PROFILES) - OPTIONAL_PROTO_TARGETS
 
 
 def _packaged_targets(
@@ -101,15 +107,16 @@ def test_packaging_can_select_one_fuzzer() -> None:
 
 def test_optional_proto_targets_are_limited_to_supported_builds() -> None:
     """Keep packaging aligned with the CMake sanitizer/architecture gates."""
-    targets = {
-        "curl_fuzzer_proto_https_gnutls",
-        "curl_fuzzer_proto_https_mbedtls",
-        "curl_fuzzer_proto_http3",
-    }
+    assert OPTIONAL_PROTO_TARGETS <= _packaged_targets()
+    assert OPTIONAL_PROTO_TARGETS.isdisjoint(_packaged_targets(sanitizer="memory"))
+    assert OPTIONAL_PROTO_TARGETS.isdisjoint(_packaged_targets(architecture="i386"))
 
-    assert targets <= _packaged_targets()
-    assert targets.isdisjoint(_packaged_targets(sanitizer="memory"))
-    assert targets.isdisjoint(_packaged_targets(architecture="i386"))
+
+def test_base_proto_targets_are_packaged_for_i386_asan() -> None:
+    """Keep the supported 32-bit build aligned with its CMake target suite."""
+    assert BASE_PROTO_TARGETS <= _packaged_targets(
+        architecture="i386", sanitizer="address"
+    )
 
 
 def test_full_coverage_target_is_only_packaged_for_profiling() -> None:
