@@ -7,7 +7,12 @@
 #include <curl/curl.h>
 
 #include <cstddef>
+#include <fstream>
+#include <iterator>
+#include <sstream>
 #include <string>
+
+#include <google/protobuf/text_format.h>
 
 #include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/curl_raii.h"
@@ -56,7 +61,8 @@ RunResult RunScenario(const Scenario &scenario, HttpTransportMode mode) {
                               &result.response) == CURLE_OK,
          "HTTP transport response callback setup failed");
 
-  proto_fuzzer::HttpTransportMockServer server(mode);
+  proto_fuzzer::HttpTransportMockServer server(mode,
+                                               scenario.haproxy_protocol());
   server.Install(easy.get());
   (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
   {
@@ -64,6 +70,10 @@ RunResult RunScenario(const Scenario &scenario, HttpTransportMode mode) {
     result.code = server.DriveScenario(easy.get(), scenario);
   }
   if (server.connection() != nullptr) {
+    // The transfer is over, so release any test-only drain cap before taking
+    // the final transcript snapshot. Backpressure may leave accepted request
+    // bytes queued in the socket even though curl has completed its send.
+    server.connection()->ApplyBackpressure(0, 0);
     (void)server.connection()->DrainIncoming();
   }
   result.transcript = server.client_transcript();
@@ -131,6 +141,75 @@ void TestConnectProxyCarriesOriginRequest() {
   }
 }
 
+void TestConnectProxyHaproxyPendingSendSeed() {
+  const std::string path =
+      std::string(PROTO_FUZZER_SCENARIO_DIR) +
+      "/http_deep/http_connect_haproxy_backpressure.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the CONNECT/HAProxy seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+         "could not parse the CONNECT/HAProxy seed");
+  Expect(scenario.http_transport_mode() ==
+                 curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY &&
+             scenario.haproxy_protocol() && scenario.probe_multi_pollset() &&
+             scenario.connection().backpressure().recv_buf_bytes() == 2048 &&
+             scenario.connection().backpressure().drain_limit() == 48,
+         "CONNECT/HAProxy seed lost its correlated pressure controls");
+
+  const RunResult result =
+      RunScenario(scenario, scenario.http_transport_mode());
+  ExpectCompleted(result, "CONNECT/HAProxy transfer did not complete");
+  Expect(result.response == "proxied",
+         "CONNECT/HAProxy transfer returned the wrong response body");
+
+  const std::string connect = "CONNECT transport.test:80 HTTP/1.1\r\n";
+  Expect(result.transcript.find(connect) == 0,
+         "CONNECT/HAProxy request line changed");
+  const std::size_t connect_end = result.transcript.find("\r\n\r\n");
+  Expect(connect_end != std::string::npos,
+         "CONNECT/HAProxy request was not terminated");
+  const std::size_t connect_padding =
+      result.transcript.find("X-Haproxy-Pad-1: ");
+  Expect(connect_padding != std::string::npos && connect_padding < connect_end,
+         "HAProxy pressure headers did not fill the CONNECT request");
+  const std::size_t proxy_start = connect_end + 4;
+  if (result.transcript.find("PROXY TCP6 ", proxy_start) != proxy_start) {
+    Fail(("HAProxy prefix did not immediately follow CONNECT: " +
+          result.transcript.substr(proxy_start, 256))
+             .c_str());
+  }
+  const std::size_t proxy_end = result.transcript.find("\r\n", proxy_start);
+  Expect(proxy_end != std::string::npos, "HAProxy prefix was not terminated");
+  Expect(proxy_end - proxy_start + 2 >
+             2 * scenario.connection().backpressure().drain_limit(),
+         "two bounded peer drains can release the complete HAProxy prefix");
+  std::istringstream fields(
+      result.transcript.substr(proxy_start, proxy_end - proxy_start));
+  std::string marker;
+  std::string family;
+  std::string source;
+  std::string destination;
+  int source_port = -1;
+  int destination_port = -1;
+  std::string trailing;
+  fields >> marker >> family >> source >> destination >> source_port >>
+      destination_port >> trailing;
+  constexpr char kFixedIpv6[] = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff";
+  Expect(marker == "PROXY" && family == "TCP6" && source == kFixedIpv6 &&
+             destination == kFixedIpv6 && source_port >= 0 &&
+             source_port <= 65535 && destination_port >= 0 &&
+             destination_port <= 65535 && trailing.empty(),
+         "HAProxy prefix did not use the fixed IPv6 endpoint shape");
+
+  const std::size_t request =
+      result.transcript.find("GET /haproxy-poll HTTP/1.1\r\n", proxy_end + 2);
+  Expect(request == proxy_end + 2,
+         "origin request did not immediately follow the HAProxy prefix");
+}
+
 void TestUnixSocketUsesOriginForm() {
   Scenario scenario;
   scenario.set_host_path("transport.test/unix");
@@ -155,6 +234,7 @@ int main() {
   }
   TestForwardProxyUsesAbsoluteForm();
   TestConnectProxyCarriesOriginRequest();
+  TestConnectProxyHaproxyPendingSendSeed();
   TestUnixSocketUsesOriginForm();
   curl_global_cleanup();
   return 0;

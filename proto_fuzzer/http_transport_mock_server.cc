@@ -21,12 +21,15 @@ namespace {
 
 constexpr char kProxyUrl[] = "http://127.0.0.1:8080";
 constexpr char kAbstractUnixSocket[] = "curl-fuzzer-http-origin";
+constexpr char kHaproxyClientIp[] = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff";
 
 }  // namespace
 
 /// Construct an idle transport peer for one policy-normalized mode.
 /// @param mode Fixed proxy or Unix-domain route to install.
-HttpTransportMockServer::HttpTransportMockServer(curl::fuzzer::proto::HttpTransportMode mode) : mode_(mode) {}
+/// @param haproxy_protocol Whether CONNECT carries a fixed HAProxy v1 prefix.
+HttpTransportMockServer::HttpTransportMockServer(curl::fuzzer::proto::HttpTransportMode mode, bool haproxy_protocol)
+    : mode_(mode), haproxy_protocol_(haproxy_protocol && mode == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY) {}
 
 /// Install socket callbacks followed by the fixed routing options. The
 /// scenario's scalar option allowlist contains no routing options, so these
@@ -48,6 +51,12 @@ void HttpTransportMockServer::Install(CURL* easy) {
       (void)curl_easy_setopt(easy, CURLOPT_NOPROXY, "");
       (void)curl_easy_setopt(easy, CURLOPT_HTTPPROXYTUNNEL,
                              mode_ == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY ? 1L : 0L);
+      // The dedicated HAProxy pressure seed uses its bounded request headers
+      // to fill the CONNECT socket before curl inserts the HAProxy filter.
+      // Other proxy scenarios retain libcurl's safer separate-header default.
+      (void)curl_easy_setopt(easy, CURLOPT_HEADEROPT, haproxy_protocol_ ? CURLHEADER_UNIFIED : CURLHEADER_SEPARATE);
+      (void)curl_easy_setopt(easy, CURLOPT_HAPROXY_CLIENT_IP, haproxy_protocol_ ? kHaproxyClientIp : nullptr);
+      (void)curl_easy_setopt(easy, CURLOPT_HAPROXYPROTOCOL, haproxy_protocol_ ? 1L : 0L);
       break;
 
     case curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET:

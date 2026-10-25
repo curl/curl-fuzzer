@@ -36,6 +36,8 @@ constexpr std::uint32_t kDefaultBackpressureBufferBytes = 2048;
 constexpr std::uint32_t kMinBackpressureBufferBytes = 2048;
 constexpr std::uint32_t kMaxBackpressureBufferBytes = 4096;
 constexpr std::uint32_t kMaxDrainBytesPerIteration = 1024;
+constexpr std::uint32_t kHaproxyConnectBufferBytes = 2048;
+constexpr std::uint32_t kHaproxyConnectDrainBytes = 48;
 
 // CURLOPT_LOCALPORTRANGE performs one synchronous bind attempt per selected
 // port. Retain a useful retry window without letting one mutation request tens
@@ -703,8 +705,10 @@ void CanonicalizeAllocationFailureDrive(curl::fuzzer::proto::Scenario* scenario)
   }
 }
 
-/// Return whether a scenario can install MIME through curl's HTTP reader path.
-bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
+/// Return whether a scenario can install MIME through curl's client-reader
+/// stack. HTTP-family requests, SMTP mail bodies, and IMAP APPEND bodies all
+/// call Curl_creader_set_mime().
+bool UsesMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
   switch (scenario.scheme()) {
     case curl::fuzzer::proto::SCHEME_HTTP:
     case curl::fuzzer::proto::SCHEME_HTTPS:
@@ -712,6 +716,10 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_WSS:
     case curl::fuzzer::proto::SCHEME_IPFS:
     case curl::fuzzer::proto::SCHEME_IPNS:
+    case curl::fuzzer::proto::SCHEME_IMAP:
+    case curl::fuzzer::proto::SCHEME_IMAPS:
+    case curl::fuzzer::proto::SCHEME_SMTP:
+    case curl::fuzzer::proto::SCHEME_SMTPS:
       return true;
 
     case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
@@ -719,16 +727,12 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
     case curl::fuzzer::proto::SCHEME_FTP:
     case curl::fuzzer::proto::SCHEME_FTPS:
     case curl::fuzzer::proto::SCHEME_TFTP:
-    case curl::fuzzer::proto::SCHEME_IMAP:
-    case curl::fuzzer::proto::SCHEME_IMAPS:
     case curl::fuzzer::proto::SCHEME_POP3:
     case curl::fuzzer::proto::SCHEME_POP3S:
     case curl::fuzzer::proto::SCHEME_MQTT:
     case curl::fuzzer::proto::SCHEME_MQTTS:
     case curl::fuzzer::proto::SCHEME_GOPHER:
     case curl::fuzzer::proto::SCHEME_GOPHERS:
-    case curl::fuzzer::proto::SCHEME_SMTP:
-    case curl::fuzzer::proto::SCHEME_SMTPS:
     case curl::fuzzer::proto::SCHEME_DICT:
     case curl::fuzzer::proto::SCHEME_FILE:
     default:
@@ -742,10 +746,11 @@ bool UsesHttpMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
 /// fails, the current error path frees the MIME reader without clearing the
 /// installed stack pointer. Ordinary inputs still cover MIME plus conversion;
 /// failure plans retain MIME processing and use curl's unconverted reader
-/// path. Non-HTTP schemes do not install this reader, so their conversion
-/// options remain useful and safe even if a compatibility input carries MIME.
+/// path. Schemes outside the HTTP and mail MIME paths do not install this
+/// reader, so their conversion options remain useful and safe even if a
+/// compatibility input carries MIME.
 void CanonicalizeAllocationFailureOptions(curl::fuzzer::proto::Scenario* scenario) {
-  if (scenario->fail_allocations().empty() || !scenario->has_mime_post() || !UsesHttpMimeReader(*scenario)) {
+  if (scenario->fail_allocations().empty() || !scenario->has_mime_post() || !UsesMimeReader(*scenario)) {
     return;
   }
 
@@ -2413,9 +2418,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http2_plan();
   }
 
+  const bool deep_http_haproxy = profile == TargetProfile::kDeepHttp &&
+                                 scenario->http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY;
   if (profile != TargetProfile::kProxyTransport) {
     scenario->clear_socks_proxy_mode();
-    scenario->clear_haproxy_protocol();
+    if (!deep_http_haproxy) {
+      scenario->clear_haproxy_protocol();
+    }
   }
 
   // StartTLS is a correlated LDAP transport mode rather than a transferable
@@ -2915,7 +2924,6 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       return;
 
     case TargetProfile::kDeepHttp:
-      ClearAllBackpressure(scenario);
       switch (scenario->http_transport_mode()) {
         case curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT:
         case curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY:
@@ -2956,6 +2964,22 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
         scenario->clear_hsts_file();
       } else if (!scenario->altsvc_file().empty()) {
         CanonicalizeAltSvcAuthority(scenario);
+      }
+      if (scenario->http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY &&
+          scenario->haproxy_protocol()) {
+        // This closed combination makes the pending HAProxy setup state
+        // reachable after CONNECT. A large checked-in request fills the
+        // tightened socket, while bounded peer drains and repeated public
+        // multi polling expose the filter's write-only pollset.
+        auto* backpressure = scenario->mutable_connection()->mutable_backpressure();
+        backpressure->set_recv_buf_bytes(kHaproxyConnectBufferBytes);
+        backpressure->set_drain_limit(kHaproxyConnectDrainBytes);
+        for (auto& connection : *scenario->mutable_subsequent_connections()) {
+          connection.clear_backpressure();
+        }
+      } else {
+        scenario->clear_haproxy_protocol();
+        ClearAllBackpressure(scenario);
       }
       if (scenario->http_transport_mode() != curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY) {
         scenario->clear_probe_multi_pollset();
