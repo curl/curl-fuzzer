@@ -16,6 +16,7 @@
 
 namespace proto_fuzzer {
 
+/// Generated callback that removes conditionally ineligible fields and options.
 using ConditionalEligibilityPruner = void (*)(curl::fuzzer::proto::Scenario*, TargetProfile);
 
 void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario);

@@ -59,6 +59,7 @@ REQUIRED_CHAIN = (
     "proto_fuzzer::RunScenario",
     "proto_fuzzer::RunMultiTransferScenario",
 )
+TEMPLATED_REQUIRED_NAMES = frozenset({"proto_fuzzer::ProtoFuzzerTestOneInput"})
 CALLTREE_LINE = re.compile(
     r"^(?P<indent>[ \t]*)(?P<name>\S.*?)\s+"
     r"(?P<source>\S+)\s+(?:linenumber=)?(?P<source_line>-?\d+)\s*$"
@@ -344,6 +345,18 @@ def _format_children(
     return rendered
 
 
+def _matches_required_name(actual: str, expected: str) -> bool:
+    """Match one required function, including its intentional template form."""
+    if actual == expected:
+        return True
+    return (
+        expected in TEMPLATED_REQUIRED_NAMES
+        and actual.startswith(f"{expected}<")
+        and actual.endswith(">")
+        and len(actual) > len(expected) + 2
+    )
+
+
 def verify_calltree(
     nodes: Sequence[CallTreeNode], *, require_multi: bool = True
 ) -> None:
@@ -352,7 +365,7 @@ def verify_calltree(
     roots = [
         index
         for index in children.get(None, [])
-        if nodes[index].name == REQUIRED_CHAIN[0]
+        if _matches_required_name(nodes[index].name, REQUIRED_CHAIN[0])
     ]
     if not roots:
         occurrences = sum(node.name == REQUIRED_CHAIN[0] for node in nodes)
@@ -368,14 +381,16 @@ def verify_calltree(
             (*chain, child)
             for chain in chains
             for child in children.get(chain[-1], [])
-            if nodes[child].name == expected
+            if _matches_required_name(nodes[child].name, expected)
         ]
         if not extended:
             parent_name = nodes[chains[0][-1]].name
             direct_children = _format_children(
                 nodes, children, [chain[-1] for chain in chains]
             )
-            occurrences = sum(node.name == expected for node in nodes)
+            occurrences = sum(
+                _matches_required_name(node.name, expected) for node in nodes
+            )
             raise IntrospectorCheckError(
                 f"missing direct call-tree edge {parent_name!r} -> {expected!r}; "
                 f"direct children seen: {direct_children}; {expected!r} occurs "

@@ -39,7 +39,9 @@ namespace proto_fuzzer {
 template <typename Traits>
 class ProfileFuzzerHooks {
  public:
+  /// Concrete generated protobuf root for this target profile.
   using Message = typename Traits::Message;
+  /// Shared internal Scenario consumed by the runtime.
   using RuntimeScenario = curl::fuzzer::proto::Scenario;
 
   /// Register the profile postprocessor before the first LPM operation.
@@ -51,6 +53,7 @@ class ProfileFuzzerHooks {
 
   /// Remove unknown wire data, normalize through the common runtime model,
   /// and lift back into the same generated profile type.
+  /// @param message Generated profile message to normalize in place.
   static void NormalizeMessage(Message* message) {
     if (message == nullptr) {
       return;
@@ -67,6 +70,11 @@ class ProfileFuzzerHooks {
   }
 
   /// Mutate a binary profile message and retain its exact type in LPM's cache.
+  /// @param data Serialized profile message buffer to mutate in place.
+  /// @param size Number of input bytes currently stored in `data`.
+  /// @param max_size Capacity of `data` available for the mutated message.
+  /// @param seed Deterministic mutation seed supplied by libFuzzer.
+  /// @return Number of serialized bytes in the mutated message.
   static std::size_t CustomMutator(std::uint8_t* data, std::size_t size, std::size_t max_size, unsigned int seed) {
     EnsurePostProcessor();
     Message message;
@@ -74,6 +82,14 @@ class ProfileFuzzerHooks {
   }
 
   /// Cross two binary profile messages using the same type as mutation/load.
+  /// @param data1 Serialized first parent message.
+  /// @param size1 Number of bytes in `data1`.
+  /// @param data2 Serialized second parent message.
+  /// @param size2 Number of bytes in `data2`.
+  /// @param out Destination buffer for the crossed message.
+  /// @param max_out_size Capacity of `out`.
+  /// @param seed Deterministic crossover seed supplied by libFuzzer.
+  /// @return Number of serialized bytes written to `out`.
   static std::size_t CustomCrossOver(const std::uint8_t* data1, std::size_t size1, const std::uint8_t* data2,
                                      std::size_t size2, std::uint8_t* out, std::size_t max_out_size,
                                      unsigned int seed) {
@@ -89,6 +105,10 @@ class ProfileFuzzerHooks {
   /// This deliberately uses LPM's ordinary input unchanged. On a cache hit,
   /// the cached Message is the same concrete type used above; on a parse path,
   /// LPM invokes the registered postprocessor before this direct lowering.
+  /// @param data Serialized profile message bytes.
+  /// @param size Number of bytes available at `data`.
+  /// @param runtime Destination for the owned, lowered runtime Scenario.
+  /// @return Whether the input loaded and lowered successfully.
   static bool LoadAndLower(const std::uint8_t* data, std::size_t size, RuntimeScenario* runtime) {
     if (runtime == nullptr) {
       return false;

@@ -2532,6 +2532,8 @@ void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario) {
 /// compatibility profile leaves the entire input unchanged.
 /// @param scenario Scenario to canonicalize in place.
 /// @param profile Target lane whose invariants must be restored.
+/// @param prune_conditional_eligibility Generated profile callback, or nullptr
+///        when the caller has no conditional eligibility to apply.
 void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile,
                                 ConditionalEligibilityPruner prune_conditional_eligibility) {
   // Compatibility has no LPM postprocessor. Preserve the complete wire input,

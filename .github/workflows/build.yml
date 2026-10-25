@@ -138,7 +138,7 @@ jobs:
       - name: Install protoc
         uses: $/.github/actions/apt-install
         with:
-          packages: protobuf-compiler
+          packages: libprotobuf-dev protobuf-compiler
           tools: protoc
 
       - name: Install test dependencies

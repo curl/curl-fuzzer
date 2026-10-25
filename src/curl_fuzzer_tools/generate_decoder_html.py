@@ -132,8 +132,9 @@ def load_browser_proto_source(explicit: Path | None) -> str:
 
     raise FileNotFoundError(
         "protoc is required to prepare the browser decoder schema; install "
-        "protobuf-compiler, generate build/schemas/curl_fuzzer.proto, or pass "
-        "a metadata-free authoring schema with --proto-file"
+        "protobuf-compiler and libprotobuf-dev, generate "
+        "build/schemas/curl_fuzzer.proto, or pass a metadata-free authoring "
+        "schema with --proto-file"
     )
 
 

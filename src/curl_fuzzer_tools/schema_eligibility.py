@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Validate schema-owned eligibility and generate restricted profile schemas.
 

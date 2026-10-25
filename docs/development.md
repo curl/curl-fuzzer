@@ -2,12 +2,13 @@
 
 ## Run checks
 
-The Python tests require the host `protoc` compiler on `PATH`
-(`protobuf-compiler` on Debian and Ubuntu). Install it, then install the Python
-testing and development dependencies:
+The Python tests require the host `protoc` compiler on `PATH` and the
+well-known `.proto` files (`protobuf-compiler` plus `libprotobuf-dev` on Debian
+and Ubuntu). Install them, then install the Python testing and development
+dependencies:
 
 ```shell
-sudo apt-get install protobuf-compiler
+sudo apt-get install libprotobuf-dev protobuf-compiler
 uv sync --extra python-tests
 ```
 

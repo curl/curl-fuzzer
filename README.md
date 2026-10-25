@@ -26,10 +26,11 @@ mbedTLS, and HTTP/3 variants are omitted from i386 and MemorySanitizer builds.
 ## Build and replay locally
 
 The primary local workflow targets Linux and requires Bash, Clang, CMake 3.24
-or newer, Python 3.10 or newer, the Protocol Buffers compiler (`protoc`), the
-project Python dependencies, a build tool such as Ninja or Make, and network
-access for the initial dependency build. The schema generator runs during CMake
-configuration, so install its dependencies before building:
+or newer, Python 3.10 or newer, the Protocol Buffers compiler (`protoc`) and
+well-known `.proto` files (`protobuf-compiler` plus `libprotobuf-dev` on Debian
+and Ubuntu), the project Python dependencies, a build tool such as Ninja or
+Make, and network access for the initial dependency build. The schema generator
+runs during CMake configuration, so install its dependencies before building:
 
 ```shell
 uv sync
@@ -130,7 +131,8 @@ their schema. Do not mark a root that still contains pre-cutover structured
 directories.
 
 Bootstrap the dedicated HTTP/2 corpus from current typed Scenario inputs after
-downloading them (requires `protoc`, provided by `protobuf-compiler`):
+downloading them (requires `protoc` and its well-known schemas, provided by
+`protobuf-compiler` and `libprotobuf-dev` on Debian and Ubuntu):
 
 ```shell
 uv run bootstrap_http2_corpus

@@ -42,7 +42,7 @@ jobs:
       - name: Install documentation packages
         uses: $/.github/actions/apt-install
         with:
-          packages: cmake doxygen protobuf-compiler
+          packages: cmake doxygen libprotobuf-dev protobuf-compiler
           tools: cmake doxygen protoc
 
       - name: Install documentation tools

@@ -55,6 +55,19 @@ if [[ "${CIFUZZ:-}" == "True" && -n "${OUT:-}" ]]; then
 fi
 export BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 
+# CIFuzz builds the curl project image from the default branch before replacing
+# /src/curl_fuzzer with the pull-request checkout. Bridge new Python build
+# dependencies until the default-branch image has caught up. Normal OSS-Fuzz
+# and local builds rely on their declared environment setup and never install
+# packages here.
+if [[ ${CIFUZZ:-} == "True" ]] && ! python3 -c \
+  'import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split(".")[:2]); sys.exit(0 if (5, 29) <= p < (7, 0) else 1)' \
+  >/dev/null 2>&1
+then
+  python3 -m pip --disable-pip-version-check --no-input --no-cache-dir \
+    install --break-system-packages 'protobuf>=5.29,<7'
+fi
+
 # Curl is cloned fresh (--depth 1) on every CIFuzz container start. Replay
 # builds likewise update that checkout before invoking this script. Invalidate
 # all client variants so a restored ExternalProject stamp cannot retain an

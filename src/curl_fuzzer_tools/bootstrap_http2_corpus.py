@@ -85,7 +85,9 @@ def bootstrap(
     """Add byte-exact selected inputs and write a reproducible handoff manifest."""
     protoc = shutil.which("protoc")
     if protoc is None:
-        raise CorpusError("protoc is required; install protobuf-compiler")
+        raise CorpusError(
+            "protoc is required; install protobuf-compiler and libprotobuf-dev"
+        )
     if not sources:
         raise CorpusError("no current typed authoring corpus found; download it first")
     corpus_dirs = [destination.resolve(), *(p.resolve() for p in sources if p.is_dir())]

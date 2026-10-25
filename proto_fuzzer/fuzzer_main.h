@@ -25,7 +25,6 @@
 
 namespace proto_fuzzer {
 
-/// Execute one already-lowered runtime scenario under its fixed target lane.
 void ExecuteProfileScenario(TargetProfile profile, curl::fuzzer::proto::Scenario* scenario);
 
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
@@ -63,6 +62,12 @@ void ProbeTimingMutationHelpers() {
 #endif
 
 /// Mutate one serialized generated profile message.
+/// @tparam Traits Generated profile adapter defining the concrete message type.
+/// @param data Serialized profile message buffer to mutate in place.
+/// @param size Number of input bytes currently stored in `data`.
+/// @param max_size Capacity of `data` available for the mutated message.
+/// @param seed Deterministic mutation seed supplied by libFuzzer.
+/// @return Number of serialized bytes in the mutated message.
 template <typename Traits>
 std::size_t ProtoFuzzerCustomMutator(std::uint8_t* data, std::size_t size, std::size_t max_size, unsigned int seed) {
   allocation_fault_injection::Reset();
@@ -70,6 +75,15 @@ std::size_t ProtoFuzzerCustomMutator(std::uint8_t* data, std::size_t size, std::
 }
 
 /// Cross two serialized generated profile messages of the same concrete type.
+/// @tparam Traits Generated profile adapter defining the concrete message type.
+/// @param data1 Serialized first parent message.
+/// @param size1 Number of bytes in `data1`.
+/// @param data2 Serialized second parent message.
+/// @param size2 Number of bytes in `data2`.
+/// @param out Destination buffer for the crossed message.
+/// @param max_out_size Capacity of `out`.
+/// @param seed Deterministic crossover seed supplied by libFuzzer.
+/// @return Number of serialized bytes written to `out`.
 template <typename Traits>
 std::size_t ProtoFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t size1, const std::uint8_t* data2,
                                        std::size_t size2, std::uint8_t* out, std::size_t max_out_size,
@@ -79,6 +93,10 @@ std::size_t ProtoFuzzerCustomCrossOver(const std::uint8_t* data1, std::size_t si
 }
 
 /// Load one generated profile message, lower it, and execute runtime state.
+/// @tparam Traits Generated profile adapter defining the concrete message type.
+/// @param data Serialized profile message bytes.
+/// @param size Number of bytes available at `data`.
+/// @return Always zero, as required by the libFuzzer entrypoint contract.
 template <typename Traits>
 int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   allocation_fault_injection::Reset();

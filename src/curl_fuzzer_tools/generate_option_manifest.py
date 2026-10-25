@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Parse native CURLOPT identities and type families from curl.h."""
 
 from __future__ import annotations
