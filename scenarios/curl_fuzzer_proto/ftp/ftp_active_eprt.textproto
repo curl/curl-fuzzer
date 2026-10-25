@@ -2,7 +2,7 @@
 # kernel-selected port from a duplicate fd and connects from loopback.
 scheme: SCHEME_FTP
 host_path: "ftp.test/active-eprt"
-options { option_id: CURLOPT_FTPPORT string_value: "127.0.0.1" }
+options { ftpport: "127.0.0.1" }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "331 password required\r\n"

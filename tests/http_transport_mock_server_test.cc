@@ -12,14 +12,15 @@
 #include <sstream>
 #include <string>
 
-#include <google/protobuf/text_format.h>
-
 #include "curl_fuzzer.pb.h"
+#include "generated/deep_http/deep_http_traits.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/http_transport_mock_server.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
+#include "proto_fuzzer/target_policy.h"
 #include "test_assertions.h"
+#include "tests/projected_scenario_loader.h"
 
 namespace {
 
@@ -150,8 +151,12 @@ void TestConnectProxyHaproxyPendingSendSeed() {
   const std::string text((std::istreambuf_iterator<char>(input)),
                          std::istreambuf_iterator<char>());
   Scenario scenario;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::DeepHttpTraits>(text, &scenario),
          "could not parse the CONNECT/HAProxy seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::generated::DeepHttpTraits::kProfile,
+      &proto_fuzzer::generated::DeepHttpTraits::PruneConditionalEligibility);
   Expect(scenario.http_transport_mode() ==
                  curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY &&
              scenario.haproxy_protocol() && scenario.probe_multi_pollset() &&

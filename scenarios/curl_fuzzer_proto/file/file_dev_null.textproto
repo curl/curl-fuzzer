@@ -3,5 +3,5 @@
 # input. NOBODY reaches curl's file metadata path without reading the target.
 scheme: SCHEME_FILE
 host_path: "localhost/dev/null"
-options { option_id: CURLOPT_NOBODY bool_value: true }
-options { option_id: CURLOPT_FILETIME bool_value: true }
+options { nobody: true }
+options { filetime: true }

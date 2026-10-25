@@ -5,8 +5,8 @@
 scheme: SCHEME_HTTPS
 host_path: "tls.test/h2-push-flow"
 accept_h2_push: true
-options { option_id: CURLOPT_POST bool_value: true }
-options { option_id: CURLOPT_POSTFIELDS string_value: "queued-body" }
+options { post: true }
+options { postfields: "queued-body" }
 http2_plan {
   # SETTINGS_INITIAL_WINDOW_SIZE=0 blocks DATA, but not request HEADERS.
   initial_settings {

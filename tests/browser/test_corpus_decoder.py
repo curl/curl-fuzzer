@@ -63,7 +63,7 @@ def _tlv(tlv_type: int, value: bytes) -> bytes:
 
 
 def _example_scenario() -> bytes:
-    option = _proto_varint(1, 44) + _proto_varint(12, 1)
+    option = _proto_varint(59, 1)
     connection = _proto_bytes(1, b"HTTP/1.1 200 OK\r\n\r\n")
     return b"".join(
         (
@@ -148,8 +148,7 @@ def test_upload_protobuf_scenario_without_network_access(tmp_path: Path) -> None
         assert "scheme: SCHEME_HTTP" in output
         assert 'host_path: "127.0.0.1/browser"' in output
         assert "options {" in output
-        assert "option_id: CURLOPT_NOBODY" in output
-        assert "bool_value: true" in output
+        assert "nobody: true" in output
         assert "connection {" in output
         assert "100: 7" in output
         assert "1 unknown field retained" in page.locator("#messages").inner_text()
@@ -161,13 +160,13 @@ def test_upload_protobuf_scenario_without_network_access(tmp_path: Path) -> None
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
 def test_protobuf_integer_and_repeated_wire_forms(tmp_path: Path) -> None:
-    """Render packed/unpacked integers, uint64 max, and an unknown enum value."""
+    """Render packed/unpacked integers, uint64 max, and an unknown option field."""
     html_path = tmp_path / "index.html"
     generate_html(html_path)
     packed_read_sizes = b"".join(_varint(value) for value in (1, 128, 16384))
     upload = _proto_bytes(2, packed_read_sizes) + _proto_varint(2, 7)
-    max_uint_option = _proto_varint(1, 98) + _proto_varint(11, 2**64 - 1)
-    unknown_option = _proto_varint(1, 123456789)
+    max_uint_option = _proto_varint(6, 2**64 - 1)
+    unknown_option = _proto_varint(123, 1)
     scenario_path = _write_input(
         tmp_path,
         "integer-forms.scenario",
@@ -191,9 +190,8 @@ def test_protobuf_integer_and_repeated_wire_forms(tmp_path: Path) -> None:
         page.wait_for_selector("text=Decoded protobuf Scenario successfully.")
 
         output = page.locator("#proto-output").inner_text()
-        assert "option_id: CURLOPT_BUFFERSIZE" in output
-        assert "uint_value: 18446744073709551615" in output
-        assert "option_id: 123456789" in output
+        assert "buffersize: 18446744073709551615" in output
+        assert "123: 1" in output
         assert [
             line.strip() for line in output.splitlines() if "read_sizes:" in line
         ] == [

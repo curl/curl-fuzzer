@@ -3,8 +3,8 @@
 # stop the transfer as soon as the scripted source reports its terminal state.
 scheme: SCHEME_HTTP
 host_path: "upload.test/callback/abort"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
+options { upload: true }
+options { customrequest: "POST" }
 request_headers: "Expect:"
 upload {
   data: "abort"

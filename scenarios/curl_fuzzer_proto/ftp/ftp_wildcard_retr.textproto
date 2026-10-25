@@ -2,7 +2,7 @@
 # connection for a second passive transfer of the matching regular file.
 scheme: SCHEME_FTP
 host_path: "ftp.test/pub/*.txt"
-options { option_id: CURLOPT_WILDCARDMATCH bool_value: true }
+options { wildcardmatch: true }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "331 password required\r\n"

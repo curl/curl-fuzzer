@@ -1,5 +1,26 @@
 #!/usr/bin/env bash
 
+# A breaking structured-schema cutover must select a new marker name. Public
+# structured corpora are replayed only after an operator has replaced the old
+# target directories and explicitly created this root sentinel.
+STRUCTURED_CORPUS_EPOCH_MARKER=".structured-schema-owned-eligibility-v1"
+
+fuzz_is_structured_target() {
+    case "$1" in
+        curl_fuzzer_proto|curl_fuzzer_proto_*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+fuzz_public_corpus_epoch_ready() {
+    local target=$1
+    local corpus_root=$2
+    if ! fuzz_is_structured_target "${target}"; then
+        return 0
+    fi
+    [[ -f "${corpus_root}/${STRUCTURED_CORPUS_EPOCH_MARKER}" ]]
+}
+
 # Return the generated corpus directory associated with a binary. Proto lane
 # names normally match their directories. Backend variants reuse the protocol
 # lane's generated seeds while OSS-Fuzz still sees a distinct binary basename.
@@ -32,37 +53,18 @@ fuzz_local_corpus_dir() {
     fi
 }
 
-# List public corpus identities worth replaying for a target. Fixed lanes whose
-# response grammar remains compatible also inherit the original target's
-# historical mixed protobuf corpus. The raw HTTP/2 origin and proxy lanes
-# intentionally do not: interpreting mostly-HTTP/1 response bytes as HTTP/2
-# frames would spend nearly every replay on the same decoder rejection.
+# List public corpus identities worth replaying for a target. Only binaries
+# compiled against the exact same generated profile share corpus bytes. The
+# old mixed Scenario format is wire-incompatible, and parse success does not
+# make different generated profiles interchangeable.
 fuzz_public_corpus_names() {
     echo "$1"
     case "$1" in
         curl_fuzzer_proto_https_gnutls|curl_fuzzer_proto_https_mbedtls)
-            # Bootstrap the backend variant from the compatible HTTPS corpus as
-            # well as the original mixed Scenario corpus. Once OSS-Fuzz has a
-            # native backend corpus, the first name above picks it up too.
+            # Backend variants share the fast_https profile exactly. Once
+            # OSS-Fuzz has a native backend corpus, the first name above picks
+            # it up too.
             echo "curl_fuzzer_proto_https"
-            echo "curl_fuzzer_proto"
-            ;;
-        curl_fuzzer_proto_http3)
-            # HTTP/3 has its own wire-response seeds, but ordinary HTTPS
-            # scenarios still provide useful URL, request, and option state;
-            # the fixed profile supplies a valid default H3 response plan.
-            echo "curl_fuzzer_proto_https"
-            echo "curl_fuzzer_proto"
-            ;;
-        curl_fuzzer_proto_http2)
-            # The cleartext prior-knowledge lane consumes the same Scenario
-            # and H2 frame grammar as the TLS lane. Its target policy rewrites
-            # the scheme while leaving structured and malformed frame work
-            # intact.
-            echo "curl_fuzzer_proto_https_h2"
-            ;;
-        curl_fuzzer_proto_http|curl_fuzzer_proto_http_deep|curl_fuzzer_proto_https|curl_fuzzer_proto_ws|curl_fuzzer_proto_wss|curl_fuzzer_proto_telnet|curl_fuzzer_proto_ftp|curl_fuzzer_proto_tftp|curl_fuzzer_proto_smtp|curl_fuzzer_proto_imap|curl_fuzzer_proto_pop3|curl_fuzzer_proto_mqtt|curl_fuzzer_proto_dict|curl_fuzzer_proto_file|curl_fuzzer_proto_ldap|curl_fuzzer_proto_rtsp|curl_fuzzer_proto_ipfs|curl_fuzzer_proto_api|curl_fuzzer_proto_multi|curl_fuzzer_proto_timing)
-            echo "curl_fuzzer_proto"
             ;;
     esac
 }

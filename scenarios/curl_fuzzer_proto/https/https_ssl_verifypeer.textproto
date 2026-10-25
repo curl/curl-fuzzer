@@ -4,6 +4,5 @@
 scheme: SCHEME_HTTPS
 host_path: "127.0.0.1/"
 options {
-  option_id: CURLOPT_SSL_VERIFYPEER
-  bool_value: true
+  ssl_verifypeer: true
 }

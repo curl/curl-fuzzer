@@ -769,6 +769,22 @@ void CanonicalizeAllocationFailureOptions(curl::fuzzer::proto::Scenario* scenari
   options->DeleteSubrange(retained, options->size() - retained);
 }
 
+/// Fold an unknown API drive selector to the ordinary multi-perform path
+/// before generated guards decide whether multi-only fields are eligible.
+void CanonicalizeApiDriveMode(curl::fuzzer::proto::ApiPlan* plan) {
+  switch (plan->drive_mode()) {
+    case curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM:
+    case curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET:
+    case curl::fuzzer::proto::API_DRIVE_EASY_PERFORM:
+    case curl::fuzzer::proto::API_DRIVE_EASY_EVENTS:
+    case curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY:
+      return;
+    default:
+      plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
+      return;
+  }
+}
+
 /// Keep API work proportional to the fixed descriptor tables used by the
 /// runtime. Selector magnitudes stay mutation-controlled because the runtime
 /// folds them into the relevant typed table; only suffixes it cannot execute
@@ -778,6 +794,7 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
   TrimRepeatedScalar(plan->mutable_easy_info_selectors(), scenario_limits::kMaxApiInfoSelectors);
   TrimRepeatedScalar(plan->mutable_reentrant_probe_selectors(), scenario_limits::kMaxApiReentrantSelectors);
 
+  CanonicalizeApiDriveMode(plan);
   switch (plan->drive_mode()) {
     case curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM:
     case curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET:
@@ -793,7 +810,6 @@ void BoundApiPlanShape(curl::fuzzer::proto::ApiPlan* plan) {
       plan->set_pause_response_once(false);
       break;
     default:
-      plan->set_drive_mode(curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM);
       break;
   }
 }
@@ -1246,540 +1262,43 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   BoundFileInputs(scenario);
 }
 
-/// Return whether an option belongs in the high-throughput HTTP lane. This is
-/// deliberately an allowlist rather than a denylist: adding a new structured
-/// option should expand deep coverage first, not silently make the fast lane
-/// slower before its cost has been measured.
-bool IsCheapHttpOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING:
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
-    case curl::fuzzer::proto::CURLOPT_DISALLOW_USERNAME_IN_URL:
-    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
-    case curl::fuzzer::proto::CURLOPT_FILETIME:
-    case curl::fuzzer::proto::CURLOPT_HEADER:
-    case curl::fuzzer::proto::CURLOPT_HTTP09_ALLOWED:
-    case curl::fuzzer::proto::CURLOPT_HTTP_CONTENT_DECODING:
-    case curl::fuzzer::proto::CURLOPT_HTTP_TRANSFER_DECODING:
-    case curl::fuzzer::proto::CURLOPT_HTTP_VERSION:
-    case curl::fuzzer::proto::CURLOPT_HTTPGET:
-    case curl::fuzzer::proto::CURLOPT_IGNORE_CONTENT_LENGTH:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PATH_AS_IS:
-    case curl::fuzzer::proto::CURLOPT_RANGE:
-    case curl::fuzzer::proto::CURLOPT_REQUEST_TARGET:
-    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TRANSFER_ENCODING:
-    case curl::fuzzer::proto::CURLOPT_USERAGENT:
-      return true;
+/// Apply schema-declared variant guards after lane selectors are normalized,
+/// then impose the shared work bounds. Static membership has already been
+/// enforced by the generated profile message type.
+void PruneAndBoundScenarioShape(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile,
+                                ConditionalEligibilityPruner prune_conditional_eligibility) {
+  if (prune_conditional_eligibility != nullptr) {
+    prune_conditional_eligibility(scenario, profile);
+  }
+  BoundScenarioShape(scenario);
+}
 
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+/// Fold malformed deep-HTTP route selectors to their zero-valued direct
+/// modes before generated guards evaluate dependent routing fields.
+void CanonicalizeDeepHttpSelectors(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->http_transport_mode()) {
+    case curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT:
+    case curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY:
+    case curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY:
+    case curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET:
+      break;
     default:
-      return false;
+      scenario->clear_http_transport_mode();
+      break;
   }
-}
-
-/// Return whether an option can affect the origin request carried through the
-/// fixed HTTP/2 proxy. Proxy routing, ALPN, and TLS verification are owned by
-/// H2ProxyMockServer and must not be mutation-controlled; HTTP/2 as an inner
-/// tunneled origin protocol is also excluded because it would require a second
-/// frame script and obscure coverage of the outer proxy filter. Stateful HTTP
-/// options remain useful here because their wire effects traverse cf-h2-proxy.
-bool IsH2ProxyOriginOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING:
-    case curl::fuzzer::proto::CURLOPT_ALTSVC_CTRL:
-    case curl::fuzzer::proto::CURLOPT_AUTOREFERER:
-    case curl::fuzzer::proto::CURLOPT_AWS_SIGV4:
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_COOKIE:
-    case curl::fuzzer::proto::CURLOPT_COOKIELIST:
-    case curl::fuzzer::proto::CURLOPT_COOKIESESSION:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
-    case curl::fuzzer::proto::CURLOPT_DISALLOW_USERNAME_IN_URL:
-    case curl::fuzzer::proto::CURLOPT_EXPECT_100_TIMEOUT_MS:
-    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
-    case curl::fuzzer::proto::CURLOPT_FILETIME:
-    case curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION:
-    case curl::fuzzer::proto::CURLOPT_FORBID_REUSE:
-    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
-    case curl::fuzzer::proto::CURLOPT_HEADER:
-    case curl::fuzzer::proto::CURLOPT_HSTS_CTRL:
-    case curl::fuzzer::proto::CURLOPT_HTTP09_ALLOWED:
-    case curl::fuzzer::proto::CURLOPT_HTTPAUTH:
-    case curl::fuzzer::proto::CURLOPT_HTTPGET:
-    case curl::fuzzer::proto::CURLOPT_HTTP_CONTENT_DECODING:
-    case curl::fuzzer::proto::CURLOPT_HTTP_TRANSFER_DECODING:
-    case curl::fuzzer::proto::CURLOPT_IGNORE_CONTENT_LENGTH:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_KEEP_SENDING_ON_ERROR:
-    case curl::fuzzer::proto::CURLOPT_MAXAGE_CONN:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_MAXLIFETIME_CONN:
-    case curl::fuzzer::proto::CURLOPT_MAXREDIRS:
-    case curl::fuzzer::proto::CURLOPT_MIME_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_PATH_AS_IS:
-    case curl::fuzzer::proto::CURLOPT_POST:
-    case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
-    case curl::fuzzer::proto::CURLOPT_POSTREDIR:
-    case curl::fuzzer::proto::CURLOPT_PROXYAUTH:
-    case curl::fuzzer::proto::CURLOPT_PROXYUSERPWD:
-    case curl::fuzzer::proto::CURLOPT_RANGE:
-    case curl::fuzzer::proto::CURLOPT_REFERER:
-    case curl::fuzzer::proto::CURLOPT_REQUEST_TARGET:
-    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
-    case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TRANSFER_ENCODING:
-    case curl::fuzzer::proto::CURLOPT_UNRESTRICTED_AUTH:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_USERAGENT:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
+  switch (scenario->proxy_socket_option_mode()) {
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT:
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME:
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR:
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR:
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY:
+    case curl::fuzzer::proto::PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE:
+      break;
     default:
-      return false;
+      scenario->clear_proxy_socket_option_mode();
+      break;
   }
 }
-
-/// Compact an option list before applying the general option-count bound.
-/// Keeping a relevant option that appears after a long rejected prefix is
-/// important for mutation density: bounding first would let unrelated options
-/// crowd useful ones out of a protocol-specific lane.
-template <typename Predicate>
-void RetainMatchingOptions(curl::fuzzer::proto::Scenario* scenario, Predicate predicate) {
-  auto* options = scenario->mutable_options();
-  int retained = 0;
-  for (int index = 0; index < options->size(); ++index) {
-    if (!predicate(options->Get(index).option_id())) {
-      continue;
-    }
-    if (retained != index) {
-      options->SwapElements(retained, index);
-    }
-    ++retained;
-  }
-  options->DeleteSubrange(retained, options->size() - retained);
-}
-
-/// Keep the high-throughput HTTP lane free of options whose setup or state is
-/// assigned to a deeper or protocol-specific target.
-void RetainCheapHttpOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario, &IsCheapHttpOption);
-}
-
-/// Keep request-level HTTP mutations while preserving the resolver lane's
-/// fixed HTTP/2 transport. Scenario options run after the H2 peer installs
-/// CURL_HTTP_VERSION_2TLS, so retaining CURLOPT_HTTP_VERSION here would let a
-/// mutation disable the HTTPS-RR ALPN path this lane exists to exercise.
-void RetainDohHttpsRrOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario, [](curl::fuzzer::proto::CurlOptionId option_id) {
-    return IsCheapHttpOption(option_id) && option_id != curl::fuzzer::proto::CURLOPT_HTTP_VERSION;
-  });
-}
-
-/// IPFS and IPNS are rewritten to an ordinary gateway GET before curl runs, so
-/// the gateway lane can consume the same cheap HTTP request controls as the
-/// fast HTTP lane. Gateway selection and TLS policy remain harness-owned.
-bool IsIpfsOption(curl::fuzzer::proto::CurlOptionId option_id) { return IsCheapHttpOption(option_id); }
-
-/// Keep the gateway lane's option budget on request-level HTTP behavior.
-void RetainIpfsOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsIpfsOption); }
-
-/// Compact the option list before its shared cap so irrelevant TLS, WebSocket,
-/// and file-transfer entries cannot crowd out origin traffic mutations.
-void RetainH2ProxyOriginOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario, &IsH2ProxyOriginOption);
-}
-
-/// HTTP/3 owns QUIC selection, ALPN, routing, and certificate verification in
-/// its peer. The tunneled-origin allowlist is deliberately the same set of
-/// request-level HTTP controls, and notably excludes CURLOPT_HTTP_VERSION and
-/// CURLOPT_CONNECT_ONLY, which could bypass the dedicated transport.
-void RetainHttp3RequestOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario, &IsH2ProxyOriginOption);
-}
-
-/// Return whether a scalar option can influence TELNET without selecting an
-/// incompatible transfer mode or introducing external state. Protocol-
-/// specific negotiation preferences use Scenario.telnet_options instead.
-bool IsCheapTelnetOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Compact the TELNET option prefix so unrelated HTTP mutations cannot crowd
-/// useful credentials, CRLF handling, and transfer-size controls out of the
-/// fixed target's general option budget.
-void RetainCheapTelnetOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario, &IsCheapTelnetOption);
-}
-
-/// Return whether an option can change an FTP transfer serviced by the
-/// bounded control/data peer. Active mode is confined to the mock's loopback
-/// listener; the implicit-TLS lane removes those selectors because its data
-/// channels are wrapped socketpairs rather than dialable TCP listeners.
-bool IsFtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_APPEND:
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
-    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
-    case curl::fuzzer::proto::CURLOPT_FILETIME:
-    case curl::fuzzer::proto::CURLOPT_FTP_ACCOUNT:
-    case curl::fuzzer::proto::CURLOPT_FTP_ALTERNATIVE_TO_USER:
-    case curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS:
-    case curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD:
-    case curl::fuzzer::proto::CURLOPT_FTP_SKIP_PASV_IP:
-    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV:
-    case curl::fuzzer::proto::CURLOPT_FTP_USE_PRET:
-    case curl::fuzzer::proto::CURLOPT_FTPPORT:
-    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_RANGE:
-    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
-    case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_WILDCARDMATCH:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the FTP target's general option budget focused on states its passive
-/// peer can actually advance.
-void RetainFtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFtpOption); }
-
-/// Remove active-mode selectors from the implicit-TLS FTP lane. FTPS data
-/// channels must carry TLS, but curl's PORT/EPRT path expects a real loopback
-/// TCP listener that the socketpair-wrapped TLS peer cannot provide, so those
-/// scenarios stay on EPSV/PASV. Removing the options here keeps LPM from
-/// spending mutations on a transfer mode this lane deliberately rejects.
-void RemoveFtpActiveModeOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario, [](curl::fuzzer::proto::CurlOptionId option_id) {
-    return option_id != curl::fuzzer::proto::CURLOPT_FTPPORT && option_id != curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT;
-  });
-}
-
-/// Return whether an option can change a local file:// transfer against the
-/// fixed /dev/null target. Upload controls are safe only because
-/// CanonicalizeFileAuthority replaces every mutation-controlled path before
-/// execution; they let the lane cover file.c's write path without creating or
-/// changing a named host file. Range, resume, size, metadata, and conversion
-/// controls remain useful because curl implements them directly in file.c.
-bool IsFileOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
-    case curl::fuzzer::proto::CURLOPT_DISALLOW_USERNAME_IN_URL:
-    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
-    case curl::fuzzer::proto::CURLOPT_FILETIME:
-    case curl::fuzzer::proto::CURLOPT_HEADER:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PATH_AS_IS:
-    case curl::fuzzer::proto::CURLOPT_RANGE:
-    case curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TIMECONDITION:
-    case curl::fuzzer::proto::CURLOPT_TIMEVALUE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the FILE target's option budget on local-transfer semantics. The URL
-/// canonicalizer, rather than this allowlist, is the write barrier: every
-/// retained upload option can target only /dev/null.
-void RetainFileOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsFileOption); }
-
-/// Return whether an option can change the single-connection SMTP exchange.
-/// The peer owns routing and timeouts; this list retains the mail envelope,
-/// authentication, and upload shape. STARTTLS remains exclusive to TLS lanes,
-/// and CURLOPT_FORBID_REUSE is excluded because its graceful-shutdown path
-/// spends up to a second waiting for QUIT on every fuzzed error.
-bool IsSmtpOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
-    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_MAIL_AUTH:
-    case curl::fuzzer::proto::CURLOPT_MAIL_FROM:
-    case curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
-    case curl::fuzzer::proto::CURLOPT_SASL_IR:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the SMTP target's general option budget focused on mail-envelope and
-/// authentication states its command-aware peer can advance.
-void RetainSmtpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsSmtpOption); }
-
-/// Return whether an option affects IMAP authentication, command selection, or
-/// APPEND upload state. IMAP has no envelope recipient list; STARTTLS belongs
-/// to a future TLS lane and is deliberately excluded here.
-bool IsImapOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
-    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
-    case curl::fuzzer::proto::CURLOPT_SASL_IR:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the IMAP target's general option budget focused on command selection,
-/// authentication, and the bounded APPEND upload.
-void RetainImapOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsImapOption); }
-
-/// Return whether an option affects POP3 authentication or command selection.
-/// POP3 is download-only, so upload and file-size controls would add callback
-/// work that its state machine never consumes.
-bool IsPop3Option(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST:
-    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
-    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
-    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
-    case curl::fuzzer::proto::CURLOPT_SASL_IR:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the POP3 target's general option budget focused on authentication and
-/// LIST/RETR command selection.
-void RetainPop3Options(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsPop3Option); }
-
-/// Return whether an option affects DICT request construction. DICT is
-/// download-only and takes its command from the URL path; authentication,
-/// response sizing, and the handful of transfer-mode controls are the only
-/// meaningful scalar inputs.
-bool IsDictOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the DICT target's general option budget focused on command and
-/// credential state its stream peer can advance.
-void RetainDictOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsDictOption); }
-
-/// Return whether an option affects TFTP request construction, option
-/// negotiation, transfer direction, or bounded body delivery. TFTP has no
-/// connection reuse or stream-level controls, so retaining those settings
-/// would add protobuf work without another state-machine edge in curl.
-bool IsTftpOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_CRLF:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE:
-    case curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the datagram lane from spending mutations on stream-only options.
-void RetainTftpOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsTftpOption); }
-
-/// Return whether an option can change the single-connection MQTT exchange.
-/// The topic comes from the URL path and the publish body from POSTFIELDS, so
-/// authentication, publish/subscribe mode, receive sizing, and the publish
-/// size ceiling are the meaningful scalar controls. Transport and connection-
-/// reuse options stay with the peer.
-bool IsMqttOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_COPYPOSTFIELDS:
-    case curl::fuzzer::proto::CURLOPT_HTTPGET:
-    case curl::fuzzer::proto::CURLOPT_KEEP_SENDING_ON_ERROR:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_NOBODY:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_POST:
-    case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the MQTT target's general option budget focused on credential and
-/// publish-mode states its packet-aware peer can advance.
-void RetainMqttOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsMqttOption); }
-
-/// Return whether an option can change the single-connection LDAP exchange.
-/// The base DN, attributes, scope, and filter come from the URL path, and
-/// OpenLDAP's simple or SASL bind takes its credentials and mechanism controls
-/// from scalar options. CURLOPT_CUSTOMREQUEST is deliberately absent: this curl
-/// revision's OpenLDAP handler ignores it. Upload, HTTP, and transfer-shape
-/// controls would add option work that the LDAP state machine never consumes.
-bool IsLdapOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_FRESH_CONNECT:
-    case curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_SASL_AUTHZID:
-    case curl::fuzzer::proto::CURLOPT_SASL_IR:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Keep the LDAP target's option budget focused on bind credentials,
-/// deterministic SASL discovery, and the bounded download path its BER-aware
-/// peer can advance.
-void RetainLdapOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsLdapOption); }
-
-/// Return whether an option can change curl's RTSP request construction,
-/// response handling, authentication, or bounded entity body. Redirect and
-/// connection-reuse controls are deliberately excluded: the peer services one
-/// request at a time and refuses follow-on sockets.
-bool IsRtspOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING:
-    case curl::fuzzer::proto::CURLOPT_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_COPYPOSTFIELDS:
-    case curl::fuzzer::proto::CURLOPT_FAILONERROR:
-    case curl::fuzzer::proto::CURLOPT_HTTPAUTH:
-    case curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE:
-    case curl::fuzzer::proto::CURLOPT_PASSWORD:
-    case curl::fuzzer::proto::CURLOPT_POSTFIELDS:
-    case curl::fuzzer::proto::CURLOPT_RANGE:
-    case curl::fuzzer::proto::CURLOPT_REFERER:
-    case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
-    case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST:
-    case curl::fuzzer::proto::CURLOPT_RTSP_SERVER_CSEQ:
-    case curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID:
-    case curl::fuzzer::proto::CURLOPT_RTSP_STREAM_URI:
-    case curl::fuzzer::proto::CURLOPT_RTSP_TRANSPORT:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD:
-    case curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE:
-    case curl::fuzzer::proto::CURLOPT_USERAGENT:
-    case curl::fuzzer::proto::CURLOPT_USERNAME:
-    case curl::fuzzer::proto::CURLOPT_USERPWD:
-    case curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Compact the RTSP option prefix so unrelated HTTP/TLS controls cannot crowd
-/// method selection, stream metadata, credentials, and the bounded body out of
-/// the shared option budget.
-void RetainRtspOptions(curl::fuzzer::proto::Scenario* scenario) { RetainMatchingOptions(scenario, &IsRtspOption); }
 
 /// Decode an integral oneof locally before the generated option canonicalizer
 /// runs. Protocol mode bounds are policy, not setopt mechanics: folding them
@@ -1896,73 +1415,6 @@ void CanonicalizeRtspOptionModes(curl::fuzzer::proto::Scenario* scenario) {
         break;
     }
   }
-}
-
-/// Identify options introduced for FTP/TFTP/SMTP so existing fixed lanes do
-/// not silently inherit dead mutations when the shared generated manifest
-/// grows. Generic options retained by those protocol allowlists are
-/// deliberately absent here because they remain useful to HTTP, WebSocket,
-/// API, or timing targets.
-bool IsFileTransferOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_APPEND:
-    case curl::fuzzer::proto::CURLOPT_DIRLISTONLY:
-    case curl::fuzzer::proto::CURLOPT_FTP_ACCOUNT:
-    case curl::fuzzer::proto::CURLOPT_FTP_ALTERNATIVE_TO_USER:
-    case curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS:
-    case curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD:
-    case curl::fuzzer::proto::CURLOPT_FTP_SKIP_PASV_IP:
-    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV:
-    case curl::fuzzer::proto::CURLOPT_FTP_USE_PRET:
-    case curl::fuzzer::proto::CURLOPT_FTPPORT:
-    case curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT:
-    case curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE:
-    case curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS:
-    case curl::fuzzer::proto::CURLOPT_MAIL_FROM:
-    case curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS:
-    case curl::fuzzer::proto::CURLOPT_TRANSFERTEXT:
-    case curl::fuzzer::proto::CURLOPT_WILDCARDMATCH:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Remove FTP/TFTP/SMTP-only options while preserving the relative order of
-/// every generic option an existing fixed target already consumed.
-void RemoveFileTransferOnlyOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(
-      scenario, [](curl::fuzzer::proto::CurlOptionId option_id) { return !IsFileTransferOnlyOption(option_id); });
-}
-
-/// Identify options that only the RTSP peer interprets. Other fixed lanes
-/// would apply them to handles whose protocol driver never reads the values, so
-/// keeping them would spend mutation and setopt work without changing a
-/// transfer.
-bool IsRtspOnlyOption(curl::fuzzer::proto::CurlOptionId option_id) {
-  switch (option_id) {
-    case curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ:
-    case curl::fuzzer::proto::CURLOPT_RTSP_REQUEST:
-    case curl::fuzzer::proto::CURLOPT_RTSP_SERVER_CSEQ:
-    case curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID:
-    case curl::fuzzer::proto::CURLOPT_RTSP_STREAM_URI:
-    case curl::fuzzer::proto::CURLOPT_RTSP_TRANSPORT:
-      return true;
-
-    case curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED:
-    default:
-      return false;
-  }
-}
-
-/// Remove RTSP-only options from lanes that cannot reach curl's RTSP request
-/// builder. The compatibility target returns before this helper so historical
-/// unknown-field semantics stay unchanged.
-void RemoveRtspOnlyOptions(curl::fuzzer::proto::Scenario* scenario) {
-  RetainMatchingOptions(scenario,
-                        [](curl::fuzzer::proto::CurlOptionId option_id) { return !IsRtspOnlyOption(option_id); });
 }
 
 /// Remove the stateful shapes assigned to the deep HTTP target. This happens
@@ -2307,7 +1759,8 @@ void CanonicalizeOptionalBackpressure(curl::fuzzer::proto::Connection* connectio
 /// scalar otherwise opts an ordinary input into hundreds of timed waits. The
 /// timing target does the inverse: it guarantees a non-default buffer setting
 /// so its CPU allocation remains focused on the intentionally slower paths.
-void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile) {
+void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile,
+                     ConditionalEligibilityPruner prune_conditional_eligibility) {
   if (scenario == nullptr) {
     return;
   }
@@ -2361,15 +1814,11 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   // RTSP is append-only too. Keep its selector away from every fixed lane
-  // that cannot service a request-aligned RTSP exchange, and drop its
-  // protocol-only options before those lanes compact their own allowlists.
+  // that cannot service a request-aligned RTSP exchange. Static option
+  // membership is carried by each generated profile descriptor.
   if (profile != TargetProfile::kFastRtsp && scenario->scheme() == curl::fuzzer::proto::SCHEME_RTSP) {
     scenario->clear_scheme();
   }
-  if (profile != TargetProfile::kFastRtsp) {
-    RemoveRtspOnlyOptions(scenario);
-  }
-
   // FTPS is append-only too. Only the fixed FTP lane may turn one of its
   // scenarios into a TLS-wrapped control/data exchange.
   if (profile != TargetProfile::kFastFtp && scenario->scheme() == curl::fuzzer::proto::SCHEME_FTPS) {
@@ -2491,8 +1940,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile == TargetProfile::kFastHttp3) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
     RemoveIgnoredHttp3Shape(scenario);
-    RetainHttp3RequestOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     // The ordinary QUIC peer consumes Http3Plan and has no use for a stream
     // response. CONNECT-UDP proxy mode instead feeds the retained Connection
     // bytes to curl's HTTP/1.1 proxy state machine and capsule filter.
@@ -2512,8 +1960,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
     RemoveNonTelnetShape(scenario);
-    RetainCheapTelnetOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     BoundTelnetResponse(scenario->mutable_connection());
     return;
   }
@@ -2524,9 +1971,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
-    RetainCheapHttpOptions(scenario);
     CanonicalizeFastHttpVersion(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     return;
   }
 
@@ -2547,8 +1993,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     if (scenario->connection().proxy_protocol() == curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1) {
       scenario->clear_h2_forward_proxy();
     }
-    RetainH2ProxyOriginOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeH2ProxyOriginAuthority(scenario);
     return;
   }
@@ -2560,8 +2005,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveIgnoredH2ProxyShape(scenario);
-    RetainH2ProxyOriginOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     if (scenario->has_http2_plan()) {
       auto* connection = scenario->mutable_connection();
       connection->clear_initial_response();
@@ -2593,9 +2037,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
     RemoveDeepHttpShape(scenario);
-    RetainCheapHttpOptions(scenario);
     scenario->mutable_connection()->clear_initial_response();
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeSocksAuthority(scenario);
     return;
   }
@@ -2650,11 +2093,6 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       scenario->set_trace_config("+THREADS");
     }
     if (doh_https_rr) {
-      RetainDohHttpsRrOptions(scenario);
-    } else {
-      RetainCheapHttpOptions(scenario);
-    }
-    if (doh_https_rr) {
       // CURLOPT_RESOLVE cannot carry an HTTPS record, and the responder owns
       // both the address and HTTPS answers. Clearing the address entries keeps
       // the DoH query on the only path that can reach the ALPN selector.
@@ -2672,7 +2110,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       BoundStringValues(scenario->mutable_resolve_entries(), scenario_limits::kMaxResolveEntries,
                         scenario_limits::kMaxResolveEntryBytes);
     }
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeResolverAuthority(scenario);
     return;
   }
@@ -2686,12 +2124,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     const bool implicit_tls = scheme == curl::fuzzer::proto::SCHEME_FTPS;
     scenario->set_scheme(implicit_tls ? curl::fuzzer::proto::SCHEME_FTPS : curl::fuzzer::proto::SCHEME_FTP);
     RemoveIgnoredFtpShape(scenario);
-    RetainFtpOptions(scenario);
-    if (implicit_tls) {
-      RemoveFtpActiveModeOptions(scenario);
-    }
     CanonicalizeFtpOptionModes(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeFtpAuthority(scenario);
     return;
   }
@@ -2699,9 +2133,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile == TargetProfile::kFastTftp) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_TFTP);
     RemoveIgnoredTftpShape(scenario);
-    RetainTftpOptions(scenario);
     CanonicalizeTftpOptionModes(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeTftpAuthority(scenario);
     return;
   }
@@ -2715,8 +2148,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_SMTPS ? curl::fuzzer::proto::SCHEME_SMTPS
                                                                      : curl::fuzzer::proto::SCHEME_SMTP);
     RemoveIgnoredSmtpShape(scenario);
-    RetainSmtpOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeSmtpAuthority(scenario);
     return;
   }
@@ -2729,8 +2161,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_IMAPS ? curl::fuzzer::proto::SCHEME_IMAPS
                                                                      : curl::fuzzer::proto::SCHEME_IMAP);
     RemoveIgnoredImapShape(scenario);
-    RetainImapOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeImapAuthority(scenario);
     return;
   }
@@ -2743,8 +2174,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_POP3S ? curl::fuzzer::proto::SCHEME_POP3S
                                                                      : curl::fuzzer::proto::SCHEME_POP3);
     RemoveIgnoredPop3Shape(scenario);
-    RetainPop3Options(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizePop3Authority(scenario);
     return;
   }
@@ -2758,8 +2188,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_MQTTS ? curl::fuzzer::proto::SCHEME_MQTTS
                                                                      : curl::fuzzer::proto::SCHEME_MQTT);
     RemoveIgnoredMqttShape(scenario);
-    RetainMqttOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeMqttAuthority(scenario);
     return;
   }
@@ -2767,8 +2196,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile == TargetProfile::kFastDict) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_DICT);
     RemoveIgnoredDictShape(scenario);
-    RetainDictOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeDictAuthority(scenario);
     return;
   }
@@ -2778,8 +2206,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
                              ? curl::fuzzer::proto::SCHEME_GOPHERS
                              : curl::fuzzer::proto::SCHEME_GOPHER);
     RemoveIgnoredGopherShape(scenario);
-    RemoveFileTransferOnlyOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeTlsAuthority(scenario);
     return;
   }
@@ -2787,8 +2214,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile == TargetProfile::kFastFile) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_FILE);
     RemoveIgnoredFileShape(scenario);
-    RetainFileOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeFileAuthority(scenario);
     return;
   }
@@ -2805,8 +2231,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       scenario->clear_ldap_starttls();
     }
     RemoveIgnoredLdapShape(scenario);
-    RetainLdapOptions(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeLdapAuthority(scenario);
     return;
   }
@@ -2814,9 +2239,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile == TargetProfile::kFastRtsp) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_RTSP);
     RemoveIgnoredRtspShape(scenario);
-    RetainRtspOptions(scenario);
     CanonicalizeRtspOptionModes(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeRtspAuthority(scenario);
     return;
   }
@@ -2827,9 +2251,8 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_IPNS ? curl::fuzzer::proto::SCHEME_IPNS
                                                                                 : curl::fuzzer::proto::SCHEME_IPFS);
     RemoveIgnoredIpfsShape(scenario);
-    RetainIpfsOptions(scenario);
     CanonicalizeFastHttpVersion(scenario);
-    BoundScenarioShape(scenario);
+    PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeIpfsAuthority(scenario);
     return;
   }
@@ -2912,8 +2335,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile != TargetProfile::kMulti) {
     RemoveMultiOnlyShape(scenario);
   }
-  RemoveFileTransferOnlyOptions(scenario);
-  BoundScenarioShape(scenario);
+  if (profile == TargetProfile::kDeepHttp) {
+    CanonicalizeDeepHttpSelectors(scenario);
+  }
+  if (profile == TargetProfile::kApi && scenario->has_api_plan()) {
+    CanonicalizeApiDriveMode(scenario->mutable_api_plan());
+  }
+  PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
 
   switch (profile) {
     case TargetProfile::kCompatibility:
@@ -2924,28 +2352,6 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       return;
 
     case TargetProfile::kDeepHttp:
-      switch (scenario->http_transport_mode()) {
-        case curl::fuzzer::proto::HTTP_TRANSPORT_DIRECT:
-        case curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY:
-        case curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY:
-        case curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET:
-          break;
-        default:
-          scenario->clear_http_transport_mode();
-          break;
-      }
-      switch (scenario->proxy_socket_option_mode()) {
-        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT:
-        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_HOSTNAME:
-        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV4_CIDR:
-        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_NOPROXY_IPV6_CIDR:
-        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY:
-        case curl::fuzzer::proto::PROXY_SOCKET_OPTION_LOOPBACK_INTERFACE_KEEPALIVE:
-          break;
-        default:
-          scenario->clear_proxy_socket_option_mode();
-          break;
-      }
       if (scenario->proxy_socket_option_mode() != curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT) {
         // A scenario describes one owned route. Prefer the closed socket-option
         // profile when a mutation selects both independent fields.
@@ -3126,14 +2532,17 @@ void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario) {
 /// compatibility profile leaves the entire input unchanged.
 /// @param scenario Scenario to canonicalize in place.
 /// @param profile Target lane whose invariants must be restored.
-void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile) {
+/// @param prune_conditional_eligibility Generated profile callback, or nullptr
+///        when the caller has no conditional eligibility to apply.
+void NormalizeScenarioForTarget(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile,
+                                ConditionalEligibilityPruner prune_conditional_eligibility) {
   // Compatibility has no LPM postprocessor. Preserve the complete wire input,
   // including mismatched option oneofs and newly added, otherwise inert fields.
   if (scenario == nullptr || profile == TargetProfile::kCompatibility) {
     return;
   }
 
-  ApplyLanePolicy(scenario, profile);
+  ApplyLanePolicy(scenario, profile, prune_conditional_eligibility);
   NormalizeScenarioForExecution(scenario);
   CanonicalizeOptionValueCases(scenario);
   // Canonicalization can materialize string values or prepend pin syntax.

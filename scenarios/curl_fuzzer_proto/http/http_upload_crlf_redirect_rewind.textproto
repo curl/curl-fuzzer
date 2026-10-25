@@ -3,12 +3,12 @@
 # wrapper's control dispatch as well as replaying the converted LF bytes.
 scheme: SCHEME_HTTP
 host_path: "upload.test/crlf/source"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 11 }
-options { option_id: CURLOPT_CRLF bool_value: true }
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { upload: true }
+options { customrequest: "POST" }
+options { infilesize_large: 11 }
+options { crlf: true }
+options { followlocation: 1 }
+options { maxredirs: 2 }
 request_headers: "Expect:"
 upload {
   data: "alpha\nbeta\n"

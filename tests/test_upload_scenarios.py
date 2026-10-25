@@ -18,7 +18,7 @@ def test_upload_retry_seeds_keep_rewind_and_follow_on_responses() -> None:
         scenario = (SCENARIOS / name).read_text(encoding="utf-8")
         assert "upload {" in scenario
         assert "seek_result: UPLOAD_SEEK_OK" in scenario
-        assert "CURLOPT_UPLOAD bool_value: true" in scenario
+        assert "upload: true" in scenario
         assert "subsequent_connections {" in scenario
         assert trigger in scenario
 
@@ -53,7 +53,7 @@ def test_upload_cantseek_seed_drives_a_real_redirect_retry() -> None:
     )
     assert "307 Temporary Redirect" in scenario
     assert "seek_result: UPLOAD_SEEK_CANTSEEK" in scenario
-    assert "CURLOPT_FOLLOWLOCATION uint_value: 1" in scenario
+    assert "followlocation: 1" in scenario
     assert "subsequent_connections {" not in scenario
 
 
@@ -62,7 +62,7 @@ def test_upload_crlf_seed_rewinds_the_line_conversion_reader() -> None:
     scenario = (SCENARIOS / "http_upload_crlf_redirect_rewind.textproto").read_text(
         encoding="utf-8"
     )
-    assert "CURLOPT_CRLF bool_value: true" in scenario
+    assert "crlf: true" in scenario
     assert 'data: "alpha\\nbeta\\n"' in scenario
     assert "seek_result: UPLOAD_SEEK_OK" in scenario
     assert "307 Temporary Redirect" in scenario

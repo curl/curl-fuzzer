@@ -3,10 +3,10 @@
 # because curl waits for it in imap_done() before the outer loop can run again.
 scheme: SCHEME_IMAP
 host_path: "imap.test/INBOX"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 17 }
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { upload: true }
+options { infilesize_large: 17 }
+options { username: "fuzz" }
+options { password: "secret" }
 upload {
   data: "Hello from IMAP\r\n"
   read_sizes: 5

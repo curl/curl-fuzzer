@@ -6,16 +6,13 @@ scheme: SCHEME_HTTP
 host_path: "s3.us-east-1.amazonaws.com/example-bucket/test%20file.txt?partNumber=1&uploadId=example"
 request_headers: "X-Amz-Date: 20130524T000000Z"
 options {
-  option_id: CURLOPT_USERPWD
-  string_value: "AKIDEXAMPLE:wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
+  userpwd: "AKIDEXAMPLE:wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
 }
 options {
-  option_id: CURLOPT_AWS_SIGV4
-  string_value: "aws:amz:us-east-1:s3"
+  aws_sigv4: "aws:amz:us-east-1:s3"
 }
 options {
-  option_id: CURLOPT_POSTFIELDS
-  string_value: "fuzz-payload"
+  postfields: "fuzz-payload"
 }
 connection {
   on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"

@@ -3,11 +3,11 @@
 # on the follow-up request. The paired socket lets that GET finish normally.
 scheme: SCHEME_HTTP
 host_path: "follow-mode.test/obey/start"
-options { option_id: CURLOPT_POST bool_value: true }
-options { option_id: CURLOPT_POSTFIELDS string_value: "mode=obeycode" }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "PATCH" }
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 2 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { post: true }
+options { postfields: "mode=obeycode" }
+options { customrequest: "PATCH" }
+options { followlocation: 2 }
+options { maxredirs: 2 }
 connection {
   initial_response: "HTTP/1.1 302 Found\r\nLocation: http://follow-mode.test/obey/end\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
 }

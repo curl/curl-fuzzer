@@ -5,7 +5,7 @@
 # ws_send_raw_blocking — both unreachable without this combination.
 scheme: SCHEME_WS
 host_path: "127.0.0.1/raw-cb"
-options { option_id: CURLOPT_WS_OPTIONS uint_value: 1 }  # CURLWS_RAW_MODE
+options { ws_options: 1 }  # CURLWS_RAW_MODE
 connection {
   server_frames {
     fin: true

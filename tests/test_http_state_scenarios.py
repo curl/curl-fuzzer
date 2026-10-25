@@ -4,23 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 HTTP_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "http"
 
 
-def _supported_options() -> set[str]:
-    return {
-        option.name
-        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
-    }
-
-
-def test_state_options_are_reachable_without_mutable_cache_paths() -> None:
+def test_state_options_are_reachable_without_mutable_cache_paths(
+    active_option_names: frozenset[str],
+) -> None:
     """Keep state parsers fuzzable without exposing filesystem path options."""
-    supported = _supported_options()
     assert {
         "CURLOPT_COOKIE",
         "CURLOPT_COOKIELIST",
@@ -36,13 +27,13 @@ def test_state_options_are_reachable_without_mutable_cache_paths() -> None:
         "CURLOPT_TIMEVALUE_LARGE",
         "CURLOPT_ALTSVC_CTRL",
         "CURLOPT_HSTS_CTRL",
-    } <= supported
+    } <= active_option_names
     assert {
         "CURLOPT_COOKIEFILE",
         "CURLOPT_COOKIEJAR",
         "CURLOPT_ALTSVC",
         "CURLOPT_HSTS",
-    }.isdisjoint(supported)
+    }.isdisjoint(active_option_names)
 
 
 def test_seed_families_keep_their_high_value_wire_tokens() -> None:
@@ -95,7 +86,7 @@ def test_stateful_seeds_complete_bounded_follow_on_exchanges() -> None:
 
     auth = (HTTP_SCENARIOS / "http_cross_host_auth_redirect.textproto").read_text()
     assert "Location: http://auth-target.test/" in auth
-    assert "CURLOPT_USERPWD" in auth
+    assert "userpwd:" in auth
 
 
 def test_bearer_seed_requires_a_challenged_retry() -> None:
@@ -105,7 +96,7 @@ def test_bearer_seed_requires_a_challenged_retry() -> None:
     )
     assert "WWW-Authenticate: Bearer" in scenario
     assert "Connection: close" in scenario
-    assert "CURLOPT_XOAUTH2_BEARER" in scenario
+    assert "xoauth2_bearer:" in scenario
     assert "subsequent_connections {" in scenario
 
 
@@ -116,8 +107,8 @@ def test_dead_connection_seed_prunes_a_reusable_redirect_socket() -> None:
     ).read_text(encoding="utf-8")
     assert "302 Found" in scenario
     assert "Location: /final" in scenario
-    assert "CURLOPT_FOLLOWLOCATION uint_value: 1" in scenario
-    assert "CURLOPT_FRESH_CONNECT bool_value: true" in scenario
+    assert "followlocation: 1" in scenario
+    assert "fresh_connect: true" in scenario
     assert "Connection: close" not in scenario
     assert scenario.count("subsequent_connections {") == 1
 
@@ -130,7 +121,7 @@ def test_sigv4_seeds_compute_s3_and_generic_payload_hashes() -> None:
     )
 
     assert "aws:amz:us-east-1:s3" in s3
-    assert "CURLOPT_POSTFIELDS" in s3
+    assert "postfields:" in s3
     assert "X-Amz-Content-Sha256" not in s3
     assert "aws:amz:us-east-1:execute-api" in service
     assert "%20" in service
@@ -142,7 +133,7 @@ def test_early_upgrade_abort_stays_in_the_timing_lane() -> None:
     scenario = (
         HTTP_SCENARIOS / "http_post_early_upgrade_backpressure.textproto"
     ).read_text(encoding="utf-8")
-    assert "CURLOPT_UPLOAD bool_value: true" in scenario
+    assert "upload: true" in scenario
     assert 'request_headers: "Connection: Upgrade"' in scenario
     assert 'request_headers: "Upgrade:' in scenario
     assert "101 Switching Protocols" in scenario

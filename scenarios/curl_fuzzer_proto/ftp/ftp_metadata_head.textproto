@@ -2,8 +2,8 @@
 # REST capability probing without opening a passive data connection.
 scheme: SCHEME_FTP
 host_path: "ftp.test/metadata.bin"
-options { option_id: CURLOPT_NOBODY bool_value: true }
-options { option_id: CURLOPT_FILETIME bool_value: true }
+options { nobody: true }
+options { filetime: true }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "331 password required\r\n"

@@ -5,19 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 TLS_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "https"
 TLS_CREDENTIALS = REPO_ROOT / "proto_fuzzer" / "tls_test_credentials.h"
-
-
-def _supported_options() -> set[str]:
-    return {
-        option.name
-        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
-    }
 
 
 def _ech_config_list() -> str:
@@ -30,9 +21,10 @@ def _ech_config_list() -> str:
     return "".join(re.findall(r'"([^"]*)"', declaration.group(1)))
 
 
-def test_tls_controls_are_reachable_as_copied_values() -> None:
+def test_tls_controls_are_reachable_as_copied_values(
+    active_option_names: frozenset[str],
+) -> None:
     """Keep TLS mutation state scalar/string-backed and independent of files."""
-    supported = _supported_options()
     assert {
         "CURLOPT_SSL_VERIFYPEER",
         "CURLOPT_SSL_VERIFYHOST",
@@ -48,13 +40,13 @@ def test_tls_controls_are_reachable_as_copied_values() -> None:
         "CURLOPT_SSL_VERIFYSTATUS",
         "CURLOPT_PINNEDPUBLICKEY",
         "CURLOPT_ECH",
-    } <= supported
+    } <= active_option_names
     assert {
         "CURLOPT_CAINFO",
         "CURLOPT_CAPATH",
         "CURLOPT_SSLCERT",
         "CURLOPT_SSLKEY",
-    }.isdisjoint(supported)
+    }.isdisjoint(active_option_names)
 
 
 def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
@@ -62,37 +54,37 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
     expected_tokens = {
         "https_certinfo_all_key_types.textproto": (
             "TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES",
-            "CURLOPT_CERTINFO bool_value: true",
+            "certinfo: true",
             "all-keys",
         ),
         "https_tls13_certinfo.textproto": (
-            "CURLOPT_CERTINFO bool_value: true",
-            "CURLOPT_SSL_VERIFYHOST uint_value: 2",
+            "certinfo: true",
+            "ssl_verifyhost: 2",
             "tls13",
         ),
         "https_tls12_ciphers.textproto": (
-            "CURLOPT_SSLVERSION uint_value: 393222",
+            "sslversion: 393222",
             "ECDHE-ECDSA-AES128-GCM-SHA256",
             "ecdsa_secp256r1_sha256",
         ),
         "https_gnutls_tls12_priority.textproto": (
-            "CURLOPT_SSLVERSION uint_value: 393222",
+            "sslversion: 393222",
             "NORMAL:-VERS-ALL:+VERS-TLS1.2",
             "gnutls-tls12",
         ),
         "https_pinned_public_key.textproto": (
-            "CURLOPT_PINNEDPUBLICKEY",
+            "pinnedpublickey:",
             "sha256//ohF20oHrdt/MM3YpyIewiTdtTbgZwq3qatd40TjMtYg=",
             "pinned",
         ),
         "https_session_redirect.textproto": (
-            "CURLOPT_SSL_SESSIONID_CACHE bool_value: true",
-            "CURLOPT_SSLVERSION uint_value: 393222",
+            "ssl_sessionid_cache: true",
+            "sslversion: 393222",
             "Connection: close",
             "subsequent_connections {",
         ),
         "https_tls_cert_status.textproto": (
-            "CURLOPT_SSL_VERIFYSTATUS bool_value: true",
+            "ssl_verifystatus: true",
             "status-probe",
         ),
         "https_tls_client_engine.textproto": (
@@ -117,7 +109,7 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "unreachable",
         ),
         "https_ech_success.textproto": (
-            "CURLOPT_ECH",
+            "ech:",
             f"ecl:{_ech_config_list()}",
             "ech-success",
         ),

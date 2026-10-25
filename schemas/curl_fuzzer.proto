@@ -8,6 +8,208 @@ syntax = "proto3";
 
 package curl.fuzzer.proto;
 
+import "eligibility_options.proto";
+
+option (curl.fuzzer.schema.eligibility_registry) = {
+  profiles {
+    profile: TARGET_PROFILE_COMPATIBILITY
+    cpp_target_profile: "kCompatibility"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "CompatibilityScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_PRESERVE_SLOT
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTP
+    cpp_target_profile: "kFastHttp"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastHttpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_DEEP_HTTP
+    cpp_target_profile: "kDeepHttp"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "DeepHttpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTPS
+    cpp_target_profile: "kFastHttps"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastHttpsScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_HTTPS_H2
+    cpp_target_profile: "kHttpsH2"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "HttpsH2Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTP2
+    cpp_target_profile: "kFastHttp2"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastHttp2Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_HTTP3
+    cpp_target_profile: "kFastHttp3"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastHttp3Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_H2_PROXY
+    cpp_target_profile: "kH2Proxy"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "H2ProxyScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_PROXY_TRANSPORT
+    cpp_target_profile: "kProxyTransport"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "ProxyTransportScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_RESOLVER
+    cpp_target_profile: "kResolver"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "ResolverScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_WEBSOCKET
+    cpp_target_profile: "kFastWebSocket"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastWebSocketScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+    cpp_target_profile: "kFastSecureWebSocket"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastSecureWebSocketScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_TELNET
+    cpp_target_profile: "kFastTelnet"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastTelnetScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_FTP
+    cpp_target_profile: "kFastFtp"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastFtpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_TFTP
+    cpp_target_profile: "kFastTftp"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastTftpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_SMTP
+    cpp_target_profile: "kFastSmtp"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastSmtpScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_IMAP
+    cpp_target_profile: "kFastImap"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastImapScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_POP3
+    cpp_target_profile: "kFastPop3"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastPop3Scenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_MQTT
+    cpp_target_profile: "kFastMqtt"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastMqttScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_DICT
+    cpp_target_profile: "kFastDict"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastDictScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_GOPHER
+    cpp_target_profile: "kFastGopher"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastGopherScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_FILE
+    cpp_target_profile: "kFastFile"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastFileScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_LDAP
+    cpp_target_profile: "kFastLdap"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastLdapScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_RTSP
+    cpp_target_profile: "kFastRtsp"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastRtspScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_FAST_IPFS
+    cpp_target_profile: "kFastIpfs"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "FastIpfsScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_API
+    cpp_target_profile: "kApi"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "ApiScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_MULTI
+    cpp_target_profile: "kMulti"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "MultiScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+  profiles {
+    profile: TARGET_PROFILE_TIMING
+    cpp_target_profile: "kTiming"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "TimingScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
+};
+
+
 // Structured network scenario description for the curl-fuzzer
 // libprotobuf-mutator targets. One scenario configures a single easy handle
 // and feeds one or more bounded mock connections.
@@ -17,7 +219,22 @@ message Scenario {
   // mutator honest: it can vary the scheme (and therefore the dispatch path
   // in the runner) independently of the rest of the URL, without hand-rolled
   // string matching to discover ws:// vs http://.
-  Scheme scheme = 1;
+  Scheme scheme = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Everything after the "://" — host, optional port, and path. The runner
   // does not validate or percent-encode this; bytes land on the wire as-is.
   // Declared as `bytes` rather than `string` because a libFuzzer / LPM mutator
@@ -25,20 +242,168 @@ message Scenario {
   // `string` validator warns on those at parse time even though the bytes are
   // preserved. Using `bytes` skips the validator; curl's URL parser is happy
   // with raw bytes and will reject anything invalid itself.
-  bytes host_path = 2;
-  repeated SetOption options = 3;
-  Connection connection = 4;
+  bytes host_path = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_DICT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  repeated SetOption options = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_DICT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  Connection connection = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_DICT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+        guards {
+          fact: SELECTOR_FACT_HTTP3_CONNECT_UDP_PROXY
+          expected: true
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+      child_context: "primary"
+    }
+  ];
   // Request headers need pointer-valued CURLOPT_HTTPHEADER state and cannot
   // safely travel through the scalar SetOption path. The runner keeps the
   // generated curl_slist alive until the transfer has completely stopped.
   // A runtime entry/length budget prevents repeated-field mutations from
   // turning header construction into the dominant cost of a fuzz iteration.
-  repeated bytes request_headers = 5;
+  repeated bytes request_headers = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Schema-native MIME reaches curl's multipart generator without teaching
   // the generic option layer about pointer ownership. This is a message (not
   // a repeated field directly on Scenario) so presence can intentionally
   // request an empty multipart body, which exercises a distinct curl path.
-  MimePost mime_post = 6;
+  MimePost mime_post = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+        guards {
+          fact: SELECTOR_FACT_TIMING_WEBSOCKET
+          expected: false
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    }
+  ];
   // Fresh HTTP sockets opened by redirects, authentication retries, and
   // connection-close responses consume these scripts in order. This is a
   // repeated Connection rather than a recursive Scenario so mutations cannot
@@ -46,7 +411,25 @@ message Scenario {
   // The HTTP runtime consumes only the first three entries (four sockets total
   // including `connection`); WebSocket targets deliberately ignore this field
   // because their manual-drive state is tied to one upgraded connection.
-  repeated Connection subsequent_connections = 7;
+  repeated Connection subsequent_connections = 7 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+        guards {
+          fact: SELECTOR_FACT_TIMING_WEBSOCKET
+          expected: false
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+      child_context: "subsequent"
+    }
+  ];
   // Request-body callbacks need mutable cursor state that must outlive every
   // redirect/authentication retry. Keeping that state schema-native lets LPM
   // mutate short-read and rewind behaviour together with the server responses
@@ -55,138 +438,489 @@ message Scenario {
   // 16 KiB stream so old corpus entries and WebSocket upload probes retain
   // their behaviour. TELNET instead reports immediate EOF because any
   // fallback bytes would turn an absent input into unsolicited terminal data.
-  UploadScript upload = 8;
+  UploadScript upload = 8 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // CURLOPT_TELNETOPTIONS is a curl_slist whose strings must outlive the
   // transfer, so it cannot use the scalar SetOption path. Keeping the list
   // schema-native also lets mutations correlate local preferences such as
   // TTYPE/NAWS with the peer negotiation bytes that request those values.
   // Non-TELNET target policies discard this field before execution.
-  repeated bytes telnet_options = 9;
+  repeated bytes telnet_options = 9 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_TELNET
+      }
+    }
+  ];
   // Public API lifecycle calls are kept in a dedicated coverage lane because
   // duplicating/resetting handles, share-handle bookkeeping, and socket-mode
   // multi driving add useful reachability but would tax every protocol parser
   // iteration if they were unconditional. Fixed non-API target policies clear
   // this plan; curl_fuzzer_proto_api retains and bounds it after mutation.
-  ApiPlan api_plan = 10;
+  ApiPlan api_plan = 10 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Concurrent easy-handle scheduling has a separate coverage lane so its
   // extra handles and connection-cache work do not reduce parser throughput
   // in the protocol targets. curl_fuzzer_proto_multi retains this plan and
   // applies the same request/response shape to a small set of easy handles.
-  MultiPlan multi_plan = 11;
+  MultiPlan multi_plan = 11 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // Select the fixed certificate chain served by dedicated TLS peers,
   // including HTTPS, secure WebSocket, and QUIC lanes.
   // Keeping this a closed profile rather than fuzzing PEM bytes makes every
   // choice a parseable TLS handshake while still varying the X509 public-key
   // types consumed by curl. Non-TLS fixed protocol lanes discard this field.
-  TlsCertificateChainProfile tls_certificate_chain = 12;
+  TlsCertificateChainProfile tls_certificate_chain = 12 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+      }
+    }
+  ];
   // Ordered HTTP/3 peer work for the dedicated QUIC lane. Keeping this in a
   // separate message lets the ordinary Connection retain its historical
   // stream-socket meaning while the H3 peer encrypts these plaintext actions
   // onto the appropriate QUIC streams. Non-H3 fixed targets discard the plan;
   // the compatibility target deliberately leaves field 13 untouched.
-  Http3Plan http3_plan = 13;
+  Http3Plan http3_plan = 13 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
   // Enable verbose curl tracing with LIB-IDS prefixes for this scenario.
-  bool trace_ids = 14;
+  bool trace_ids = 14 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_DICT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Select the wire version and resolution side for the dedicated proxy
   // transport lane. Values zero and one retain the original SOCKS4/SOCKS4A
   // behavior of historical serialized inputs; SOCKS5 modes are append-only.
   // Other fixed targets clear this field, and the compatibility target ignores
   // it, preserving the semantics of historical serialized inputs.
-  SocksProxyMode socks_proxy_mode = 15;
+  SocksProxyMode socks_proxy_mode = 15 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+      }
+    }
+  ];
   // Harness-owned CURLOPT_RESOLVE entries for the dedicated resolver lane.
   // The runtime appends a fixed mapping for the requested origin after these
   // fuzzed entries so removals and wildcards cannot escape the mock transport.
-  repeated bytes resolve_entries = 16;
+  repeated bytes resolve_entries = 16 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_RESOLVER
+        guards {
+          fact: SELECTOR_FACT_RESOLVER_DEFAULT_MODE
+          expected: true
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+        guards {
+          fact: SELECTOR_FACT_RESOLVER_USES_DOH
+          expected: false
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    }
+  ];
   // HTTP file-format parsers that have only filename-based public APIs receive
   // these bytes through bounded anonymous files exposed as /proc/self/fd
   // paths. Only the deep HTTP lane retains them. Empty values preserve the
   // historical /dev/null inputs without opening a temporary file.
-  bytes cookie_file = 17;
-  bytes altsvc_file = 18;
-  bytes hsts_file = 19;
+  bytes cookie_file = 17 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+      }
+    }
+  ];
+  bytes altsvc_file = 18 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        guards {
+          fact: SELECTOR_FACT_DEEP_HTTP_REWRITE_FILES_ALLOWED
+          expected: true
+          profiles: TARGET_PROFILE_DEEP_HTTP
+        }
+      }
+    }
+  ];
+  bytes hsts_file = 19 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        guards {
+          fact: SELECTOR_FACT_DEEP_HTTP_REWRITE_FILES_ALLOWED
+          expected: true
+          profiles: TARGET_PROFILE_DEEP_HTTP
+        }
+      }
+    }
+  ];
   // The deep HTTP lane enables REQUIRED netrc processing when this field is
   // non-empty, so the file scanner runs during URL credential setup before
   // the isolated mock connection is opened.
-  bytes netrc_file = 20;
+  bytes netrc_file = 20 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+      }
+    }
+  ];
   // Only the verified HTTP/1.1 TLS lane retains this field. The harness passes
   // its anonymous path to CURLOPT_CRLFILE after installing the in-process
   // peer's trust anchor; no plaintext or unrelated protocol target pays the
   // TLS backend's CRL parsing cost.
-  bytes crl_file = 21;
+  bytes crl_file = 21 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
   // Accept at most one server-pushed stream in the dedicated HTTPS/HTTP2
   // lane. The default keeps the historical rejection path, while an explicit
   // opt-in transfers ownership of one server-created easy handle to the
   // harness so a corpus entry can drive the promised response to completion.
   // Other fixed target policies discard this field.
-  bool accept_h2_push = 22;
+  bool accept_h2_push = 22 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+      }
+    }
+  ];
   // Ordered HTTP/2 peer work for the fixed H2 origin lanes. Common frames
   // keep their correlated length, stream, flag, and HPACK fields valid while
   // wire_frame and raw_bytes preserve malformed and truncated input. A
   // symbolic stream reference follows requests as mutations add redirects or
   // concurrent streams. Non-H2 target policies discard this plan.
-  Http2Plan http2_plan = 23;
+  Http2Plan http2_plan = 23 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+        guards {
+          fact: SELECTOR_FACT_RESOLVER_USES_DOH
+          expected: true
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    }
+  ];
   // Select the key-exchange group policy for the dedicated HTTPS/HTTP2 peer.
   // Zero fixes both endpoints to X25519 for the high-throughput path, while
   // the provider-default profile preserves coverage of OpenSSL's evolving
   // preferred groups. Other fixed target policies discard this field.
-  TlsGroupProfile tls_group_profile = 24;
+  TlsGroupProfile tls_group_profile = 24 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+      }
+    }
+  ];
   // Fail selected one-based positive-size allocation attempts while the
   // target drives this transfer. The shared controller sorts, deduplicates,
   // and bounds the list. Later ordinals refer to the execution path already
   // changed by earlier failures, and are stable only for the same target,
   // build, backend, and input.
-  repeated uint32 fail_allocations = 25 [packed = true];
+  repeated uint32 fail_allocations = 25 [
+    packed = true,
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_DICT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Fuzzer-controlled curl_global_trace() configuration. Declared as `bytes`
   // rather than `string` so a mutator can produce non-UTF-8 tokens without
   // proto3 parse warnings; curl ignores unknown names. Non-empty values enable
   // verbose tracing with a silent debug callback so the per-feature formatters
   // stay reachable without emitting per-input diagnostics. Empty preserves the
   // historical behavior.
-  bytes trace_config = 26;
+  bytes trace_config = 26 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_RESOLVER
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        profiles: TARGET_PROFILE_FAST_DICT
+        profiles: TARGET_PROFILE_FAST_GOPHER
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_LDAP
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_FAST_IPFS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Race several cached addresses through curl's happy-eyeballs filter in the
   // dedicated resolver lane. The peer binds real loopback listeners, returns
   // unconnected non-blocking sockets, and sets a zero initial delay so more
   // than one connection attempt can be in flight. Other lanes clear this
   // field, and empty/false preserves ordinary single-address resolution.
-  bool happy_eyeballs = 27;
+  bool happy_eyeballs = 27 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_RESOLVER
+        guards {
+          fact: SELECTOR_FACT_RESOLVER_DEFAULT_MODE
+          expected: true
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+        guards {
+          fact: SELECTOR_FACT_RESOLVER_USES_DOH
+          expected: false
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    }
+  ];
   // CURLOPT_MAIL_RCPT is a curl_slist whose strings must outlive the transfer,
   // so it cannot use the scalar SetOption path. Each entry is one SMTP
   // recipient address. Keeping the list schema-native lets mutations vary the
   // RCPT TO sequence, multi-recipient failures, and CURLOPT_MAIL_RCPT_
   // ALLOWFAILS together. Non-SMTP target policies clear this field.
-  repeated bytes mail_rcpt = 28;
+  repeated bytes mail_rcpt = 28 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_SMTP
+      }
+    }
+  ];
   // Route the resolver lane's HTTPS transfer through its in-process DoH
   // responder. The responder synthesizes an HTTPS resource record carrying
   // alpn=h2,h3 so curl's HTTPS-connect filter selects the first ALPN from DNS
   // rather than from CURLOPT_HTTP_VERSION. CURLOPT_RESOLVE cannot carry
   // SVCB/HTTPS records, so this is the only structured path to that filter.
   // Other fixed lanes clear the field; false preserves ordinary resolution.
-  bool doh_https_rr = 29;
+  bool doh_https_rr = 29 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_RESOLVER
+        guards {
+          fact: SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL
+          expected: true
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    }
+  ];
   // Exercise curl's public multi poll path between successful perform turns
   // while the transfer and its in-process protocol connection are both live.
   // The fixed SMTP, IMAP, POP3, FTP/FTPS, MQTT/MQTTS, and proxy transport
   // lanes retain this opt-in because their custom loop can immediately
   // service the peer; other fixed lanes clear it. False preserves the
   // syscall-free historical fast path.
-  bool probe_multi_pollset = 30;
+  bool probe_multi_pollset = 30 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
+        profiles: TARGET_PROFILE_FAST_MQTT
+        guards {
+          fact: SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY
+          expected: true
+          profiles: TARGET_PROFILE_DEEP_HTTP
+        }
+      }
+    }
+  ];
   // Send a HAProxy protocol-v1 prefix through the selected SOCKS tunnel before
   // the HTTP request. The prefix uses harness-owned loopback metadata; fuzzed
   // bytes can neither select an address nor escape the in-process socketpair.
   // Only the proxy transport lane retains this flag. False preserves the
   // historical SOCKS-only wire exchange.
-  bool haproxy_protocol = 31;
+  bool haproxy_protocol = 31 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_PROXY_TRANSPORT
+        guards {
+          fact: SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY
+          expected: true
+          profiles: TARGET_PROFILE_DEEP_HTTP
+        }
+      }
+    }
+  ];
   // Send the H2 proxy lane's origin request directly through the proxy rather
   // than establishing a CONNECT tunnel. curl first builds an absolute-form
   // textual request and then translates it to HTTP/2 pseudo-headers, reaching
   // request-target parsing that a tunneled origin-form request cannot. Other
   // fixed lanes clear this field; false preserves existing proxy corpus bytes.
-  bool h2_forward_proxy = 32;
+  bool h2_forward_proxy = 32 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_H2_PROXY
+        guards {
+          fact: SELECTOR_FACT_H2_PROXY_HTTP2
+          expected: true
+          profiles: TARGET_PROFILE_H2_PROXY
+        }
+      }
+    }
+  ];
   // Select a harness-owned HTTP transport for the deep HTTP coverage lane.
   // Proxy modes always use the fixed numeric loopback endpoint intercepted by
   // the in-process socket callback; the Unix mode uses a fixed abstract socket
   // name and never consumes a fuzz-controlled filesystem path. Other fixed
   // lanes clear this field. Zero preserves the historical direct transport.
-  HttpTransportMode http_transport_mode = 33;
+  HttpTransportMode http_transport_mode = 33 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        guards {
+          fact: SELECTOR_FACT_DEEP_HTTP_DEFAULT_SOCKET_ROUTE
+          expected: true
+          profiles: TARGET_PROFILE_DEEP_HTTP
+        }
+      }
+    }
+  ];
   // Select one harness-owned resolver outcome in the dedicated resolver
   // lane. Threaded modes use a target-local getaddrinfo shim, so they cover
   // curl's real asynchronous resolver and cache state without consulting
@@ -194,32 +928,72 @@ message Scenario {
   // address builder; OPENSOCKETFUNCTION still returns the in-process peer.
   // Other fixed lanes clear this field. Zero preserves the historical
   // localhost/CURLOPT_RESOLVE/DoH behavior.
-  ResolverMode resolver_mode = 34;
+  ResolverMode resolver_mode = 34 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
   // Select one bounded, harness-owned client-credential setup in the verified
   // HTTPS lane. The profile never exposes a mutated filename, provider, or
   // engine name: malformed blobs are compiled into the harness and the only
   // file-backed probes use the fixed /dev/null path. Other fixed targets clear
   // this field, and zero preserves the ordinary no-client-certificate path.
-  TlsClientCredentialProfile tls_client_credential_profile = 35;
+  TlsClientCredentialProfile tls_client_credential_profile = 35 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
   // Select one closed proxy or socket-option setup in the deep HTTP lane.
   // Every proxy address, no-proxy token, bind address, and interface value is
   // fixed by the harness. The loopback TCP mode is the only mode that returns
   // an unconnected INET socket; all others retain the in-process socketpair.
   // Other fixed lanes clear this field. Zero preserves historical behavior.
-  ProxySocketOptionMode proxy_socket_option_mode = 36;
+  ProxySocketOptionMode proxy_socket_option_mode = 36 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+      }
+    }
+  ];
   // Upgrade the plaintext LDAP lane with RFC 4511 StartTLS before bind/search.
   // This is harness-owned rather than a general CURLOPT_USE_SSL option: only
   // the BER-aware LDAP peer retains it, and the peer emits the correlated
   // ExtendedResponse before curl installs its TLS connection filter. False
   // preserves the historical plaintext exchange; LDAPS clears this field.
-  bool ldap_starttls = 37;
+  bool ldap_starttls = 37 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_LDAP
+        guards {
+          fact: SELECTOR_FACT_IMPLICIT_LDAPS
+          expected: false
+          profiles: TARGET_PROFILE_FAST_LDAP
+        }
+      }
+    }
+  ];
   // Select a closed, harness-owned TLS handshake terminal in the verified
   // HTTPS lane. The OpenSSL clean-close probe sends one fixed close_notify
   // record before negotiation completes so curl observes SSL_ERROR_ZERO_RETURN
   // with an empty provider error queue. Non-OpenSSL client variants treat it
   // as DEFAULT, other fixed targets clear it, and compatibility preserves the
   // append-only field without interpreting it.
-  TlsHandshakeProfile tls_handshake_profile = 38;
+  TlsHandshakeProfile tls_handshake_profile = 38 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -325,11 +1099,30 @@ enum ResolverMode {
 // mutations protocol-valid; raw writes retain access to malformed HTTP/3 and
 // QPACK input after the peer has completed a valid QUIC/TLS handshake.
 message Http3Plan {
-  repeated Http3Action actions = 1;
+  repeated Http3Action actions = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        guards {
+          fact: SELECTOR_FACT_HTTP3_CONNECT_UDP_PROXY
+          expected: false
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    }
+  ];
   // Route the HTTP/3 origin through the bounded HTTP/1.1 CONNECT-UDP mock.
   // This drives curl's production capsule connection filter while retaining
   // the same easy-handle request surface as ordinary HTTP/3 scenarios.
-  bool use_h1_connect_udp_proxy = 2;
+  bool use_h1_connect_udp_proxy = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 // One operation performed by the in-process HTTP/3 peer. The oneof prevents a
@@ -337,12 +1130,54 @@ message Http3Plan {
 // still permitting deliberate ordering such as response, GOAWAY, then FIN.
 message Http3Action {
   oneof action {
-    Http3Response structured_response = 1;
-    Http3StreamWrite stream_write = 2;
-    Http3StreamReset stream_reset = 3;
-    Http3Goaway goaway = 4;
-    Http3ConnectionClose connection_close = 5;
-    Http3OpenUnidirectionalStream open_unidirectional_stream = 6;
+    Http3Response structured_response = 1 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    ];
+    Http3StreamWrite stream_write = 2 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    ];
+    Http3StreamReset stream_reset = 3 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    ];
+    Http3Goaway goaway = 4 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    ];
+    Http3ConnectionClose connection_close = 5 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    ];
+    Http3OpenUnidirectionalStream open_unidirectional_stream = 6 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    ];
   }
 }
 
@@ -350,19 +1185,68 @@ message Http3Action {
 // 100..599, header metadata and chunk counts are bounded, and finish_stream
 // controls whether this response also concludes the request stream.
 message Http3Response {
-  uint32 status_code = 1;
-  repeated Http3Header response_headers = 2;
-  repeated bytes body_chunks = 3;
-  repeated Http3Header response_trailers = 4;
-  bool finish_stream = 5;
+  uint32 status_code = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  repeated Http3Header response_headers = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  repeated bytes body_chunks = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  repeated Http3Header response_trailers = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  bool finish_stream = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 // One ordinary response or trailer field. Pseudo-headers are peer-owned; the
 // policy turns names into lowercase HTTP token bytes so this structured path
 // remains encodable. Malformed fields remain reachable through raw writes.
 message Http3Header {
-  bytes name = 1;
-  bytes value = 2;
+  bytes name = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  bytes value = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 // Streams writable by an HTTP/3 server. Zero intentionally names the response
@@ -378,9 +1262,30 @@ enum Http3StreamRole {
 // Setting finish_stream makes the write and stream conclusion one ordered
 // operation; an empty write can therefore express a standalone FIN.
 message Http3StreamWrite {
-  Http3StreamRole role = 1;
-  bytes data = 2;
-  bool finish_stream = 3;
+  Http3StreamRole role = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  bytes data = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  bool finish_stream = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 // Create a fresh server-initiated unidirectional QUIC stream and write these
@@ -388,38 +1293,108 @@ message Http3StreamWrite {
 // the peer does not prepend a stream type or bind the stream to nghttp3, so
 // mutations can select unknown and duplicate HTTP/3 stream types directly.
 message Http3OpenUnidirectionalStream {
-  bytes data = 1;
-  bool finish_stream = 2;
+  bytes data = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  bool finish_stream = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 message Http3StreamReset {
-  Http3StreamRole role = 1;
-  uint64 application_error_code = 2;
+  Http3StreamRole role = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
+  uint64 application_error_code = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 message Http3Goaway {
   // Client-initiated bidirectional stream ID advertised as the first request
   // the server will reject. The target policy folds this onto 0,4,8,... and
   // into QUIC's 62-bit varint range.
-  uint64 id = 1;
+  uint64 id = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 message Http3ConnectionClose {
-  uint64 application_error_code = 1;
+  uint64 application_error_code = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+      }
+    }
+  ];
 }
 
 // A bounded HTTP/2 server script. The peer emits the connection SETTINGS and
 // its acknowledgement automatically so an action mutation can focus on the
 // frame sequence that follows protocol startup.
 message Http2Plan {
-  repeated Http2Action actions = 1;
+  repeated Http2Action actions = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
   // Sent as the peer's first application frame. INITIAL_WINDOW_SIZE can
   // therefore constrain an upload before any response action is released.
-  Http2Settings initial_settings = 2;
+  Http2Settings initial_settings = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+      child_context: "initial"
+    }
+  ];
   // Change the public CURLOPT_STREAM_WEIGHT only after the peer has observed
   // request headers. Zero disables the transition; non-zero values are
   // canonicalized to curl's documented [1, 256] range.
-  uint32 stream_weight_after_headers = 3;
+  uint32 stream_weight_after_headers = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 // One peer operation or delivery boundary. Structured frames use the peer's
@@ -427,18 +1402,127 @@ message Http2Plan {
 // those correlations for parser error paths.
 message Http2Action {
   oneof action {
-    Http2Settings settings = 1;
-    Http2Headers headers = 2;
-    Http2Data data = 3;
-    Http2WindowUpdate window_update = 4;
-    Http2RstStream rst_stream = 5;
-    Http2Ping ping = 6;
-    Http2Goaway goaway = 7;
-    Http2PushPromise push_promise = 8;
-    Http2Wait wait = 9;
-    uint32 yield_turns = 10;
-    Http2WireFrame wire_frame = 11;
-    bytes raw_bytes = 12;
+    Http2Settings settings = 1 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+        child_context: "action"
+      }
+    ];
+    Http2Headers headers = 2 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2Data data = 3 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2WindowUpdate window_update = 4 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2RstStream rst_stream = 5 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2Ping ping = 6 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2Goaway goaway = 7 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2PushPromise push_promise = 8 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2Wait wait = 9 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    uint32 yield_turns = 10 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    Http2WireFrame wire_frame = 11 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    bytes raw_bytes = 12 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
   }
 }
 
@@ -448,73 +1532,357 @@ message Http2Action {
 // protocol-invalid stream targeting.
 message Http2StreamRef {
   oneof target {
-    bool connection = 1;
-    uint32 request_index = 2;
-    bool latest_request = 3;
-    uint32 push_index = 4;
-    uint32 explicit_id = 5;
+    bool connection = 1 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    uint32 request_index = 2 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    bool latest_request = 3 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    uint32 push_index = 4 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
+    uint32 explicit_id = 5 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    ];
   }
 }
 
 message Http2Setting {
-  uint32 identifier = 1;
-  uint32 value = 2;
+  uint32 identifier = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 value = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 message Http2Settings {
-  repeated Http2Setting entries = 1;
-  bool ack = 2;
+  repeated Http2Setting entries = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bool ack = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+      }
+      contextual_eligibility {
+        context: "action"
+        eligibility {
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_RESOLVER
+        }
+      }
+    }
+  ];
 }
 
 message Http2Header {
-  bytes name = 1;
-  bytes value = 2;
+  bytes name = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bytes value = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 // Response HEADERS prepend :status unless trailers is set. Long HPACK blocks
 // are split into HEADERS plus CONTINUATION frames by the serializer.
 message Http2Headers {
-  Http2StreamRef stream = 1;
-  uint32 status_code = 2;
-  repeated Http2Header fields = 3;
-  bool end_stream = 4;
-  bool trailers = 5;
+  Http2StreamRef stream = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 status_code = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  repeated Http2Header fields = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bool end_stream = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bool trailers = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 message Http2Data {
-  Http2StreamRef stream = 1;
-  bytes data = 2;
-  bool end_stream = 3;
+  Http2StreamRef stream = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bytes data = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bool end_stream = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 message Http2WindowUpdate {
-  Http2StreamRef stream = 1;
-  uint32 increment = 2;
+  Http2StreamRef stream = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 increment = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 message Http2RstStream {
-  Http2StreamRef stream = 1;
-  uint32 error_code = 2;
+  Http2StreamRef stream = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 error_code = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 message Http2Ping {
-  bytes opaque_data = 1;
-  bool ack = 2;
+  bytes opaque_data = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bool ack = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 message Http2Goaway {
-  Http2StreamRef last_stream = 1;
-  uint32 error_code = 2;
-  bytes debug_data = 3;
+  Http2StreamRef last_stream = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 error_code = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bytes debug_data = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 // The parent stream defaults to the latest request. The promised stream
 // defaults to the next even server stream, and is recorded for push_index
 // references used by later HEADERS, DATA, and RST_STREAM actions.
 message Http2PushPromise {
-  Http2StreamRef parent_stream = 1;
-  Http2StreamRef promised_stream = 2;
-  repeated Http2Header request_headers = 3;
+  Http2StreamRef parent_stream = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  Http2StreamRef promised_stream = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  repeated Http2Header request_headers = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 enum Http2ClientEvent {
@@ -527,21 +1895,102 @@ enum Http2ClientEvent {
 // Hold later actions until the client has produced a correlated event. The
 // bounded driver abandons an unsatisfied wait rather than sleeping.
 message Http2Wait {
-  Http2ClientEvent event = 1;
-  Http2StreamRef stream = 2;
-  uint32 count = 3;
+  Http2ClientEvent event = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  Http2StreamRef stream = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 count = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 // A raw frame header with a separately mutable declared length. When
 // use_declared_length is false the payload size is used, retaining a compact
 // frame-aware malformed path alongside completely arbitrary raw_bytes.
 message Http2WireFrame {
-  uint32 type = 1;
-  uint32 flags = 2;
-  uint32 stream_id = 3;
-  bytes payload = 4;
-  uint32 declared_length = 5;
-  bool use_declared_length = 6;
+  uint32 type = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 flags = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 stream_id = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bytes payload = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  uint32 declared_length = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  bool use_declared_length = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
 }
 
 // A bounded plan for public libcurl APIs that are adjacent to, rather than
@@ -553,27 +2002,108 @@ message Http2WireFrame {
 message ApiPlan {
   // Duplicate the configured easy handle so ownership and copied option state
   // cross curl_easy_duphandle's success and cleanup paths.
-  bool duplicate_easy = 1;
+  bool duplicate_easy = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Reset the selected easy handle and restore the scenario's configuration
   // before transfer, exercising reset without turning the request accidental.
-  bool reset_easy = 2;
+  bool reset_easy = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Create and attach a CURLSH. An empty selector list still exercises the
   // share handle's init/setopt/cleanup lifecycle.
-  bool attach_share = 3;
-  repeated uint32 share_data_selectors = 4;
+  bool attach_share = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
+  repeated uint32 share_data_selectors = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Select one valid transfer entrypoint. The runtime owns sequencing and
   // translates readiness from its in-process peer; arbitrary raw call lists
   // would overwhelmingly describe invalid or non-progressing event loops.
-  ApiDriveMode drive_mode = 5;
+  ApiDriveMode drive_mode = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+        guards {
+          fact: SELECTOR_FACT_API_VALID_MIME_REPEAT
+          expected: false
+          profiles: TARGET_PROFILE_API
+        }
+      }
+    }
+  ];
   // Probe curl_multi_wakeup while the multi handle is live.
-  bool wake_multi = 6;
+  bool wake_multi = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+        guards {
+          fact: SELECTOR_FACT_API_MULTI_DRIVE
+          expected: true
+          profiles: TARGET_PROFILE_API
+        }
+        guards {
+          fact: SELECTOR_FACT_API_VALID_MIME_REPEAT
+          expected: false
+          profiles: TARGET_PROFILE_API
+        }
+      }
+    }
+  ];
   // Each selector indexes a runtime descriptor carrying both a CURLINFO value
   // and its required output type.
-  repeated uint32 easy_info_selectors = 7;
+  repeated uint32 easy_info_selectors = 7 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Make the first response-body callback pause receiving, then resume it
   // from the bounded multi event loop. Easy-only drives clear this flag
   // because their blocking entrypoints provide no safe external resume point.
-  bool pause_response_once = 8;
+  bool pause_response_once = 8 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+        guards {
+          fact: SELECTOR_FACT_API_MULTI_DRIVE
+          expected: true
+          profiles: TARGET_PROFILE_API
+        }
+        guards {
+          fact: SELECTOR_FACT_API_VALID_MIME_REPEAT
+          expected: false
+          profiles: TARGET_PROFILE_API
+        }
+      }
+    }
+  ];
   // Public API probes to fire once from inside the response callback. Each
   // selector indexes a runtime table of typed calls that exercises the
   // eapi/mapi guard bookkeeping without casting selector bytes to CURLINFO or
@@ -581,19 +2111,52 @@ message ApiPlan {
   // so it sits on multi->callstack and non-reentrant entrypoints are rejected
   // with a recursive-API-call result, even on a curl_easy_pause() replay; the
   // table still holds only calls that stay safe if the guard admits them.
-  repeated uint32 reentrant_probe_selectors = 9;
+  repeated uint32 reentrant_probe_selectors = 9 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Exercise scheme inference through the public URL API using one fixed,
   // bounded hostname without an explicit scheme.
-  bool guess_scheme_url = 10;
+  bool guess_scheme_url = 10 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Query the immutable public version/feature descriptor once for this
   // lifecycle. The runtime bounds feature-name traversal independently.
-  bool probe_version_info = 11;
+  bool probe_version_info = 11 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+      }
+    }
+  ];
   // Repeat a callback-backed MIME request on the same easy handle and MIME
   // tree after the first transfer completes. The API target retains this only
   // when Scenario.upload backs a top-level MIME callback part, and fixes the
   // drive to the bounded multi-perform loop. This makes public MIME rewind
   // failures observable without exposing an arbitrary call sequence.
-  bool repeat_mime_post = 12;
+  bool repeat_mime_post = 12 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_API
+        guards {
+          fact: SELECTOR_FACT_API_VALID_MIME_REPEAT
+          expected: true
+          profiles: TARGET_PROFILE_API
+        }
+      }
+    }
+  ];
 }
 
 // Public transfer entrypoints covered by the API lane. An enum prevents
@@ -619,31 +2182,101 @@ enum ApiDriveMode {
 // the complete transfer grammar for every handle.
 message MultiPlan {
   // Canonicalized to the inclusive range [2, 4] by the multi target policy.
-  uint32 transfer_count = 1;
-  MultiDriveMode drive_mode = 2;
+  uint32 transfer_count = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
+  MultiDriveMode drive_mode = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // Zero preserves libcurl's default; non-zero values are capped to the
   // transfer count so mutations efficiently explore queueing boundaries.
-  uint32 max_host_connections = 3;
-  uint32 max_total_connections = 4;
+  uint32 max_host_connections = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
+  uint32 max_total_connections = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // CURLMOPT_MAXCONNECTS controls the size of the shared connection cache.
   // Zero retains libcurl's default and non-zero values are runtime-bounded.
-  uint32 connection_cache_size = 5;
+  uint32 connection_cache_size = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // Ask the peer not to half-close completed responses, making an HTTP/1.1
   // connection eligible for reuse by a queued handle.
-  bool keep_connections_open = 6;
+  bool keep_connections_open = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // Enable CURLPIPE_MULTIPLEX on the multi handle. The plaintext seeds remain
   // HTTP/1.1, but mutations can combine this setting with HTTP version options.
-  bool multiplex = 7;
-  bool wake_multi = 8;
+  bool multiplex = 7 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
+  bool wake_multi = 8 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // One action is consumed per bounded event-loop turn. Ordered actions can
   // therefore pause then resume, or remove then re-add, the same easy handle.
-  repeated MultiAction actions = 9;
+  repeated MultiAction actions = 9 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
   // Select a closed, harness-owned generic state-machine probe. The non-zero
   // profile redirects curl's internal progress meter to an anonymous stream,
   // applies a fixed receive limit, and shortens the transfer timeout. Keeping
   // those controls out of SetOption prevents arbitrary mutations from turning
   // other targets into slow or noisy transfers.
-  MultiStateProbeProfile state_probe_profile = 10;
+  MultiStateProbeProfile state_probe_profile = 10 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
 }
 
 enum MultiDriveMode {
@@ -658,8 +2291,22 @@ enum MultiStateProbeProfile {
 
 message MultiAction {
   // Folded into the configured handle count after mutation.
-  uint32 transfer_selector = 1;
-  MultiActionKind kind = 2;
+  uint32 transfer_selector = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
+  MultiActionKind kind = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_MULTI
+      }
+    }
+  ];
 }
 
 enum MultiActionKind {
@@ -678,14 +2325,110 @@ enum MultiActionKind {
 message UploadScript {
   // Binary bytes returned to curl. Unlike POSTFIELDS this remains callback
   // backed, so redirects and authentication retries exercise seek/rewind.
-  bytes data = 1;
+  bytes data = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Per-callback maximums used in order. A zero entry means one byte: proto3
   // makes zero especially easy to mutate into, and treating it as immediate
   // EOF would hide the configured terminal outcome and all later steps.
   // Once this list is exhausted, reads use curl's requested buffer capacity.
-  repeated uint32 read_sizes = 2;
-  UploadTerminal terminal = 3;
-  UploadSeekResult seek_result = 4;
+  repeated uint32 read_sizes = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  UploadTerminal terminal = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  UploadSeekResult seek_result = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_TELNET
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_FAST_TFTP
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_FILE
+        profiles: TARGET_PROFILE_FAST_RTSP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // What the read callback reports after all scripted bytes have been consumed.
@@ -713,7 +2456,24 @@ enum UploadSeekResult {
 // number of parts constructed, since protobuf itself does not bound repeated
 // field cardinality.
 message MimePost {
-  repeated MimePart parts = 1;
+  repeated MimePart parts = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // One top-level MIME part. The content oneof makes mutations choose between
@@ -723,42 +2483,331 @@ message MimePost {
 // a recursively-shaped protobuf from consuming a fuzz iteration in parsing or
 // destruction before curl sees it.
 message MimePart {
-  bytes name = 1;
+  bytes name = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   oneof content {
-    bytes data = 2;
-    MimeSubparts subparts = 7;
-    GeneratedBytes generated_data = 8;
+    bytes data = 2 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    MimeSubparts subparts = 7 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    GeneratedBytes generated_data = 8 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
     // Feed this part from the containing Scenario.upload callbacks. Presence
     // selects the callback even when the bool value is false; the oneof case
     // is the mutation-significant choice. Only the top-level part supports the
     // shared cursor so nested trees cannot multiply callback work.
-    bool upload_callback = 9;
+    bool upload_callback = 9 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
   }
-  bytes filename = 3;
-  bytes content_type = 4;
-  MimeEncoder encoder = 5;
-  repeated bytes headers = 6;
+  bytes filename = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  bytes content_type = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  MimeEncoder encoder = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  repeated bytes headers = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // The bounded nested-multipart layer. Keeping this separate from MimePost is
 // what makes unbounded recursive part trees impossible at the schema level.
 message MimeSubparts {
-  repeated MimeDataPart parts = 1;
+  repeated MimeDataPart parts = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // A leaf MIME part. An absent content source is applied as empty data;
 // empty-body form fields are valid and cover different size/encoder handling
 // from an omitted MIME part.
 message MimeDataPart {
-  bytes name = 1;
+  bytes name = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   oneof content {
-    bytes data = 2;
-    GeneratedBytes generated_data = 7;
+    bytes data = 2 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    GeneratedBytes generated_data = 7 [
+      (curl.fuzzer.schema.scenario_field) = {
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
   }
-  bytes filename = 3;
-  bytes content_type = 4;
-  MimeEncoder encoder = 5;
-  repeated bytes headers = 6;
+  bytes filename = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  bytes content_type = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  MimeEncoder encoder = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  repeated bytes headers = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // A compact request-body source for buffer-boundary tests. Repeating a short
@@ -766,8 +2815,42 @@ message MimeDataPart {
 // scenario while still letting curl's MIME encoders produce large writes.
 // Both the postprocessor and runtime cap the materialized byte count.
 message GeneratedBytes {
-  bytes pattern = 1;
-  uint32 repeat_count = 2;
+  bytes pattern = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  uint32 repeat_count = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_HTTPS_H2
+        profiles: TARGET_PROFILE_FAST_HTTP2
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_H2_PROXY
+        profiles: TARGET_PROFILE_FAST_SMTP
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // Restrict mutations to curl's supported transfer encoders. Arbitrary strings
@@ -833,42 +2916,2151 @@ enum Scheme {
   SCHEME_IPNS = 25;
 }
 
+// Ordered, typed curl_easy_setopt operations. Oneof presence preserves
+// explicit empty, false, and zero values while preventing mismatched
+// option/value representations.
 message SetOption {
-  CurlOptionId option_id = 1;
-  oneof value {
-    bytes  string_value = 10;
-    uint64 uint_value   = 11;
-    bool   bool_value   = 12;
+  oneof setting {
+    bytes accept_encoding = 1 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_ACCEPT_ENCODING"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 altsvc_ctrl = 2 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_ALTSVC_CTRL"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool append = 3 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_APPEND"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    bool autoreferer = 4 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_AUTOREFERER"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes aws_sigv4 = 5 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_AWS_SIGV4"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 buffersize = 6 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_BUFFERSIZE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool certinfo = 7 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_CERTINFO"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 connect_only = 8 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_CONNECT_ONLY"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes cookie = 9 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_COOKIE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes cookielist = 10 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_COOKIELIST"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool cookiesession = 11 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_COOKIESESSION"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes copypostfields = 12 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_COPYPOSTFIELDS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool crlf = 13 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_CRLF"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes customrequest = 14 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_CUSTOMREQUEST"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool dirlistonly = 15 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_DIRLISTONLY"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_FILE
+        }
+      }
+    ];
+    bool disallow_username_in_url = 16 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_DISALLOW_USERNAME_IN_URL"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes ech = 17 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_ECH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 expect_100_timeout_ms = 18 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_EXPECT_100_TIMEOUT_MS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool failonerror = 19 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FAILONERROR"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool filetime = 20 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FILETIME"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 followlocation = 21 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FOLLOWLOCATION"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool forbid_reuse = 22 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FORBID_REUSE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool fresh_connect = 23 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FRESH_CONNECT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes ftpport = 24 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTPPORT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+          guards {
+            fact: SELECTOR_FACT_IMPLICIT_FTPS
+            expected: false
+            profiles: TARGET_PROFILE_FAST_FTP
+          }
+        }
+      }
+    ];
+    bytes ftp_account = 25 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_ACCOUNT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    bytes ftp_alternative_to_user = 26 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_ALTERNATIVE_TO_USER"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    uint64 ftp_create_missing_dirs = 27 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_CREATE_MISSING_DIRS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    uint64 ftp_filemethod = 28 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_FILEMETHOD"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    bool ftp_skip_pasv_ip = 29 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_SKIP_PASV_IP"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    uint64 ftp_use_eprt = 30 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_USE_EPRT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+          guards {
+            fact: SELECTOR_FACT_IMPLICIT_FTPS
+            expected: false
+            profiles: TARGET_PROFILE_FAST_FTP
+          }
+        }
+      }
+    ];
+    bool ftp_use_epsv = 31 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_USE_EPSV"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    bool ftp_use_pret = 32 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_FTP_USE_PRET"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    bool header = 33 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HEADER"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 hsts_ctrl = 34 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HSTS_CTRL"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool http09_allowed = 35 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTP09_ALLOWED"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 httpauth = 36 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTPAUTH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool httpget = 37 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTPGET"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 httpsig_algorithm = 38 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTPSIG_ALGORITHM"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes httpsig_headers = 39 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTPSIG_HEADERS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes httpsig_key = 40 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTPSIG_KEY"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes httpsig_keyid = 41 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTPSIG_KEYID"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool http_content_decoding = 42 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTP_CONTENT_DECODING"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool http_transfer_decoding = 43 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTP_TRANSFER_DECODING"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 http_version = 44 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_HTTP_VERSION"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+          guards {
+            fact: SELECTOR_FACT_RESOLVER_USES_DOH
+            expected: false
+            profiles: TARGET_PROFILE_RESOLVER
+          }
+        }
+      }
+    ];
+    bool ignore_content_length = 45 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_IGNORE_CONTENT_LENGTH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 infilesize_large = 46 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_INFILESIZE_LARGE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool keep_sending_on_error = 47 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_KEEP_SENDING_ON_ERROR"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 localport = 48 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_LOCALPORT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 localportrange = 49 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_LOCALPORTRANGE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes login_options = 50 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_LOGIN_OPTIONS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes mail_auth = 51 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAIL_AUTH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes mail_from = 52 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAIL_FROM"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_SMTP
+        }
+      }
+    ];
+    bool mail_rcpt_allowfails = 53 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAIL_RCPT_ALLOWFAILS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_SMTP
+        }
+      }
+    ];
+    uint64 maxage_conn = 54 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAXAGE_CONN"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 maxfilesize_large = 55 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAXFILESIZE_LARGE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 maxlifetime_conn = 56 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAXLIFETIME_CONN"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 maxredirs = 57 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAXREDIRS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 mime_options = 58 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MIME_OPTIONS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool nobody = 59 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_NOBODY"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes password = 60 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_PASSWORD"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool path_as_is = 61 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_PATH_AS_IS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes pinnedpublickey = 62 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_PINNEDPUBLICKEY"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool post = 63 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_POST"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes postfields = 64 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_POSTFIELDS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 postredir = 65 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_POSTREDIR"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 proxyauth = 66 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_PROXYAUTH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes proxyuserpwd = 67 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_PROXYUSERPWD"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes range = 68 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RANGE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes referer = 69 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_REFERER"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes request_target = 70 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_REQUEST_TARGET"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 resume_from_large = 71 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RESUME_FROM_LARGE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 rtsp_client_cseq = 72 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RTSP_CLIENT_CSEQ"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_RTSP
+        }
+      }
+    ];
+    uint64 rtsp_request = 73 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RTSP_REQUEST"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_RTSP
+        }
+      }
+    ];
+    uint64 rtsp_server_cseq = 74 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RTSP_SERVER_CSEQ"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_RTSP
+        }
+      }
+    ];
+    bytes rtsp_session_id = 75 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RTSP_SESSION_ID"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_RTSP
+        }
+      }
+    ];
+    bytes rtsp_stream_uri = 76 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RTSP_STREAM_URI"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_RTSP
+        }
+      }
+    ];
+    bytes rtsp_transport = 77 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_RTSP_TRANSPORT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_RTSP
+        }
+      }
+    ];
+    bytes sasl_authzid = 78 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SASL_AUTHZID"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool sasl_ir = 79 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SASL_IR"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 sslversion = 80 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSLVERSION"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes ssl_cipher_list = 81 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_CIPHER_LIST"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes ssl_ec_curves = 82 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_EC_CURVES"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool ssl_enable_alpn = 83 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_ENABLE_ALPN"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 ssl_options = 84 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_OPTIONS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool ssl_sessionid_cache = 85 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_SESSIONID_CACHE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes ssl_signature_algorithms = 86 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_SIGNATURE_ALGORITHMS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 ssl_verifyhost = 87 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_VERIFYHOST"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool ssl_verifypeer = 88 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_VERIFYPEER"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool ssl_verifystatus = 89 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_SSL_VERIFYSTATUS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 tftp_blksize = 90 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TFTP_BLKSIZE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_TFTP
+        }
+      }
+    ];
+    bool tftp_no_options = 91 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TFTP_NO_OPTIONS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_TFTP
+        }
+      }
+    ];
+    uint64 timecondition = 92 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TIMECONDITION"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 timevalue_large = 93 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TIMEVALUE_LARGE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes tls13_ciphers = 94 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TLS13_CIPHERS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool transfertext = 95 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TRANSFERTEXT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_FILE
+        }
+      }
+    ];
+    bool transfer_encoding = 96 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_TRANSFER_ENCODING"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool unrestricted_auth = 97 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_UNRESTRICTED_AUTH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool upload = 98 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_UPLOAD"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    uint64 upload_buffersize = 99 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_UPLOAD_BUFFERSIZE"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_FILE
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes useragent = 100 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_USERAGENT"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes username = 101 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_USERNAME"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes userpwd = 102 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_USERPWD"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_FTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bool wildcardmatch = 103 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_WILDCARDMATCH"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    ];
+    uint64 ws_options = 104 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_WS_OPTIONS"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    bytes xoauth2_bearer = 105 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_XOAUTH2_BEARER"
+        eligibility {
+          profiles: TARGET_PROFILE_COMPATIBILITY
+          profiles: TARGET_PROFILE_DEEP_HTTP
+          profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_API
+          profiles: TARGET_PROFILE_MULTI
+          profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
   }
 }
 
 message Connection {
   // Bytes written to the mock server fd as soon as curl opens the socket.
-  bytes initial_response = 1;
+  bytes initial_response = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+      contextual_eligibility {
+        context: "primary"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          guards {
+            fact: SELECTOR_FACT_HTTP2_PLAN_PRESENT
+            expected: false
+            profiles: TARGET_PROFILE_HTTPS_H2
+            profiles: TARGET_PROFILE_FAST_HTTP2
+          }
+        }
+      }
+    }
+  ];
   // Subsequent chunks, each sent the next time the fd becomes readable.
-  repeated bytes on_readable = 2;
+  repeated bytes on_readable = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_FTP
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+      contextual_eligibility {
+        context: "primary"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_HTTP
+          profiles: TARGET_PROFILE_HTTPS_H2
+          profiles: TARGET_PROFILE_FAST_HTTP2
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_H2_PROXY
+          profiles: TARGET_PROFILE_PROXY_TRANSPORT
+          profiles: TARGET_PROFILE_RESOLVER
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_TELNET
+          profiles: TARGET_PROFILE_FAST_TFTP
+          profiles: TARGET_PROFILE_FAST_SMTP
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
+          profiles: TARGET_PROFILE_FAST_MQTT
+          profiles: TARGET_PROFILE_FAST_DICT
+          profiles: TARGET_PROFILE_FAST_GOPHER
+          profiles: TARGET_PROFILE_FAST_LDAP
+          profiles: TARGET_PROFILE_FAST_RTSP
+          profiles: TARGET_PROFILE_FAST_IPFS
+          guards {
+            fact: SELECTOR_FACT_HTTP2_PLAN_PRESENT
+            expected: false
+            profiles: TARGET_PROFILE_HTTPS_H2
+            profiles: TARGET_PROFILE_FAST_HTTP2
+          }
+        }
+      }
+    }
+  ];
   // Structured WebSocket frames. Each frame is serialised to RFC 6455 wire
   // format and pushed onto the socket in order, as an alternative to the
   // raw bytes in on_readable. Useful for scenarios where the mutator should
   // explore frame fields (opcode, flags, length) independently of payload
   // bytes. on_readable is still available for malformed / truncated frames.
-  repeated WebSocketFrame server_frames = 3;
+  repeated WebSocketFrame server_frames = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+      contextual_eligibility {
+        context: "primary"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        }
+      }
+    }
+  ];
   // Deterministic backpressure knobs for the curl→mock direction. Shrink the
   // kernel recv buffer and/or cap how much the mock drains per call, to force
   // curl's send() into short-write / EAGAIN paths (ws_send_raw_blocking's
   // partial-write loop, ws_flush's CURLE_AGAIN branch, ws_enc_add_pending,
   // etc). Left at defaults (0/0) the mock drains greedily and nothing
   // backpressures — same behaviour as before this field existed.
-  BackpressureConfig backpressure = 4;
+  BackpressureConfig backpressure = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_TIMING
+      }
+      contextual_eligibility {
+        context: "primary"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    }
+  ];
   // Opt-in probes run in the CONNECT_ONLY=2 manual-drive tail. Each probe
   // targets a specific region of ws.c; default-off keeps new scenarios
   // focused on the behaviour they're exercising. Ignored when the scenario
   // isn't in manual-drive mode.
-  WsManualProbes manual_probes = 5;
+  WsManualProbes manual_probes = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+      contextual_eligibility {
+        context: "primary"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_FAST_WEBSOCKET
+          profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        }
+      }
+    }
+  ];
   // Select the HTTPS CONNECT proxy's negotiated application protocol. The
   // zero value preserves the historical H2 peer; HTTP/1.1 is a separate,
   // bounded CONNECT-parser profile owned by the same target.
-  ProxyProtocol proxy_protocol = 6;
+  ProxyProtocol proxy_protocol = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+      }
+      contextual_eligibility {
+        context: "primary"
+        eligibility {
+          profiles: TARGET_PROFILE_H2_PROXY
+        }
+      }
+    }
+  ];
 }
 
 enum ProxyProtocol {
@@ -884,14 +5076,56 @@ enum ProxyProtocol {
 message WsManualProbes {
   // Walk curl_ws_start_frame / curl_ws_send through kWsSendFlagMatrix.
   // Covers ws_frame_flags2firstbyte branches plus invalid-flag failf paths.
-  bool flag_matrix = 1;
+  bool flag_matrix = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Declare a fragsize=200 frame, send 23 bytes, then send a 500-byte buffer
   // — trips the "unaligned frame size" guard in ws_enc_send.
-  bool unaligned_send = 2;
+  bool unaligned_send = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // curl_ws_send with flags=0, fragsize=0. In CURLWS_RAW_MODE this hits the
   // ws_raw_mode / ws_send_raw branch; otherwise it reaches the "no flags
   // given" rejection (already covered elsewhere).
-  bool raw_send = 3;
+  bool raw_send = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // Tunes how aggressively the mock drains bytes curl sends it. Deterministic
@@ -904,11 +5138,27 @@ message BackpressureConfig {
   // this caps how many bytes curl can push into the pipe before its send()
   // short-writes or returns EAGAIN. Linux clamps below SOCK_MIN_RCVBUF
   // (~2 KB after doubling); effectively a floor around 2048.
-  uint32 recv_buf_bytes = 1;
+  uint32 recv_buf_bytes = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Upper bound on bytes drained per DrainIncoming() call. 0 = unlimited
   // (legacy behaviour). Small values keep the mock-side recv buffer full
   // so curl keeps seeing short writes across multiple loop iterations.
-  uint32 drain_limit = 2;
+  uint32 drain_limit = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }
 
 // One WebSocket frame to be emitted by the mock server. Field semantics
@@ -917,144 +5167,148 @@ message BackpressureConfig {
 // inputs, so e.g. opcode=15 or rsv bits set will simply land on the wire.
 message WebSocketFrame {
   // Final fragment bit (bit 0 of byte 0).
-  bool fin = 1;
+  bool fin = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Reserved bits. Any non-zero value should trip the extension-negotiation
   // checks in curl's decoder.
-  bool rsv1 = 2;
-  bool rsv2 = 3;
-  bool rsv3 = 4;
+  bool rsv1 = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  bool rsv2 = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  bool rsv3 = 4 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Opcode nibble (low 4 bits of byte 0). Values > 15 are masked to 4 bits.
-  uint32 opcode = 5;
+  uint32 opcode = 5 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Mask bit + 32-bit masking key. The serializer XORs the payload if set.
-  bool masked = 6;
-  uint32 mask_key = 7;
+  bool masked = 6 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
+  uint32 mask_key = 7 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Payload bytes (length implied — the serializer picks the narrowest
   // length encoding unless length_form overrides it).
-  bytes payload = 8;
+  bytes payload = 8 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
   // Force a specific length-encoding form: 0 = auto, 1 = 7-bit, 2 = 16-bit
   // (0x7E marker), 3 = 64-bit (0x7F marker). Lets scenarios exercise the
   // extended-length decode paths even for small payloads.
-  uint32 length_form = 9;
-}
-
-// These checked-in values are libcurl's stable CURLoption numbers and form
-// part of the serialized corpus contract. generate_option_manifest.py checks
-// the entries between CURL-OPTIONS-BEGIN and CURL-OPTIONS-END against the
-// selected curl.h at build time. That block is the source of truth for the
-// options the fuzzer may apply. Keep the UNSPECIFIED entry so the raw zero tag
-// is harmless.
-enum CurlOptionId {
-  CURL_OPTION_UNSPECIFIED = 0;
-  // These options were once present in the serialized enum. Their behavior is
-  // now harness-owned, but their wire numbers and names must not be reused.
-  reserved 10002, 30120;
-  reserved "CURLOPT_URL", "CURLOPT_POSTFIELDSIZE_LARGE";
-  // Keep active options alphabetized by name.
-  // CURL-OPTIONS-BEGIN
-  CURLOPT_ACCEPT_ENCODING = 10102;
-  CURLOPT_ALTSVC_CTRL = 286;
-  CURLOPT_APPEND = 50;
-  CURLOPT_AUTOREFERER = 58;
-  CURLOPT_AWS_SIGV4 = 10305;
-  CURLOPT_BUFFERSIZE = 98;
-  CURLOPT_CERTINFO = 172;
-  CURLOPT_CONNECT_ONLY = 141;
-  CURLOPT_COOKIE = 10022;
-  CURLOPT_COOKIELIST = 10135;
-  CURLOPT_COOKIESESSION = 96;
-  CURLOPT_COPYPOSTFIELDS = 10165;
-  CURLOPT_CRLF = 27;
-  CURLOPT_CUSTOMREQUEST = 10036;
-  CURLOPT_DIRLISTONLY = 48;
-  CURLOPT_DISALLOW_USERNAME_IN_URL = 278;
-  CURLOPT_ECH = 10325;
-  CURLOPT_EXPECT_100_TIMEOUT_MS = 227;
-  CURLOPT_FAILONERROR = 45;
-  CURLOPT_FILETIME = 69;
-  CURLOPT_FOLLOWLOCATION = 52;
-  CURLOPT_FORBID_REUSE = 75;
-  CURLOPT_FRESH_CONNECT = 74;
-  CURLOPT_FTPPORT = 10017;
-  CURLOPT_FTP_ACCOUNT = 10134;
-  CURLOPT_FTP_ALTERNATIVE_TO_USER = 10147;
-  CURLOPT_FTP_CREATE_MISSING_DIRS = 110;
-  CURLOPT_FTP_FILEMETHOD = 138;
-  CURLOPT_FTP_SKIP_PASV_IP = 137;
-  CURLOPT_FTP_USE_EPRT = 106;
-  CURLOPT_FTP_USE_EPSV = 85;
-  CURLOPT_FTP_USE_PRET = 188;
-  CURLOPT_HEADER = 42;
-  CURLOPT_HSTS_CTRL = 299;
-  CURLOPT_HTTP09_ALLOWED = 285;
-  CURLOPT_HTTPAUTH = 107;
-  CURLOPT_HTTPGET = 80;
-  CURLOPT_HTTPSIG_ALGORITHM = 329;
-  CURLOPT_HTTPSIG_HEADERS = 10332;
-  CURLOPT_HTTPSIG_KEY = 10330;
-  CURLOPT_HTTPSIG_KEYID = 10331;
-  CURLOPT_HTTP_CONTENT_DECODING = 158;
-  CURLOPT_HTTP_TRANSFER_DECODING = 157;
-  CURLOPT_HTTP_VERSION = 84;
-  CURLOPT_IGNORE_CONTENT_LENGTH = 136;
-  CURLOPT_INFILESIZE_LARGE = 30115;
-  CURLOPT_KEEP_SENDING_ON_ERROR = 245;
-  CURLOPT_LOCALPORT = 139;
-  CURLOPT_LOCALPORTRANGE = 140;
-  CURLOPT_LOGIN_OPTIONS = 10224;
-  CURLOPT_MAIL_AUTH = 10217;
-  CURLOPT_MAIL_FROM = 10186;
-  CURLOPT_MAIL_RCPT_ALLOWFAILS = 290;
-  CURLOPT_MAXAGE_CONN = 288;
-  CURLOPT_MAXFILESIZE_LARGE = 30117;
-  CURLOPT_MAXLIFETIME_CONN = 314;
-  CURLOPT_MAXREDIRS = 68;
-  CURLOPT_MIME_OPTIONS = 315;
-  CURLOPT_NOBODY = 44;
-  CURLOPT_PASSWORD = 10174;
-  CURLOPT_PATH_AS_IS = 234;
-  CURLOPT_PINNEDPUBLICKEY = 10230;
-  CURLOPT_POST = 47;
-  CURLOPT_POSTFIELDS = 10015;
-  CURLOPT_POSTREDIR = 161;
-  CURLOPT_PROXYAUTH = 111;
-  CURLOPT_PROXYUSERPWD = 10006;
-  CURLOPT_RANGE = 10007;
-  CURLOPT_REFERER = 10016;
-  CURLOPT_REQUEST_TARGET = 10266;
-  CURLOPT_RESUME_FROM_LARGE = 30116;
-  CURLOPT_RTSP_CLIENT_CSEQ = 193;
-  CURLOPT_RTSP_REQUEST = 189;
-  CURLOPT_RTSP_SERVER_CSEQ = 194;
-  CURLOPT_RTSP_SESSION_ID = 10190;
-  CURLOPT_RTSP_STREAM_URI = 10191;
-  CURLOPT_RTSP_TRANSPORT = 10192;
-  CURLOPT_SASL_AUTHZID = 10289;
-  CURLOPT_SASL_IR = 218;
-  CURLOPT_SSLVERSION = 32;
-  CURLOPT_SSL_CIPHER_LIST = 10083;
-  CURLOPT_SSL_EC_CURVES = 10298;
-  CURLOPT_SSL_ENABLE_ALPN = 226;
-  CURLOPT_SSL_OPTIONS = 216;
-  CURLOPT_SSL_SESSIONID_CACHE = 150;
-  CURLOPT_SSL_SIGNATURE_ALGORITHMS = 10328;
-  CURLOPT_SSL_VERIFYHOST = 81;
-  CURLOPT_SSL_VERIFYPEER = 64;
-  CURLOPT_SSL_VERIFYSTATUS = 232;
-  CURLOPT_TFTP_BLKSIZE = 178;
-  CURLOPT_TFTP_NO_OPTIONS = 242;
-  CURLOPT_TIMECONDITION = 33;
-  CURLOPT_TIMEVALUE_LARGE = 30270;
-  CURLOPT_TLS13_CIPHERS = 10276;
-  CURLOPT_TRANSFERTEXT = 53;
-  CURLOPT_TRANSFER_ENCODING = 207;
-  CURLOPT_UNRESTRICTED_AUTH = 105;
-  CURLOPT_UPLOAD = 46;
-  CURLOPT_UPLOAD_BUFFERSIZE = 280;
-  CURLOPT_USERAGENT = 10018;
-  CURLOPT_USERNAME = 10173;
-  CURLOPT_USERPWD = 10005;
-  CURLOPT_WILDCARDMATCH = 197;
-  CURLOPT_WS_OPTIONS = 320;
-  CURLOPT_XOAUTH2_BEARER = 10220;
-  // CURL-OPTIONS-END
+  uint32 length_form = 9 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_WEBSOCKET
+        profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
+        profiles: TARGET_PROFILE_API
+        profiles: TARGET_PROFILE_MULTI
+        profiles: TARGET_PROFILE_TIMING
+      }
+    }
+  ];
 }

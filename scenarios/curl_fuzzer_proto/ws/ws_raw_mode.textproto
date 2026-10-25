@@ -4,8 +4,8 @@
 # curl_ws_start_frame against RAW mode (returns CURLE_FAILED_INIT).
 scheme: SCHEME_WS
 host_path: "127.0.0.1/raw"
-options { option_id: CURLOPT_CONNECT_ONLY uint_value: 2 }
-options { option_id: CURLOPT_WS_OPTIONS   uint_value: 1 }  # CURLWS_RAW_MODE
+options { connect_only: 2 }
+options { ws_options: 1 }  # CURLWS_RAW_MODE
 connection {
   server_frames {
     fin: true

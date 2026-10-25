@@ -8,7 +8,9 @@ The primary local workflow targets 64-bit Linux. It requires:
 - Clang and Clang++;
 - CMake 3.24 or newer;
 - Ninja or Make;
-- Python 3;
+- Python 3.10 or newer;
+- the Protocol Buffers compiler (`protoc`) and well-known `.proto` files
+  (`protobuf-compiler` plus `libprotobuf-dev` on Debian and Ubuntu);
 - Git and network access for the first dependency build.
 
 The build downloads and compiles curl and its static dependencies. It can take

@@ -5,8 +5,8 @@
 # buffers the overflow — both uncovered in the raw-mode scenario.
 scheme: SCHEME_WS
 host_path: "127.0.0.1/bp-upload"
-options { option_id: CURLOPT_UPLOAD           bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 16384 }
+options { upload: true }
+options { infilesize_large: 16384 }
 connection {
   backpressure {
     recv_buf_bytes: 2048

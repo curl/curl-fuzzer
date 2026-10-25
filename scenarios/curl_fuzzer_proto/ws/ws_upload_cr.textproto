@@ -6,7 +6,7 @@
 # deterministic no-progress budget, without waiting for a wall-clock timeout.
 scheme: SCHEME_WS
 host_path: "127.0.0.1/upload"
-options { option_id: CURLOPT_UPLOAD             bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE   uint_value: 256 }
+options { upload: true }
+options { infilesize_large: 256 }
 connection {
 }

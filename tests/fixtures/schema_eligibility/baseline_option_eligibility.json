@@ -1,0 +1,1882 @@
+{
+  "format": 1,
+  "baseline_revision": "f76d561e063fc80c1c30dde789f85adf7b57a1e3",
+  "old_descriptor_sha256": "a611fcf2b53e596c09bc25482198d492a79bb5ab3ae0ec4fd77bacb064a9981e",
+  "schema_source_sha256": "7fdc9990c4a13981e378d1fe6377fba7741b8eac4a78a83e2492d92145986159",
+  "target_policy_source_sha256": "d8d8d71ff040edf2d87c14e2812376998e2149bb4f4f820172c23fa02ab049b0",
+  "profiles": [
+    "compatibility",
+    "fast_http",
+    "deep_http",
+    "fast_https",
+    "https_h2",
+    "fast_http2",
+    "fast_http3",
+    "h2_proxy",
+    "proxy_transport",
+    "resolver",
+    "fast_websocket",
+    "fast_secure_websocket",
+    "fast_telnet",
+    "fast_ftp",
+    "fast_tftp",
+    "fast_smtp",
+    "fast_imap",
+    "fast_pop3",
+    "fast_mqtt",
+    "fast_dict",
+    "fast_gopher",
+    "fast_file",
+    "fast_ldap",
+    "fast_rtsp",
+    "fast_ipfs",
+    "api",
+    "multi",
+    "timing"
+  ],
+  "options": [
+    {
+      "name": "CURLOPT_ACCEPT_ENCODING",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_ALTSVC_CTRL",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_APPEND",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_AUTOREFERER",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_AWS_SIGV4",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_BUFFERSIZE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_CERTINFO",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_CONNECT_ONLY",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_COOKIE",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_COOKIELIST",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_COOKIESESSION",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_COPYPOSTFIELDS",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_CRLF",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_telnet": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_CUSTOMREQUEST",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_DIRLISTONLY",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_DISALLOW_USERNAME_IN_URL",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_ECH",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_EXPECT_100_TIMEOUT_MS",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FAILONERROR",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FILETIME",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FOLLOWLOCATION",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FORBID_REUSE",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FRESH_CONNECT",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTPPORT",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": ["SCHEME_FTPS=false"]}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_ACCOUNT",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_ALTERNATIVE_TO_USER",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_CREATE_MISSING_DIRS",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_FILEMETHOD",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_SKIP_PASV_IP",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_USE_EPRT",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": ["SCHEME_FTPS=false"]}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_USE_EPSV",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_FTP_USE_PRET",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HEADER",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HSTS_CTRL",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTP09_ALLOWED",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTPAUTH",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTPGET",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTPSIG_ALGORITHM",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTPSIG_HEADERS",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTPSIG_KEY",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTPSIG_KEYID",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTP_CONTENT_DECODING",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTP_TRANSFER_DECODING",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_HTTP_VERSION",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": ["doh_https_rr=false"]},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_IGNORE_CONTENT_LENGTH",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_INFILESIZE_LARGE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_KEEP_SENDING_ON_ERROR",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_LOCALPORT",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_LOCALPORTRANGE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_LOGIN_OPTIONS",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAIL_AUTH",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAIL_FROM",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAIL_RCPT_ALLOWFAILS",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAXAGE_CONN",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAXFILESIZE_LARGE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_telnet": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAXLIFETIME_CONN",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MAXREDIRS",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_MIME_OPTIONS",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_NOBODY",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_PASSWORD",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_telnet": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_PATH_AS_IS",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_PINNEDPUBLICKEY",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_POST",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_POSTFIELDS",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_POSTREDIR",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_PROXYAUTH",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_PROXYUSERPWD",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RANGE",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_REFERER",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_REQUEST_TARGET",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RESUME_FROM_LARGE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RTSP_CLIENT_CSEQ",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RTSP_REQUEST",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RTSP_SERVER_CSEQ",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RTSP_SESSION_ID",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RTSP_STREAM_URI",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_RTSP_TRANSPORT",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SASL_AUTHZID",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SASL_IR",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSLVERSION",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_CIPHER_LIST",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_EC_CURVES",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_ENABLE_ALPN",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_OPTIONS",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_SESSIONID_CACHE",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_SIGNATURE_ALGORITHMS",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_VERIFYHOST",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_VERIFYPEER",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_SSL_VERIFYSTATUS",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TFTP_BLKSIZE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TFTP_NO_OPTIONS",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TIMECONDITION",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TIMEVALUE_LARGE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TLS13_CIPHERS",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TRANSFERTEXT",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_TRANSFER_ENCODING",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_UNRESTRICTED_AUTH",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_UPLOAD",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_tftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_UPLOAD_BUFFERSIZE",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_file": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_USERAGENT",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_http": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "proxy_transport": {"default": true, "exceptions": []},
+        "resolver": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "fast_ipfs": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_USERNAME",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_telnet": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_USERPWD",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_telnet": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_mqtt": {"default": true, "exceptions": []},
+        "fast_dict": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_ldap": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_WILDCARDMATCH",
+      "kind": "bool",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "fast_ftp": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_WS_OPTIONS",
+      "kind": "uint64",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    },
+    {
+      "name": "CURLOPT_XOAUTH2_BEARER",
+      "kind": "bytes",
+      "profiles": {
+        "compatibility": {"default": true, "exceptions": []},
+        "deep_http": {"default": true, "exceptions": []},
+        "fast_https": {"default": true, "exceptions": []},
+        "https_h2": {"default": true, "exceptions": []},
+        "fast_http2": {"default": true, "exceptions": []},
+        "fast_http3": {"default": true, "exceptions": []},
+        "h2_proxy": {"default": true, "exceptions": []},
+        "fast_websocket": {"default": true, "exceptions": []},
+        "fast_secure_websocket": {"default": true, "exceptions": []},
+        "fast_smtp": {"default": true, "exceptions": []},
+        "fast_imap": {"default": true, "exceptions": []},
+        "fast_pop3": {"default": true, "exceptions": []},
+        "fast_gopher": {"default": true, "exceptions": []},
+        "fast_rtsp": {"default": true, "exceptions": []},
+        "api": {"default": true, "exceptions": []},
+        "multi": {"default": true, "exceptions": []},
+        "timing": {"default": true, "exceptions": []}
+      }
+    }
+  ]
+}

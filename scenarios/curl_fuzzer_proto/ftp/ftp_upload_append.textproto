@@ -1,9 +1,9 @@
 # APPE takes a distinct command/state path from ordinary STOR.
 scheme: SCHEME_FTP
 host_path: "ftp.test/log.txt"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_APPEND bool_value: true }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 6 }
+options { upload: true }
+options { append: true }
+options { infilesize_large: 6 }
 upload { data: "append" terminal: UPLOAD_TERMINAL_EOF }
 connection {
   initial_response: "220 ready\r\n"

@@ -2,8 +2,8 @@
 # then the final control-channel completion reply.
 scheme: SCHEME_FTP
 host_path: "ftp.test/file.bin"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { username: "fuzz" }
+options { password: "secret" }
 connection {
   initial_response: "220 ftp fuzz peer ready\r\n"
   on_readable: "331 password required\r\n"

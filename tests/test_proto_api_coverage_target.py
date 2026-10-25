@@ -33,6 +33,54 @@ void curl_global_cleanup(void);
 """,
         encoding="utf-8",
     )
+    generated_include = tmp_path / "generated" / "api"
+    generated_include.mkdir(parents=True)
+    (generated_include / "api_traits.h").write_text(
+        "namespace proto_fuzzer::generated { "
+        "struct ApiTraits { static constexpr int kProfile = 0; }; }\n",
+        encoding="utf-8",
+    )
+    proto_include = tmp_path / "proto_fuzzer"
+    proto_include.mkdir()
+    (proto_include / "fuzzer_main.h").write_text(
+        r"""
+#ifndef TEST_PROTO_FUZZER_MAIN_H_
+#define TEST_PROTO_FUZZER_MAIN_H_
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+namespace proto_fuzzer {
+struct ProfileFuzzerTraits {
+  int profile;
+};
+template <typename Traits>
+constexpr ProfileFuzzerTraits BindProfileFuzzer() {
+  return {Traits::kProfile};
+}
+inline int ProtoFuzzerTestOneInput(const std::uint8_t *data, std::size_t size,
+                                   const ProfileFuzzerTraits &) {
+  (void)data;
+  (void)size;
+  std::puts("ordinary API scenario");
+  return 0;
+}
+std::size_t ProtoFuzzerCustomMutator(std::uint8_t *, std::size_t size,
+                                     std::size_t, unsigned int,
+                                     const ProfileFuzzerTraits &) {
+  return size;
+}
+std::size_t ProtoFuzzerCustomCrossOver(const std::uint8_t *, std::size_t size1,
+                                       const std::uint8_t *, std::size_t,
+                                       std::uint8_t *, std::size_t,
+                                       unsigned int,
+                                       const ProfileFuzzerTraits &) {
+  return size1;
+}
+}  // namespace proto_fuzzer
+#endif
+""",
+        encoding="utf-8",
+    )
     driver = tmp_path / "driver.cc"
     driver.write_text(
         r"""
@@ -42,8 +90,6 @@ void curl_global_cleanup(void);
 #include <string_view>
 
 #include <curl/curl.h>
-
-#include "proto_fuzzer/target_profile.h"
 
 extern "C" int LLVMFuzzerInitialize(int *, char ***);
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *, std::size_t);
@@ -71,20 +117,6 @@ void ExerciseDynamicFormattingCoverage() {
 namespace proto_fuzzer {
 void FinalizeRegisteredCurlGlobalLifecyclesForExit() {
   std::puts("bootstrap final cleanup");
-}
-int ProtoFuzzerTestOneInput(TargetProfile, const std::uint8_t *, std::size_t) {
-  std::puts("ordinary API scenario");
-  return 0;
-}
-std::size_t ProtoFuzzerCustomMutator(TargetProfile, std::uint8_t *, std::size_t size,
-                                     std::size_t, unsigned int) {
-  return size;
-}
-std::size_t ProtoFuzzerCustomCrossOver(TargetProfile, const std::uint8_t *,
-                                      std::size_t size1, const std::uint8_t *,
-                                      std::size_t, std::uint8_t *, std::size_t,
-                                      unsigned int) {
-  return size1;
 }
 }  // namespace proto_fuzzer
 

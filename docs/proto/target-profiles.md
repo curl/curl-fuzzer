@@ -1,12 +1,14 @@
 # Target profiles
 
-All structured targets share the binary `Scenario` wire format and most of the
-runtime. A target profile defines which part of that format is meaningful,
-which peer is used, and how much work one mutation may create.
+All structured targets are generated from one authoring schema and share most
+of the runtime, but each target gives libprotobuf-mutator its own restricted
+message type. Retained fields keep the authoring field numbers and wire types,
+so ordinary authored seed bytes remain profile-compatible. A profile defines
+the mutation surface, peer, semantic normalization, and work budget.
 
 | Target | Profile and peer focus |
 |---|---|
-| `curl_fuzzer_proto` | Compatibility target for the historical mixed HTTP, HTTPS, WebSocket, and TELNET corpus. It deliberately has no profile postprocessor. |
+| `curl_fuzzer_proto` | Broad generated compatibility profile for mixed HTTP, HTTPS, WebSocket, and TELNET behavior. It preserves the historical execution mode, but uses the new typed-option schema like every other target. |
 | `curl_fuzzer_proto_http` | High-throughput plaintext HTTP/1 and h2c upgrade negotiation. Retains cheap request options and raw response parsing; removes MIME, uploads, follow-on sockets, prior-knowledge HTTP/2, HTTP/3 selection, and timing controls. |
 | `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, dead connection-pool pruning, authentication, MIME construction and redirected body rewinds, uploads, result APIs, bounded cookie, Alt-Svc, HSTS, and netrc files; harness-owned forward-proxy, HTTP CONNECT (including a bounded pending HAProxy-prefix pollset profile), and abstract Unix-domain transports; plus fixed no-proxy/environment-proxy parsing and owned-loopback interface/keepalive setup. |
 | `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
@@ -15,7 +17,7 @@ which peer is used, and how much work one mutation may create.
 | `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, input-selectable X25519 or provider-default key exchange, plus push, live stream-weight, fatal-session, and upkeep probes. |
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS CONNECT proxy. `connection.proxy_protocol` selects the existing HTTP/2 frame peer or a bounded HTTP/1.1 CONNECT response profile; proxy authentication options remain owned by this lane. |
-| `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4, SOCKS4A, SOCKS5, or SOCKS5-hostname proxy, including scripted SOCKS5 username/password authentication and an optional fixed HAProxy protocol-v1 prefix. The historical basename is retained for accumulated-corpus compatibility. |
+| `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4, SOCKS4A, SOCKS5, or SOCKS5-hostname proxy, including scripted SOCKS5 username/password authentication and an optional fixed HAProxy protocol-v1 prefix. The historical basename is retained as the target identity. |
 | `curl_fuzzer_proto_resolver` | Localhost and bounded `CURLOPT_RESOLVE` cache operations; deterministic positive, negative, link-local retry, queued-cancellation/idle-wait, and Unix-socket resolver states; a real loopback happy-eyeballs race; and loopback DoH success or malformed-answer diagnostics. |
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_wss` | Verified in-process TLS followed by the WebSocket handshake, framing, callbacks, and manual-drive paths. |
@@ -49,20 +51,24 @@ complete its ordinary verified-TLS path.
 
 ## What policy application changes
 
-Before a fixed target executes a loaded or newly mutated message, its
-postprocessor:
+Before a fixed target executes a loaded or newly mutated generated message, its
+postprocessor lowers it into the internal runtime representation and:
 
 - fixes or narrows the scheme and, where required, canonicalizes the authority;
-- retains only options that can affect that peer and transfer mode;
-- removes protocol-specific plans, file inputs, and connection shapes that the
-  lane cannot consume;
+- evaluates generated conditional eligibility after selector normalization;
+- removes variant-specific options and fields that the selected mode cannot
+  consume;
 - caps options, headers, response chunks, connection count, upload data, MIME
   parts, API actions, and protocol-specific byte budgets; and
 - canonicalizes small enums and transport settings onto useful, safe ranges.
 
-The shared limits are in `proto_fuzzer/scenario_limits.h`; profile-specific
-selection is in `proto_fuzzer/target_policy.cc`. Runtime code repeats important
-bounds so callers that bypass mutation policy cannot create unchecked work.
+Static option and field selection is declared beside fields in
+`schemas/curl_fuzzer.proto` and compiled into each generated profile root.
+Conditional membership is also declared there and emitted as a generated
+pruner. The shared limits and semantic selector normalization remain in
+`proto_fuzzer/scenario_limits.h` and `proto_fuzzer/target_policy.cc`. Runtime
+code repeats important bounds so callers that bypass mutation policy cannot
+create unchecked work.
 The packaged libFuzzer configuration also caps each serialized structured
 input at 32 KiB.
 
@@ -125,11 +131,12 @@ resolver lifecycle rather than the generic multi runner. The identity content
 decoder used by the seed does safely exercise `Curl_cwriter_def_write` as part
 of the response path.
 
-The compatibility profile is intentionally different. Existing OSS-Fuzz
-inputs are keyed to `curl_fuzzer_proto`, so changing its normalization would
-change the meaning of accumulated corpus and crash files. New protocol enum
-values and fields must therefore default to the old behavior or be gated so
-the compatibility runner does not reinterpret historical wire data.
+The compatibility profile is intentionally broad. Its generated root preserves
+empty option slots and its runner keeps the mixed execution mode rather than
+applying one fixed lane's restrictions. The typed-option cutover was still a
+breaking in-place format change: pre-cutover OSS-Fuzz corpus and crash files
+must be replayed with their original revision and target. New fields and enum
+values must continue to avoid reinterpreting older wire tags.
 
 ## Choosing a target for a seed or crash
 
@@ -141,8 +148,10 @@ Use the narrowest target that owns the behavior:
   rather than putting protocol frame setup into an HTTP seed.
 - Put lifecycle-only work in `api` or `multi`, keeping it out of protocol-hot
   loops.
-- Replay a crash with the binary named by OSS-Fuzz. Although fixed lanes share
-  a wire format, their policies can transform the same bytes differently.
+- Replay a crash with the binary and curl-fuzzer revision named by OSS-Fuzz.
+  Profile roots preserve common field tags, but different profiles can discard
+  or normalize the same bytes differently, and pre-cutover bytes use a
+  different option layout.
 
 See [Writing and inspecting scenarios](scenarios.md) for corpus generation and
 [Extending the structured suite](extending.md) for the invariants a new lane

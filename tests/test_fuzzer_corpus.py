@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -11,12 +12,19 @@ import pytest
 
 from curl_fuzzer_tools.fuzzer_corpus import (
     COMPATIBLE_CORPUS_TARGETS,
-    HISTORICAL_PROTO_CORPUS_TARGETS,
+    STRUCTURED_CORPUS_EPOCH_MARKER,
     CorpusError,
     CorpusSnapshotBuilder,
     parse_corpus_mappings,
     resolve_corpus_sources,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _mark_current_structured_epoch(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / STRUCTURED_CORPUS_EPOCH_MARKER).touch()
 
 
 def test_snapshot_combines_supported_sources_and_deduplicates_content(
@@ -194,6 +202,55 @@ def test_target_uses_its_matching_checked_in_corpus(tmp_path: Path) -> None:
     assert sources == [proto_http]
 
 
+def test_structured_public_corpus_requires_current_epoch_marker(tmp_path: Path) -> None:
+    public_root = tmp_path / "public"
+    public_corpus = public_root / "curl_fuzzer_proto_http"
+    public_corpus.mkdir(parents=True)
+    (public_corpus / "seed").write_bytes(b"new-format")
+
+    with pytest.raises(CorpusError, match=STRUCTURED_CORPUS_EPOCH_MARKER):
+        resolve_corpus_sources(
+            "curl_fuzzer_proto_http",
+            tmp_path / "bin",
+            None,
+            public_root,
+            {},
+        )
+
+    _mark_current_structured_epoch(public_root)
+    assert resolve_corpus_sources(
+        "curl_fuzzer_proto_http",
+        tmp_path / "bin",
+        None,
+        public_root,
+        {},
+    ) == [public_corpus]
+
+
+def test_shell_epoch_guard_matches_python_marker(tmp_path: Path) -> None:
+    helper = REPO_ROOT / "scripts" / "fuzz_corpus_helpers.sh"
+
+    def ready(target: str) -> bool:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1"; fuzz_public_corpus_epoch_ready "$2" "$3"',
+                "bash",
+                str(helper),
+                target,
+                str(tmp_path),
+            ],
+            check=False,
+        )
+        return result.returncode == 0
+
+    assert ready("curl_fuzzer_http")
+    assert not ready("curl_fuzzer_proto_http")
+    _mark_current_structured_epoch(tmp_path)
+    assert ready("curl_fuzzer_proto_http")
+
+
 def test_resolver_can_use_a_packaged_seed_without_a_checkout(tmp_path: Path) -> None:
     binary_dir = tmp_path / "bin"
     binary_dir.mkdir()
@@ -205,7 +262,7 @@ def test_resolver_can_use_a_packaged_seed_without_a_checkout(tmp_path: Path) -> 
     assert sources == [seed_archive]
 
 
-def test_fixed_proto_lane_includes_historical_public_corpus(tmp_path: Path) -> None:
+def test_fixed_proto_lane_excludes_old_mixed_public_corpus(tmp_path: Path) -> None:
     corpus_root = tmp_path / "corpora"
     proto_http = corpus_root / "curl_fuzzer_proto_http"
     proto_http.mkdir(parents=True)
@@ -218,6 +275,7 @@ def test_fixed_proto_lane_includes_historical_public_corpus(tmp_path: Path) -> N
     historical_public.mkdir()
     (current_public / "current").write_bytes(b"current")
     (historical_public / "historical").write_bytes(b"historical")
+    _mark_current_structured_epoch(public_root)
 
     sources = resolve_corpus_sources(
         "curl_fuzzer_proto_http",
@@ -227,7 +285,7 @@ def test_fixed_proto_lane_includes_historical_public_corpus(tmp_path: Path) -> N
         {},
     )
 
-    assert sources == [proto_http, current_public, historical_public]
+    assert sources == [proto_http, current_public]
 
 
 @pytest.mark.parametrize(
@@ -252,6 +310,7 @@ def test_tls_lane_reuses_compatible_https_corpora(tmp_path: Path, target: str) -
     for directory in (target_public, https_public, historical_public):
         directory.mkdir(parents=True)
         (directory / "input").write_bytes(directory.name.encode())
+    _mark_current_structured_epoch(public_root)
 
     sources = resolve_corpus_sources(
         target,
@@ -266,11 +325,10 @@ def test_tls_lane_reuses_compatible_https_corpora(tmp_path: Path, target: str) -
         https_seed_archive,
         target_public,
         https_public,
-        historical_public,
     ]
 
 
-def test_http3_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
+def test_http3_lane_does_not_reuse_a_different_profile(tmp_path: Path) -> None:
     corpus_root = tmp_path / "corpora"
     http3_corpus = corpus_root / "curl_fuzzer_proto_http3"
     https_corpus = corpus_root / "curl_fuzzer_proto_https"
@@ -291,6 +349,7 @@ def test_http3_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
     for directory in (http3_public, https_public, historical_public):
         directory.mkdir(parents=True)
         (directory / "input").write_bytes(directory.name.encode())
+    _mark_current_structured_epoch(public_root)
 
     sources = resolve_corpus_sources(
         "curl_fuzzer_proto_http3",
@@ -302,37 +361,12 @@ def test_http3_lane_reuses_compatible_https_corpora(tmp_path: Path) -> None:
 
     assert sources == [
         http3_corpus,
-        https_corpus,
-        https_seed_archive,
         http3_public,
-        https_public,
-        historical_public,
     ]
 
 
 def test_compatible_target_policy_keeps_wire_formats_aligned() -> None:
     assert COMPATIBLE_CORPUS_TARGETS == {
-        "curl_fuzzer_proto_http2": ("curl_fuzzer_proto_https_h2",),
         "curl_fuzzer_proto_https_gnutls": ("curl_fuzzer_proto_https",),
         "curl_fuzzer_proto_https_mbedtls": ("curl_fuzzer_proto_https",),
-        "curl_fuzzer_proto_http3": ("curl_fuzzer_proto_https",),
     }
-
-
-@pytest.mark.parametrize(
-    ("target", "uses_historical_proto"),
-    [
-        ("curl_fuzzer_proto_http_deep", True),
-        ("curl_fuzzer_proto_telnet", True),
-        ("curl_fuzzer_proto_file", True),
-        ("curl_fuzzer_proto_h2_proxy", False),
-        ("curl_fuzzer_proto_https_h2", False),
-        ("curl_fuzzer_proto_http2", False),
-        ("curl_fuzzer_proto_socks4", False),
-        ("curl_fuzzer_proto_resolver", False),
-    ],
-)
-def test_historical_proto_corpus_policy(
-    target: str, uses_historical_proto: bool
-) -> None:
-    assert (target in HISTORICAL_PROTO_CORPUS_TARGETS) is uses_historical_proto

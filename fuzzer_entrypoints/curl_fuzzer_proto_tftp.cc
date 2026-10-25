@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: curl
  */
 
+#include "generated/fast_tftp/fast_tftp_traits.h"
 #include "proto_fuzzer/fuzzer_main.h"
 
 namespace {
 
 // Bind this source's visible target identity once so mutation, crossover, and
 // execution cannot drift onto different policies as the shared runner evolves.
-constexpr auto kProfile = proto_fuzzer::TargetProfile::kFastTftp;
+using Traits = proto_fuzzer::generated::FastTftpTraits;
+constexpr auto kProfile = proto_fuzzer::BindProfileFuzzer<Traits>();
 
 } // namespace
 
@@ -21,8 +23,8 @@ extern "C" std::size_t LLVMFuzzerCustomMutator(std::uint8_t *data,
                                                std::size_t size,
                                                std::size_t max_size,
                                                unsigned int seed) {
-  return proto_fuzzer::ProtoFuzzerCustomMutator(kProfile, data, size, max_size,
-                                                seed);
+  return proto_fuzzer::ProtoFuzzerCustomMutator(data, size, max_size, seed,
+                                                kProfile);
 }
 
 extern "C" std::size_t
@@ -31,10 +33,10 @@ LLVMFuzzerCustomCrossOver(const std::uint8_t *data1, std::size_t size1,
                           std::uint8_t *out, std::size_t max_out_size,
                           unsigned int seed) {
   return proto_fuzzer::ProtoFuzzerCustomCrossOver(
-      kProfile, data1, size1, data2, size2, out, max_out_size, seed);
+      data1, size1, data2, size2, out, max_out_size, seed, kProfile);
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
                                       std::size_t size) {
-  return proto_fuzzer::ProtoFuzzerTestOneInput(kProfile, data, size);
+  return proto_fuzzer::ProtoFuzzerTestOneInput(data, size, kProfile);
 }

@@ -4,9 +4,9 @@
 # the mock does not require a fixed client cnonce or response digest.
 scheme: SCHEME_IMAP
 host_path: "imap.test/INBOX?ALL"
-options { option_id: CURLOPT_USERNAME string_value: "user" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
-options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=DIGEST-MD5" }
+options { username: "user" }
+options { password: "secret" }
+options { login_options: "AUTH=DIGEST-MD5" }
 connection {
   initial_response: "* OK imap.test ready\r\n"
   on_readable: "* CAPABILITY IMAP4rev1 AUTH=DIGEST-MD5\r\nOK CAPABILITY completed\r\n"

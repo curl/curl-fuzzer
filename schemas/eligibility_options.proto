@@ -1,0 +1,136 @@
+/*
+ * Copyright (C) Max Dymond, <cmeister2@gmail.com>, et al.
+ *
+ * SPDX-License-Identifier: curl
+ */
+
+syntax = "proto3";
+
+package curl.fuzzer.schema;
+
+import "google/protobuf/descriptor.proto";
+
+// Compile-time identities of the structured fuzzing lanes. Keep this list in
+// lock-step with proto_fuzzer::TargetProfile; schema generation fails when a
+// registry omits any non-zero member.
+enum TargetProfile {
+  TARGET_PROFILE_UNSPECIFIED = 0;
+  TARGET_PROFILE_COMPATIBILITY = 1;
+  TARGET_PROFILE_FAST_HTTP = 2;
+  TARGET_PROFILE_DEEP_HTTP = 3;
+  TARGET_PROFILE_FAST_HTTPS = 4;
+  TARGET_PROFILE_HTTPS_H2 = 5;
+  TARGET_PROFILE_FAST_HTTP2 = 6;
+  TARGET_PROFILE_FAST_HTTP3 = 7;
+  TARGET_PROFILE_H2_PROXY = 8;
+  TARGET_PROFILE_PROXY_TRANSPORT = 9;
+  TARGET_PROFILE_RESOLVER = 10;
+  TARGET_PROFILE_FAST_WEBSOCKET = 11;
+  TARGET_PROFILE_FAST_SECURE_WEBSOCKET = 12;
+  TARGET_PROFILE_FAST_TELNET = 13;
+  TARGET_PROFILE_FAST_FTP = 14;
+  TARGET_PROFILE_FAST_TFTP = 15;
+  TARGET_PROFILE_FAST_SMTP = 16;
+  TARGET_PROFILE_FAST_IMAP = 17;
+  TARGET_PROFILE_FAST_POP3 = 18;
+  TARGET_PROFILE_FAST_MQTT = 19;
+  TARGET_PROFILE_FAST_DICT = 20;
+  TARGET_PROFILE_FAST_GOPHER = 21;
+  TARGET_PROFILE_FAST_FILE = 22;
+  TARGET_PROFILE_FAST_LDAP = 23;
+  TARGET_PROFILE_FAST_RTSP = 24;
+  TARGET_PROFILE_FAST_IPFS = 25;
+  TARGET_PROFILE_API = 26;
+  TARGET_PROFILE_MULTI = 27;
+  TARGET_PROFILE_TIMING = 28;
+}
+
+// Empty SetOption entries are representable because SetOption is a oneof.
+// Profiles must declare whether an empty entry consumes an option-budget slot.
+enum EmptyOptionPolicy {
+  EMPTY_OPTION_POLICY_UNSPECIFIED = 0;
+  EMPTY_OPTION_POLICY_DISCARD = 1;
+  EMPTY_OPTION_POLICY_PRESERVE_SLOT = 2;
+}
+
+// Closed selector facts may conditionally remove fields after their mutable
+// selectors have been normalized. They never alter a profile's root type.
+enum SelectorFact {
+  SELECTOR_FACT_UNSPECIFIED = 0;
+  SELECTOR_FACT_IMPLICIT_FTPS = 1;
+  SELECTOR_FACT_RESOLVER_USES_DOH = 2;
+  SELECTOR_FACT_TIMING_WEBSOCKET = 3;
+  SELECTOR_FACT_HTTP3_CONNECT_UDP_PROXY = 4;
+  SELECTOR_FACT_HTTP2_PLAN_PRESENT = 5;
+  SELECTOR_FACT_H2_PROXY_HTTP2 = 6;
+  SELECTOR_FACT_IMPLICIT_LDAPS = 7;
+  SELECTOR_FACT_RESOLVER_DEFAULT_MODE = 8;
+  SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL = 9;
+  SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY = 10;
+  SELECTOR_FACT_DEEP_HTTP_DEFAULT_SOCKET_ROUTE = 11;
+  SELECTOR_FACT_DEEP_HTTP_REWRITE_FILES_ALLOWED = 12;
+  SELECTOR_FACT_API_MULTI_DRIVE = 13;
+  SELECTOR_FACT_API_VALID_MIME_REPEAT = 14;
+}
+
+message ConditionalGuard {
+  SelectorFact fact = 1;
+  bool expected = 2;
+  // Empty means every profile in the enclosing eligibility declaration.
+  repeated TargetProfile profiles = 3;
+}
+
+message Eligibility {
+  repeated TargetProfile profiles = 1;
+  repeated ConditionalGuard guards = 3;
+}
+
+message CurlOption {
+  string native_name = 1;
+  Eligibility eligibility = 2;
+}
+
+message ContextualEligibility {
+  // Shape selected by the containing message reference's child_context. The
+  // eligibility below is additive to ScenarioField.eligibility for that
+  // shape, so profiles may retain a field everywhere or only on selected
+  // paths without duplicating the source message declaration.
+  string context = 1;
+  Eligibility eligibility = 2;
+}
+
+message ScenarioField {
+  Eligibility eligibility = 1;
+  // Add profile membership or guards only for selected shapes of this
+  // containing message. ScenarioField.eligibility is the default for every
+  // shape. A message-typed reference chooses its child's shape with
+  // child_context, allowing one source declaration to be cloned safely when
+  // two paths retain different reachable fields.
+  repeated ContextualEligibility contextual_eligibility = 3;
+  string child_context = 4;
+}
+
+message ProfileDeclaration {
+  TargetProfile profile = 1;
+  // Exact enumerator in proto_fuzzer::TargetProfile. This is intentionally
+  // explicit: generated adapters must not guess C++ spelling from proto names.
+  string cpp_target_profile = 5;
+  // Fully-qualified authoring message from which the restricted root is built.
+  string root_message = 2;
+  // Unqualified generated message name in the authoring root's package.
+  string generated_root = 3;
+  EmptyOptionPolicy empty_option_policy = 4;
+}
+
+message EligibilityRegistry {
+  repeated ProfileDeclaration profiles = 1;
+}
+
+extend google.protobuf.FileOptions {
+  EligibilityRegistry eligibility_registry = 51000;
+}
+
+extend google.protobuf.FieldOptions {
+  CurlOption curl_option = 51001;
+  ScenarioField scenario_field = 51002;
+}

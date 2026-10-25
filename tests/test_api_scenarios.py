@@ -4,23 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from curl_fuzzer_tools.generate_option_manifest import parse_proto_options
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCENARIO_SCHEMA = REPO_ROOT / "schemas" / "curl_fuzzer.proto"
 API_SCENARIOS = REPO_ROOT / "scenarios" / "curl_fuzzer_proto" / "api"
 
 
-def test_copy_postfields_is_a_supported_option() -> None:
-    supported = {
-        option.name
-        for option in parse_proto_options(SCENARIO_SCHEMA.read_text(encoding="utf-8"))
-    }
+def test_copy_postfields_is_a_supported_option(
+    active_option_names: frozenset[str],
+) -> None:
     assert {
         "CURLOPT_COPYPOSTFIELDS",
         "CURLOPT_LOCALPORT",
         "CURLOPT_LOCALPORTRANGE",
-    } <= supported
+    } <= active_option_names
 
 
 def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
@@ -45,7 +40,7 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
         ),
         "api_pause_buffered.textproto": (
             "pause_response_once: true",
-            'option_id: CURLOPT_ACCEPT_ENCODING string_value: "gzip"',
+            'accept_encoding: "gzip"',
             "Content-Encoding: gzip",
             "Content-Length: 12311",
         ),
@@ -54,13 +49,10 @@ def test_api_seeds_preserve_correlated_entrypoints_and_peer_data() -> None:
             "reentrant_probe_selectors: 13",
             "API_DRIVE_MULTI_PERFORM",
         ),
-        "api_copy_postfields.textproto": (
-            "CURLOPT_COPYPOSTFIELDS",
-            'string_value: "copy\\000body"',
-        ),
+        "api_copy_postfields.textproto": ('copypostfields: "copy\\000body"',),
         "api_url_guess_local_port.textproto": (
-            "CURLOPT_LOCALPORT",
-            "CURLOPT_LOCALPORTRANGE",
+            "localport: 12345",
+            "localportrange: 3",
             "guess_scheme_url: true",
             "probe_version_info: true",
         ),

@@ -27,9 +27,9 @@ from dataclasses import dataclass, field
 
 from curl_fuzzer_tools.corpus import BaseType, TLVDecoder
 
-# Tag classification. The supported subset mirrors
-# schemas/curl_fuzzer.proto's CurlOptionId enum; a TLV tag landing in one of
-# these sets becomes a SetOption, with its CURLOPT name pulled straight
+# Tag classification. The supported subset mirrors the typed fields in
+# schemas/curl_fuzzer.proto's SetOption oneof; a TLV tag landing in one of
+# these sets becomes a SetOption, with its CURLOPT identity pulled straight
 # from BaseType.TYPEMAP. Tags outside the sets are reported as skipped.
 STRING_TAGS = frozenset(
     {
@@ -151,11 +151,13 @@ def curlopt_name(tlv_type: int) -> str:
     return name
 
 
+def curlopt_field_name(tlv_type: int) -> str:
+    """Return the typed SetOption field associated with a legacy TLV tag."""
+    return curlopt_name(tlv_type).removeprefix("CURLOPT_").lower()
+
+
 def render_string_option(tlv_type: int, value: bytes) -> str:
-    return (
-        f"options {{ option_id: {curlopt_name(tlv_type)} "
-        f"string_value: {escape_bytes(value)} }}"
-    )
+    return f"options {{ {curlopt_field_name(tlv_type)}: {escape_bytes(value)} }}"
 
 
 def decode_u32(tlv_type: int, value: bytes) -> int:
@@ -171,22 +173,21 @@ def render_bool_option(tlv_type: int, value: bytes) -> str:
     # TLV booleans are 4-byte big-endian ints; non-zero is true.
     flag = bool(decode_u32(tlv_type, value))
     return (
-        f"options {{ option_id: {curlopt_name(tlv_type)} "
-        f"bool_value: {'true' if flag else 'false'} }}"
+        f"options {{ {curlopt_field_name(tlv_type)}: {'true' if flag else 'false'} }}"
     )
 
 
 def render_uint_option(tlv_type: int, value: bytes) -> str:
     number = decode_u32(tlv_type, value)
-    return f"options {{ option_id: {curlopt_name(tlv_type)} uint_value: {number} }}"
+    return f"options {{ {curlopt_field_name(tlv_type)}: {number} }}"
 
 
-def record_option(tlv_type: int, seen_option_ids: set[str]) -> None:
+def record_option(tlv_type: int, seen_option_names: set[str]) -> None:
     """Reject repeated scalar/string options like the legacy parser does."""
-    option_id = curlopt_name(tlv_type)
-    if option_id in seen_option_ids:
-        raise ConversionError(f"duplicate {option_id}")
-    seen_option_ids.add(option_id)
+    option_name = curlopt_name(tlv_type)
+    if option_name in seen_option_names:
+        raise ConversionError(f"duplicate {option_name}")
+    seen_option_names.add(option_name)
 
 
 def convert_stream(stream: bytes) -> ProtoOutput:
@@ -194,7 +195,7 @@ def convert_stream(stream: bytes) -> ProtoOutput:
     out = ProtoOutput()
     url_seen = False
     upload_seen = False
-    seen_option_ids: set[str] = set()
+    seen_option_names: set[str] = set()
     for tlv in TLVDecoder(stream):
         if len(tlv.data) != tlv.length:
             label = BaseType.TYPEMAP.get(tlv.type, f"0x{tlv.type:02x}")
@@ -208,7 +209,7 @@ def convert_stream(stream: bytes) -> ProtoOutput:
             url_seen = True
             # RunScenario owns CURLOPT_URL: it composes it from these two
             # fields and deliberately does not expose CURLOPT_URL through the
-            # generic option manifest. Preserve all bytes after the separator
+            # typed SetOption surface. Preserve all bytes after the separator
             # verbatim so malformed authorities and paths remain fuzzable.
             scheme, separator, host_path = tlv.data.partition(b"://")
             scheme_name = SCHEME_NAMES.get(scheme.lower())
@@ -236,18 +237,16 @@ def convert_stream(stream: bytes) -> ProtoOutput:
             # read callback (CURLOPT_UPLOAD + CURLOPT_INFILESIZE_LARGE). The
             # proto runner drives uploads from the upload script instead.
             out.upload_data = tlv.data
-            out.options.append("options { option_id: CURLOPT_UPLOAD bool_value: true }")
-            out.options.append(
-                f"options {{ option_id: CURLOPT_INFILESIZE_LARGE uint_value: {len(tlv.data)} }}"
-            )
+            out.options.append("options { upload: true }")
+            out.options.append(f"options {{ infilesize_large: {len(tlv.data)} }}")
         elif tlv.type in STRING_TAGS:
-            record_option(tlv.type, seen_option_ids)
+            record_option(tlv.type, seen_option_names)
             out.options.append(render_string_option(tlv.type, tlv.data))
         elif tlv.type in BOOL_TAGS:
-            record_option(tlv.type, seen_option_ids)
+            record_option(tlv.type, seen_option_names)
             out.options.append(render_bool_option(tlv.type, tlv.data))
         elif tlv.type in UINT_TAGS:
-            record_option(tlv.type, seen_option_ids)
+            record_option(tlv.type, seen_option_names)
             out.options.append(render_uint_option(tlv.type, tlv.data))
         else:
             out.skipped.append(tlv.type)

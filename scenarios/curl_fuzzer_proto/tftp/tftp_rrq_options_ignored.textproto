@@ -3,5 +3,5 @@
 # requested eight-byte block size to TFTP's 512-byte default.
 scheme: SCHEME_TFTP
 host_path: "tftp.test/options-ignored"
-options { option_id: CURLOPT_TFTP_BLKSIZE uint_value: 8 }
+options { tftp_blksize: 8 }
 connection { initial_response: "\000\003\000\001abcdefgh" }

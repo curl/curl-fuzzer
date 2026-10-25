@@ -4,9 +4,9 @@
 # and prune that dead idle connection before opening the second socket.
 scheme: SCHEME_HTTP
 host_path: "reap.test/start"
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 1 }
-options { option_id: CURLOPT_FRESH_CONNECT bool_value: true }
+options { followlocation: 1 }
+options { maxredirs: 1 }
+options { fresh_connect: true }
 connection {
   initial_response: "HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\n\r\n"
 }

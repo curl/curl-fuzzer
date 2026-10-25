@@ -4,14 +4,12 @@
 # component parser exercised by the Ed25519 seed.
 scheme: SCHEME_HTTP
 host_path: "httpsig.test/hmac?mode=default"
-options { option_id: CURLOPT_HTTPSIG_ALGORITHM uint_value: 2 }
+options { httpsig_algorithm: 2 }
 options {
-  option_id: CURLOPT_HTTPSIG_KEY
-  string_value: "7365637265742d66757a7a2d6b6579"
+  httpsig_key: "7365637265742d66757a7a2d6b6579"
 }
 options {
-  option_id: CURLOPT_HTTPSIG_KEYID
-  string_value: "fuzz-hmac-sha256"
+  httpsig_keyid: "fuzz-hmac-sha256"
 }
 connection {
   initial_response: "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"

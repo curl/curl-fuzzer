@@ -2,7 +2,7 @@
 # such as EXPN instead of the mail-envelope state machine.
 scheme: SCHEME_SMTP
 host_path: "smtp.test/command.test"
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "EXPN" }
+options { customrequest: "EXPN" }
 mail_rcpt: "list@example.test"
 connection {
   initial_response: "220 smtp.test ESMTP fuzz peer\r\n"

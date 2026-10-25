@@ -1,4 +1,4 @@
-"""Tests for a reproducible, byte-preserving historical HTTP/2 handoff."""
+"""Tests for a reproducible, byte-preserving typed HTTP/2 handoff."""
 
 from __future__ import annotations
 
@@ -12,11 +12,15 @@ from pathlib import Path
 import pytest
 
 from curl_fuzzer_tools import bootstrap_http2_corpus as bootstrapper
-from curl_fuzzer_tools.fuzzer_corpus import CorpusError, resolve_corpus_sources
+from curl_fuzzer_tools.fuzzer_corpus import (
+    STRUCTURED_CORPUS_EPOCH_MARKER,
+    CorpusError,
+    resolve_corpus_sources,
+)
 
 SCHEMA = Path(__file__).resolve().parents[1] / "schemas" / "curl_fuzzer.proto"
-H2_OPTION = "options {\n  option_id: CURLOPT_HTTP_VERSION\n  uint_value: 5\n}\n"
-H1_OPTION = H2_OPTION.replace("uint_value: 5", "uint_value: 2")
+H2_OPTION = "options {\n  http_version: 5\n}\n"
+H1_OPTION = H2_OPTION.replace("http_version: 5", "http_version: 2")
 
 
 @pytest.mark.parametrize(
@@ -28,10 +32,10 @@ H1_OPTION = H2_OPTION.replace("uint_value: 5", "uint_value: 2")
         ("options {\n}\n" * 63 + H2_OPTION, True),
         ("options {\n}\n" * 64 + H2_OPTION, False),
         ("api_plan {\n  " + H2_OPTION.replace("\n", "\n  ") + "}\n", False),
-        (H2_OPTION.replace("uint_value: 5", "bool_value: true"), False),
-        (H2_OPTION + "options {\n  option_id: CURLOPT_HTTP_VERSION\n}\n", False),
-        ('host_path: "options {\\n  uint_value: 5\\n}"\n', False),
-        (H2_OPTION.replace("uint_value: 5", "uint_value: 50"), False),
+        (H2_OPTION.replace("http_version: 5", "http09_allowed: true"), False),
+        (H2_OPTION + "options {\n  http_version: 0\n}\n", False),
+        ('host_path: "options {\\n  http_version: 5\\n}"\n', False),
+        (H2_OPTION.replace("http_version: 5", "http_version: 50"), False),
     ],
 )
 def test_selection_respects_final_version_and_visible_option_prefix(
@@ -54,6 +58,28 @@ def test_missing_protoc_fails_before_creating_output(
             [tmp_path / "source"], tmp_path / "out", tmp_path / "manifest", SCHEMA
         )
     assert not (tmp_path / "out").exists()
+
+
+def test_default_source_discovery_requires_current_epoch_marker(tmp_path: Path) -> None:
+    public = tmp_path / "public"
+    compatibility = public / "curl_fuzzer_proto"
+    compatibility.mkdir(parents=True)
+
+    with pytest.raises(CorpusError, match=STRUCTURED_CORPUS_EPOCH_MARKER):
+        bootstrapper._default_sources(public)
+
+    (public / STRUCTURED_CORPUS_EPOCH_MARKER).touch()
+    assert bootstrapper._default_sources(public) == [compatibility]
+
+
+def test_cli_reports_missing_default_source_epoch_marker(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    public = tmp_path / "public"
+    public.mkdir()
+
+    assert bootstrapper.main(["--public-corpus-root", str(public)]) == 1
+    assert STRUCTURED_CORPUS_EPOCH_MARKER in capsys.readouterr().err
 
 
 def test_interrupted_publication_preserves_existing_file(
@@ -81,7 +107,7 @@ def test_interrupted_publication_preserves_existing_file(
 def test_empty_source_is_rejected(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
-    with pytest.raises(CorpusError, match="historical corpus is empty"):
+    with pytest.raises(CorpusError, match="typed authoring corpus is empty"):
         bootstrapper.bootstrap(
             [source], tmp_path / "out", tmp_path / "manifest", SCHEMA
         )
@@ -131,10 +157,10 @@ def test_real_protobuf_handoff_is_stable_and_discovered_as_native(
         )
 
     h2 = encode(
-        'options { option_id: CURLOPT_HTTP_VERSION uint_value: 5 } connection { initial_response: "\\000\\377" }'
+        'options { http_version: 5 } connection { initial_response: "\\000\\377" }'
     )
-    h1 = encode("options { option_id: CURLOPT_HTTP_VERSION uint_value: 2 }")
-    oneof_override = b"\x1a\x06\x08\x54\x58\x05\x60\x01"
+    h1 = encode("options { http_version: 2 }")
+    oneof_override = b"\x1a\x06\xe0\x02\x05\x0a\x01x"
     source = tmp_path / "source.zip"
     with zipfile.ZipFile(source, "w") as archive:
         for name, data in {
@@ -147,6 +173,8 @@ def test_real_protobuf_handoff_is_stable_and_discovered_as_native(
             archive.writestr(name, data)
     original = source.read_bytes()
     public = tmp_path / "public"
+    public.mkdir()
+    (public / STRUCTURED_CORPUS_EPOCH_MARKER).touch()
     destination = public / "curl_fuzzer_proto_http2"
     destination.mkdir(parents=True)
     (destination / "native-entry").write_bytes(b"native")

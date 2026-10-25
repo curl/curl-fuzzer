@@ -10,11 +10,8 @@
 #include "test_assertions.h"
 
 #include <curl/curl.h>
-#include <google/protobuf/text_format.h>
 
 #include <cstdint>
-#include <fstream>
-#include <iterator>
 #include <limits>
 #include <string>
 
@@ -45,6 +42,7 @@ using curl::fuzzer::proto::SCHEME_TFTP;
 using curl::fuzzer::proto::SCHEME_UNSPECIFIED;
 using curl::fuzzer::proto::SCHEME_WS;
 using curl::fuzzer::proto::SCHEME_WSS;
+using curl::fuzzer::proto::SetOption;
 using proto_fuzzer::NormalizeScenarioForExecution;
 using proto_fuzzer::NormalizeScenarioForTarget;
 using proto_fuzzer::RunModeFor;
@@ -63,6 +61,17 @@ Scenario ScenarioWithBackpressure(curl::fuzzer::proto::Scheme scheme,
   backpressure->set_recv_buf_bytes(recv_buf_bytes);
   backpressure->set_drain_limit(drain_limit);
   return scenario;
+}
+
+const SetOption &RequireOption(const Scenario &scenario,
+                               curl::fuzzer::proto::CurlOptionId option_id,
+                               const char *message) {
+  for (const auto &option : scenario.options()) {
+    if (option.option_id() == option_id) {
+      return option;
+    }
+  }
+  Fail(message);
 }
 
 void ExpectFixedPolicy(TargetProfile profile,
@@ -148,7 +157,6 @@ void TestDeepHttpPolicy() {
       "follow-on sentinel");
   scenario.mutable_mime_post()->add_parts()->set_data("mime sentinel");
   scenario.mutable_upload()->set_data("upload sentinel");
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kDeepHttp);
 
@@ -163,9 +171,6 @@ void TestDeepHttpPolicy() {
   Expect(scenario.has_upload(), "deep HTTP policy removed an upload script");
   Expect(scenario.request_headers_size() == 1,
          "deep HTTP policy removed request headers");
-  Expect(scenario.options_size() == 1 && scenario.options(0).option_id() ==
-                                             curl::fuzzer::proto::CURLOPT_POST,
-         "deep HTTP policy filtered a coverage option");
 }
 
 void TestDeepHttpBoundsFileInputs() {
@@ -397,16 +402,6 @@ void TestHttpsH2Policy() {
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.set_accept_h2_push(true);
 
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_SSL_ENABLE_ALPN);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_SSL_EC_CURVES);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kHttpsH2);
 
   Expect(scenario.scheme() == SCHEME_HTTPS,
@@ -436,12 +431,6 @@ void TestHttpsH2Policy() {
          "HTTPS/H2 policy retained forward-proxy-only work");
   Expect(scenario.accept_h2_push(),
          "HTTPS/H2 policy discarded its accepted-push mode");
-  Expect(scenario.options_size() == 2 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_POST &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION,
-         "HTTPS/H2 policy retained an option that can bypass fixed ALPN h2");
 }
 
 void TestFastHttp2Policy() {
@@ -456,10 +445,6 @@ void TestFastHttp2Policy() {
       ->add_actions()
       ->mutable_headers()
       ->set_status_code(200);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_SSL_ENABLE_ALPN);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp2);
 
   Expect(scenario.scheme() == SCHEME_HTTP,
@@ -475,10 +460,6 @@ void TestFastHttp2Policy() {
   Expect(scenario.connection().initial_response().empty() &&
              !scenario.connection().has_backpressure(),
          "fast HTTP/2 policy retained competing raw or timed response work");
-  Expect(scenario.options_size() == 1 && scenario.options(0).option_id() ==
-                                             curl::fuzzer::proto::CURLOPT_POST,
-         "fast HTTP/2 policy retained an option that can bypass "
-         "prior-knowledge H2");
 }
 
 void TestTlsPoliciesRejectUnknownCertificateChain() {
@@ -610,12 +591,6 @@ void TestFastHttp3PolicyMaterializesUsefulPlan() {
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
   scenario.mutable_http3_plan();
 
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_CONNECT_ONLY);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp3);
 
   Expect(scenario.scheme() == SCHEME_HTTPS,
@@ -634,9 +609,6 @@ void TestFastHttp3PolicyMaterializesUsefulPlan() {
   Expect(scenario.tls_certificate_chain() ==
              curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
          "fast HTTP/3 policy discarded its certificate-chain selector");
-  Expect(scenario.options_size() == 1 && scenario.options(0).option_id() ==
-                                             curl::fuzzer::proto::CURLOPT_POST,
-         "fast HTTP/3 policy retained transport-breaking options");
   Expect(scenario.has_http3_plan() && scenario.http3_plan().actions_size() == 1,
          "fast HTTP/3 policy did not materialize a default peer action");
   const auto &response = scenario.http3_plan().actions(0).structured_response();
@@ -862,17 +834,6 @@ void TestH2ProxyPolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.set_h2_forward_proxy(true);
 
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_CONNECT_ONLY);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_PROXYAUTH);
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_PROXYUSERPWD);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kH2Proxy);
 
   Expect(scenario.scheme() == SCHEME_HTTP,
@@ -896,18 +857,6 @@ void TestH2ProxyPolicy() {
          "HTTP/2 proxy policy retained another target's work");
   Expect(!scenario.h2_forward_proxy(),
          "HTTP/1 proxy policy retained unsupported direct-forwarding mode");
-  Expect(scenario.options_size() == 4 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_POST &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PROXYAUTH &&
-             scenario.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PROXYUSERPWD,
-         "HTTP/2 proxy policy retained an option that can bypass its fixed "
-         "transport");
-
   Scenario h2_forward;
   h2_forward.set_h2_forward_proxy(true);
   NormalizeScenarioForTarget(&h2_forward, TargetProfile::kH2Proxy);
@@ -972,16 +921,6 @@ void TestFastTelnetPolicy() {
     scenario.add_telnet_options(std::string(
         proto_fuzzer::scenario_limits::kMaxTelnetOptionBytes + 17, 't'));
   }
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_HTTPGET);
-  constexpr curl::fuzzer::proto::CurlOptionId kRetained[] = {
-      curl::fuzzer::proto::CURLOPT_CRLF,
-      curl::fuzzer::proto::CURLOPT_USERNAME,
-      curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE,
-  };
-  for (const auto option : kRetained) {
-    scenario.add_options()->set_option_id(option);
-  }
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastTelnet);
 
   Expect(scenario.scheme() == SCHEME_TELNET,
@@ -1016,13 +955,6 @@ void TestFastTelnetPolicy() {
   Expect(scenario.telnet_options(0).size() ==
              proto_fuzzer::scenario_limits::kMaxTelnetOptionBytes,
          "fast TELNET policy retained an invisible option suffix");
-  Expect(scenario.options_size() ==
-             static_cast<int>(sizeof(kRetained) / sizeof(kRetained[0])),
-         "fast TELNET policy retained an unrelated scalar option");
-  for (int index = 0; index < scenario.options_size(); ++index) {
-    Expect(scenario.options(index).option_id() == kRetained[index],
-           "fast TELNET policy changed retained option order");
-  }
 }
 
 void TestFastFtpPolicy() {
@@ -1044,8 +976,6 @@ void TestFastFtpPolicy() {
     data->add_server_frames()->set_payload("ignored frame");
   }
 
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
   auto *create_dirs = scenario.add_options();
   create_dirs->set_option_id(
       curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS);
@@ -1059,8 +989,6 @@ void TestFastFtpPolicy() {
   auto *use_eprt = scenario.add_options();
   use_eprt->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT);
   use_eprt->set_uint_value(7);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFtp);
 
   Expect(scenario.scheme() == SCHEME_FTP, "fast FTP policy did not force FTP");
@@ -1084,14 +1012,24 @@ void TestFastFtpPolicy() {
   Expect(!scenario.subsequent_connections(0).has_backpressure() &&
              scenario.subsequent_connections(0).server_frames_size() == 0,
          "fast FTP policy retained ignored data-channel controls");
-  Expect(scenario.options_size() == 5,
-         "fast FTP policy retained a non-FTP option");
-  Expect(scenario.options(0).uint_value() < 3 &&
-             scenario.options(1).uint_value() < 4,
+  const auto &normalized_create_dirs = RequireOption(
+      scenario, curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS,
+      "fast FTP policy lost its create-directory selector");
+  const auto &normalized_file_method =
+      RequireOption(scenario, curl::fuzzer::proto::CURLOPT_FTP_FILEMETHOD,
+                    "fast FTP policy lost its file-method selector");
+  const auto &normalized_ftp_port =
+      RequireOption(scenario, curl::fuzzer::proto::CURLOPT_FTPPORT,
+                    "fast FTP policy lost its active-mode address");
+  const auto &normalized_use_eprt =
+      RequireOption(scenario, curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT,
+                    "fast FTP policy lost its EPRT selector");
+  Expect(normalized_create_dirs.uint_value() < 3 &&
+             normalized_file_method.uint_value() < 4,
          "fast FTP policy left small enums outside curl's valid domains");
-  Expect(scenario.options(2).string_value() == "127.0.0.1",
+  Expect(normalized_ftp_port.string_value() == "127.0.0.1",
          "fast FTP policy retained a resolving active-mode address");
-  Expect(scenario.options(3).uint_value() == 1,
+  Expect(normalized_use_eprt.uint_value() == 1,
          "fast FTP policy did not canonicalize the EPRT selector");
 }
 
@@ -1108,16 +1046,6 @@ void TestFastFtpsPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("data");
 
-  auto *use_epsv = scenario.add_options();
-  use_epsv->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV);
-  use_epsv->set_bool_value(true);
-  auto *ftp_port = scenario.add_options();
-  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
-  ftp_port->set_string_value("untrusted.invalid");
-  auto *use_eprt = scenario.add_options();
-  use_eprt->set_option_id(curl::fuzzer::proto::CURLOPT_FTP_USE_EPRT);
-  use_eprt->set_uint_value(1);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFtp);
 
   Expect(scenario.scheme() == SCHEME_FTPS,
@@ -1133,10 +1061,6 @@ void TestFastFtpsPolicy() {
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast FTP lane changed the FTPS control script");
-  Expect(scenario.options_size() == 1 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_FTP_USE_EPSV,
-         "fast FTP lane retained an active-mode selector in FTPS");
 }
 
 void TestNonFtpPoliciesClearFtpsScheme() {
@@ -1182,31 +1106,6 @@ void TestFastFilePolicy() {
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
 
-  auto *upload = scenario.add_options();
-  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
-  upload->set_bool_value(true);
-  auto *append = scenario.add_options();
-  append->set_option_id(curl::fuzzer::proto::CURLOPT_APPEND);
-  append->set_bool_value(true);
-  auto *infile_size = scenario.add_options();
-  infile_size->set_option_id(curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE);
-  infile_size->set_uint_value(20);
-  auto *upload_buffer = scenario.add_options();
-  upload_buffer->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE);
-  upload_buffer->set_uint_value(16384);
-  auto *range = scenario.add_options();
-  range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
-  range->set_string_value("0-0");
-  auto *nobody = scenario.add_options();
-  nobody->set_option_id(curl::fuzzer::proto::CURLOPT_NOBODY);
-  nobody->set_bool_value(true);
-  auto *filetime = scenario.add_options();
-  filetime->set_option_id(curl::fuzzer::proto::CURLOPT_FILETIME);
-  filetime->set_bool_value(true);
-  auto *mail = scenario.add_options();
-  mail->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_FROM);
-  mail->set_string_value("sender@example.test");
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFile);
 
   Expect(scenario.scheme() == SCHEME_FILE,
@@ -1229,29 +1128,6 @@ void TestFastFilePolicy() {
              scenario.resolve_entries_size() == 0 &&
              scenario.cookie_file().empty(),
          "fast FILE policy retained an inert shape or dropped upload data");
-  Expect(scenario.options_size() == 6 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_UPLOAD &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_UPLOAD_BUFFERSIZE &&
-             scenario.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RANGE &&
-             scenario.options(4).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_NOBODY &&
-             scenario.options(5).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_FILETIME,
-         "fast FILE policy dropped a local-transfer option or retained an "
-         "unrelated one");
-  Expect(scenario.options(0).bool_value() &&
-             scenario.options(1).uint_value() == 20 &&
-             scenario.options(2).uint_value() == 16384 &&
-             scenario.options(3).string_value() == "0-0" &&
-             scenario.options(4).bool_value() &&
-             scenario.options(5).bool_value(),
-         "fast FILE policy changed a retained local-transfer option");
-
   Scenario bare;
   bare.set_host_path("localhost");
   NormalizeScenarioForTarget(&bare, TargetProfile::kFastFile);
@@ -1311,20 +1187,9 @@ void TestFastSmtpPolicy() {
       0, std::string(proto_fuzzer::scenario_limits::kMaxMailRecipientBytes + 32,
                      'r'));
 
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  auto *upload = scenario.add_options();
-  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
-  upload->set_bool_value(true);
-  auto *from = scenario.add_options();
-  from->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_FROM);
-  from->set_string_value("sender@example.test");
   auto *allow_fails = scenario.add_options();
   allow_fails->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS);
   allow_fails->set_uint_value(7);
-  auto *ftp_port = scenario.add_options();
-  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
-  ftp_port->set_string_value("untrusted.invalid");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastSmtp);
 
@@ -1351,18 +1216,11 @@ void TestFastSmtpPolicy() {
   Expect(scenario.mail_rcpt(0).size() ==
              proto_fuzzer::scenario_limits::kMaxMailRecipientBytes,
          "fast SMTP policy left an oversized recipient");
-  Expect(scenario.options_size() == 3,
-         "fast SMTP policy retained a non-SMTP option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_UPLOAD &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_MAIL_FROM &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS,
-         "fast SMTP policy changed retained option order");
-  Expect(scenario.options(1).string_value() == "sender@example.test" &&
-             scenario.options(2).bool_value(),
-         "fast SMTP policy lost the mail envelope option values");
+  Expect(RequireOption(scenario,
+                       curl::fuzzer::proto::CURLOPT_MAIL_RCPT_ALLOWFAILS,
+                       "fast SMTP policy lost its recipient-failure selector")
+             .bool_value(),
+         "fast SMTP policy did not canonicalize the recipient-failure flag");
 }
 
 void TestFastSmtpsPolicy() {
@@ -1434,12 +1292,9 @@ void TestFastTftpPolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_upload()->set_data("upload sentinel");
 
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
   auto *block_size = scenario.add_options();
   block_size->set_option_id(curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE);
   block_size->set_uint_value(std::numeric_limits<std::uint64_t>::max());
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS);
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastTftp);
 
@@ -1460,9 +1315,9 @@ void TestFastTftpPolicy() {
   Expect(!scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast TFTP policy retained stream-only connection controls");
-  Expect(scenario.options_size() == 2,
-         "fast TFTP policy retained a non-TFTP option");
-  Expect(scenario.options(0).uint_value() == 65464,
+  Expect(RequireOption(scenario, curl::fuzzer::proto::CURLOPT_TFTP_BLKSIZE,
+                       "fast TFTP policy lost its block-size selector")
+                 .uint_value() == 65464,
          "fast TFTP policy did not clamp block size to curl's upper boundary");
 }
 
@@ -1478,21 +1333,6 @@ void TestFastImapPolicy() {
   scenario.mutable_connection()->add_on_readable("control reply");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
-
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  auto *username = scenario.add_options();
-  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
-  username->set_string_value("fuzz");
-  auto *password = scenario.add_options();
-  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
-  password->set_string_value("secret");
-  auto *upload = scenario.add_options();
-  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
-  upload->set_bool_value(true);
-  auto *custom = scenario.add_options();
-  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
-  custom->set_string_value("STORE 1 +FLAGS (\\Deleted)");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastImap);
 
@@ -1513,76 +1353,6 @@ void TestFastImapPolicy() {
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast IMAP policy changed replies or retained stream-only controls");
-  Expect(scenario.options_size() == 4,
-         "fast IMAP policy retained a non-IMAP option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERNAME &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_UPLOAD &&
-             scenario.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
-         "fast IMAP policy changed retained option order");
-}
-
-void TestFastImapParitySeedsSurviveProductionNormalization() {
-  struct SeedExpectation {
-    const char *name;
-    const char *host_path;
-    const char *login_options;
-    curl::fuzzer::proto::CurlOptionId extra_option;
-    const char *extra_value;
-  };
-  constexpr SeedExpectation kSeeds[] = {
-      {"imap_auth_xoauth2_success.textproto", "imap.test/INBOX/;MAILINDEX=1",
-       "AUTH=XOAUTH2", curl::fuzzer::proto::CURLOPT_XOAUTH2_BEARER,
-       "fuzz-xoauth2-token"},
-      {"imap_auth_login_custom_fetch.textproto", "imap.test/INBOX",
-       "AUTH=LOGIN", curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
-       "UID FETCH 1:* (FLAGS)"},
-      {"imap_auth_digest_md5_search.textproto", "imap.test/INBOX?ALL",
-       "AUTH=DIGEST-MD5", curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED, ""},
-  };
-
-  for (const SeedExpectation &expected : kSeeds) {
-    const std::string path =
-        std::string(PROTO_FUZZER_SCENARIO_DIR) + "/imap/" + expected.name;
-    std::ifstream input(path);
-    Expect(input.is_open(), "could not read an IMAP parity seed");
-    const std::string text((std::istreambuf_iterator<char>(input)),
-                           std::istreambuf_iterator<char>());
-    Scenario scenario;
-    Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
-           "could not parse an IMAP parity seed");
-    const std::string connection = scenario.connection().SerializeAsString();
-
-    NormalizeScenarioForTarget(&scenario, TargetProfile::kFastImap);
-    NormalizeScenarioForExecution(&scenario);
-
-    bool retained_login_options = false;
-    bool retained_extra_option =
-        expected.extra_option == curl::fuzzer::proto::CURL_OPTION_UNSPECIFIED;
-    for (const auto &option : scenario.options()) {
-      if (option.option_id() == curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
-          option.string_value() == expected.login_options) {
-        retained_login_options = true;
-      }
-      if (option.option_id() == expected.extra_option &&
-          option.string_value() == expected.extra_value) {
-        retained_extra_option = true;
-      }
-    }
-
-    Expect(scenario.scheme() == SCHEME_IMAP &&
-               scenario.host_path() == expected.host_path,
-           "fast IMAP policy changed a parity seed's route or command path");
-    Expect(retained_login_options && retained_extra_option,
-           "fast IMAP policy removed a parity seed's authentication or "
-           "custom-command option");
-    Expect(scenario.connection().SerializeAsString() == connection,
-           "fast IMAP policy changed a parity seed's scripted exchange");
-  }
 }
 
 void TestFastPop3Policy() {
@@ -1597,21 +1367,6 @@ void TestFastPop3Policy() {
   scenario.mutable_connection()->add_on_readable("control reply");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
-
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  auto *username = scenario.add_options();
-  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
-  username->set_string_value("fuzz");
-  auto *password = scenario.add_options();
-  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
-  password->set_string_value("secret");
-  auto *custom = scenario.add_options();
-  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
-  custom->set_string_value("TOP 1 0");
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_DIRLISTONLY);
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastPop3);
 
@@ -1630,79 +1385,6 @@ void TestFastPop3Policy() {
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast POP3 policy changed replies or retained stream-only controls");
-  Expect(scenario.options_size() == 4,
-         "fast POP3 policy retained a non-POP3 option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERNAME &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST &&
-             scenario.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_DIRLISTONLY,
-         "fast POP3 policy changed retained option order");
-}
-
-void AddMailAuthenticationOptions(Scenario *scenario) {
-  auto *login_options = scenario->add_options();
-  login_options->set_option_id(curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS);
-  login_options->set_string_value("AUTH=PLAIN");
-  auto *mail_auth = scenario->add_options();
-  mail_auth->set_option_id(curl::fuzzer::proto::CURLOPT_MAIL_AUTH);
-  mail_auth->set_string_value("sender@example.test");
-  auto *authzid = scenario->add_options();
-  authzid->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_AUTHZID);
-  authzid->set_string_value("authorization-id");
-  auto *initial_response = scenario->add_options();
-  initial_response->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_IR);
-  initial_response->set_uint_value(7);
-}
-
-void ExpectSharedMailAuthenticationOptions(const Scenario &scenario,
-                                           int expected_count) {
-  Expect(scenario.options_size() == expected_count,
-         "mail policy retained the wrong authentication option count");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
-             scenario.options(0).string_value() == "AUTH=PLAIN",
-         "mail policy lost CURLOPT_LOGIN_OPTIONS");
-  Expect(scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_SASL_AUTHZID &&
-             scenario.options(1).string_value() == "authorization-id",
-         "mail policy lost CURLOPT_SASL_AUTHZID");
-  Expect(scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_SASL_IR &&
-             scenario.options(2).bool_value(),
-         "mail policy lost CURLOPT_SASL_IR");
-}
-
-void TestMailAuthenticationOptionPolicies() {
-  Scenario smtp;
-  AddMailAuthenticationOptions(&smtp);
-  NormalizeScenarioForTarget(&smtp, TargetProfile::kFastSmtp);
-  Expect(smtp.options_size() == 4,
-         "SMTP policy removed a supported authentication option");
-  Expect(smtp.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
-             smtp.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_MAIL_AUTH &&
-             smtp.options(1).string_value() == "sender@example.test" &&
-             smtp.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_SASL_AUTHZID &&
-             smtp.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_SASL_IR &&
-             smtp.options(3).bool_value(),
-         "SMTP policy changed the authentication option contract");
-
-  Scenario imap;
-  AddMailAuthenticationOptions(&imap);
-  NormalizeScenarioForTarget(&imap, TargetProfile::kFastImap);
-  ExpectSharedMailAuthenticationOptions(imap, 3);
-
-  Scenario pop3;
-  AddMailAuthenticationOptions(&pop3);
-  NormalizeScenarioForTarget(&pop3, TargetProfile::kFastPop3);
-  ExpectSharedMailAuthenticationOptions(pop3, 3);
 }
 
 void TestFastMqttPolicy() {
@@ -1718,18 +1400,6 @@ void TestFastMqttPolicy() {
   scenario.mutable_connection()->add_on_readable("server packet");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
-
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  auto *payload = scenario.add_options();
-  payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
-  payload->set_string_value("hello mqtt");
-  auto *credentials = scenario.add_options();
-  credentials->set_option_id(curl::fuzzer::proto::CURLOPT_USERPWD);
-  credentials->set_string_value("fuzz:secret");
-  auto *ftp_port = scenario.add_options();
-  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
-  ftp_port->set_string_value("untrusted.invalid");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastMqtt);
 
@@ -1749,16 +1419,6 @@ void TestFastMqttPolicy() {
              scenario.connection().server_frames_size() == 0,
          "fast MQTT policy changed server packets or retained stream-only "
          "controls");
-  Expect(scenario.options_size() == 2,
-         "fast MQTT policy retained a non-MQTT option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_POSTFIELDS &&
-             scenario.options(0).string_value() == "hello mqtt",
-         "fast MQTT policy removed the publish payload");
-  Expect(scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERPWD &&
-             scenario.options(1).string_value() == "fuzz:secret",
-         "fast MQTT policy changed retained option order or credentials");
 }
 
 void TestFastMqttsPolicy() {
@@ -1767,9 +1427,6 @@ void TestFastMqttsPolicy() {
   scenario.set_probe_multi_pollset(true);
   scenario.set_host_path(
       "untrusted.invalid:8883/sensors/kitchen?query#fragment");
-  auto *payload = scenario.add_options();
-  payload->set_option_id(curl::fuzzer::proto::CURLOPT_POSTFIELDS);
-  payload->set_string_value("implicit tls mqtt");
   scenario.mutable_connection()->set_initial_response(
       std::string("\x20\x02\x00\x00", 4));
 
@@ -1781,11 +1438,6 @@ void TestFastMqttsPolicy() {
          "fast MQTT lane removed the MQTTS pollset-probe opt-in");
   Expect(scenario.host_path() == "tls.test/sensors/kitchen?query#fragment",
          "fast MQTT lane did not give MQTTS the certifiable authority");
-  Expect(scenario.options_size() == 1 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_POSTFIELDS &&
-             scenario.options(0).string_value() == "implicit tls mqtt",
-         "fast MQTT lane removed the MQTTS publish payload");
   Expect(scenario.connection().initial_response() ==
              std::string("\x20\x02\x00\x00", 4),
          "fast MQTT lane removed the MQTTS CONNACK");
@@ -1831,19 +1483,6 @@ void TestFastDictPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("stream-only");
 
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  auto *username = scenario.add_options();
-  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
-  username->set_string_value("fuzz");
-  auto *password = scenario.add_options();
-  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
-  password->set_string_value("secret");
-  auto *custom = scenario.add_options();
-  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
-  custom->set_string_value("SHOW db");
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastDict);
 
   Expect(scenario.scheme() == SCHEME_DICT,
@@ -1861,18 +1500,6 @@ void TestFastDictPolicy() {
              scenario.connection().server_frames_size() == 0,
          "fast DICT policy changed replies, kept unreachable chunks, or "
          "retained stream-only controls");
-  Expect(scenario.options_size() == 2,
-         "fast DICT policy retained a non-DICT option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERNAME &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PASSWORD,
-         "fast DICT policy changed retained option order");
-  for (const auto &option : scenario.options()) {
-    Expect(option.option_id() != curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
-           "fast DICT policy retained CURLOPT_CUSTOMREQUEST, which curl's "
-           "DICT handler never reads");
-  }
 }
 
 void TestNonDictPoliciesClearDictScheme() {
@@ -1916,33 +1543,6 @@ void TestFastLdapPolicy() {
   scenario.add_mail_rcpt("recipient@example.test");
   scenario.set_ldap_starttls(true);
 
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  auto *username = scenario.add_options();
-  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
-  username->set_string_value("cn=admin,dc=example,dc=com");
-  auto *custom = scenario.add_options();
-  custom->set_option_id(curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST);
-  custom->set_string_value("(cn=*)");
-  auto *password = scenario.add_options();
-  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
-  password->set_string_value("secret");
-  auto *login_options = scenario.add_options();
-  login_options->set_option_id(curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS);
-  login_options->set_string_value("AUTH=PLAIN");
-  auto *authzid = scenario.add_options();
-  authzid->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_AUTHZID);
-  authzid->set_string_value("authorization-id");
-  auto *sasl_ir = scenario.add_options();
-  sasl_ir->set_option_id(curl::fuzzer::proto::CURLOPT_SASL_IR);
-  sasl_ir->set_bool_value(true);
-  auto *ftp_port = scenario.add_options();
-  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
-  ftp_port->set_string_value("untrusted.invalid");
-  auto *max_size = scenario.add_options();
-  max_size->set_option_id(curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE);
-  max_size->set_uint_value(4096);
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastLdap);
 
   Expect(scenario.scheme() == SCHEME_LDAP,
@@ -1962,27 +1562,6 @@ void TestFastLdapPolicy() {
              scenario.connection().server_frames_size() == 0,
          "fast LDAP policy changed the scripted bind/search bytes or retained "
          "stream-only controls");
-  Expect(scenario.options_size() == 6,
-         "fast LDAP policy retained a non-LDAP option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERNAME &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_PASSWORD &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS &&
-             scenario.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_SASL_AUTHZID &&
-             scenario.options(4).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_SASL_IR &&
-             scenario.options(5).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE,
-         "fast LDAP policy changed retained option order");
-  Expect(scenario.options(0).string_value() == "cn=admin,dc=example,dc=com" &&
-             scenario.options(1).string_value() == "secret" &&
-             scenario.options(2).string_value() == "AUTH=PLAIN" &&
-             scenario.options(3).string_value() == "authorization-id" &&
-             scenario.options(4).bool_value(),
-         "fast LDAP policy lost the SASL-bind configuration");
   Expect(scenario.ldap_starttls(),
          "fast LDAP policy discarded the bounded StartTLS mode");
 }
@@ -2045,10 +1624,6 @@ void TestFastLdapsPolicy() {
   scenario.mutable_connection()->add_on_readable("search entry");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
 
-  auto *username = scenario.add_options();
-  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
-  username->set_string_value("cn=admin,dc=example,dc=com");
-
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastLdap);
 
   Expect(scenario.scheme() == SCHEME_LDAPS,
@@ -2064,10 +1639,6 @@ void TestFastLdapsPolicy() {
              scenario.connection().server_frames_size() == 0,
          "fast LDAP lane changed the LDAPS script or retained stream-only "
          "controls");
-  Expect(scenario.options_size() == 1 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERNAME,
-         "fast LDAP lane retained a non-LDAP option for LDAPS");
   Expect(!scenario.ldap_starttls(),
          "fast LDAP lane retained StartTLS for implicit LDAPS");
 }
@@ -2090,20 +1661,9 @@ void TestFastRtspPolicy() {
   auto *request = scenario.add_options();
   request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
   request->set_uint_value(0);
-  auto *stream = scenario.add_options();
-  stream->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID);
-  stream->set_string_value("12345678");
-  auto *range = scenario.add_options();
-  range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
-  range->set_string_value("npt=0.000-");
-  auto *rejected = scenario.add_options();
-  rejected->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
   auto *cseq = scenario.add_options();
   cseq->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ);
   cseq->set_uint_value(std::numeric_limits<std::uint64_t>::max());
-  auto *ftp_port = scenario.add_options();
-  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
-  ftp_port->set_string_value("untrusted.invalid");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastRtsp);
 
@@ -2126,24 +1686,14 @@ void TestFastRtspPolicy() {
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast RTSP policy changed the request-aligned reply script");
-  Expect(scenario.options_size() == 4,
-         "fast RTSP policy retained a non-RTSP option");
-  Expect(scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RTSP_REQUEST &&
-             scenario.options(0).uint_value() == CURL_RTSPREQ_OPTIONS,
+  Expect(RequireOption(scenario, curl::fuzzer::proto::CURLOPT_RTSP_REQUEST,
+                       "fast RTSP policy lost its method selector")
+                 .uint_value() == CURL_RTSPREQ_OPTIONS,
          "fast RTSP policy did not fold an invalid method onto OPTIONS");
-  Expect(scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RTSP_SESSION_ID &&
-             scenario.options(1).string_value() == "12345678",
-         "fast RTSP policy removed the session id");
-  Expect(scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RANGE &&
-             scenario.options(2).string_value() == "npt=0.000-",
-         "fast RTSP policy removed the PLAY range");
-  Expect(scenario.options(3).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ &&
-             scenario.options(3).uint_value() ==
-                 static_cast<std::uint64_t>(std::numeric_limits<int>::max()),
+  Expect(RequireOption(scenario, curl::fuzzer::proto::CURLOPT_RTSP_CLIENT_CSEQ,
+                       "fast RTSP policy lost its client sequence selector")
+                 .uint_value() ==
+             static_cast<std::uint64_t>(std::numeric_limits<int>::max()),
          "fast RTSP policy did not clamp the client sequence override");
 }
 
@@ -2168,7 +1718,7 @@ void TestFastRtspPolicyFoldsReceiveOntoOptions() {
          "it onto OPTIONS");
 }
 
-void TestNonRtspPoliciesClearRtspSchemeAndOptions() {
+void TestNonRtspPoliciesClearRtspScheme() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
       TargetProfile::kFastFtp,  TargetProfile::kFastSmtp,
@@ -2179,27 +1729,17 @@ void TestNonRtspPoliciesClearRtspSchemeAndOptions() {
     Scenario scenario;
     scenario.set_host_path("rtsp.test/stream");
     scenario.set_scheme(SCHEME_RTSP);
-    auto *request = scenario.add_options();
-    request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
-    request->set_uint_value(CURL_RTSPREQ_DESCRIBE);
-
     NormalizeScenarioForTarget(&scenario, profile);
 
     Expect(scenario.scheme() != SCHEME_RTSP,
            "a non-RTSP policy retained the RTSP scheme");
-    Expect(scenario.options_size() == 0,
-           "a non-RTSP policy retained an RTSP-only option");
   }
 
   Scenario compatibility;
   compatibility.set_host_path("rtsp.test/stream");
   compatibility.set_scheme(SCHEME_RTSP);
-  auto *request = compatibility.add_options();
-  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
-  request->set_uint_value(CURL_RTSPREQ_DESCRIBE);
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
-  Expect(compatibility.scheme() == SCHEME_RTSP &&
-             compatibility.options_size() == 1,
+  Expect(compatibility.scheme() == SCHEME_RTSP,
          "compatibility unexpectedly rewrote the RTSP input");
 }
 
@@ -2216,18 +1756,9 @@ void TestFastIpfsPolicy() {
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("redirect");
 
-  auto *useragent = scenario.add_options();
-  useragent->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
-  useragent->set_string_value("curl-fuzzer-ipfs");
-  auto *range = scenario.add_options();
-  range->set_option_id(curl::fuzzer::proto::CURLOPT_RANGE);
-  range->set_string_value("bytes=0-3");
   auto *http_version = scenario.add_options();
   http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
   http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
-  auto *ftp_port = scenario.add_options();
-  ftp_port->set_option_id(curl::fuzzer::proto::CURLOPT_FTPPORT);
-  ftp_port->set_string_value("untrusted.invalid");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastIpfs);
 
@@ -2250,16 +1781,10 @@ void TestFastIpfsPolicy() {
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast IPFS policy changed the gateway response script");
-  Expect(scenario.options_size() == 3 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_USERAGENT &&
-             scenario.options(1).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_RANGE &&
-             scenario.options(2).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_HTTP_VERSION &&
-             scenario.options(2).uint_value() <= CURL_HTTP_VERSION_2TLS,
-         "fast IPFS policy retained a non-HTTP option or an unusable "
-         "HTTP version");
+  Expect(RequireOption(scenario, curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
+                       "fast IPFS policy lost its HTTP version selector")
+                 .uint_value() <= CURL_HTTP_VERSION_2TLS,
+         "fast IPFS policy retained an unusable HTTP version");
 
   Scenario ipns;
   ipns.set_scheme(SCHEME_IPNS);
@@ -2364,10 +1889,6 @@ void TestResolverPolicy() {
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.mutable_mime_post()->add_parts()->set_data("ignored");
-  auto *ordinary_http_version = scenario.add_options();
-  ordinary_http_version->set_option_id(
-      curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  ordinary_http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
   for (std::size_t index = 0;
        index < proto_fuzzer::scenario_limits::kMaxResolveEntries + 3; ++index) {
     scenario.add_resolve_entries(std::string(
@@ -2392,11 +1913,6 @@ void TestResolverPolicy() {
                  curl::fuzzer::proto::SOCKS_PROXY_SOCKS4 &&
              !scenario.haproxy_protocol(),
          "resolver policy retained another dedicated lane's shape");
-  Expect(scenario.options_size() == 1 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
-         "ordinary resolver policy discarded its HTTP version mutation");
-
   Scenario localhost;
   localhost.set_host_path("untrusted.invalid/no-cache");
   NormalizeScenarioForTarget(&localhost, TargetProfile::kResolver);
@@ -2418,12 +1934,6 @@ void TestResolverPolicy() {
   doh.add_resolve_entries("example.test:443:127.0.0.1");
   doh.set_happy_eyeballs(true);
   doh.mutable_http2_plan();
-  auto *doh_http_version = doh.add_options();
-  doh_http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
-  doh_http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
-  auto *doh_user_agent = doh.add_options();
-  doh_user_agent->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
-  doh_user_agent->set_string_value("resolver-test");
   NormalizeScenarioForTarget(&doh, TargetProfile::kResolver);
   Expect(doh.scheme() == SCHEME_HTTPS,
          "DoH resolver policy did not select its HTTPS transport");
@@ -2433,11 +1943,6 @@ void TestResolverPolicy() {
          "DoH resolver policy retained contradictory address-resolution state");
   Expect(doh.has_http2_plan(),
          "DoH resolver policy discarded the selected ALPN h2 response plan");
-  Expect(doh.options_size() == 1 && doh.options(0).option_id() ==
-                                        curl::fuzzer::proto::CURLOPT_USERAGENT,
-         "DoH resolver policy retained a transport override or discarded a "
-         "request-level HTTP option");
-
   Scenario threaded;
   threaded.set_host_path("untrusted.invalid/threaded");
   threaded.set_resolver_mode(
@@ -2813,59 +2318,7 @@ void TestDeepPoliciesRemoveRuntimeInvisibleSuffixes() {
          "fixed policy retained an ineffective upload read size");
 }
 
-void TestFastHttpOptionAllowlist() {
-  constexpr curl::fuzzer::proto::CurlOptionId kCheapOptions[] = {
-      curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING,
-      curl::fuzzer::proto::CURLOPT_BUFFERSIZE,
-      curl::fuzzer::proto::CURLOPT_CUSTOMREQUEST,
-      curl::fuzzer::proto::CURLOPT_DISALLOW_USERNAME_IN_URL,
-      curl::fuzzer::proto::CURLOPT_FAILONERROR,
-      curl::fuzzer::proto::CURLOPT_FILETIME,
-      curl::fuzzer::proto::CURLOPT_HEADER,
-      curl::fuzzer::proto::CURLOPT_HTTP09_ALLOWED,
-      curl::fuzzer::proto::CURLOPT_HTTP_CONTENT_DECODING,
-      curl::fuzzer::proto::CURLOPT_HTTP_TRANSFER_DECODING,
-      curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
-      curl::fuzzer::proto::CURLOPT_HTTPGET,
-      curl::fuzzer::proto::CURLOPT_IGNORE_CONTENT_LENGTH,
-      curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE,
-      curl::fuzzer::proto::CURLOPT_NOBODY,
-      curl::fuzzer::proto::CURLOPT_PATH_AS_IS,
-      curl::fuzzer::proto::CURLOPT_RANGE,
-      curl::fuzzer::proto::CURLOPT_REQUEST_TARGET,
-      curl::fuzzer::proto::CURLOPT_RESUME_FROM_LARGE,
-      curl::fuzzer::proto::CURLOPT_TRANSFER_ENCODING,
-      curl::fuzzer::proto::CURLOPT_USERAGENT,
-  };
-
-  Scenario scenario;
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
-  for (auto option_id : kCheapOptions) {
-    scenario.add_options()->set_option_id(option_id);
-  }
-  scenario.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
-  scenario.add_options()->set_option_id(
-      static_cast<curl::fuzzer::proto::CurlOptionId>(123456789));
-
-  Scenario deep = scenario;
-  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp);
-  NormalizeScenarioForTarget(&deep, TargetProfile::kDeepHttp);
-
-  Expect(scenario.options_size() ==
-             static_cast<int>(sizeof(kCheapOptions) / sizeof(kCheapOptions[0])),
-         "fast HTTP policy retained an option outside its cheap allowlist");
-  for (int index = 0; index < scenario.options_size(); ++index) {
-    Expect(scenario.options(index).option_id() == kCheapOptions[index],
-           "fast HTTP policy changed the order of retained options");
-  }
-  Expect(deep.options_size() == static_cast<int>(sizeof(kCheapOptions) /
-                                                 sizeof(kCheapOptions[0])) +
-                                    3,
-         "deep HTTP policy filtered an option intended for full coverage");
-}
-
-void TestFastHttpKeepsOnlyOwnedHttpVersions() {
+void TestFastHttpCanonicalizesSupportedHttpVersions() {
   struct VersionCase {
     std::uint64_t input;
     std::uint64_t expected;
@@ -2907,7 +2360,7 @@ void TestFastHttpKeepsOnlyOwnedHttpVersions() {
        ++index) {
     Expect(scenario.options(static_cast<int>(index)).uint_value() ==
                kCases[index].expected,
-           "fast HTTP policy retained an unowned HTTP version");
+           "fast HTTP policy retained an unsupported HTTP version");
   }
   const int malformed_start =
       static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
@@ -2929,21 +2382,101 @@ void TestFastHttpKeepsOnlyOwnedHttpVersions() {
          "fast HTTP version normalization was not idempotent");
 }
 
-void TestFastHttpFiltersBeforeApplyingOptionBound() {
+int conditional_pruner_calls = 0;
+TargetProfile conditional_pruner_profile = TargetProfile::kCompatibility;
+bool conditional_pruner_saw_fixed_scheme = false;
+std::size_t conditional_pruner_unbounded_size = 0;
+
+void GeneratedConditionalPrunerFixture(Scenario *scenario,
+                                       TargetProfile profile) {
+  ++conditional_pruner_calls;
+  conditional_pruner_profile = profile;
+  conditional_pruner_saw_fixed_scheme = scenario->scheme() == SCHEME_HTTP;
+  conditional_pruner_unbounded_size =
+      static_cast<std::size_t>(scenario->options_size());
+  scenario->mutable_options()->DeleteSubrange(0, 1);
+}
+
+void TestGeneratedConditionalPrunerRunsBeforeOptionBound() {
+  conditional_pruner_calls = 0;
+  conditional_pruner_profile = TargetProfile::kCompatibility;
+  conditional_pruner_saw_fixed_scheme = false;
+  conditional_pruner_unbounded_size = 0;
+
   Scenario scenario;
+  scenario.set_scheme(SCHEME_TFTP);
+  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
   for (std::size_t index = 0;
-       index < proto_fuzzer::scenario_limits::kMaxOptions + 5; ++index) {
+       index + 1 < proto_fuzzer::scenario_limits::kMaxOptions; ++index) {
     scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
   }
   scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_USERAGENT);
 
-  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp);
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp,
+                             &GeneratedConditionalPrunerFixture);
 
-  Expect(scenario.options_size() == 1,
-         "fast HTTP bounded options before removing deep-only entries");
-  Expect(scenario.options(0).option_id() ==
-             curl::fuzzer::proto::CURLOPT_USERAGENT,
-         "fast HTTP lost a cheap option behind a rejected prefix");
+  Expect(conditional_pruner_calls == 1 &&
+             conditional_pruner_profile == TargetProfile::kFastHttp,
+         "target policy did not invoke the generated conditional pruner once");
+  Expect(conditional_pruner_saw_fixed_scheme,
+         "conditional pruning ran before selector normalization");
+  Expect(conditional_pruner_unbounded_size ==
+             proto_fuzzer::scenario_limits::kMaxOptions + 1,
+         "conditional pruning ran after the shared option bound");
+  Expect(static_cast<std::size_t>(scenario.options_size()) ==
+                 proto_fuzzer::scenario_limits::kMaxOptions &&
+             scenario.options(scenario.options_size() - 1).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_USERAGENT,
+         "shared bounds did not run after conditional option pruning");
+}
+
+bool selector_pruner_saw_canonical_deep_http = false;
+bool selector_pruner_saw_canonical_api_drive = false;
+
+void GeneratedSelectorPrunerFixture(Scenario *scenario, TargetProfile profile) {
+  if (profile == TargetProfile::kDeepHttp) {
+    selector_pruner_saw_canonical_deep_http =
+        scenario->proxy_socket_option_mode() ==
+            curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT &&
+        scenario->http_transport_mode() ==
+            curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY;
+  }
+  if (profile == TargetProfile::kApi && scenario->has_api_plan()) {
+    selector_pruner_saw_canonical_api_drive =
+        scenario->api_plan().drive_mode() ==
+            curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM &&
+        scenario->api_plan().wake_multi() &&
+        scenario->api_plan().pause_response_once();
+  }
+}
+
+void TestGeneratedConditionalPrunerSeesCanonicalSelectors() {
+  selector_pruner_saw_canonical_deep_http = false;
+  selector_pruner_saw_canonical_api_drive = false;
+
+  Scenario deep_http;
+  deep_http.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY);
+  deep_http.set_proxy_socket_option_mode(
+      static_cast<curl::fuzzer::proto::ProxySocketOptionMode>(99));
+  deep_http.set_haproxy_protocol(true);
+  NormalizeScenarioForTarget(&deep_http, TargetProfile::kDeepHttp,
+                             &GeneratedSelectorPrunerFixture);
+  Expect(selector_pruner_saw_canonical_deep_http,
+         "conditional pruning saw malformed deep HTTP route selectors");
+
+  Scenario api;
+  auto *plan = api.mutable_api_plan();
+  plan->set_drive_mode(static_cast<curl::fuzzer::proto::ApiDriveMode>(99));
+  plan->set_wake_multi(true);
+  plan->set_pause_response_once(true);
+  NormalizeScenarioForTarget(&api, TargetProfile::kApi,
+                             &GeneratedSelectorPrunerFixture);
+  Expect(selector_pruner_saw_canonical_api_drive,
+         "conditional pruning saw a malformed API drive selector");
+  Expect(plan->drive_mode() == curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM &&
+             plan->wake_multi() && plan->pause_response_once(),
+         "API fallback drive lost eligible multi-only work");
 }
 
 void TestApiPolicyRetainsAndBoundsItsPlan() {
@@ -2951,8 +2484,6 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
   scenario.set_host_path(
       std::string(proto_fuzzer::scenario_limits::kMaxApiStringBytes + 7, 'u'));
   scenario.mutable_mime_post()->add_parts()->set_data("deep HTTP sentinel");
-  scenario.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
-
   auto *plan = scenario.mutable_api_plan();
   plan->set_duplicate_easy(true);
   plan->set_reset_easy(true);
@@ -2987,7 +2518,7 @@ void TestApiPolicyRetainsAndBoundsItsPlan() {
          "API policy retained URL bytes its convenience probes cannot use");
   Expect(!scenario.connection().has_backpressure(),
          "API policy retained timed backpressure");
-  Expect(scenario.has_mime_post() && scenario.options_size() == 1,
+  Expect(scenario.has_mime_post(),
          "API policy discarded the HTTP state used to populate query results");
   Expect(scenario.has_api_plan(), "API policy discarded its lifecycle plan");
   Expect(scenario.api_plan().duplicate_easy() &&
@@ -3831,79 +3362,29 @@ void TestH2NormalizationCanonicalizesSettingsWireWidth() {
   }
 }
 
-void TestH2FlowControlSeedPreservesInitialWindow() {
-  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
-                           "/https_h2/https_h2_push_flow_control.textproto";
-  std::ifstream input(path);
-  Expect(input.is_open(), "could not read the H2 flow-control seed");
-  const std::string text((std::istreambuf_iterator<char>(input)),
-                         std::istreambuf_iterator<char>());
+void TestH2FlowControlWindowIsPreserved() {
   Scenario seed;
-  Expect(google::protobuf::TextFormat::ParseFromString(text, &seed),
-         "could not parse the H2 flow-control seed");
+  seed.set_accept_h2_push(true);
+  auto *initial_window =
+      seed.mutable_http2_plan()->mutable_initial_settings()->add_entries();
+  initial_window->set_identifier(4U);
+  initial_window->set_value(0U);
   Expect(seed.http2_plan().initial_settings().entries_size() == 1 &&
              seed.http2_plan().initial_settings().entries(0).identifier() ==
                  4U &&
              seed.http2_plan().initial_settings().entries(0).value() == 0U,
-         "H2 flow-control seed no longer requests an initial zero window");
+         "H2 flow-control fixture does not request an initial zero window");
   for (const TargetProfile profile :
        {TargetProfile::kHttpsH2, TargetProfile::kFastHttp2}) {
     Scenario scenario = seed;
     NormalizeScenarioForTarget(&scenario, profile);
     const auto &settings = scenario.http2_plan().initial_settings();
-    Expect(settings.entries(0).identifier() == 4U &&
-               settings.entries(0).value() == 0U,
-           "normalization removed the flow-control seed's zero stream window");
+    Expect(
+        settings.entries(0).identifier() == 4U &&
+            settings.entries(0).value() == 0U,
+        "normalization removed the flow-control fixture's zero stream window");
     Expect(scenario.accept_h2_push(),
-           "normalization disabled accepted push in the flow-control seed");
-  }
-}
-
-void TestRawHttp2SeedsFitDedicatedTarget() {
-  constexpr const char *kSeedNames[] = {
-      "http2_control_frames.textproto",
-      "http2_invalid_preface.textproto",
-      "http2_prior_knowledge.textproto",
-      "http2_truncated_headers_frame.textproto",
-  };
-
-  for (const char *name : kSeedNames) {
-    const std::string path =
-        std::string(PROTO_FUZZER_SCENARIO_DIR) + "/http/" + name;
-    std::ifstream input(path);
-    Expect(input.is_open(), "could not read a raw HTTP/2 seed");
-    const std::string text((std::istreambuf_iterator<char>(input)),
-                           std::istreambuf_iterator<char>());
-    Scenario scenario;
-    Expect(google::protobuf::TextFormat::ParseFromString(text, &scenario),
-           "could not parse a raw HTTP/2 seed");
-    const auto connection = scenario.connection();
-    bool selects_prior_knowledge = false;
-    for (const auto &option : scenario.options()) {
-      if (option.option_id() == curl::fuzzer::proto::CURLOPT_HTTP_VERSION &&
-          option.uint_value() == CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE) {
-        selects_prior_knowledge = true;
-      }
-    }
-    Expect(selects_prior_knowledge,
-           "raw HTTP/2 seed does not select prior knowledge");
-    Expect(!connection.initial_response().empty() ||
-               connection.on_readable_size() != 0,
-           "raw HTTP/2 seed has no response frames");
-
-    NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp2);
-
-    Expect(scenario.scheme() == SCHEME_HTTP,
-           "HTTP/2 target changed a raw seed's scheme");
-    Expect(!scenario.has_http2_plan(),
-           "HTTP/2 target materialized a structured plan for a raw seed");
-    Expect(scenario.connection().SerializeAsString() ==
-               connection.SerializeAsString(),
-           "HTTP/2 target changed a raw seed's response bytes");
-    for (const auto &option : scenario.options()) {
-      Expect(option.option_id() != curl::fuzzer::proto::CURLOPT_HTTP_VERSION,
-             "HTTP/2 target retained a seed's transport selection option");
-    }
+           "normalization disabled accepted push in the flow-control fixture");
   }
 }
 
@@ -4061,9 +3542,7 @@ int main() {
   TestFastTftpPolicy();
   TestFastSmtpPolicy();
   TestFastImapPolicy();
-  TestFastImapParitySeedsSurviveProductionNormalization();
   TestFastPop3Policy();
-  TestMailAuthenticationOptionPolicies();
   TestFastMqttPolicy();
   TestFastMqttsPolicy();
   TestNonMqttPoliciesClearMqttScheme();
@@ -4074,7 +3553,7 @@ int main() {
   TestFastLdapsPolicy();
   TestFastRtspPolicy();
   TestFastRtspPolicyFoldsReceiveOntoOptions();
-  TestNonRtspPoliciesClearRtspSchemeAndOptions();
+  TestNonRtspPoliciesClearRtspScheme();
   TestFastIpfsPolicy();
   TestNonIpfsPoliciesClearIpfsScheme();
   TestProxyTransportPolicy();
@@ -4091,9 +3570,9 @@ int main() {
   TestTimingPolicyClampsIneffectiveValues();
   TestTimingPolicyCanonicalizesOnlyConfiguredFollowOns();
   TestDeepPoliciesRemoveRuntimeInvisibleSuffixes();
-  TestFastHttpOptionAllowlist();
-  TestFastHttpKeepsOnlyOwnedHttpVersions();
-  TestFastHttpFiltersBeforeApplyingOptionBound();
+  TestFastHttpCanonicalizesSupportedHttpVersions();
+  TestGeneratedConditionalPrunerRunsBeforeOptionBound();
+  TestGeneratedConditionalPrunerSeesCanonicalSelectors();
   TestApiPolicyRetainsAndBoundsItsPlan();
   TestApiMimeRepeatRequiresCallbackShape();
   TestProtocolPoliciesDiscardApiPlans();
@@ -4112,8 +3591,7 @@ int main() {
   TestHttpsH2PolicyBoundsStructuredPlan();
   TestH2NormalizationPreservesValidSettings();
   TestH2NormalizationCanonicalizesSettingsWireWidth();
-  TestH2FlowControlSeedPreservesInitialWindow();
-  TestRawHttp2SeedsFitDedicatedTarget();
+  TestH2FlowControlWindowIsPreserved();
   TestNormalizationBoundsCanonicalOptionStrings();
   TestNormalizationPipelineIsIdempotent();
   return 0;

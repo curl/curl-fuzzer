@@ -2,10 +2,10 @@
 # waiting for a 334 continuation.
 scheme: SCHEME_SMTP
 host_path: "smtp.test/initial.test"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
-options { option_id: CURLOPT_LOGIN_OPTIONS string_value: "AUTH=PLAIN" }
-options { option_id: CURLOPT_SASL_IR bool_value: true }
+options { username: "fuzz" }
+options { password: "secret" }
+options { login_options: "AUTH=PLAIN" }
+options { sasl_ir: true }
 connection {
   initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
   on_readable: "250-smtp.test\r\n250-AUTH PLAIN\r\n250 8BITMIME\r\n"

@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .corpus import BaseType
 from .logger import common_logging
 from .read_proto_corpus import SCENARIO_MESSAGE, find_proto_file
+from .schema_eligibility import authoring_schema_files, load_schema_model
 
 _TEMPLATE_NAME = "corpus_decoder.html"
 _DEFAULT_OUTPUT = Path("_site/corpus-decoder/index.html")
@@ -28,6 +31,9 @@ _LICENSE_FILES = (
     ("long.js", Path("long/LICENSE")),
     ("protobuf.js", Path("protobufjs/LICENSE")),
     ("Google protobuf definitions", Path("protobufjs/google/LICENSE")),
+)
+_ELIGIBILITY_IMPORT = re.compile(
+    r'^\s*import\s+"eligibility_options\.proto"\s*;', re.MULTILINE
 )
 
 
@@ -55,6 +61,81 @@ def find_node_modules(explicit: Path | None) -> Path | None:
         if has_required_files(candidate):
             return candidate
     return None
+
+
+def _find_staged_authoring_schema(annotated: Path) -> Path | None:
+    """Find the generated metadata-free schema adjacent to a source tree."""
+    for root in (annotated.parent, *annotated.parent.parents):
+        candidate = root / "build" / "schemas" / "curl_fuzzer.proto"
+        if not candidate.is_file() or candidate == annotated:
+            continue
+        candidate_source = candidate.read_text(encoding="utf-8")
+        if _ELIGIBILITY_IMPORT.search(candidate_source) is None:
+            return candidate
+    return None
+
+
+def _generate_authoring_proto_source(annotated: Path, protoc: str) -> str:
+    """Compile and strip an annotated source without running the full build."""
+    with tempfile.TemporaryDirectory(prefix="curl-browser-schema-") as temporary:
+        descriptor = Path(temporary) / "annotated.desc"
+        command = [
+            protoc,
+            f"--proto_path={annotated.parent}",
+            "--include_imports",
+            "--include_source_info",
+            f"--descriptor_set_out={descriptor}",
+            annotated.name,
+        ]
+        result = subprocess.run(
+            command,
+            cwd=annotated.parent,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "protoc failed while preparing the browser authoring schema "
+                f"({result.returncode}): {result.stderr.strip()}"
+            )
+        files = authoring_schema_files(load_schema_model(descriptor.read_bytes()))
+
+    source = files.get(annotated.name)
+    if source is None:
+        names = ", ".join(sorted(files)) or "<none>"
+        raise RuntimeError(
+            f"metadata stripping did not produce {annotated.name}; produced {names}"
+        )
+    return source
+
+
+def load_browser_proto_source(explicit: Path | None) -> str:
+    """Load a metadata-free authoring schema suitable for protobuf.js."""
+    resolved = find_proto_file(explicit)
+    if resolved is None:
+        raise FileNotFoundError(
+            "curl_fuzzer.proto was not found; run from a source checkout or "
+            "pass --proto-file"
+        )
+    source = resolved.read_text(encoding="utf-8")
+    if _ELIGIBILITY_IMPORT.search(source) is None:
+        return source
+
+    protoc = shutil.which("protoc")
+    if protoc is not None:
+        return _generate_authoring_proto_source(resolved, protoc)
+
+    staged = _find_staged_authoring_schema(resolved)
+    if staged is not None:
+        return staged.read_text(encoding="utf-8")
+
+    raise FileNotFoundError(
+        "protoc is required to prepare the browser decoder schema; install "
+        "protobuf-compiler and libprotobuf-dev, generate "
+        "build/schemas/curl_fuzzer.proto, or pass a metadata-free authoring "
+        "schema with --proto-file"
+    )
 
 
 def _javascript_bundle(node_modules: Path) -> str:
@@ -135,12 +216,7 @@ def generate_html(
     node_modules: Path | None = None,
 ) -> Path:
     """Generate the HTML decoder page to the provided output path."""
-    resolved_proto = find_proto_file(proto_file)
-    if resolved_proto is None:
-        raise FileNotFoundError(
-            "curl_fuzzer.proto was not found; run from a source checkout or "
-            "pass --proto-file"
-        )
+    proto_source = load_browser_proto_source(proto_file)
     resolved_node_modules = find_node_modules(node_modules)
     if resolved_node_modules is None:
         raise FileNotFoundError(
@@ -150,7 +226,7 @@ def generate_html(
     env = _jinja_env()
     html = _render_html(
         env,
-        resolved_proto.read_text(encoding="utf-8"),
+        proto_source,
         _javascript_bundle(resolved_node_modules),
         _third_party_licenses(resolved_node_modules),
     )

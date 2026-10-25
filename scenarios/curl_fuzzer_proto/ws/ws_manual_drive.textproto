@@ -3,7 +3,7 @@
 # WebSocket path instead of libcurl's streaming ws_cw_/cr_ws_ integration.
 scheme: SCHEME_WS
 host_path: "127.0.0.1/manual"
-options { option_id: CURLOPT_CONNECT_ONLY uint_value: 2 }
+options { connect_only: 2 }
 connection {
   server_frames {
     fin: true

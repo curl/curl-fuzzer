@@ -1,6 +1,6 @@
 scheme: SCHEME_HTTPS
 host_path: "tls.test/cert-status"
-options { option_id: CURLOPT_SSL_VERIFYSTATUS bool_value: true }
+options { ssl_verifystatus: true }
 connection {
   initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nstatus-probe"
 }

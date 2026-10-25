@@ -1,52 +1,55 @@
 # Structured fuzzers
 
-The structured fuzzer suite models a curl transfer as a protobuf `Scenario`.
-[libprotobuf-mutator](https://github.com/google/libprotobuf-mutator) mutates the
-message rather than an unstructured byte stream, then a target-specific policy
-normalizes it before the harness runs curl against a bounded local peer.
+The structured fuzzer suite models a curl transfer with one annotated protobuf
+authoring schema. The build derives a restricted root for each target.
+[libprotobuf-mutator](https://github.com/google/libprotobuf-mutator) mutates
+that target-specific type rather than an unstructured byte stream, and a
+generated adapter lowers it into the common runtime before the harness runs
+curl against a bounded local peer.
 
-The targets still consume binary files. The textproto files under
-`scenarios/curl_fuzzer_proto/` are readable seed sources; CMake encodes them as
-binary protobuf corpus entries under `build/generated_corpora/`.
+The targets still consume ordinary binary protobuf files. Textprotos under
+`scenarios/curl_fuzzer_proto/` are readable full-authoring seed sources; CMake
+encodes them under `build/generated_corpora/`.
 
 ## How an input reaches curl
 
 ```mermaid
 flowchart TD
     subgraph build["Build time"]
-        sources["Checked-in schema<br/>and selected curl.h"]
-        generator["Validate and stage the schema;<br/>generate the C++ option manifest"]
-        schema["build/schemas/curl_fuzzer.proto"]
-        messages["Generated C++ Scenario type"]
-        manifest["C++ option dispatch manifest"]
+        sources["Annotated authoring schema<br/>eligibility metadata<br/>selected curl.h"]
+        descriptor["Descriptor set"]
+        generator["Validate one eligibility model"]
+        authoring["Metadata-free authoring schema"]
+        runtimeSchema["Internal runtime schema<br/>and option manifest"]
+        profileSchema["Restricted profile schema<br/>and direct Traits adapter"]
         seeds["Checked-in .textproto seeds"]
-        encoder["protoc --encode"]
+        encoder["ordinary protoc --encode<br/>authoring Scenario"]
         corpus["Per-target .scenario corpus"]
-        target["Structured fuzzer executable<br/>bound to a TargetProfile"]
+        target["Structured fuzzer executable<br/>linked to one generated profile"]
 
-        sources --> generator
-        generator --> schema
-        generator --> manifest
-        schema --> messages
-        schema --> encoder
+        sources --> descriptor --> generator
+        generator --> authoring
+        generator --> runtimeSchema
+        generator --> profileSchema
+        authoring --> encoder
         seeds --> encoder --> corpus
-        messages --> target
-        manifest --> target
+        runtimeSchema --> target
+        profileSchema --> target
     end
 
     subgraph runtime["Each fuzz or replay iteration"]
-        input["Binary Scenario input"]
-        lpm["libprotobuf-mutator<br/>decode; mutate and cross over when fuzzing"]
-        profile{"Fixed-profile target?"}
-        normalize["Normalize, prune, and bound"]
-        compatibility["Compatibility behavior"]
+        input["Binary profile-compatible input"]
+        lpm["libprotobuf-mutator<br/>generated profile root"]
+        lower["Direct lower to internal Scenario"]
+        fixed{"Fixed profile?"}
+        normalize["Normalize selectors<br/>generated prune<br/>bound surviving shape"]
         runner["Scenario runner"]
         curl["curl"]
         peer["Harness-owned local peer"]
 
-        input --> lpm --> profile
-        profile -->|yes| normalize --> runner
-        profile -->|curl_fuzzer_proto| compatibility --> runner
+        input --> lpm --> lower --> fixed
+        fixed -->|yes| normalize --> runner
+        fixed -->|compatibility| runner
         runner --> curl
         runner --> peer
         curl <-->|bounded protocol exchange| peer
@@ -56,20 +59,34 @@ flowchart TD
     target --> input
 ```
 
-The `CurlOptionId` values are checked in because they are part of the serialized
-corpus format. During the build, the option-manifest generator
-reads the active options between the schema's `CURL-OPTIONS` markers, checks
-their values against the selected curl checkout's `curl.h`, stages the schema
-under `build/schemas/`, and generates the C++ dispatch manifest. The remaining
-message types describe request data, peer responses, and focused API-lifecycle
-work.
+`SetOption` is an ordered oneof of typed fields. Each field declares its stable
+protobuf tag, native `CURLOPT_*` identity, and profile membership beside the
+value. Structured fields carry the same kind of eligibility metadata. The
+generator checks those declarations against the selected curl checkout's
+`curl.h`, then derives the internal `CurlOptionId`, value-kind manifest,
+profile cases, and direct transfers. There is no parallel handwritten C++
+option allowlist.
 
-Each thin entrypoint binds the shared runtime to one `TargetProfile`. Fixed
-profiles select a protocol, remove fields and options that their peer cannot
-use, and cap repeated fields and byte budgets. This prevents mutations from
-spending most of an iteration on inert or unbounded data. The original
-`curl_fuzzer_proto` target is the exception: it preserves its historical mixed
-semantics and corpus without registering a profile postprocessor.
+The metadata-free authoring view is staged at
+`build/schemas/curl_fuzzer.proto`. Normal checked-in textprotos are encoded
+against that full view with ordinary `protoc --encode`. Generated restricted
+roots keep the same field numbers and wire types, so a target can parse those
+bytes directly and discard unknown fields. No separate per-profile seed encoder
+is required.
+
+Each thin entrypoint binds its generated Traits once into an ordinary `kProfile`
+descriptor and passes that descriptor to non-template entrypoint helpers.
+Mutation, crossover, and loading therefore use the same concrete message type
+without exposing template specializations to Fuzz Introspector. Static profile
+projection prevents unsupported fields from entering the mutation graph.
+Generated conditional pruning runs after selector
+normalization and before limits, while C++ continues to own scheme fixing,
+selector canonicalization, work bounds, resource lifetimes, and peer behavior.
+The compatibility target uses a generated broad root and keeps its historical
+mixed execution mode; the schema format itself still changed in place.
+
+Pre-cutover binaries are not automatically detected or loaded. Reproduce them
+with the revision and target that created them.
 
 The peers are owned by the harness. Stream protocols generally use local
 socket pairs; TFTP and HTTP/3 use private loopback UDP endpoints. Baseline curl

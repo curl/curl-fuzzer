@@ -11,6 +11,8 @@ from typing import Any
 
 import pytest
 
+from curl_fuzzer_tools.fuzzer_corpus import STRUCTURED_CORPUS_EPOCH_MARKER
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -265,6 +267,37 @@ def test_replay_reports_libcurl_and_harness_without_nested_build_sources(
     assert "generated.cc" not in harness_summary
     assert "fixture_test.cc" not in harness_summary
     assert "standalone_fuzz_target_runner.cc" not in harness_summary
+
+
+def test_structured_public_replay_requires_epoch_marker(
+    coverage_fixture: dict[str, Any],
+) -> None:
+    fixture = coverage_fixture
+    target = "curl_fuzzer_proto_http"
+    binary = fixture["build"] / target
+    shutil.copyfile(fixture["build"] / fixture["target"], binary)
+    binary.chmod(0o755)
+    local_corpus = fixture["checkout"] / "corpora" / target
+    local_corpus.mkdir(parents=True)
+    (local_corpus / "local").write_bytes(b"local")
+    public_root = fixture["checkout"] / "ossfuzz_corpus"
+    public_corpus = public_root / target
+    public_corpus.mkdir(parents=True)
+    (public_corpus / "public").write_bytes(b"public")
+
+    result = _replay(fixture, TARGETS=target)
+    assert result.returncode == 0, result.stderr
+    assert STRUCTURED_CORPUS_EPOCH_MARKER in result.stderr
+    assert fixture["replay_log"].read_text().splitlines() == [str(local_corpus)]
+
+    (public_root / STRUCTURED_CORPUS_EPOCH_MARKER).touch()
+    fixture["replay_log"].unlink()
+    result = _replay(fixture, TARGETS=target)
+    assert result.returncode == 0, result.stderr
+    assert fixture["replay_log"].read_text().splitlines() == [
+        str(local_corpus),
+        str(public_corpus),
+    ]
 
 
 def test_failed_and_skipped_replays_keep_later_coverage_marked_partial(

@@ -9,6 +9,6 @@ upload {
   read_sizes: 7
   terminal: UPLOAD_TERMINAL_EOF
 }
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_RESUME_FROM_LARGE uint_value: 4 }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 15 }
+options { upload: true }
+options { resume_from_large: 4 }
+options { infilesize_large: 15 }

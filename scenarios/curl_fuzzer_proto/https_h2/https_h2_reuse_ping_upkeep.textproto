@@ -5,8 +5,8 @@
 # completion, producing a bounded client-origin PING without sleeping.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/h2-start"
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { followlocation: 1 }
+options { maxredirs: 2 }
 http2_plan {
   actions {
     wait {

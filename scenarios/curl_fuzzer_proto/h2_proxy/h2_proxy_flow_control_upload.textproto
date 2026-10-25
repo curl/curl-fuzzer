@@ -3,8 +3,8 @@
 # origin traffic instead of merely adjusting an otherwise idle counter.
 scheme: SCHEME_HTTP
 host_path: "origin.test/flow-control"
-options { option_id: CURLOPT_POST bool_value: true }
-options { option_id: CURLOPT_POSTFIELDS string_value: "queued-body" }
+options { post: true }
+options { postfields: "queued-body" }
 connection {
   # SETTINGS_INITIAL_WINDOW_SIZE=0 keeps CONNECT headers sendable while
   # preventing the later HTTP/1.1 request bytes from leaving stream 1.

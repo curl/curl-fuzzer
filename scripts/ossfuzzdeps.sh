@@ -32,4 +32,11 @@ $SUDO apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends \
   pkg-config \
   wget \
   cmake \
-  ninja-build
+  ninja-build \
+  python3 \
+  python3-pip
+
+# Schema projection and target-aware corpus encoding use protobuf's descriptor
+# APIs at build time. Keep this explicit here rather than allowing a CMake
+# generation command to fetch tooling from the network.
+$SUDO python3 -m pip install --break-system-packages 'protobuf>=5.29,<7'

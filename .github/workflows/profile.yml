@@ -233,11 +233,21 @@ jobs:
           ASAN_SYMBOLIZER_PATH: ${{ env.OSS_FUZZ_OUT }}/llvm-symbolizer
         run: |
           profile_cpu=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
+          source scripts/fuzz_corpus_helpers.sh
+          public_corpus_args=()
+          if fuzz_public_corpus_epoch_ready \
+              "$PROFILE_TARGET" "$GITHUB_WORKSPACE/ossfuzz_corpus"; then
+            public_corpus_args=(
+              --public-corpus-root "$GITHUB_WORKSPACE/ossfuzz_corpus"
+            )
+          else
+            echo "warning: profiling without unmarked structured public corpus" >&2
+          fi
           profile_fuzzer \
             --binary-dir "$OSS_FUZZ_OUT" \
             --target "$PROFILE_TARGET" \
             --corpus-root "$GITHUB_WORKSPACE/corpora" \
-            --public-corpus-root "$GITHUB_WORKSPACE/ossfuzz_corpus" \
+            "${public_corpus_args[@]}" \
             --seconds "$PROFILE_SECONDS" \
             --seed 101 \
             --event cpu-clock:u \

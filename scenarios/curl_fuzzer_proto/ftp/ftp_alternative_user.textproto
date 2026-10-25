@@ -2,7 +2,7 @@
 # accepting that command resumes the ordinary PWD and download state machine.
 scheme: SCHEME_FTP
 host_path: "ftp.test/alternative.bin"
-options { option_id: CURLOPT_FTP_ALTERNATIVE_TO_USER string_value: "SITE LOGIN" }
+options { ftp_alternative_to_user: "SITE LOGIN" }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "530 USER rejected\r\n"

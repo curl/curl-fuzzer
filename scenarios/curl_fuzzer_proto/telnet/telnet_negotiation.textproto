@@ -3,7 +3,7 @@
 # enters telnet_do(), so this remains deterministic without terminal input.
 scheme: SCHEME_TELNET
 host_path: "127.0.0.1/"
-options { option_id: CURLOPT_USERNAME string_value: "fuzz-user" }
+options { username: "fuzz-user" }
 telnet_options: "TTYPE=vt100"
 telnet_options: "XDISPLOC=:0"
 telnet_options: "NEW_ENV=TERM,vt100"

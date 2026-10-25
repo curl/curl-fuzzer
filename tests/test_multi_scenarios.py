@@ -14,7 +14,7 @@ def test_multi_progress_ratelimit_seed_keeps_its_closed_profile() -> None:
     )
 
     assert "MULTI_STATE_PROBE_PROGRESS_RATE_LIMIT" in scenario
-    assert 'option_id: CURLOPT_ACCEPT_ENCODING string_value: "identity"' in scenario
+    assert 'accept_encoding: "identity"' in scenario
     assert "transfer_count: 2" in scenario
     assert scenario.count('initial_response: "HTTP/1.1 200 OK') == 2
     assert scenario.count("on_readable:") == 4

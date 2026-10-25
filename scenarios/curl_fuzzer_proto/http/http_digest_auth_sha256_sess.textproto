@@ -5,10 +5,9 @@
 scheme: SCHEME_HTTP
 host_path: "auth.test/dir/index.html?query=yes"
 options {
-  option_id: CURLOPT_USERPWD
-  string_value: "u\"ser\\name:p@ss:word"
+  userpwd: "u\"ser\\name:p@ss:word"
 }
-options { option_id: CURLOPT_HTTPAUTH uint_value: 2 }
+options { httpauth: 2 }
 connection {
   initial_response: "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"api\\\"realm\", nonce=\"0123456789abcdef\", opaque=\"opaque-token\", algorithm=SHA-256-SESS, qop=\"auth-int\", userhash=true, stale=true, extension=ignored\r\nContent-Length: 0\r\n\r\n"
   on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"

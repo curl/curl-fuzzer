@@ -3,11 +3,11 @@
 # response, while SEEK_OK lets the second socket replay exactly the same body.
 scheme: SCHEME_HTTP
 host_path: "upload.test/redirect/source"
-options { option_id: CURLOPT_UPLOAD bool_value: true }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "POST" }
-options { option_id: CURLOPT_INFILESIZE_LARGE uint_value: 13 }
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { upload: true }
+options { customrequest: "POST" }
+options { infilesize_large: 13 }
+options { followlocation: 1 }
+options { maxredirs: 2 }
 request_headers: "Expect:"
 upload {
   data: "redirect-body"

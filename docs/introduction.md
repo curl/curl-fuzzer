@@ -10,8 +10,8 @@ The repository has three target families:
 
 - **Legacy fuzzers** (`curl_fuzzer` and its protocol variants) drive libcurl
   from a stable Type-Length-Value (TLV) input.
-- **Structured fuzzers** use a protobuf `Scenario`, target-specific mutation
-  policies, and bounded in-process protocol peers.
+- **Structured fuzzers** use typed protobuf scenarios, generated
+  target-specific mutation roots, and bounded in-process protocol peers.
 - **Direct fuzzers** feed raw bytes to focused parsers such as URL, DoH, netrc,
   and buffer-queue code.
 
@@ -35,9 +35,12 @@ Avoid copying lists that must be kept synchronized:
 - [`scripts/fuzz_targets`](https://github.com/curl/curl-fuzzer/blob/master/scripts/fuzz_targets)
   defines the targets packaged for each architecture and sanitizer.
 - [`schemas/curl_fuzzer.proto`](https://github.com/curl/curl-fuzzer/blob/master/schemas/curl_fuzzer.proto)
-  is the complete structured scenario schema, including the stable
-  `CurlOptionId` values used by serialized corpora. Its marker-delimited enum
-  block also defines the active `SetOption` surface.
+  is the complete annotated authoring schema. Typed `SetOption` fields own
+  native curl-option identity and profile membership; structured-field
+  annotations own the remainder of each generated profile's input surface.
+- [`schemas/eligibility_options.proto`](https://github.com/curl/curl-fuzzer/blob/master/schemas/eligibility_options.proto)
+  defines the profile registry and eligibility metadata interpreted at build
+  time. It does not define a second serialized Scenario format.
 - [`corpora/`](https://github.com/curl/curl-fuzzer/tree/master/corpora)
   contains checked-in legacy and direct-fuzzer inputs.
 - [`scenarios/curl_fuzzer_proto/`](https://github.com/curl/curl-fuzzer/tree/master/scenarios/curl_fuzzer_proto)

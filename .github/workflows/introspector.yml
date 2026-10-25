@@ -81,7 +81,7 @@ jobs:
     name: 'Proto call graph'
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out curl-fuzzer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,7 +108,7 @@ jobs:
           install --progress-bar off --only-binary=:all: --no-deps
           --group introspector
 
-      - name: Generate focused source call graph
+      - name: Generate focused source call graphs
         env:
           PYTHONPATH: '${{ github.workspace }}/fuzz-introspector/src'
         run: python scripts/generate_introspector_calltree.py introspector-output
@@ -116,7 +116,7 @@ jobs:
       - name: Check proto runner ancestry
         run: >-
           python scripts/check_introspector_report.py
-          introspector-output/fuzzerLogFile-curl_fuzzer_proto_multi.data
+          introspector-output/
 
       - name: Upload diagnostic metadata
         if: failure()

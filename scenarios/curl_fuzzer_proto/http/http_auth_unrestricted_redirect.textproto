@@ -4,11 +4,11 @@
 # default-policy seed covers the non-leakage branch.
 scheme: SCHEME_HTTP
 host_path: "auth.test/redirect"
-options { option_id: CURLOPT_USERPWD string_value: "redirect:secret" }
-options { option_id: CURLOPT_HTTPAUTH uint_value: 1 }
-options { option_id: CURLOPT_UNRESTRICTED_AUTH bool_value: true }
-options { option_id: CURLOPT_FOLLOWLOCATION uint_value: 1 }
-options { option_id: CURLOPT_MAXREDIRS uint_value: 2 }
+options { userpwd: "redirect:secret" }
+options { httpauth: 1 }
+options { unrestricted_auth: true }
+options { followlocation: 1 }
+options { maxredirs: 2 }
 connection {
   initial_response: "HTTP/1.1 302 Found\r\nLocation: http://other-auth.test/final\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
 }

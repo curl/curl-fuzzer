@@ -5,9 +5,9 @@
 scheme: SCHEME_MQTTS
 host_path: "tls.test/sensors/kitchen"
 probe_multi_pollset: true
-options { option_id: CURLOPT_POSTFIELDS string_value: "hello mqtt" }
-options { option_id: CURLOPT_USERNAME string_value: "fuzz" }
-options { option_id: CURLOPT_PASSWORD string_value: "secret" }
+options { postfields: "hello mqtt" }
+options { username: "fuzz" }
+options { password: "secret" }
 connection {
   # CONNACK: 0x20, remaining length 2, session-present 0, return code 0.
   initial_response: "\040\002\000\000"

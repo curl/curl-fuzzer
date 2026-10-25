@@ -2,8 +2,8 @@
 # passive-data path even when the verb is not one of curl's usual LIST forms.
 scheme: SCHEME_FTP
 host_path: "ftp.test/"
-options { option_id: CURLOPT_DIRLISTONLY bool_value: true }
-options { option_id: CURLOPT_CUSTOMREQUEST string_value: "X-LIST" }
+options { dirlistonly: true }
+options { customrequest: "X-LIST" }
 connection {
   initial_response: "220 ready\r\n"
   on_readable: "331 password\r\n"

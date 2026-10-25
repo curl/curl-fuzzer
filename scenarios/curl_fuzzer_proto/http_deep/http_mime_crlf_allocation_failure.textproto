@@ -1,32 +1,27 @@
-# Exact 533-byte CI regression input after textproto round-trip. Ordinal 102
-# rejected curl's CRLF conversion-reader allocation after its MIME reader was
-# installed; the shared execution policy now retains MIME and removes
+# Converted from the historical 533-byte CI regression input; the typed schema
+# encodes this source as 522 bytes. At the pinned pre-cutover revision, ordinal
+# 102 rejected curl's CRLF conversion-reader allocation after its MIME reader
+# was installed. The shared execution policy now retains MIME and removes
 # line-ending conversion whenever an allocation plan is active.
 scheme: SCHEME_HTTP
 host_path: "altsvc-origin.test/crlf/source"
 options {
-  option_id: CURLOPT_UPLOAD
-  bool_value: true
+  upload: true
 }
 options {
-  option_id: CURLOPT_UPLOAD
-  bool_value: true
+  upload: true
 }
 options {
-  option_id: CURLOPT_CUSTOMREQUEST
-  string_value: "POST"
+  customrequest: "POST"
 }
 options {
-  option_id: CURLOPT_INFILESIZE_LARGE
-  uint_value: 11
+  infilesize_large: 11
 }
 options {
-  option_id: CURLOPT_CRLF
-  bool_value: true
+  crlf: true
 }
 options {
-  option_id: CURLOPT_FOLLOWLOCATION
-  uint_value: 10
+  followlocation: 10
 }
 connection {
   on_readable: "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://upload.test/crlf/destination\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"

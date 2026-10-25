@@ -1,4 +1,4 @@
-"""Bootstrap the native HTTP/2 corpus from historical Scenario inputs."""
+"""Bootstrap the native HTTP/2 corpus from current typed authoring inputs."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from typing import TypedDict
 from curl_fuzzer_tools.fuzzer_corpus import (
     CorpusError,
     CorpusSnapshotBuilder,
+    require_current_structured_corpus_epoch,
     sha256_file,
 )
 from curl_fuzzer_tools.read_proto_corpus import decode, find_proto_file
@@ -24,10 +25,9 @@ from curl_fuzzer_tools.read_proto_corpus import decode, find_proto_file
 # Match top-level SetOption blocks in protoc's canonical text output. Byte
 # strings have escaped newlines; nested unknown-field groups are indented.
 _OPTIONS = re.compile(r"^options \{\n(.*?)^\}", re.MULTILINE | re.DOTALL)
-_VERSION_ID = re.compile(r"^  option_id: CURLOPT_HTTP_VERSION$", re.MULTILINE)
-_PRIOR_KNOWLEDGE = re.compile(r"^  uint_value: 5$", re.MULTILINE)
+_HTTP_VERSION = re.compile(r"^  http_version: ([0-9]+)$", re.MULTILINE)
 _MAX_OPTIONS = 64  # proto_fuzzer::scenario_limits::kMaxOptions
-_SELECTOR = "last HTTP_VERSION in first 64 options is uint_value=5"
+_SELECTOR = "last HTTP_VERSION in first 64 options is http_version=5"
 
 
 class BootstrapManifest(TypedDict):
@@ -55,8 +55,8 @@ def selects_prior_knowledge(text: str) -> bool:
     for index, option in enumerate(_OPTIONS.findall(text)):
         if index >= _MAX_OPTIONS:
             break
-        if _VERSION_ID.search(option):
-            selected = _PRIOR_KNOWLEDGE.search(option) is not None
+        if match := _HTTP_VERSION.search(option):
+            selected = match.group(1) == "5"
     return selected
 
 
@@ -85,9 +85,11 @@ def bootstrap(
     """Add byte-exact selected inputs and write a reproducible handoff manifest."""
     protoc = shutil.which("protoc")
     if protoc is None:
-        raise CorpusError("protoc is required; install protobuf-compiler")
+        raise CorpusError(
+            "protoc is required; install protobuf-compiler and libprotobuf-dev"
+        )
     if not sources:
-        raise CorpusError("no historical corpus found; download public corpora first")
+        raise CorpusError("no current typed authoring corpus found; download it first")
     corpus_dirs = [destination.resolve(), *(p.resolve() for p in sources if p.is_dir())]
     for artifact in (manifest, output_zip):
         if artifact is not None and any(
@@ -105,11 +107,11 @@ def bootstrap(
 
     with tempfile.TemporaryDirectory(prefix="curl-http2-bootstrap-") as temporary:
         root = Path(temporary)
-        # Validate the named schema and its append-only field/enum identities
-        # before classifying individual parse failures. Scenario.options=3,
-        # SetOption.option_id=1 (HTTP_VERSION=84), and uint_value=11.
+        # Validate the named schema and its append-only typed field identity
+        # before classifying individual parse failures. Scenario.options=3 and
+        # SetOption.http_version=44.
         probe = root / "probe"
-        probe.write_bytes(b"\x1a\x04\x08\x54\x58\x05")
+        probe.write_bytes(b"\x1a\x03\xe0\x02\x05")
         if not selects_prior_knowledge(decode(probe, proto_file)):
             raise CorpusError("schema does not describe the HTTP_VERSION selector")
         original = CorpusSnapshotBuilder(root / "original")
@@ -117,7 +119,7 @@ def bootstrap(
         for source in sources:
             original.add(source)
         if not original.hashes:
-            raise CorpusError("historical corpus is empty")
+            raise CorpusError("typed authoring corpus is empty")
         rejected: list[str] = []
         for digest in sorted(original.hashes):
             source = original.destination / digest
@@ -177,8 +179,14 @@ def bootstrap(
     return document
 
 
+def _default_sources(public_corpus_root: Path) -> list[Path]:
+    require_current_structured_corpus_epoch(public_corpus_root)
+    compatibility_corpus = public_corpus_root / "curl_fuzzer_proto"
+    return [compatibility_corpus] if compatibility_corpus.is_dir() else []
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the installed historical HTTP/2 corpus bootstrap command."""
+    """Run the installed typed HTTP/2 corpus bootstrap command."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--public-corpus-root", type=Path, default=Path("ossfuzz_corpus")
@@ -198,15 +206,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     public = args.public_corpus_root
     sources = args.source
-    if sources is None:
-        sources = [
-            path
-            for name in ("curl_fuzzer_proto", "curl_fuzzer_proto_http")
-            if (path := public / name).is_dir()
-        ]
     destination = args.output_dir or public / "curl_fuzzer_proto_http2"
     manifest = args.manifest or public / ".manifests" / "http2-bootstrap.json"
     try:
+        if sources is None:
+            # The compatibility profile has the full current authoring wire
+            # shape. Do not infer that narrower profiles or historical bytes
+            # are equivalent merely because protobuf can parse them.
+            sources = _default_sources(public)
         proto_file = find_proto_file(args.proto_file)
         if proto_file is None:
             raise CorpusError("curl_fuzzer.proto is required; pass --proto-file")
