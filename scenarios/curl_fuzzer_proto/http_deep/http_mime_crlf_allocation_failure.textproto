@@ -1,8 +1,8 @@
 # Converted from the historical 533-byte CI regression input; the typed schema
-# encodes this source as 522 bytes. At the pinned pre-cutover revision, ordinal
-# 102 rejected curl's CRLF conversion-reader allocation after its MIME reader
-# was installed. The shared execution policy now retains MIME and removes
-# line-ending conversion whenever an allocation plan is active.
+# encodes this source as 522 bytes. It keeps MIME, CRLF conversion, and an
+# allocation plan combined so fuzzing can exercise composed reader setup.
+# Allocation ordinals are revision-local; curl's unit3307 owns the stable
+# cleanup regression.
 scheme: SCHEME_HTTP
 host_path: "altsvc-origin.test/crlf/source"
 options {

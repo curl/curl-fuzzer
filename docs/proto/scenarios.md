@@ -300,13 +300,10 @@ heap-backed socket-monitor allocation fails, curl's current debug event adapter
 returns a status outside the socket-callback contract; event-based driving
 remains available when no allocation failure is selected.
 
-An active plan combined with an HTTP-family MIME body also removes the
-`CURLOPT_CRLF` and `CURLOPT_TRANSFERTEXT` line-ending conversion options before
-execution. curl currently installs the MIME reader before allocating the
-conversion reader, and the allocation-error path can otherwise leave the freed
-MIME reader installed. MIME failures remain selected, while ordinary inputs
-still cover MIME with line-ending conversion. Compatibility inputs receive the
-same execution-only safety rule without changing their serialized messages.
+An active plan can combine a MIME body with `CURLOPT_CRLF` or
+`CURLOPT_TRANSFERTEXT`, allowing allocation injection across curl's composed
+MIME and line-conversion reader stack. curl clears partially installed readers
+when that setup fails.
 
 Multiple failures describe one evolving execution. In the example, 9 means
 the ninth allocation attempt on the path produced after attempt 5 failed, not

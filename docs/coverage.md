@@ -136,14 +136,10 @@ debug event adapter returns a status outside the socket-callback contract and
 later removes a record it never inserted. This keeps the ordinal plan focused
 on libcurl transfer and parser state without call-stack-dependent exclusions.
 
-Likewise, an HTTP-family MIME body with an active plan drops the `CURLOPT_CRLF`
-and `CURLOPT_TRANSFERTEXT` line-ending conversion options before execution.
-curl currently installs its MIME client reader before allocating the optional
-conversion reader; if that second allocation fails, its error path frees the
-installed reader without clearing the stack pointer. MIME allocation failures
-remain enabled, and inputs without a failure plan continue to cover the
-combined MIME and conversion path. The compatibility target applies this rule
-to its parsed execution copy without rewriting the persistent corpus message.
+MIME bodies retain `CURLOPT_CRLF` and `CURLOPT_TRANSFERTEXT` under active plans,
+so allocation injection covers failures while curl composes its MIME and
+line-conversion readers. curl clears the partially installed reader stack if
+that setup fails.
 
 The active state is thread-local. Worker-thread allocations pass through, and
 only allocations routed through libcurl's configured callbacks are counted.
