@@ -51,6 +51,17 @@ jobs:
           ref: ${{ github.repository == 'curl/curl-fuzzer' && github.ref || '' }}
           path: .curl-fuzzer
 
+      # The OSS-Fuzz project Dockerfile installs dependencies before CIFuzz
+      # replaces its master checkout with the triggering ref. Exercise this
+      # checkout explicitly so changes to the installer are covered in PRs.
+      - name: Test OSS-Fuzz dependency installation
+        if: github.repository == 'curl/curl-fuzzer'
+        run: |
+          docker run --rm --pull=always \
+            --mount "type=bind,source=${GITHUB_WORKSPACE}/.curl-fuzzer,target=/src/curl_fuzzer,readonly" \
+            gcr.io/oss-fuzz-base/base-builder \
+            /src/curl_fuzzer/scripts/ossfuzzdeps.sh
+
       - name: Restore build cache
         id: build-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

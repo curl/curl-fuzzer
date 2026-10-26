@@ -19,6 +19,16 @@
     },
     {
       "customType": "regex",
+      "managerFilePatterns": [
+        "/^pyproject\\.toml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\r?\\n\\s*required-version\\s*=\\s*\"==(?<currentValue>\\d+(?:\\.\\d+)+)\""
+      ],
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "openldap/openldap",
       "extractVersionTemplate": "^OPENLDAP_REL_ENG_(?<major>\\d+)_(?<minor>\\d+)_(?<patch>\\d+)$",

@@ -123,6 +123,10 @@ skip-magic-trailing-comma = false
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
 
+[tool.uv]
+# renovate: datasource=github-releases depName=astral-sh/uv
+required-version = "==0.13.5"
+
 [[tool.uv.index]]
 name = "pypi"
 url = "https://pypi.org/simple/"
