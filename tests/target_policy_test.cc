@@ -2767,96 +2767,33 @@ void TestApiAllocationFailuresAvoidDebugEventAdapter() {
          "API drive normalization changed the allocation plan");
 }
 
-void TestAllocationFailuresAvoidDanglingMimeReader() {
-  Scenario scenario;
-  scenario.mutable_mime_post()->add_parts()->set_data("mime body");
-  scenario.add_fail_allocations(102);
-  auto *crlf = scenario.add_options();
-  crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
-  crlf->set_bool_value(true);
-  auto *transfer_text = scenario.add_options();
-  transfer_text->set_option_id(curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
-  transfer_text->set_bool_value(true);
-  auto *retained = scenario.add_options();
-  retained->set_option_id(curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION);
-  retained->set_uint_value(1);
-
-  NormalizeScenarioForTarget(&scenario, TargetProfile::kDeepHttp);
-
-  Expect(scenario.has_mime_post() && scenario.fail_allocations_size() == 1 &&
-             scenario.fail_allocations(0) == 102,
-         "MIME allocation safety changed the body or failure plan");
-  Expect(scenario.options_size() == 1 &&
-             scenario.options(0).option_id() ==
-                 curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION,
-         "MIME allocation safety did not remove only conversion options");
-
-  Scenario ordinary;
-  ordinary.mutable_mime_post()->add_parts()->set_data("mime body");
-  auto *ordinary_crlf = ordinary.add_options();
-  ordinary_crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
-  ordinary_crlf->set_bool_value(true);
-  NormalizeScenarioForTarget(&ordinary, TargetProfile::kDeepHttp);
-  Expect(ordinary.options_size() == 1 && ordinary.options(0).option_id() ==
-                                             curl::fuzzer::proto::CURLOPT_CRLF,
-         "ordinary MIME input lost CRLF conversion coverage");
-
-  ordinary.add_fail_allocations(0);
-  NormalizeScenarioForExecution(&ordinary);
-  Expect(ordinary.fail_allocations().empty() && ordinary.options_size() == 1,
-         "inactive allocation ordinal changed MIME execution");
-
-  Scenario no_mime;
-  no_mime.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
-  no_mime.add_fail_allocations(102);
-  no_mime.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
-  no_mime.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
-  NormalizeScenarioForExecution(&no_mime);
-  Expect(no_mime.options_size() == 2,
-         "allocation safety removed conversion options without a MIME body");
-
-  Scenario compatibility;
-  compatibility.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
-  compatibility.mutable_mime_post()->add_parts()->set_data("mime body");
-  compatibility.add_fail_allocations(102);
-  compatibility.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
-  compatibility.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
-  NormalizeScenarioForExecution(&compatibility);
-  Expect(compatibility.options_size() == 0 &&
-             compatibility.fail_allocations_size() == 1 &&
-             compatibility.fail_allocations(0) == 102,
-         "compatibility execution retained the unsafe MIME reader shape");
-
+void TestAllocationFailuresRetainMimeConversion() {
   for (const auto scheme :
-       {SCHEME_SMTP, SCHEME_SMTPS, SCHEME_IMAP, SCHEME_IMAPS}) {
-    Scenario mail;
-    mail.set_scheme(scheme);
-    mail.mutable_mime_post();
-    mail.add_fail_allocations(91);
-    auto *mail_crlf = mail.add_options();
-    mail_crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
-    mail_crlf->set_bool_value(true);
+       {SCHEME_HTTP, SCHEME_HTTPS, SCHEME_WS, SCHEME_WSS, SCHEME_IPFS,
+        SCHEME_IPNS, SCHEME_IMAP, SCHEME_IMAPS, SCHEME_SMTP, SCHEME_SMTPS}) {
+    Scenario scenario;
+    scenario.set_scheme(scheme);
+    scenario.mutable_mime_post()->add_parts()->set_data("mime body");
+    scenario.add_fail_allocations(91);
+    auto *crlf = scenario.add_options();
+    crlf->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
+    crlf->set_bool_value(true);
+    auto *transfer_text = scenario.add_options();
+    transfer_text->set_option_id(curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
+    transfer_text->set_bool_value(true);
 
-    NormalizeScenarioForExecution(&mail);
+    NormalizeScenarioForExecution(&scenario);
 
-    Expect(mail.options_size() == 0 && mail.has_mime_post() &&
-               mail.fail_allocations_size() == 1 &&
-               mail.fail_allocations(0) == 91,
-           "mail MIME allocation safety retained CRLF conversion");
+    Expect(scenario.has_mime_post() && scenario.fail_allocations_size() == 1 &&
+               scenario.fail_allocations(0) == 91,
+           "execution normalization changed the MIME allocation plan");
+    Expect(scenario.options_size() == 2 &&
+               scenario.options(0).option_id() ==
+                   curl::fuzzer::proto::CURLOPT_CRLF &&
+               scenario.options(1).option_id() ==
+                   curl::fuzzer::proto::CURLOPT_TRANSFERTEXT,
+           "execution normalization removed MIME conversion coverage");
   }
-
-  Scenario non_http;
-  non_http.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
-  non_http.mutable_mime_post()->add_parts()->set_data("inert");
-  non_http.add_fail_allocations(102);
-  non_http.add_options()->set_option_id(curl::fuzzer::proto::CURLOPT_CRLF);
-  non_http.add_options()->set_option_id(
-      curl::fuzzer::proto::CURLOPT_TRANSFERTEXT);
-  NormalizeScenarioForExecution(&non_http);
-  Expect(non_http.options_size() == 2,
-         "allocation safety removed conversion options for non-HTTP MIME");
 }
 
 void TestExecutionBoundsLocalPortRange() {
@@ -3580,7 +3517,7 @@ int main() {
   TestOtherPoliciesDiscardMultiPlans();
   TestApiEasyDrivesDropMultiOnlyWork();
   TestApiAllocationFailuresAvoidDebugEventAdapter();
-  TestAllocationFailuresAvoidDanglingMimeReader();
+  TestAllocationFailuresRetainMimeConversion();
   TestExecutionBoundsLocalPortRange();
   TestProfileRunModes();
   TestCompatibilityProfileIsNoOp();

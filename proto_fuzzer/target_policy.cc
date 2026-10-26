@@ -705,70 +705,6 @@ void CanonicalizeAllocationFailureDrive(curl::fuzzer::proto::Scenario* scenario)
   }
 }
 
-/// Return whether a scenario can install MIME through curl's client-reader
-/// stack. HTTP-family requests, SMTP mail bodies, and IMAP APPEND bodies all
-/// call Curl_creader_set_mime().
-bool UsesMimeReader(const curl::fuzzer::proto::Scenario& scenario) {
-  switch (scenario.scheme()) {
-    case curl::fuzzer::proto::SCHEME_HTTP:
-    case curl::fuzzer::proto::SCHEME_HTTPS:
-    case curl::fuzzer::proto::SCHEME_WS:
-    case curl::fuzzer::proto::SCHEME_WSS:
-    case curl::fuzzer::proto::SCHEME_IPFS:
-    case curl::fuzzer::proto::SCHEME_IPNS:
-    case curl::fuzzer::proto::SCHEME_IMAP:
-    case curl::fuzzer::proto::SCHEME_IMAPS:
-    case curl::fuzzer::proto::SCHEME_SMTP:
-    case curl::fuzzer::proto::SCHEME_SMTPS:
-      return true;
-
-    case curl::fuzzer::proto::SCHEME_UNSPECIFIED:
-    case curl::fuzzer::proto::SCHEME_TELNET:
-    case curl::fuzzer::proto::SCHEME_FTP:
-    case curl::fuzzer::proto::SCHEME_FTPS:
-    case curl::fuzzer::proto::SCHEME_TFTP:
-    case curl::fuzzer::proto::SCHEME_POP3:
-    case curl::fuzzer::proto::SCHEME_POP3S:
-    case curl::fuzzer::proto::SCHEME_MQTT:
-    case curl::fuzzer::proto::SCHEME_MQTTS:
-    case curl::fuzzer::proto::SCHEME_GOPHER:
-    case curl::fuzzer::proto::SCHEME_GOPHERS:
-    case curl::fuzzer::proto::SCHEME_DICT:
-    case curl::fuzzer::proto::SCHEME_FILE:
-    default:
-      return false;
-  }
-}
-
-/// Keep an injected failure from leaving curl's MIME client-reader stack
-/// dangling. With line-ending conversion enabled, curl installs the MIME
-/// reader before allocating the conversion reader. If that second allocation
-/// fails, the current error path frees the MIME reader without clearing the
-/// installed stack pointer. Ordinary inputs still cover MIME plus conversion;
-/// failure plans retain MIME processing and use curl's unconverted reader
-/// path. Schemes outside the HTTP and mail MIME paths do not install this
-/// reader, so their conversion options remain useful and safe even if a
-/// compatibility input carries MIME.
-void CanonicalizeAllocationFailureOptions(curl::fuzzer::proto::Scenario* scenario) {
-  if (scenario->fail_allocations().empty() || !scenario->has_mime_post() || !UsesMimeReader(*scenario)) {
-    return;
-  }
-
-  auto* options = scenario->mutable_options();
-  int retained = 0;
-  for (int index = 0; index < options->size(); ++index) {
-    const auto option_id = options->Get(index).option_id();
-    if (option_id == curl::fuzzer::proto::CURLOPT_CRLF || option_id == curl::fuzzer::proto::CURLOPT_TRANSFERTEXT) {
-      continue;
-    }
-    if (retained != index) {
-      options->SwapElements(retained, index);
-    }
-    ++retained;
-  }
-  options->DeleteSubrange(retained, options->size() - retained);
-}
-
 /// Fold an unknown API drive selector to the ordinary multi-perform path
 /// before generated guards decide whether multi-only fields are eligible.
 void CanonicalizeApiDriveMode(curl::fuzzer::proto::ApiPlan* plan) {
@@ -2518,7 +2454,6 @@ void NormalizeScenarioForExecution(curl::fuzzer::proto::Scenario* scenario) {
   }
   CanonicalizeAllocationFailures(scenario);
   CanonicalizeAllocationFailureDrive(scenario);
-  CanonicalizeAllocationFailureOptions(scenario);
   CanonicalizeLocalPortRange(scenario);
 }
 
