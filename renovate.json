@@ -91,6 +91,15 @@
     },
     {
       "matchManagers": [
+        "pep621"
+      ],
+      "matchPackageNames": [
+        "protobuf"
+      ],
+      "rangeStrategy": "widen"
+    },
+    {
+      "matchManagers": [
         "custom.regex"
       ],
       "matchPackageNames": [

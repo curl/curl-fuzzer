@@ -291,7 +291,7 @@ def test_ossfuzz_bootstraps_schema_generator_dependency_for_pr_images() -> None:
     script = (REPO_ROOT / "ossfuzz.sh").read_text(encoding="utf-8")
 
     check = 'if [[ ${CIFUZZ:-} == "True" ]] && ! python3 -c'
-    install = "install --break-system-packages 'protobuf>=5.29,<7'"
+    install = "install --break-system-packages 'protobuf>=5.29,<8'"
     compile_target = '"${SCRIPTDIR}"/compile_target.sh "${FUZZ_BUILD_TARGET}"'
     assert check in script
     assert install in script

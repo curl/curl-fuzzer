@@ -1613,12 +1613,12 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     execute_process(
         COMMAND ${Python3_EXECUTABLE} -c
-            "import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split('.')[:2]); sys.exit(0 if (5, 29) <= p < (7, 0) else 1)"
+            "import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split('.')[:2]); sys.exit(0 if (5, 29) <= p < (8, 0) else 1)"
         RESULT_VARIABLE PROTOBUF_PYTHON_RESULT
         ERROR_VARIABLE PROTOBUF_PYTHON_ERROR)
     if(NOT PROTOBUF_PYTHON_RESULT EQUAL 0)
         message(FATAL_ERROR
-            "The structured fuzzer schema generator requires Python protobuf >=5.29,<7. "
+            "The structured fuzzer schema generator requires Python protobuf >=5.29,<8. "
             "Install the repository tooling dependencies for ${Python3_EXECUTABLE} "
             "(for example, `uv sync`) and reconfigure. ${PROTOBUF_PYTHON_ERROR}")
     endif()

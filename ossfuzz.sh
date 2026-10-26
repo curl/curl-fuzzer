@@ -61,11 +61,11 @@ export BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
 # and local builds rely on their declared environment setup and never install
 # packages here.
 if [[ ${CIFUZZ:-} == "True" ]] && ! python3 -c \
-  'import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split(".")[:2]); sys.exit(0 if (5, 29) <= p < (7, 0) else 1)' \
+  'import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split(".")[:2]); sys.exit(0 if (5, 29) <= p < (8, 0) else 1)' \
   >/dev/null 2>&1
 then
   python3 -m pip --disable-pip-version-check --no-input --no-cache-dir \
-    install --break-system-packages 'protobuf>=5.29,<7'
+    install --break-system-packages 'protobuf>=5.29,<8'
 fi
 
 # Curl is cloned fresh (--depth 1) on every CIFuzz container start. Replay
