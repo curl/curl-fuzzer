@@ -30,14 +30,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: 'install prereqs'
         run: |
           /home/linuxbrew/.linuxbrew/bin/brew install zizmor
-          pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary --group dev
+          uv sync --locked --no-default-groups --group dev
 
       - name: 'zizmor GHA'
         env:
@@ -48,13 +49,13 @@ jobs:
 
       - name: 'ruff'
         run: |
-          ruff --version
-          git ls-files '*.py' -z | xargs -0 -r ruff check --
+          uv run --locked --no-sync ruff --version
+          git ls-files '*.py' -z | xargs -0 -r uv run --locked --no-sync ruff check --
 
       - name: 'mypy'
         run: |
-          mypy --version
-          git ls-files 'src/*.py' -z | xargs -0 -r mypy --
+          uv run --locked --no-sync mypy --version
+          git ls-files 'src/*.py' -z | xargs -0 -r uv run --locked --no-sync mypy --
 
   cpp-linters:
     name: 'C++ linters'
@@ -64,12 +65,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: Install schema generator dependencies
-        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
+        run: uv sync --locked --no-dev
 
       - name: 'install prereqs'
         uses: $/.github/actions/apt-install
@@ -79,7 +81,7 @@ jobs:
       # cmake configure is enough — the lint targets don't depend on any
       # ExternalProject outputs, so there's no need to build curl/openssl/etc.
       - name: 'configure'
-        run: cmake -B build .
+        run: uv run --locked --no-sync cmake -B build .
 
       - name: 'clang-format'
         run: cmake --build build --target clang-format-check
