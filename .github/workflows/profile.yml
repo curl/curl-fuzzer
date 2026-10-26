@@ -189,9 +189,9 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.OSS_FUZZ_CACHE }}
-          key: profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-${{ matrix.target }}
+          key: profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'pyproject.toml', 'uv.lock', 'src/curl_fuzzer_tools/check_python_protobuf.py', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-${{ matrix.target }}
           restore-keys: |
-            profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-
+            profile-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.OSS_FUZZ_REV }}-${{ steps.build-environment.outputs.base_digest }}-${{ steps.build-environment.outputs.toolchain_hash }}-${{ hashFiles('.github/workflows/profile.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'ossfuzz.sh', 'pyproject.toml', 'uv.lock', 'src/curl_fuzzer_tools/check_python_protobuf.py', 'scripts/compile_target.sh', 'scripts/create_zip.sh', 'scripts/fuzz_corpus_helpers.sh', 'scripts/fuzz_targets', 'scripts/ossfuzzdeps.sh', 'scripts/trim_cache.sh') }}-
 
       # The project image supplies a fresh curl checkout. Keep dependency
       # installs in the cache, but always rebuild curl itself.

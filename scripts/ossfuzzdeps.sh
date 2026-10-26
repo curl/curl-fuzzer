@@ -9,6 +9,7 @@ set -exo pipefail
 
 SCRIPTDIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 REPO_ROOT=$(readlink -f "${SCRIPTDIR}/..")
+PYTHON_VENV=${CURL_FUZZER_PYTHON_VENV:-/opt/curl-fuzzer-python}
 
 # Work out if we need to install with sudo or not.
 if [[ $(id -u) -eq 0 ]]
@@ -37,8 +38,7 @@ $SUDO apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends \
   wget \
   cmake \
   ninja-build \
-  python3 \
-  python3-pip
+  python3
 
 # The OSS-Fuzz project image cannot use GitHub Actions to provision uv. Keep
 # this version sourced from the same Renovate-managed pin as setup-uv.
@@ -55,6 +55,8 @@ wget --https-only --secure-protocol=TLSv1_2 --quiet --output-document=- \
 uv --version
 
 # Schema projection and target-aware corpus encoding use protobuf's descriptor
-# APIs at build time. Keep this explicit here rather than allowing a CMake
-# generation command to fetch tooling from the network.
-$SUDO python3 -m pip install --break-system-packages 'protobuf>=5.29,<8'
+# APIs at build time. Keep the locked tooling environment isolated from the
+# base image and populate it before OSS-Fuzz disables networking.
+$SUDO env UV_PROJECT_ENVIRONMENT="${PYTHON_VENV}" \
+  uv sync --locked --no-dev --no-editable --project "${REPO_ROOT}"
+$SUDO "${PYTHON_VENV}/bin/check_python_protobuf"

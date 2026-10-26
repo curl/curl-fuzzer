@@ -52,22 +52,25 @@ jobs:
           path: .curl-fuzzer
 
       # The OSS-Fuzz project Dockerfile installs dependencies before CIFuzz
-      # replaces its master checkout with the triggering ref. Exercise this
-      # checkout explicitly so changes to the installer are covered in PRs.
+      # replaces its master checkout with the triggering ref. Copy this
+      # checkout into the same writable path as its Dockerfile clone so package
+      # installation and installer changes are covered in PRs.
       - name: Test OSS-Fuzz dependency installation
         if: github.repository == 'curl/curl-fuzzer'
         run: |
           docker run --rm --pull=always \
-            --mount "type=bind,source=${GITHUB_WORKSPACE}/.curl-fuzzer,target=/src/curl_fuzzer,readonly" \
+            --mount "type=bind,source=${GITHUB_WORKSPACE}/.curl-fuzzer,target=/tmp/curl_fuzzer,readonly" \
             gcr.io/oss-fuzz-base/base-builder \
-            /src/curl_fuzzer/scripts/ossfuzzdeps.sh
+            /bin/bash -c \
+            'cp -a /tmp/curl_fuzzer /src/curl_fuzzer &&
+             exec /src/curl_fuzzer/scripts/ossfuzzdeps.sh'
 
       - name: Restore build cache
         id: build-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/pyproject.toml', '.curl-fuzzer/uv.lock', '.curl-fuzzer/src/curl_fuzzer_tools/check_python_protobuf.py', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
           restore-keys: |
             ossfuzz-build-v2-${{ runner.os }}-address-x86_64-
 
@@ -89,7 +92,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
+          key: ossfuzz-build-v2-${{ runner.os }}-address-x86_64-${{ hashFiles('.curl-fuzzer/CMakeLists.txt', '.curl-fuzzer/cmake/*.cmake', '.curl-fuzzer/pyproject.toml', '.curl-fuzzer/uv.lock', '.curl-fuzzer/src/curl_fuzzer_tools/check_python_protobuf.py', '.curl-fuzzer/scripts/compile_target.sh', '.curl-fuzzer/scripts/ossfuzzdeps.sh', '.curl-fuzzer/scripts/trim_cache.sh', '.curl-fuzzer/ossfuzz.sh') }}
 
       # The tar files preserve executable permissions, which GitHub artifacts
       # do not retain on their own.
