@@ -1611,15 +1611,24 @@ add_custom_target(fuzz
 if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
    "$ENV{SANITIZER}" STREQUAL "address")
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    get_filename_component(Python3_BIN_DIR "${Python3_EXECUTABLE}" DIRECTORY)
+    set(PROTOBUF_PYTHON_CHECK
+        "${Python3_BIN_DIR}/check_python_protobuf")
+    if(NOT EXISTS "${PROTOBUF_PYTHON_CHECK}")
+        message(FATAL_ERROR
+            "The check_python_protobuf entry point is unavailable for "
+            "${Python3_EXECUTABLE}. Install the repository tooling dependencies "
+            "(for example, `uv sync`) and reconfigure.")
+    endif()
     execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c
-            "import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split('.')[:2]); sys.exit(0 if (5, 29) <= p < (7, 0) else 1)"
+        COMMAND "${PROTOBUF_PYTHON_CHECK}"
         RESULT_VARIABLE PROTOBUF_PYTHON_RESULT
-        ERROR_VARIABLE PROTOBUF_PYTHON_ERROR)
+        ERROR_VARIABLE PROTOBUF_PYTHON_ERROR
+        ERROR_STRIP_TRAILING_WHITESPACE)
     if(NOT PROTOBUF_PYTHON_RESULT EQUAL 0)
         message(FATAL_ERROR
-            "The structured fuzzer schema generator requires Python protobuf >=5.29,<7. "
-            "Install the repository tooling dependencies for ${Python3_EXECUTABLE} "
+            "The structured fuzzer schema generator dependency check failed for "
+            "${PROTOBUF_PYTHON_CHECK}. Install the repository tooling dependencies "
             "(for example, `uv sync`) and reconfigure. ${PROTOBUF_PYTHON_ERROR}")
     endif()
 

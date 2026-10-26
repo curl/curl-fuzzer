@@ -287,12 +287,47 @@ def test_every_checked_in_textproto_encodes_with_plain_protoc(tmp_path: Path) ->
         )
 
 
-def test_ossfuzz_bootstraps_schema_generator_dependency_for_pr_images() -> None:
-    script = (REPO_ROOT / "ossfuzz.sh").read_text(encoding="utf-8")
+def test_ossfuzz_isolates_schema_generator_dependencies() -> None:
+    build_script = (REPO_ROOT / "ossfuzz.sh").read_text(encoding="utf-8")
+    dependency_script = (REPO_ROOT / "scripts" / "ossfuzzdeps.sh").read_text(
+        encoding="utf-8"
+    )
+    cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
 
-    check = 'if [[ ${CIFUZZ:-} == "True" ]] && ! python3 -c'
-    install = "install --break-system-packages 'protobuf>=5.29,<7'"
+    venv = "CURL_FUZZER_PYTHON_VENV:-/opt/curl-fuzzer-python"
+    build_environment = 'UV_PROJECT_ENVIRONMENT="${PYTHON_VENV}"'
+    build_sync = (
+        'uv sync --locked --no-dev --no-editable --project "${BUILD_ROOT}"'
+    )
+    dependency_sync = (
+        'uv sync --locked --no-dev --no-editable --project "${REPO_ROOT}"'
+    )
+    helper = 'PROTOBUF_PYTHON_CHECK=${PYTHON_VENV}/bin/check_python_protobuf'
+    helper_call = '"${PROTOBUF_PYTHON_CHECK}"'
+    dependency_helper = '$SUDO "${PYTHON_VENV}/bin/check_python_protobuf"'
+    helper_build = '${HELPER:-} == "True"'
     compile_target = '"${SCRIPTDIR}"/compile_target.sh "${FUZZ_BUILD_TARGET}"'
-    assert check in script
-    assert install in script
-    assert script.index(check) < script.index(install) < script.index(compile_target)
+
+    assert venv in build_script
+    assert venv in dependency_script
+    assert build_environment in build_script
+    assert build_environment in dependency_script
+    assert build_sync in build_script
+    assert dependency_sync in dependency_script
+    assert helper in build_script
+    assert helper_call in build_script
+    assert helper_build in build_script
+    assert dependency_helper in dependency_script
+    assert "-DPython3_EXECUTABLE:FILEPATH=${CURL_FUZZER_PYTHON}" in build_script
+    assert build_script.index(build_sync) < build_script.index(compile_target)
+
+    assert '"${Python3_BIN_DIR}/check_python_protobuf"' in cmake
+    assert 'COMMAND "${PROTOBUF_PYTHON_CHECK}"' in cmake
+    assert "src/curl_fuzzer_tools/check_python_protobuf.py" not in cmake
+    assert "python3 -c" not in build_script
+    assert "python3 -m venv" not in build_script
+    assert "python3 -m venv" not in dependency_script
+    assert "src/curl_fuzzer_tools/check_python_protobuf.py" not in build_script
+    assert "src/curl_fuzzer_tools/check_python_protobuf.py" not in dependency_script
+    assert " --break-system-packages" not in build_script
+    assert " --break-system-packages" not in dependency_script

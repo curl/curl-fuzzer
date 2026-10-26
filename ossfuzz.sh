@@ -26,6 +26,25 @@ set -eu
 # Save off the current folder as the build root.
 export BUILD_ROOT=$PWD
 SCRIPTDIR=${BUILD_ROOT}/scripts
+PYTHON_VENV=${CURL_FUZZER_PYTHON_VENV:-/opt/curl-fuzzer-python}
+CURL_FUZZER_PYTHON=${PYTHON_VENV}/bin/python
+PROTOBUF_PYTHON_CHECK=${PYTHON_VENV}/bin/check_python_protobuf
+
+# CIFuzz and helper builds can replace the project image's default-branch
+# checkout with another revision. Refresh the isolated tooling environment from
+# the active checkout so new Python dependencies and entry points are present.
+if [[ ${CIFUZZ:-} == "True" || ${HELPER:-} == "True" ]]; then
+  UV_PROJECT_ENVIRONMENT="${PYTHON_VENV}" \
+    uv sync --locked --no-dev --no-editable --project "${BUILD_ROOT}"
+elif [[ ! -x "${PROTOBUF_PYTHON_CHECK}" ]]; then
+  CURL_FUZZER_PYTHON=$(command -v python3)
+  PROTOBUF_PYTHON_CHECK=$(command -v check_python_protobuf)
+fi
+
+"${PROTOBUF_PYTHON_CHECK}"
+export PATH="$(dirname "${CURL_FUZZER_PYTHON}"):${PATH}"
+EXTRA_CMAKE_ARGS="${EXTRA_CMAKE_ARGS:-} -DPython3_EXECUTABLE:FILEPATH=${CURL_FUZZER_PYTHON}"
+export EXTRA_CMAKE_ARGS
 
 # Keep Fuzz Introspector focused on the libcurl and harness code that these
 # binaries can actually reach. The setting must be exported before compiling:
@@ -54,19 +73,6 @@ if [[ "${CIFUZZ:-}" == "True" && -n "${OUT:-}" ]]; then
   echo "CIFuzz detected: redirecting BUILD_DIR to ${BUILD_DIR}"
 fi
 export BUILD_DIR=${BUILD_DIR:-${BUILD_ROOT}/build}
-
-# CIFuzz builds the curl project image from the default branch before replacing
-# /src/curl_fuzzer with the pull-request checkout. Bridge new Python build
-# dependencies until the default-branch image has caught up. Normal OSS-Fuzz
-# and local builds rely on their declared environment setup and never install
-# packages here.
-if [[ ${CIFUZZ:-} == "True" ]] && ! python3 -c \
-  'import sys; from google.protobuf import __version__ as v; p=tuple(int(x) for x in v.split(".")[:2]); sys.exit(0 if (5, 29) <= p < (7, 0) else 1)' \
-  >/dev/null 2>&1
-then
-  python3 -m pip --disable-pip-version-check --no-input --no-cache-dir \
-    install --break-system-packages 'protobuf>=5.29,<7'
-fi
 
 # Curl is cloned fresh (--depth 1) on every CIFuzz container start. Replay
 # builds likewise update that checkout before invoking this script. Invalidate

@@ -75,7 +75,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.BUILD_DIR }}
-          key: mainline-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sanitizer }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('.github/workflows/build.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'mainline.sh', 'scripts/compile_target.sh', 'scripts/trim_cache.sh') }}
+          key: mainline-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sanitizer }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('.github/workflows/build.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'mainline.sh', 'pyproject.toml', 'uv.lock', 'src/curl_fuzzer_tools/check_python_protobuf.py', 'scripts/compile_target.sh', 'scripts/trim_cache.sh') }}
 
       - name: Compile mainline
         run: ./mainline.sh
