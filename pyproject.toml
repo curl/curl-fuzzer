@@ -23,7 +23,7 @@ classifiers = [
 ]
 dependencies = [
     "jinja2>=3.1.0,<4.0.0",
-    "protobuf>=5.29,<7",
+    "protobuf>=7.36,<8",
 ]
 
 [project.urls]
