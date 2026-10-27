@@ -1358,7 +1358,6 @@ curl_add_fuzzer(curl_fuzzer_pop3      POP3)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
-curl_add_fuzzer(curl_fuzzer_ws        WS)
 
 # Deterministic profiling probes share one target rather than adding lanes
 # that compete with the existing fuzzers. The packaging inventory omits this
@@ -1594,7 +1593,6 @@ add_custom_target(fuzz
         curl_fuzzer_rtsp
         curl_fuzzer_smtp
         curl_fuzzer_tftp
-        curl_fuzzer_ws
         fuzz_bufq
         fuzz_url
         fuzz_doh

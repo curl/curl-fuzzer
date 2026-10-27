@@ -304,18 +304,6 @@ int fuzz_set_easy_options(FUZZ_DATA *fuzz)
   /* Set the Certificate Revocation List file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CRLFILE, FUZZ_CRL_FILE_PATH));
 
-  /* Loading the host trust store for every WSS mutation dominates the
-     WebSocket target even when the in-process mock immediately ends the TLS
-     handshake. Keep this exception local to that target: the other legacy
-     fuzzers should retain libcurl's verification default so their ordinary
-     mutations continue to cover certificate setup. An explicit
-     SSL_VERIFYPEER TLV still restores verification in the WebSocket target. */
-#ifdef FUZZ_PROTOCOLS_WS
-  if(!fuzz->options[CURLOPT_SSL_VERIFYPEER % 1000]) {
-    FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_SSL_VERIFYPEER, 0L));
-  }
-#endif
-
   /* Set the .netrc file path so it can be fuzzed */
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_NETRC_FILE, FUZZ_NETRC_FILE_PATH));
 
@@ -754,12 +742,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_TFTP
   allowed_protocols = "tftp";
 #endif
-#ifdef FUZZ_PROTOCOLS_WS
-  // http is required by websockets
-  allowed_protocols = "http,ws,wss";
-  FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_CONNECT_ONLY, 2L));
-#endif
-
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
 
 EXIT_LABEL:

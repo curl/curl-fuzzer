@@ -61,7 +61,6 @@ AUDITED_BASELINE_INVENTORY = frozenset(
         "curl_fuzzer_rtsp",
         "curl_fuzzer_smtp",
         "curl_fuzzer_tftp",
-        "curl_fuzzer_ws",
     }
 )
 AUDITED_CANDIDATE_INVENTORY = frozenset(
