@@ -60,7 +60,6 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_http",
     "curl_fuzzer_https",
     "curl_fuzzer_tftp",
-    "curl_fuzzer_ws",
     "curl_fuzzer_proto_http",
     "curl_fuzzer_proto_http_deep",
     "curl_fuzzer_proto_http2",
