@@ -1500,6 +1500,17 @@ void TestFastDictPolicy() {
              scenario.connection().server_frames_size() == 0,
          "fast DICT policy changed replies, kept unreachable chunks, or "
          "retained stream-only controls");
+
+  Scenario oversized;
+  oversized.set_host_path(
+      "untrusted.invalid/d:" +
+      std::string(proto_fuzzer::scenario_limits::kMaxDictHostPathBytes * 2,
+                  'x'));
+  NormalizeScenarioForTarget(&oversized, TargetProfile::kFastDict);
+  Expect(oversized.host_path().size() ==
+                 proto_fuzzer::scenario_limits::kMaxDictHostPathBytes &&
+             oversized.host_path().rfind("dict.test/d:", 0) == 0,
+         "fast DICT policy did not bound the synchronous request path");
 }
 
 void TestNonDictPoliciesClearDictScheme() {

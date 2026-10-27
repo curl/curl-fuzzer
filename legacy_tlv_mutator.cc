@@ -502,9 +502,7 @@ uint16_t RandomKnownType(Random *random) {
  * structured mutations still exit before exercising the intended protocol.
  */
 const char *DefaultUrl() {
-#if defined(FUZZ_PROTOCOLS_DICT)
-  return "dict://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_FILE)
+#if defined(FUZZ_PROTOCOLS_FILE)
   return "file:///dev/null";
 #elif defined(FUZZ_PROTOCOLS_FTP)
   return "ftp://127.0.0.1/";

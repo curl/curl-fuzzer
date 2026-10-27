@@ -403,7 +403,11 @@ void CanonicalizeDictAuthority(curl::fuzzer::proto::Scenario* scenario) {
     scenario->set_host_path("dict.test/d:word");
     return;
   }
-  scenario->set_host_path("dict.test" + host_path.substr(suffix_start));
+  std::string canonical = "dict.test" + host_path.substr(suffix_start);
+  if (canonical.size() > scenario_limits::kMaxDictHostPathBytes) {
+    canonical.resize(scenario_limits::kMaxDictHostPathBytes);
+  }
+  scenario->set_host_path(canonical);
 }
 
 /// Pin a file:// URL to a fixed local source/sink. The path component is what

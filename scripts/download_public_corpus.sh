@@ -15,7 +15,7 @@
 #
 # OSS-Fuzz prefixes binaries with the project name when the target doesn't
 # already start with "curl_" — so fuzz_url is published as curl_fuzz_url,
-# while curl_fuzzer_dict stays as-is.
+# while curl_fuzzer_file stays as-is.
 #
 # New targets take a while to land after first upload; a non-200 response
 # is logged and skipped rather than failing the whole run.
@@ -53,7 +53,7 @@ trap 'rm -rf "${TMPDIR_ROOT}"' EXIT
 
 for TARGET in ${FUZZ_TARGETS}; do
   # OSS-Fuzz adds the project prefix to any target that doesn't already
-  # start with "curl_": fuzz_url → curl_fuzz_url, curl_fuzzer_dict unchanged.
+  # start with "curl_": fuzz_url → curl_fuzz_url, curl_fuzzer_file unchanged.
   if [[ "${TARGET}" == curl_* ]]; then
     OSS_NAMES=("${TARGET}")
   else
