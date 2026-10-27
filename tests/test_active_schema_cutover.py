@@ -297,12 +297,13 @@ def test_ossfuzz_isolates_schema_generator_dependencies() -> None:
     venv = "CURL_FUZZER_PYTHON_VENV:-/opt/curl-fuzzer-python"
     build_environment = 'UV_PROJECT_ENVIRONMENT="${PYTHON_VENV}"'
     build_sync = (
-        'uv sync --locked --no-dev --no-editable --project "${BUILD_ROOT}"'
+        "/usr/local/bin/uv sync --locked --no-dev --no-editable "
+        '--project "${BUILD_ROOT}"'
     )
-    dependency_sync = (
-        'uv sync --locked --no-dev --no-editable --project "${REPO_ROOT}"'
-    )
-    helper = 'PROTOBUF_PYTHON_CHECK=${PYTHON_VENV}/bin/check_python_protobuf'
+    dependency_sync = 'uv sync --locked --no-dev --no-editable --project "${REPO_ROOT}"'
+    installer = '"https://astral.sh/uv/${UV_VERSION}/install.sh"'
+    uninstall = "rm -f /usr/local/bin/uv /usr/local/bin/uvx"
+    helper = "PROTOBUF_PYTHON_CHECK=${PYTHON_VENV}/bin/check_python_protobuf"
     helper_call = '"${PROTOBUF_PYTHON_CHECK}"'
     dependency_helper = '$SUDO "${PYTHON_VENV}/bin/check_python_protobuf"'
     helper_build = '${HELPER:-} == "True"'
@@ -312,6 +313,9 @@ def test_ossfuzz_isolates_schema_generator_dependencies() -> None:
     assert venv in dependency_script
     assert build_environment in build_script
     assert build_environment in dependency_script
+    assert installer in build_script
+    assert installer in dependency_script
+    assert uninstall in build_script
     assert build_sync in build_script
     assert dependency_sync in dependency_script
     assert helper in build_script
@@ -319,6 +323,9 @@ def test_ossfuzz_isolates_schema_generator_dependencies() -> None:
     assert helper_build in build_script
     assert dependency_helper in dependency_script
     assert "-DPython3_EXECUTABLE:FILEPATH=${CURL_FUZZER_PYTHON}" in build_script
+    assert build_script.index(uninstall) < build_script.index(installer)
+    assert build_script.index(installer) < build_script.index(build_sync)
+    assert dependency_script.index(installer) < dependency_script.index(dependency_sync)
     assert build_script.index(build_sync) < build_script.index(compile_target)
 
     assert '"${Python3_BIN_DIR}/check_python_protobuf"' in cmake
