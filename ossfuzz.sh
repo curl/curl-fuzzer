@@ -31,11 +31,32 @@ CURL_FUZZER_PYTHON=${PYTHON_VENV}/bin/python
 PROTOBUF_PYTHON_CHECK=${PYTHON_VENV}/bin/check_python_protobuf
 
 # CIFuzz and helper builds can replace the project image's default-branch
-# checkout with another revision. Refresh the isolated tooling environment from
-# the active checkout so new Python dependencies and entry points are present.
+# checkout with another revision. Reinstall uv if that checkout requires a
+# different version, then refresh its Python dependencies and entry points.
 if [[ ${CIFUZZ:-} == "True" || ${HELPER:-} == "True" ]]; then
+  UV_VERSION=$(sed -nE \
+    's/^required-version = "==([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' \
+    "${BUILD_ROOT}/pyproject.toml")
+  if [[ ! ${UV_VERSION} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Could not determine one exact uv version from pyproject.toml." >&2
+    exit 1
+  fi
+  INSTALLED_UV_VERSION=$(
+    cd /
+    /usr/local/bin/uv --version 2>/dev/null |
+      sed -nE 's/^uv ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p'
+  )
+  if [[ ${INSTALLED_UV_VERSION} != "${UV_VERSION}" ]]; then
+    rm -f /usr/local/bin/uv /usr/local/bin/uvx
+    (
+      set -o pipefail
+      wget --https-only --secure-protocol=TLSv1_2 --quiet --output-document=- \
+        "https://astral.sh/uv/${UV_VERSION}/install.sh" | \
+        env UV_UNMANAGED_INSTALL=/usr/local/bin sh
+    )
+  fi
   UV_PROJECT_ENVIRONMENT="${PYTHON_VENV}" \
-    uv sync --locked --no-dev --no-editable --project "${BUILD_ROOT}"
+    /usr/local/bin/uv sync --locked --no-dev --no-editable --project "${BUILD_ROOT}"
 elif [[ ! -x "${PROTOBUF_PYTHON_CHECK}" ]]; then
   CURL_FUZZER_PYTHON=$(command -v python3)
   PROTOBUF_PYTHON_CHECK=$(command -v check_python_protobuf)
