@@ -88,6 +88,11 @@ inline constexpr std::size_t kMaxMetadataBytes = 4096;
 /// keeps that suffix mutation-controlled, but a bounded whole-URL budget stops
 /// LPM from growing a single identifier into a large CONNECT_TO target.
 inline constexpr std::size_t kMaxIpfsHostPathBytes = 4096;
+/// DICT builds its complete command synchronously before the outer mock loop
+/// can drain curl's socket. Four KiB retains long lookup/parser inputs while
+/// keeping the worst-case RFC 2229 escaping below the peer's verified client
+/// send-buffer floor.
+inline constexpr std::size_t kMaxDictHostPathBytes = 4 * 1024;
 /// MIME payloads remain large enough to cross encoder buffer boundaries.
 inline constexpr std::size_t kMaxMimeDataBytes = 16384;
 /// Longer repeated patterns are better expressed as ordinary MIME data and

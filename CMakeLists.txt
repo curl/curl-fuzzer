@@ -1345,7 +1345,6 @@ endif()
 
 # Main fuzzer and protocol-specific fuzzers
 curl_add_fuzzer(curl_fuzzer           ALL)
-curl_add_fuzzer(curl_fuzzer_dict      DICT)
 curl_add_fuzzer(curl_fuzzer_file      FILE)
 curl_add_fuzzer(curl_fuzzer_ftp       FTP)
 curl_add_fuzzer(curl_fuzzer_gopher    GOPHER)
@@ -1580,7 +1579,6 @@ add_custom_target(fuzz
     DEPENDS
         curl_fuzzer
         curl_fuzzer_full_coverage
-        curl_fuzzer_dict
         curl_fuzzer_file
         curl_fuzzer_ftp
         curl_fuzzer_gopher

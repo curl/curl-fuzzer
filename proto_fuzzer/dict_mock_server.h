@@ -39,7 +39,13 @@ class DictMockServer : public PingpongMockServer {
   DictMockServer(const DictMockServer&) = delete;
   DictMockServer& operator=(const DictMockServer&) = delete;
 
+  void Install(CURL* easy) override;
+
  protected:
+  std::unique_ptr<MockConnection> CreateConnection() override;
+
+  void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
+
   void HandleLine(std::string_view line) override;
 
   void ResetProtocolState() override;
