@@ -38,8 +38,28 @@ python -m pip install -e .
 | `generate_schema_eligibility` | Validate annotated schema eligibility and emit authoring, runtime, profile, adapter, report, and machine-contract artifacts |
 | `compare_fuzzers`          | Compare repeatable throughput and source coverage measurements between fuzzer builds            |
 | `profile_fuzzer`           | Collect a reproducible Linux perf profile from one production libFuzzer target                  |
+| `coverage_history`         | Fetch aggregate or per-target OSS-Fuzz curl/lib history as a table, JSON, CSV, or SVG            |
 
 Run any command with `--help` for its complete interface.
+
+## OSS-Fuzz coverage history
+
+`coverage_history` reads the public daily `summary.json` artifacts and sums
+the files under `curl/lib`. Aggregate reports use
+`https://storage.googleapis.com/oss-fuzz-coverage/curl/reports/{YYYYMMDD}/linux/summary.json`;
+passing `--target` selects
+`https://storage.googleapis.com/oss-fuzz-coverage/curl/reports-by-target/{YYYYMMDD}/{TARGET}/linux/summary.json`.
+Each JSON or CSV observation retains the exact URL used.
+
+```shell
+uv run coverage_history \
+  --start 2026-10-01 --end 2026-10-28 \
+  --format svg --metric functions > curl-lib-functions.svg
+
+uv run coverage_history \
+  --start 2026-10-01 --end 2026-10-28 \
+  --target curl_fuzzer_proto_ldap --format json
+```
 
 ## Schema generation and seed encoding
 
