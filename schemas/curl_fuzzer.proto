@@ -3258,6 +3258,12 @@ message SetOption {
           profiles: TARGET_PROFILE_API
           profiles: TARGET_PROFILE_MULTI
           profiles: TARGET_PROFILE_TIMING
+          profiles: TARGET_PROFILE_RESOLVER
+          guards {
+            fact: SELECTOR_FACT_RESOLVER_USES_DOH
+            expected: true
+            profiles: TARGET_PROFILE_RESOLVER
+          }
         }
       }
     ];

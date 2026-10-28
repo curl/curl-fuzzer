@@ -1,0 +1,33 @@
+# Ask OpenSSL to obtain ECH configuration from the loopback HTTPS record.
+# The responder releases the address answers first, then holds the HTTPS
+# answer for one deterministic drive turn. TLS setup therefore observes the
+# record as pending before the same in-process HTTP/2 exchange completes.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/doh-httpsrr-ech-pending"
+doh_https_rr: true
+trace_config: "all"
+options {
+  ech: "true"
+}
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "OK"
+      end_stream: true
+    }
+  }
+}

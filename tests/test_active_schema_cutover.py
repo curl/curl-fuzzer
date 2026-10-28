@@ -126,9 +126,23 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         field = typed_options[option["name"]]
         assert field.number == tag
         assert kind_by_type[field.proto_type] == option["kind"]
-        assert field.eligibility.profiles == {
-            _profile_name(profile) for profile in option["profiles"]
-        }
+        expected_profiles = {_profile_name(profile) for profile in option["profiles"]}
+        if option["name"] == "CURLOPT_ECH":
+            # The resolver's DoH HTTPS-RR lane deliberately extends the
+            # pre-cutover baseline so TLS can observe a pending ECH record.
+            expected_profiles.add("TARGET_PROFILE_RESOLVER")
+        assert field.eligibility.profiles == expected_profiles
+
+    ech = typed_options["CURLOPT_ECH"]
+    assert [
+        (guard.fact, guard.expected, guard.profiles) for guard in ech.eligibility.guards
+    ] == [
+        (
+            "SELECTOR_FACT_RESOLVER_USES_DOH",
+            True,
+            frozenset({"TARGET_PROFILE_RESOLVER"}),
+        )
+    ]
 
     projections = {
         profile: project_profile(model, profile) for profile in sorted(model.profiles)

@@ -30,6 +30,17 @@ def test_resolver_lane_has_a_doh_httpsrr_seed() -> None:
     assert "HTTP2_CLIENT_EVENT_HEADERS" in doh
 
 
+def test_resolver_lane_has_a_pending_httpsrr_ech_seed() -> None:
+    doh = (SCENARIO_DIR / "doh_httpsrr_ech_pending.textproto").read_text()
+
+    assert "scheme: SCHEME_HTTPS" in doh
+    assert 'host_path: "tls.test/' in doh
+    assert "doh_https_rr: true" in doh
+    assert 'trace_config: "all"' in doh
+    assert 'ech: "true"' in doh
+    assert "http2_plan {" in doh
+
+
 def test_resolver_httpsrr_trace_seed_only_enables_per_input_tracing() -> None:
     control = (SCENARIO_DIR / "doh_httpsrr_alpn.textproto").read_text()
     traced = (SCENARIO_DIR / "doh_httpsrr_alpn_trace.textproto").read_text()

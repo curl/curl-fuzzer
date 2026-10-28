@@ -508,8 +508,6 @@ const char *DefaultUrl() {
   return "ftp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_GOPHER)
   return "gopher://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_HTTPS)
-  return "https://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_IMAP)
   return "imap://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_MQTT)
@@ -547,8 +545,7 @@ const char *DefaultResponse() {
   return "+OK fuzz ready\r\n";
 #elif defined(FUZZ_PROTOCOLS_RTSP)
   return "RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n";
-#elif defined(FUZZ_PROTOCOLS_HTTP) || defined(FUZZ_PROTOCOLS_HTTPS) || \
-    defined(FUZZ_PROTOCOLS_ALL)
+#elif defined(FUZZ_PROTOCOLS_HTTP) || defined(FUZZ_PROTOCOLS_ALL)
   return "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 #else
   return "fuzz\r\n";

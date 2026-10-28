@@ -71,7 +71,7 @@ void TrimMetadata(std::string* value) {
 
 /// Give the successful-TLS lane a hostname its fixed certificate can verify
 /// while retaining the fuzz-controlled path, query, and fragment. Arbitrary
-/// authorities remain covered by the compatibility and legacy HTTPS lanes;
+/// authorities remain covered by the compatibility lane;
 /// spending this lane's mutations on URL failures would keep curl's peer-cert
 /// and encrypted application-data paths dark.
 void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {

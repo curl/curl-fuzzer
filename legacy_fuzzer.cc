@@ -706,9 +706,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_HTTP
   allowed_protocols = "http";
 #endif
-#ifdef FUZZ_PROTOCOLS_HTTPS
-  allowed_protocols = "https";
-#endif
 #ifdef FUZZ_PROTOCOLS_IMAP
   allowed_protocols = "imap,imaps";
 #endif
