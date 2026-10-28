@@ -1,8 +1,8 @@
-# Cover resume handling in file_upload while the destination remains the fixed
-# /dev/null sink. Curl skips the first four source bytes, then writes the rest
-# through its bounded callback loop.
+# Cover resume handling in file_upload while the destination remains a
+# harness-owned anonymous descriptor. Curl skips the first four upload bytes,
+# then writes the rest through its bounded callback loop.
 scheme: SCHEME_FILE
-host_path: "localhost/also-not-created"
+file_source: "sink"
 upload {
   data: "skip-and-upload"
   read_sizes: 2

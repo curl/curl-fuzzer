@@ -502,9 +502,7 @@ uint16_t RandomKnownType(Random *random) {
  * structured mutations still exit before exercising the intended protocol.
  */
 const char *DefaultUrl() {
-#if defined(FUZZ_PROTOCOLS_FILE)
-  return "file:///dev/null";
-#elif defined(FUZZ_PROTOCOLS_FTP)
+#if defined(FUZZ_PROTOCOLS_FTP)
   return "ftp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_GOPHER)
   return "gopher://127.0.0.1/";
@@ -545,23 +543,11 @@ const char *DefaultResponse() {
 }
 
 /**
- * Distinguishes the file harness, where injecting a network response is dead
- * corpus weight, from targets whose transfer path needs peer input.
- */
-bool TargetNeedsResponse() {
-#if defined(FUZZ_PROTOCOLS_FILE)
-  return false;
-#else
-  return true;
-#endif
-}
-
-/**
  * Marks the minimal records that keep structured network children executable.
  * Raw mutation may still remove or corrupt them to retain framing coverage.
  */
 bool IsRequiredType(uint16_t type) {
-  return type == 1 || (TargetNeedsResponse() && type == 2);
+  return type == 1 || type == 2;
 }
 
 /**
@@ -784,7 +770,7 @@ size_t CanonicalizeRoutingValues(uint8_t *data, size_t size,
 uint16_t PickInsertType(const ParsedInput &parsed, Random *random) {
   if(!HasType(parsed, 1))
     return 1;
-  if(TargetNeedsResponse() && !HasType(parsed, 2))
+  if(!HasType(parsed, 2))
     return 2;
 
   static constexpr uint16_t kCoreTypes[] = {
@@ -1148,8 +1134,7 @@ size_t Mutate(uint8_t *data, size_t size, size_t max_size,
       parsed = Parse(data, size);
       result = InsertRecord(data, size, max_size, parsed, &random);
     }
-    else if(!HasType(parsed, 1) ||
-            (TargetNeedsResponse() && !HasType(parsed, 2)) ||
+    else if(!HasType(parsed, 1) || !HasType(parsed, 2) ||
             !parsed.count) {
       /* A structurally valid stream may still lack enough transfer scaffolding
        * to reach curl or feed its fake peer. Repair one missing prerequisite
@@ -1230,9 +1215,8 @@ size_t CrossOver(const uint8_t *data1, size_t size1,
    * waiting for a missing fake-peer response. */
   if(!AppendRequiredRecord(1, data1, first, data2, second, out,
                            max_out_size, &out_size, &seen, &random) ||
-     (TargetNeedsResponse() &&
-      !AppendRequiredRecord(2, data1, first, data2, second, out,
-                            max_out_size, &out_size, &seen, &random)))
+     !AppendRequiredRecord(2, data1, first, data2, second, out,
+                           max_out_size, &out_size, &seen, &random))
     return CanonicalizeRoutingValues(
         out, LocalByteCrossOver(data1, size1, data2, size2, out,
                                 max_out_size, &random),

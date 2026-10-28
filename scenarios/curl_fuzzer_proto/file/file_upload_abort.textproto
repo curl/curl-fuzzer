@@ -1,8 +1,7 @@
-# Drive file_upload's client-read error path after one bounded payload chunk.
-# Target policy replaces the mutation-controlled path with the /dev/null sink
-# before curl can open it.
+# Drive file_upload's client-read error path after one bounded payload chunk
+# against a harness-owned anonymous descriptor.
 scheme: SCHEME_FILE
-host_path: "localhost/not-an-output-file"
+file_source: "sink"
 upload {
   data: "partial"
   read_sizes: 7

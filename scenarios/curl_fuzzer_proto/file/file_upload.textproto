@@ -1,7 +1,7 @@
-# Exercise file.c's synchronous upload path against the target policy's fixed
-# /dev/null sink. The mutation-controlled path below is never opened.
+# Exercise file.c's synchronous upload path against a harness-owned anonymous
+# descriptor. No mutation-controlled pathname is accepted.
 scheme: SCHEME_FILE
-host_path: "localhost/should-not-exist"
+file_source: "sink"
 upload {
   data: "file upload payload\n"
   read_sizes: 3

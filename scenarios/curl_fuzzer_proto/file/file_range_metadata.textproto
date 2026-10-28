@@ -1,7 +1,7 @@
-# Exercise curl's local-file range, header, and conversion controls against the
-# fixed empty target. RANGE is parsed by file.c even though /dev/null is empty.
+# Exercise curl's local-file range, header, and conversion controls against a
+# harness-owned anonymous regular file.
 scheme: SCHEME_FILE
-host_path: "localhost/dev/null"
+file_source: "metadata"
 options { header: true }
 options { range: "0-0" }
 options { transfertext: true }

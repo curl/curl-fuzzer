@@ -1,8 +1,6 @@
-# Exercise URL parsing around a fuzz-controlled authority and suffix. The
-# encoded traversal segments are deliberately discarded when the policy pins
-# the opened path to /dev/null, so this input never reads a host file.
+# Exercise URL-policy controls against an empty harness-owned anonymous source.
+# The complete file:///proc/self/fd/N URL is constructed by the runtime.
 scheme: SCHEME_FILE
-host_path: "127.0.0.1/%2e%2e/etc/passwd?download=1#fragment"
 options { path_as_is: true }
 options { failonerror: true }
 options { disallow_username_in_url: true }

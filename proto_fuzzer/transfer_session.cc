@@ -59,8 +59,10 @@ void PrepareInputFile(const std::string& contents, std::size_t* remaining_bytes,
 
 }  // namespace
 
-/// Files are allocated only for parser-input lanes and survive easy cleanup.
+/// Anonymous files are allocated only for file-backed lanes and survive easy
+/// cleanup.
 struct TransferSession::ParserInputs {
+  BoundedAnonymousInputFile file_source{scenario_limits::kMaxFileInputBytes};
   BoundedAnonymousInputFile cookie{scenario_limits::kMaxFileInputBytes};
   BoundedAnonymousInputFile altsvc{scenario_limits::kMaxFileInputBytes};
   BoundedAnonymousInputFile hsts{scenario_limits::kMaxFileInputBytes};
@@ -109,16 +111,22 @@ bool TransferSession::ResetConfiguration() {
 
 /// Copy bounded parser inputs into lazily allocated anonymous files.
 /// @param scenario Source of parser-file bytes; not retained.
-/// @param mode Select deep HTTP or TLS parser inputs.
+/// @param mode Select the FILE source or deep HTTP/TLS parser inputs.
 /// @return False after easy initialization, when paths may be retained.
 bool TransferSession::PrepareInputFiles(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
   if (easy_) {
     return false;
   }
-  if (mode != ScenarioRunMode::kDeepHttpCoverage && mode != ScenarioRunMode::kTlsCoverage) {
+  if (mode != ScenarioRunMode::kFileCoverage && mode != ScenarioRunMode::kDeepHttpCoverage &&
+      mode != ScenarioRunMode::kTlsCoverage) {
     return true;
   }
   parser_inputs_ = std::make_unique<ParserInputs>();
+  if (mode == ScenarioRunMode::kFileCoverage) {
+    const std::size_t size = std::min(scenario.file_source().size(), scenario_limits::kMaxFileInputBytes);
+    return parser_inputs_->file_source.Write(reinterpret_cast<const std::uint8_t*>(scenario.file_source().data()),
+                                             size);
+  }
   std::size_t remaining_bytes = scenario_limits::kMaxFileInputTotalBytes;
   if (mode == ScenarioRunMode::kDeepHttpCoverage) {
     PrepareInputFile(scenario.cookie_file(), &remaining_bytes, &parser_inputs_->cookie);
@@ -129,6 +137,13 @@ bool TransferSession::PrepareInputFiles(const curl::fuzzer::proto::Scenario& sce
     PrepareInputFile(scenario.crl_file(), &remaining_bytes, &parser_inputs_->crl);
   }
   return true;
+}
+
+/// Return the pathname of the prepared FILE source/sink. The path names only
+/// a descriptor owned by this session and is unavailable in every other lane.
+/// @return Stable `/proc/self/fd/N` path, or nullptr without a ready source.
+const char* TransferSession::FileSourcePath() const {
+  return parser_inputs_ ? parser_inputs_->file_source.path() : nullptr;
 }
 
 /// Apply prepared parser paths after baseline and peer installation.

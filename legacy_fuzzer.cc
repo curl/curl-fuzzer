@@ -694,9 +694,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
      prevent every transfer from starting. */
   allowed_protocols = legacy_protocol_allowlist::ForCurrentCurl().c_str();
 #endif
-#ifdef FUZZ_PROTOCOLS_FILE
-  allowed_protocols = "file";
-#endif
 #ifdef FUZZ_PROTOCOLS_FTP
   allowed_protocols = "ftp,ftps";
 #endif

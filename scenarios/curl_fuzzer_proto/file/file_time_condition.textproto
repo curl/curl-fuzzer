@@ -1,7 +1,7 @@
-# Exercise the file protocol's time-condition and resume selectors. Both are
-# evaluated locally after the policy replaces the path with /dev/null.
+# Exercise the file protocol's time-condition and size selectors against a
+# harness-owned anonymous regular file.
 scheme: SCHEME_FILE
-host_path: "localhost/dev/null"
+file_source: "time"
 options { timecondition: 1 }
 options { timevalue_large: 0 }
 options { resume_from_large: 0 }

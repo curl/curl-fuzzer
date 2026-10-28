@@ -1,7 +1,7 @@
-# FILE has no network peer. The path is pinned to /dev/null by the target
-# policy; the authority and query/fragment bytes remain fuzz-controlled URL
-# input. NOBODY reaches curl's file metadata path without reading the target.
+# FILE has no network peer. The runtime exposes these bytes through a
+# harness-owned anonymous descriptor. NOBODY reaches curl's metadata path
+# without consuming the source.
 scheme: SCHEME_FILE
-host_path: "localhost/dev/null"
+file_source: "metadata"
 options { nobody: true }
 options { filetime: true }
