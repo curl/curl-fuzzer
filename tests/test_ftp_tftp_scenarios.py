@@ -302,6 +302,35 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert oauth.count('on_readable: "+') == 2
     assert "NO Authentication failed" in oauth
 
+    oauth_port80 = (
+        imap_root / "imap_auth_oauthbearer_port80_fetch.textproto"
+    ).read_text(encoding="utf-8")
+    assert 'host_path: "imap.test:80/INBOX"' in oauth_port80
+    assert 'login_options: "AUTH=OAUTHBEARER"' in oauth_port80
+    assert 'xoauth2_bearer: "fuzz-oauth-token"' in oauth_port80
+    assert "AUTH=OAUTHBEARER SASL-IR" in oauth_port80
+    assert "sasl_ir: true" in oauth_port80
+    assert 'customrequest: "FETCH 1:* (FLAGS)"' in oauth_port80
+    assert "OK FETCH completed" in oauth_port80
+
+    max_literal = (imap_root / "imap_store_max_literal.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'customrequest: "STORE 1 +FLAGS (\\\\Seen)"' in max_literal
+    assert (
+        'on_readable: "* 1 FETCH (BODY[] {9223372036854775807}\\r\\n"'
+        in max_literal
+    )
+    assert "OK STORE completed" not in max_literal
+
+    sendleft = (imap_root / "imap_select_sendleft.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "backpressure { recv_buf_bytes: 2048 }" in sendleft
+    assert 'customrequest: "NOOP"' in sendleft
+    assert sendleft.count("A" * 80) >= 70
+    assert "NO mailbox unavailable" in sendleft
+
     xoauth2 = (imap_root / "imap_auth_xoauth2_success.textproto").read_text(
         encoding="utf-8"
     )

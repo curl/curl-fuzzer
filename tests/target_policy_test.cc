@@ -1363,6 +1363,27 @@ void TestFastImapPolicy() {
              scenario.connection().backpressure().drain_limit() == 0 &&
              scenario.connection().server_frames_size() == 0,
          "fast IMAP policy changed replies or mail pressure controls");
+
+  Scenario default_port;
+  default_port.set_scheme(SCHEME_IMAP);
+  default_port.set_host_path("untrusted.invalid:80/INBOX");
+  NormalizeScenarioForTarget(&default_port, TargetProfile::kFastImap);
+  Expect(default_port.host_path() == "imap.test:80/INBOX",
+         "fast IMAP policy removed the explicit OAuth default port");
+
+  Scenario nondefault_port;
+  nondefault_port.set_scheme(SCHEME_IMAP);
+  nondefault_port.set_host_path("untrusted.invalid:81/INBOX");
+  NormalizeScenarioForTarget(&nondefault_port, TargetProfile::kFastImap);
+  Expect(nondefault_port.host_path() == "imap.test/INBOX",
+         "fast IMAP policy retained an arbitrary port");
+
+  Scenario implicit_tls_port;
+  implicit_tls_port.set_scheme(SCHEME_IMAPS);
+  implicit_tls_port.set_host_path("untrusted.invalid:80/INBOX");
+  NormalizeScenarioForTarget(&implicit_tls_port, TargetProfile::kFastImap);
+  Expect(implicit_tls_port.host_path() == "tls.test/INBOX",
+         "fast IMAPS policy retained a plaintext-only default port");
 }
 
 void TestFastPop3Policy() {

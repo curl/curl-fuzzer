@@ -1,0 +1,17 @@
+# Keep plaintext IMAP's explicit default port through normalization so
+# OAUTHBEARER takes its port-omitting message branch, then complete a custom
+# FETCH listing without producing a response body.
+scheme: SCHEME_IMAP
+host_path: "imap.test:80/INBOX"
+options { username: "fuzz" }
+options { login_options: "AUTH=OAUTHBEARER" }
+options { xoauth2_bearer: "fuzz-oauth-token" }
+options { sasl_ir: true }
+options { customrequest: "FETCH 1:* (FLAGS)" }
+connection {
+  initial_response: "* OK imap.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1 AUTH=OAUTHBEARER SASL-IR\r\nOK CAPABILITY completed\r\n"
+  on_readable: "OK AUTHENTICATE completed\r\n"
+  on_readable: "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n"
+  on_readable: "* 1 FETCH (FLAGS (\\Seen))\r\nOK FETCH completed\r\n"
+}

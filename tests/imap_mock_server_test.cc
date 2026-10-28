@@ -9,6 +9,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -40,6 +41,7 @@ size_t CollectResponse(char *contents, size_t size, size_t nmemb,
 
 struct ImapRunResult {
   CURLcode code = CURLE_FAILED_INIT;
+  curl_off_t content_length = -1;
   std::string body;
   std::string transcript;
   std::string uploaded;
@@ -70,6 +72,8 @@ ImapRunResult RunScenario(const Scenario &scenario, const char *url) {
     proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
     result.code = server.DriveScenario(easy.get(), scenario);
   }
+  (void)curl_easy_getinfo(easy.get(), CURLINFO_CONTENT_LENGTH_DOWNLOAD_T,
+                          &result.content_length);
   result.transcript = server.control_transcript();
   result.uploaded = server.uploaded_data();
   result.active_pollset_probes = server.active_pollset_probe_count();
@@ -95,6 +99,20 @@ void AddStringOption(Scenario *scenario,
   auto *option = scenario->add_options();
   option->set_option_id(option_id);
   option->set_string_value(std::string(value));
+}
+
+Scenario LoadImapSeed(std::string_view filename) {
+  const std::string path =
+      std::string(PROTO_FUZZER_SCENARIO_DIR) + "/imap/" + std::string(filename);
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read an IMAP coverage seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastImapTraits>(text, &scenario),
+         "could not parse an IMAP coverage seed");
+  return scenario;
 }
 
 void ExpectTranscriptOrder(
@@ -262,6 +280,74 @@ void TestLoginCustomFetchListingSeed() {
       "IMAP LOGIN custom FETCH transcript was incomplete or out of order");
 }
 
+void TestOauthBearerDefaultPortCustomFetchSeed() {
+  const Scenario scenario =
+      LoadImapSeed("imap_auth_oauthbearer_port80_fetch.textproto");
+  const std::string url = "imap://" + scenario.host_path();
+  const ImapRunResult result = RunScenario(scenario, url.c_str());
+
+  constexpr std::string_view kPayloadWithoutPort =
+      "bixhPWZ1enosAWhvc3Q9aW1hcC50ZXN0AWF1dGg9QmVhcmVyIGZ1enot"
+      "b2F1dGgtdG9rZW4BAQ==";
+  constexpr std::string_view kPayloadWithPort =
+      "bixhPWZ1enosAWhvc3Q9aW1hcC50ZXN0AXBvcnQ9ODABYXV0aD1CZWFy"
+      "IGZ1enotb2F1dGgtdG9rZW4BAQ==";
+  Expect(result.code == CURLE_OK,
+         "IMAP port-80 OAUTHBEARER FETCH seed did not complete");
+  Expect(result.body.empty(),
+         "IMAP custom FETCH listing unexpectedly produced a body");
+  Expect(result.transcript.find(kPayloadWithoutPort) != std::string::npos &&
+             result.transcript.find(kPayloadWithPort) == std::string::npos,
+         "IMAP OAUTHBEARER payload encoded the explicit default port");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "AUTHENTICATE OAUTHBEARER ", kPayloadWithoutPort,
+       "\r\n", "SELECT INBOX\r\n", "FETCH 1:* (FLAGS)\r\n", "LOGOUT\r\n"},
+      "IMAP port-80 OAUTHBEARER transcript was incomplete or out of order");
+  Expect(result.transcript.find("UID FETCH 1:* (FLAGS)\r\n") ==
+             std::string::npos,
+         "IMAP custom FETCH unexpectedly gained a UID prefix");
+}
+
+void TestStoreMaximumLiteralSeed() {
+  const Scenario scenario = LoadImapSeed("imap_store_max_literal.textproto");
+  const std::string expected_fragment =
+      "* 1 FETCH (BODY[] {9223372036854775807}\r\n";
+  Expect(scenario.connection().on_readable_size() == 4 &&
+             scenario.connection().on_readable(3) == expected_fragment,
+         "IMAP maximum-literal seed changed its incomplete peer fragment");
+
+  const std::string url = "imap://" + scenario.host_path();
+  const ImapRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.content_length == std::numeric_limits<curl_off_t>::max(),
+         "IMAP maximum literal did not saturate the transfer size");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "LOGIN fuzz secret\r\n", "SELECT INBOX\r\n",
+       "STORE 1 +FLAGS (\\Seen)\r\n"},
+      "IMAP maximum-literal STORE transcript was incomplete or out of order");
+}
+
+void TestLongMailboxSelectWithReceiveBufferPressure() {
+  const Scenario scenario = LoadImapSeed("imap_select_sendleft.textproto");
+  const std::string mailbox(6144, 'A');
+  Expect(scenario.host_path() == "imap.test/" + mailbox &&
+             scenario.connection().backpressure().recv_buf_bytes() == 2048,
+         "IMAP long-mailbox seed lost its deterministic send pressure");
+
+  const std::string url = "imap://" + scenario.host_path();
+  const ImapRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_LOGIN_DENIED,
+         "IMAP rejected long mailbox did not report SELECT denial");
+  Expect(result.body.empty(),
+         "IMAP long-mailbox SELECT denial unexpectedly produced a body");
+  ExpectTranscriptOrder(
+      result.transcript,
+      {"CAPABILITY\r\n", "LOGIN fuzz secret\r\n",
+       std::string("SELECT ") + mailbox + "\r\n"},
+      "IMAP long SELECT command was incomplete or out of order");
+}
+
 void TestOauthBearerErrorUsesMultipleContinuationRounds() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_IMAP);
@@ -387,6 +473,9 @@ int main() {
   TestLoginDenialIsTerminal();
   TestPlainAuthenticationPreservesTagAcrossContinuation();
   TestLoginCustomFetchListingSeed();
+  TestOauthBearerDefaultPortCustomFetchSeed();
+  TestStoreMaximumLiteralSeed();
+  TestLongMailboxSelectWithReceiveBufferPressure();
   TestOauthBearerErrorUsesMultipleContinuationRounds();
   TestXoauth2SeedCompletesAuthenticationAndFetch();
   TestDigestMd5SeedCompletesAuthenticationAndSearch();
