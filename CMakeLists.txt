@@ -1346,7 +1346,6 @@ endif()
 # Main fuzzer and protocol-specific fuzzers
 curl_add_fuzzer(curl_fuzzer           ALL)
 curl_add_fuzzer(curl_fuzzer_ftp       FTP)
-curl_add_fuzzer(curl_fuzzer_http      HTTP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
@@ -1574,7 +1573,6 @@ add_custom_target(fuzz
         curl_fuzzer
         curl_fuzzer_full_coverage
         curl_fuzzer_ftp
-        curl_fuzzer_http
         curl_fuzzer_mqtt
         curl_fuzzer_rtsp
         curl_fuzzer_smtp
@@ -1967,8 +1965,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         ${GEN_PB_CC}
     )
     target_compile_features(curl_fuzzer_proto_runtime PRIVATE cxx_std_17)
-    target_compile_options(curl_fuzzer_proto_runtime PRIVATE
-        ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+    target_compile_options(curl_fuzzer_proto_runtime PRIVATE ${COMMON_FLAGS})
     target_include_directories(curl_fuzzer_proto_runtime PRIVATE
         ${CURL_INCLUDE_DIRS}
         ${CMAKE_BINARY_DIR}
@@ -2002,8 +1999,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         proto_fuzzer/bounded_anonymous_input_file.cc
         proto_fuzzer/scenario_runner.cc)
     target_compile_features(curl_fuzzer_proto_runner PRIVATE cxx_std_17)
-    target_compile_options(curl_fuzzer_proto_runner PRIVATE
-        ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+    target_compile_options(curl_fuzzer_proto_runner PRIVATE ${COMMON_FLAGS})
     target_include_directories(curl_fuzzer_proto_runner PRIVATE
         ${CURL_INCLUDE_DIRS}
         ${CMAKE_BINARY_DIR}
@@ -2030,7 +2026,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         target_compile_features(curl_fuzzer_proto_http3_runner PRIVATE
             cxx_std_17)
         target_compile_options(curl_fuzzer_proto_http3_runner PRIVATE
-            ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+            ${COMMON_FLAGS})
         target_compile_definitions(curl_fuzzer_proto_http3_runner PRIVATE
             PROTO_FUZZER_HAS_TLS_MOCK_SERVER
             PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
@@ -2104,8 +2100,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             $<TARGET_OBJECTS:curl_fuzzer_profile_${PROTO_PROFILE}>
         )
         target_compile_features(${_name} PRIVATE cxx_std_17)
-        target_compile_options(${_name} PRIVATE
-            ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_HTTP)
+        target_compile_options(${_name} PRIVATE ${COMMON_FLAGS})
         target_include_directories(${_name} PRIVATE
             ${_curl_include_dirs}
             ${_profile_root}
@@ -2289,13 +2284,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         ${HTTP_DEEP_SCENARIO_TEXTPROTOS})
     set(RAW_HTTP2_SCENARIO_TEXTPROTOS
         ${SCENARIO_SRC_DIR}/http/http2_control_frames.textproto
+        ${SCENARIO_SRC_DIR}/http/http2_connect_flush.textproto
         ${SCENARIO_SRC_DIR}/http/http2_invalid_preface.textproto
         ${SCENARIO_SRC_DIR}/http/http2_prior_knowledge.textproto
         ${SCENARIO_SRC_DIR}/http/http2_truncated_headers_frame.textproto)
     list(LENGTH RAW_HTTP2_SCENARIO_TEXTPROTOS RAW_HTTP2_SCENARIO_COUNT)
-    if(NOT RAW_HTTP2_SCENARIO_COUNT EQUAL 4)
+    if(NOT RAW_HTTP2_SCENARIO_COUNT EQUAL 5)
         message(FATAL_ERROR
-            "The raw HTTP/2 corpus must contain exactly 4 seed declarations")
+            "The raw HTTP/2 corpus must contain exactly 5 seed declarations")
     endif()
     foreach(raw_http2_textproto ${RAW_HTTP2_SCENARIO_TEXTPROTOS})
         if(NOT EXISTS "${raw_http2_textproto}")

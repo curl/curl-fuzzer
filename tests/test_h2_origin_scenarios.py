@@ -59,6 +59,11 @@ def test_https_h2_seeds_preserve_protocol_valid_correlations() -> None:
             "nine empty",
             "raw_bytes:",
         ),
+        "https_h2_response_header_size_limit.textproto": (
+            "300 KiB aggregate",
+            "wire_frame",
+            "flags: 5",
+        ),
     }
 
     assert {path.name for path in SCENARIO_ROOT.glob("*.textproto")} == set(

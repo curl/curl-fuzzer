@@ -413,7 +413,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
   }
 
   if (mode == ScenarioRunMode::kHttp2Coverage) {
-    return std::make_unique<H2CleartextMockServer>();
+    return std::make_unique<H2CleartextMockServer>(scenario.http2_connect_flush_probe());
   }
 
   if (mode == ScenarioRunMode::kTlsHttp2Coverage) {

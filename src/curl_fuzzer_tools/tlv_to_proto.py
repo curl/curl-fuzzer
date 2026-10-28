@@ -304,7 +304,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "corpus_dir",
         type=pathlib.Path,
-        help="Directory of TLV corpus inputs (e.g. corpora/curl_fuzzer_http).",
+        help="Directory of TLV corpus inputs (e.g. corpora/curl_fuzzer_ftp).",
     )
     parser.add_argument(
         "output_dir",

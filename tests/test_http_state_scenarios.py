@@ -89,6 +89,16 @@ def test_stateful_seeds_complete_bounded_follow_on_exchanges() -> None:
     assert "userpwd:" in auth
 
 
+def test_digest_response_limit_seed_crosses_only_the_composite_bound() -> None:
+    """Keep both quoted inputs valid while their Authorization is too large."""
+    scenario = (HTTP_SCENARIOS / "http_digest_response_limit.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert r'qop=\"auth\"' in scenario
+    assert "A" * 2000 + ':p"' in scenario
+    assert "/" + "B" * 2000 + '"' in scenario
+
+
 def test_bearer_seed_requires_a_challenged_retry() -> None:
     """Keep Bearer parsing behind a real 401 exchange."""
     scenario = (HTTP_SCENARIOS / "http_auth_bearer.textproto").read_text(

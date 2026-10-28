@@ -38,7 +38,7 @@ To use an existing curl checkout:
 To build one CMake target instead of the aggregate `fuzz` target:
 
 ```shell
-./mainline.sh -t curl_fuzzer_http
+./mainline.sh -t curl_fuzzer_proto_http
 ```
 
 MemorySanitizer builds use a separate directory and are compile/link checks:
@@ -53,19 +53,14 @@ Standalone binaries accept files and directories. A file produces a detailed
 per-input trace; a directory is walked recursively:
 
 ```shell
-FUZZ_VERBOSE=1 ./build/curl_fuzzer_http \
-  corpora/curl_fuzzer_http/test_url_http
-
-./build/curl_fuzzer_http corpora/curl_fuzzer_http/
-```
-
-Set `FUZZ_VERBOSE` to any value to enable libcurl's verbose output. Structured
-targets use generated binary seeds under `build/generated_corpora/`:
-
-```shell
+FUZZ_VERBOSE=1 ./build/curl_fuzzer_proto_http \
+  build/generated_corpora/curl_fuzzer_proto_http/basic_get.scenario
 ./build/curl_fuzzer_proto_http \
   build/generated_corpora/curl_fuzzer_proto_http/
 ```
+
+Set `FUZZ_VERBOSE` to any value to enable libcurl's verbose output. Structured
+targets use generated binary seeds under `build/generated_corpora/`.
 
 ## Run mutation fuzzing
 
@@ -79,11 +74,13 @@ python3 .oss-fuzz/infra/helper.py build_image curl
 python3 .oss-fuzz/infra/helper.py build_fuzzers \
   --sanitizer address --engine libfuzzer curl "$PWD"
 
-mkdir -p build/local-corpus/curl_fuzzer_http
-cp corpora/curl_fuzzer_http/* build/local-corpus/curl_fuzzer_http/
+mkdir -p build/local-corpus/curl_fuzzer_proto_http
+python3 -m zipfile -e \
+  .oss-fuzz/build/out/curl/curl_fuzzer_proto_http_seed_corpus.zip \
+  build/local-corpus/curl_fuzzer_proto_http
 python3 .oss-fuzz/infra/helper.py run_fuzzer \
-  --corpus-dir "$PWD/build/local-corpus/curl_fuzzer_http" \
-  curl curl_fuzzer_http
+  --corpus-dir "$PWD/build/local-corpus/curl_fuzzer_proto_http" \
+  curl curl_fuzzer_proto_http
 ```
 
 Pass libFuzzer arguments after the target name when needed. The helper keeps

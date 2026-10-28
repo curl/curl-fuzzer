@@ -13,7 +13,16 @@
 
 namespace proto_fuzzer {
 
-H2CleartextMockServer::H2CleartextMockServer() = default;
+namespace {
+
+constexpr int kConnectFlushBufferBytes = 2048;
+
+}  // namespace
+
+/// Construct a prior-knowledge peer, optionally with a full client send path.
+/// @param connect_flush_probe Whether to saturate curl's endpoint before fd
+/// ownership is transferred.
+H2CleartextMockServer::H2CleartextMockServer(bool connect_flush_probe) : connect_flush_probe_(connect_flush_probe) {}
 
 H2CleartextMockServer::~H2CleartextMockServer() {
   // The multi borrows runtime_ for push callbacks, and connections borrow its
@@ -31,9 +40,22 @@ void H2CleartextMockServer::Install(CURL* easy) {
 }
 
 /// Attach the reusable H2 client-frame tracker to the plaintext connection.
-/// @return Newly allocated plaintext connection with the tracker attached.
+/// @return Newly allocated plaintext connection, with the frame tracker
+/// attached unless the connection is reserved for the transport-only probe.
 std::unique_ptr<MockConnection> H2CleartextMockServer::CreateConnection() {
   std::unique_ptr<MockConnection> connection = MockServer::CreateConnection();
+  if (connect_flush_probe_) {
+    if (connection == nullptr || !connection->ok()) {
+      return nullptr;
+    }
+    connection->ApplyBackpressure(kConnectFlushBufferBytes, 0);
+    if (!connection->FillClientSendBuffer()) {
+      return nullptr;
+    }
+    // The filler is transport pressure rather than HTTP/2 input. Do not feed
+    // it to the frame observer when the outer loop drains the server endpoint.
+    return connection;
+  }
   runtime_.AttachConnection(connection.get());
   return connection;
 }
@@ -44,7 +66,16 @@ std::unique_ptr<MockConnection> H2CleartextMockServer::CreateConnection() {
 /// @param scenario Source of bounded HTTP/2 response work.
 void H2CleartextMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
   runtime_.PrepareMulti(multi, scenario.accept_h2_push());
-  if (!scenario.has_http2_plan()) {
+  if (connect_flush_probe_) {
+    // CONNECT_ONLY has no request stream, so curl explicitly flushes its
+    // initial HTTP/2 SETTINGS during connect. The prefilled socket keeps those
+    // bytes pending until request teardown asks the connection filter to flush
+    // again, now with no stream context.
+    (void)curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 1L);
+    SetKeepConnectionsOpen(true);
+    MockServer::RunLoop(multi, easy, scenario);
+    SetKeepConnectionsOpen(false);
+  } else if (!scenario.has_http2_plan()) {
     MockServer::RunLoop(multi, easy, scenario);
   } else {
     // TLS's H2 carrier already keeps its write side open. Plaintext must do so

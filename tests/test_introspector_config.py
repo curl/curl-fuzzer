@@ -40,7 +40,7 @@ def test_introspector_excludes_only_declared_non_fuzz_surfaces() -> None:
         "/src/curl/lib/http.c",
         "/src/curl/lib/vtls/openssl.c",
         "/src/curl_fuzzer/legacy_fuzzer.cc",
-        "/src/curl_fuzzer/fuzzer_entrypoints/curl_fuzzer_http.cc",
+        "/src/curl_fuzzer/fuzzer_entrypoints/curl_fuzzer_ftp.cc",
         "/src/curl_fuzzer/proto_fuzzer/scenario_runner.cc",
         # Exact local-only file rules must not swallow similarly named code.
         "/src/curl_fuzzer/standalone_fuzz_target_runner.cc.backup",

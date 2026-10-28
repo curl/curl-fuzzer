@@ -1856,6 +1856,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_gopher_probe_mode();
   }
 
+  if (profile != TargetProfile::kFastHttp2) {
+    scenario->clear_http2_connect_flush_probe();
+  }
+
   if (profile != TargetProfile::kDeepHttp) {
     scenario->clear_http_transport_mode();
     scenario->clear_proxy_socket_option_mode();
@@ -1980,6 +1984,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     RemoveTelnetOnlyShape(scenario);
     RemoveIgnoredH2ProxyShape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
+    if (scenario->http2_connect_flush_probe()) {
+      // CONNECT_ONLY supplies no HTTP response plan. Clear competing peer
+      // bytes so mutations stay focused on the connection-filter lifecycle.
+      scenario->clear_http2_plan();
+      scenario->clear_connection();
+      scenario->clear_subsequent_connections();
+    }
     if (scenario->has_http2_plan()) {
       auto* connection = scenario->mutable_connection();
       connection->clear_initial_response();

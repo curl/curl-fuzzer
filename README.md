@@ -47,7 +47,7 @@ Use `-c` to build a local curl checkout, or `-t` to build one target:
 
 ```shell
 ./mainline.sh -c /path/to/curl
-./mainline.sh -t curl_fuzzer_http
+./mainline.sh -t curl_fuzzer_proto_http
 ```
 
 The default AddressSanitizer build creates standalone replay binaries under
@@ -55,9 +55,10 @@ The default AddressSanitizer build creates standalone replay binaries under
 directories:
 
 ```shell
-FUZZ_VERBOSE=1 ./build/curl_fuzzer_http \
-  corpora/curl_fuzzer_http/test_url_http
-./build/curl_fuzzer_http corpora/curl_fuzzer_http/
+FUZZ_VERBOSE=1 ./build/curl_fuzzer_proto_http \
+  build/generated_corpora/curl_fuzzer_proto_http/basic_get.scenario
+./build/curl_fuzzer_proto_http \
+  build/generated_corpora/curl_fuzzer_proto_http/
 ```
 
 These standalone binaries replay inputs; they do not perform mutation fuzzing.
@@ -71,7 +72,7 @@ The Python package requires Python 3.10 or newer. With
 
 ```shell
 uv sync
-uv run read_corpus corpora/curl_fuzzer_http/test_url_http
+uv run read_corpus corpora/curl_fuzzer_ftp/test_url_ftp
 ```
 
 Or use a conventional virtual environment:
@@ -80,7 +81,7 @@ Or use a conventional virtual environment:
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-read_corpus corpora/curl_fuzzer_http/test_url_http
+read_corpus corpora/curl_fuzzer_ftp/test_url_ftp
 ```
 
 Useful commands include:
