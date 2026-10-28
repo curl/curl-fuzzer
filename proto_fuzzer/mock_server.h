@@ -42,6 +42,8 @@ class MockConnection {
 
   bool EnsureClientSendBufferSize(std::size_t minimum);
 
+  bool FillClientSendBuffer();
+
   virtual bool WriteAll(const unsigned char* data, std::size_t size);
   virtual std::size_t DrainIncoming();
   void SetIncomingDataObserver(IncomingDataObserver* observer);

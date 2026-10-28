@@ -21,6 +21,7 @@
 #include "proto_fuzzer/api_lifecycle.h"
 #include "proto_fuzzer/dict_mock_server.h"
 #include "proto_fuzzer/ftp_mock_server.h"
+#include "proto_fuzzer/gopher_mock_server.h"
 #include "proto_fuzzer/h2_cleartext_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/http_transport_mock_server.h"
@@ -480,7 +481,8 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 #endif
       return std::make_unique<MockServer>();
     case curl::fuzzer::proto::SCHEME_GOPHER:
-      return mode == ScenarioRunMode::kGopherCoverage ? std::make_unique<MockServer>() : nullptr;
+      return mode == ScenarioRunMode::kGopherCoverage ? std::make_unique<GopherMockServer>(scenario.gopher_probe_mode())
+                                                      : nullptr;
     case curl::fuzzer::proto::SCHEME_GOPHERS:
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
       if (mode == ScenarioRunMode::kGopherCoverage) {
@@ -871,6 +873,11 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
+    if (mode == ScenarioRunMode::kGopherCoverage &&
+        scenario.gopher_probe_mode() == curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT) {
+      (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 0L);
+      (void)curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_ALLOW_BEAST));
+    }
     if (ScenarioRequestsStartTls(scenario, mode)) {
       (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
     }

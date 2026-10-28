@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -133,6 +134,35 @@ bool MockConnection::EnsureClientSendBufferSize(std::size_t minimum) {
     return false;
   }
   return client_send_buffer_size() >= minimum;
+}
+
+/// Saturate curl's endpoint before ownership is transferred. The temporary
+/// non-blocking flag makes the stopping condition explicit and is restored so
+/// curl receives the same descriptor state as every other stream peer.
+/// @return true only when the endpoint reached EAGAIN/EWOULDBLOCK.
+bool MockConnection::FillClientSendBuffer() {
+  if (client_fd_ < 0) {
+    return false;
+  }
+  const int flags = fcntl(client_fd_, F_GETFL, 0);
+  if (flags < 0 || fcntl(client_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
+    return false;
+  }
+
+  static constexpr unsigned char kPadding[4096] = {};
+  bool full = false;
+  while (true) {
+    const ssize_t written = ::send(client_fd_, kPadding, sizeof(kPadding), MSG_NOSIGNAL);
+    if (written > 0) {
+      continue;
+    }
+    full = written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
+    break;
+  }
+  if (fcntl(client_fd_, F_SETFL, flags) < 0) {
+    return false;
+  }
+  return full;
 }
 
 /// Hand the client-side fd to libcurl. After this call the caller owns the fd and the MockConnection will not close it

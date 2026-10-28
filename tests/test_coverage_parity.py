@@ -49,7 +49,6 @@ AUDITED_BASELINE_INVENTORY = frozenset(
         "curl_fuzzer",
         "curl_fuzzer_ftp",
         "curl_fuzzer_full_coverage",
-        "curl_fuzzer_gopher",
         "curl_fuzzer_http",
         "curl_fuzzer_mqtt",
         "curl_fuzzer_rtsp",

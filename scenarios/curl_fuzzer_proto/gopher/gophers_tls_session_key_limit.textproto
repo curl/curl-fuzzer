@@ -1,0 +1,10 @@
+# The closed probe replaces this authority with a fixed 10,163-byte hostname
+# and fixes the TLS options after ordinary scenario options are applied.
+scheme: SCHEME_GOPHERS
+host_path: "tls.test/1/session-key-limit"
+gopher_probe_mode: GOPHER_PROBE_TLS_SESSION_KEY_LIMIT
+options { ssl_options: 1 }
+options { ssl_verifypeer: false }
+connection {
+  initial_response: "0Unreachable\t/\ttls.test\t70\r\n.\r\n"
+}

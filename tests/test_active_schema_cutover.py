@@ -156,12 +156,14 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
     for slug, body in influence["profiles"].items():
         projection = projections[_profile_name(slug)]
         expected_fields = set(body["input_fields"])
-        # POP3's semantic STLS selector, mail recv-buffer pressure, and FILE's
+        # Semantic protocol probes, mail recv-buffer pressure, and FILE's
         # harness-owned anonymous source are deliberate post-cutover changes.
         # Keep the historical fixture frozen and spell out only these reviewed
         # deltas here.
         if slug in {"compatibility", "fast_pop3"}:
             expected_fields.add("pop3_starttls_filter_allocation_failure")
+        if slug in {"compatibility", "fast_gopher"}:
+            expected_fields.add("gopher_probe_mode")
         if slug in {"fast_imap", "fast_pop3"}:
             expected_fields.update(
                 {
@@ -245,6 +247,12 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     drain_limit = model.fields["curl.fuzzer.proto.BackpressureConfig.drain_limit"]
     assert "TARGET_PROFILE_FAST_IMAP" not in drain_limit.eligibility.profiles
     assert "TARGET_PROFILE_FAST_POP3" not in drain_limit.eligibility.profiles
+
+    gopher_probe = model.fields["curl.fuzzer.proto.Scenario.gopher_probe_mode"]
+    assert gopher_probe.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_GOPHER",
+    }
 
     settings_ack = model.fields["curl.fuzzer.proto.Http2Settings.ack"]
     assert settings_ack.eligibility.profiles == {"TARGET_PROFILE_COMPATIBILITY"}

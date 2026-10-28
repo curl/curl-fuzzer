@@ -504,8 +504,6 @@ uint16_t RandomKnownType(Random *random) {
 const char *DefaultUrl() {
 #if defined(FUZZ_PROTOCOLS_FTP)
   return "ftp://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_GOPHER)
-  return "gopher://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_MQTT)
   return "mqtt://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_RTMP)

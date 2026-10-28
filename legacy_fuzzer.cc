@@ -697,9 +697,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_FTP
   allowed_protocols = "ftp,ftps";
 #endif
-#ifdef FUZZ_PROTOCOLS_GOPHER
-  allowed_protocols = "gopher,gophers";
-#endif
 #ifdef FUZZ_PROTOCOLS_HTTP
   allowed_protocols = "http";
 #endif

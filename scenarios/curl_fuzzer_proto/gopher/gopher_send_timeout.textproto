@@ -1,0 +1,8 @@
+# Saturate the harness-owned client socket before handoff, then give curl a
+# fixed five-millisecond deadline for its synchronous selector write.
+scheme: SCHEME_GOPHER
+host_path: "tls.test/1/selector-timeout"
+gopher_probe_mode: GOPHER_PROBE_SEND_TIMEOUT
+connection {
+  initial_response: "0Unreachable\t/\ttls.test\t70\r\n.\r\n"
+}

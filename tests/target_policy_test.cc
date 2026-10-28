@@ -22,6 +22,8 @@ using curl::fuzzer::proto::SCHEME_DICT;
 using curl::fuzzer::proto::SCHEME_FILE;
 using curl::fuzzer::proto::SCHEME_FTP;
 using curl::fuzzer::proto::SCHEME_FTPS;
+using curl::fuzzer::proto::SCHEME_GOPHER;
+using curl::fuzzer::proto::SCHEME_GOPHERS;
 using curl::fuzzer::proto::SCHEME_HTTP;
 using curl::fuzzer::proto::SCHEME_HTTPS;
 using curl::fuzzer::proto::SCHEME_IMAP;
@@ -1605,6 +1607,70 @@ void TestNonDictPoliciesClearDictScheme() {
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
   Expect(compatibility.scheme() == SCHEME_DICT,
          "compatibility unexpectedly rewrote the DICT scheme");
+}
+
+void TestFastGopherProbePolicy() {
+  Scenario ordinary;
+  ordinary.set_scheme(SCHEME_GOPHERS);
+  ordinary.set_host_path("untrusted.invalid/1/menu");
+  NormalizeScenarioForTarget(&ordinary, TargetProfile::kFastGopher);
+  Expect(ordinary.scheme() == SCHEME_GOPHERS &&
+             ordinary.host_path() == "tls.test/1/menu" &&
+             ordinary.gopher_probe_mode() ==
+                 curl::fuzzer::proto::GOPHER_PROBE_DEFAULT,
+         "fast Gopher policy changed the ordinary TLS lane");
+
+  Scenario partial;
+  partial.set_scheme(SCHEME_GOPHERS);
+  partial.set_host_path("untrusted.invalid/1/selector");
+  partial.set_gopher_probe_mode(
+      curl::fuzzer::proto::GOPHER_PROBE_PARTIAL_WRITE_NO_TIMEOUT);
+  NormalizeScenarioForTarget(&partial, TargetProfile::kFastGopher);
+  Expect(partial.scheme() == SCHEME_GOPHER &&
+             partial.host_path() == "tls.test/1/selector" &&
+             partial.gopher_probe_mode() ==
+                 curl::fuzzer::proto::GOPHER_PROBE_PARTIAL_WRITE_NO_TIMEOUT,
+         "partial-write probe did not select bounded plaintext Gopher");
+
+  Scenario timeout;
+  timeout.set_scheme(SCHEME_GOPHERS);
+  timeout.set_host_path("untrusted.invalid/1/selector");
+  timeout.set_gopher_probe_mode(curl::fuzzer::proto::GOPHER_PROBE_SEND_TIMEOUT);
+  NormalizeScenarioForTarget(&timeout, TargetProfile::kFastGopher);
+  Expect(timeout.scheme() == SCHEME_GOPHER &&
+             timeout.gopher_probe_mode() ==
+                 curl::fuzzer::proto::GOPHER_PROBE_SEND_TIMEOUT,
+         "send-timeout probe did not select bounded plaintext Gopher");
+
+  Scenario tls_limit;
+  tls_limit.set_scheme(SCHEME_HTTP);
+  tls_limit.set_host_path("ignored.invalid/ignored");
+  tls_limit.set_gopher_probe_mode(
+      curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT);
+  NormalizeScenarioForTarget(&tls_limit, TargetProfile::kFastGopher);
+  const std::size_t path_start = tls_limit.host_path().find('/');
+  Expect(tls_limit.scheme() == SCHEME_GOPHERS && path_start == 10163 &&
+             tls_limit.host_path().substr(path_start) ==
+                 "/1/session-key-limit" &&
+             std::all_of(tls_limit.host_path().begin(),
+                         tls_limit.host_path().begin() +
+                             static_cast<std::ptrdiff_t>(path_start),
+                         [](char byte) { return byte == 'g'; }),
+         "TLS session-key probe did not materialize its fixed authority");
+
+  Scenario unknown;
+  unknown.set_gopher_probe_mode(
+      static_cast<curl::fuzzer::proto::GopherProbeMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastGopher);
+  Expect(unknown.gopher_probe_mode() ==
+             curl::fuzzer::proto::GOPHER_PROBE_DEFAULT,
+         "fast Gopher policy retained an unknown probe mode");
+
+  Scenario other;
+  other.set_gopher_probe_mode(curl::fuzzer::proto::GOPHER_PROBE_SEND_TIMEOUT);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.gopher_probe_mode() == curl::fuzzer::proto::GOPHER_PROBE_DEFAULT,
+         "non-Gopher policy retained a Gopher transport probe");
 }
 
 void TestFastLdapPolicy() {
@@ -3564,6 +3630,7 @@ int main() {
   TestNonMqttPoliciesClearMqttScheme();
   TestFastDictPolicy();
   TestNonDictPoliciesClearDictScheme();
+  TestFastGopherProbePolicy();
   TestFastLdapPolicy();
   TestNonLdapPoliciesClearLdapScheme();
   TestFastLdapsPolicy();

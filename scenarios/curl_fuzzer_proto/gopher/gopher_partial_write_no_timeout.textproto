@@ -1,0 +1,8 @@
+# Split a bounded selector write while the transfer has no operation deadline.
+# curl must translate the zero time-left value to its infinite poll sentinel.
+scheme: SCHEME_GOPHER
+host_path: "tls.test/1/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
+gopher_probe_mode: GOPHER_PROBE_PARTIAL_WRITE_NO_TIMEOUT
+connection {
+  initial_response: "0Partial write\t/\ttls.test\t70\r\n.\r\n"
+}
