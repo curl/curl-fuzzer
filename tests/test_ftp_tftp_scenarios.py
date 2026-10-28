@@ -399,6 +399,24 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     assert "SASL NTLM" in unavailable
     assert "+OK authentication succeeded" not in unavailable
 
+    unavailable_scram = (pop3_root / "pop3_auth_unavailable_scram.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'login_options: "AUTH=SCRAM-SHA-256"' in unavailable_scram
+    assert "SASL SCRAM-SHA-256" in unavailable_scram
+    assert "+OK authentication succeeded" not in unavailable_scram
+
+    starttls = (
+        pop3_root / "pop3_starttls_filter_allocation_failure.textproto"
+    ).read_text(encoding="utf-8")
+    assert "pop3_starttls_filter_allocation_failure: true" in starttls
+    assert "STLS\\r\\n" in starttls
+    assert "+OK begin TLS" in starttls
+
+    sendleft = (pop3_root / "pop3_sendleft_retr.textproto").read_text(encoding="utf-8")
+    assert "backpressure { recv_buf_bytes: 2048 }" in sendleft
+    assert sendleft.count("A" * 80) >= 70
+
     uidl = (pop3_root / "pop3_uidl_mailbox.textproto").read_text(encoding="utf-8")
     assert 'customrequest: "UIDL"' in uidl
     assert "+OK unique ids follow" in uidl

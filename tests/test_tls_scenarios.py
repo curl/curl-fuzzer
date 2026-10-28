@@ -105,7 +105,15 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
         ),
         "https_tls_openssl_close_notify.textproto": (
             "TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY",
+            'trace_config: "all"',
             "openssl-close-notify",
+            "unreachable",
+        ),
+        "https_tls_openssl_hello_request.textproto": (
+            "TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST",
+            'trace_config: "all"',
+            "sslversion: 393222",
+            "openssl-hello-request",
             "unreachable",
         ),
         "https_ech_success.textproto": (

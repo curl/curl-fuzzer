@@ -77,6 +77,7 @@ class TlsMockTransport {
  private:
   const TlsGroupPolicy group_policy_;
   const bool openssl_close_notify_;
+  const bool openssl_hello_request_;
   std::unique_ptr<TlsServerContext> context_;
 };
 

@@ -1351,7 +1351,6 @@ curl_add_fuzzer(curl_fuzzer_gopher    GOPHER)
 curl_add_fuzzer(curl_fuzzer_http      HTTP)
 curl_add_fuzzer(curl_fuzzer_imap      IMAP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
-curl_add_fuzzer(curl_fuzzer_pop3      POP3)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
@@ -1583,7 +1582,6 @@ add_custom_target(fuzz
         curl_fuzzer_http
         curl_fuzzer_imap
         curl_fuzzer_mqtt
-        curl_fuzzer_pop3
         curl_fuzzer_rtsp
         curl_fuzzer_smtp
         curl_fuzzer_tftp
@@ -3090,7 +3088,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(pop3_mock_server_test
             tests/pop3_mock_server_test.cc
-            proto_fuzzer/pop3_mock_server.cc)
+            proto_fuzzer/pop3_mock_server.cc
+            proto_fuzzer/allocation_fault_injection.cc)
         curl_add_proto_peer_test(mqtt_mock_server_test
             tests/mqtt_mock_server_test.cc
             proto_fuzzer/mqtt_mock_server.cc)
@@ -3242,6 +3241,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             # implicit-TLS peer and the plaintext POP3 parser it extends.
             add_executable(pop3s_mock_server_test
                 tests/pop3s_mock_server_test.cc
+                proto_fuzzer/allocation_fault_injection.cc
                 proto_fuzzer/pop3s_mock_server.cc
                 proto_fuzzer/pop3_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc

@@ -12,6 +12,8 @@
 #include <string>
 #include <string_view>
 
+#include "proto_fuzzer/allocation_fault_injection.h"
+
 namespace proto_fuzzer {
 
 /// Begin without a borrowed protobuf or open socketpair. RunLoop borrows a
@@ -28,13 +30,20 @@ Pop3MockServer::~Pop3MockServer() = default;
 /// self-describing, so the scripted bytes are written unchanged; curl chooses
 /// multi-line handling from the command it sent, not from the reply.
 /// @param line One newline-terminated command from curl.
-void Pop3MockServer::HandleLine(std::string_view /*line*/) {
+void Pop3MockServer::HandleLine(std::string_view line) {
   if (scenario() == nullptr) {
     return;
   }
   const std::string* response = NextControlReply();
-  if (response != nullptr) {
-    (void)WriteControlBytes(*response);
+  if (response == nullptr || !WriteControlBytes(*response)) {
+    return;
+  }
+  if (!scenario()->pop3_starttls_filter_allocation_failure()) {
+    return;
+  }
+  const bool starttls_accepted = TokenEquals(FirstToken(line), "STLS") && TokenEquals(FirstToken(*response), "+OK");
+  if (starttls_accepted) {
+    allocation_fault_injection::ArmNextAllocationFailure();
   }
 }
 

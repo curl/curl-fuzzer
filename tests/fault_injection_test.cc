@@ -101,6 +101,25 @@ void TestAllocatorContracts() {
   faults::internal::Free(zeroed);
 }
 
+void TestArmNextAllocationFailure() {
+  const std::uint32_t later[] = {7};
+  faults::Configure(later, std::size(later));
+  faults::Arm();
+  faults::ArmNextAllocationFailure();
+
+  Expect(faults::internal::Malloc(8) == nullptr,
+         "semantic arm did not fail the next allocation");
+  void *recovered = faults::internal::Malloc(8);
+  const faults::Statistics statistics = faults::GetStatistics();
+  Expect(recovered != nullptr && statistics.armed &&
+             statistics.configured_failures == 1 &&
+             statistics.allocation_attempts == 2 &&
+             statistics.injected_failures == 1,
+         "semantic arm retained an earlier plan or reported bad statistics");
+  faults::Reset();
+  faults::internal::Free(recovered);
+}
+
 void TestDisarmAndReset() {
   const std::uint32_t first[] = {1};
   faults::Configure(first, std::size(first));
@@ -254,6 +273,7 @@ int main() {
          "allocator global reference was claimed more than once");
   TestBoundedOrdinalPlan();
   TestAllocatorContracts();
+  TestArmNextAllocationFailure();
   TestDisarmAndReset();
   TestScopedFailureSuppression();
   TestResetInvalidatesLiveSuppression();

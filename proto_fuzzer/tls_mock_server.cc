@@ -502,6 +502,36 @@ class TlsCloseNotifyConnection final : public MockConnection {
   bool alert_sent_;
 };
 
+/// Emit one fixed TLS handshake record containing an empty HelloRequest.
+/// This deliberately predates negotiation and ignores scripted HTTP bytes:
+/// its only purpose is to drive OpenSSL's message callback through the
+/// SSL3_MT_HELLO_REQUEST label with harness-owned bytes.
+class TlsHelloRequestConnection final : public MockConnection {
+ public:
+  TlsHelloRequestConnection() : record_sent_(false) {}
+
+  bool WriteAll(const unsigned char* /*data*/, std::size_t /*size*/) override { return SendOnce(); }
+
+  void ShutdownWrite() override {
+    (void)SendOnce();
+    MockConnection::ShutdownWrite();
+  }
+
+ private:
+  bool SendOnce() {
+    if (record_sent_) {
+      return true;
+    }
+    static constexpr unsigned char kHelloRequest[] = {
+        0x16, 0x03, 0x03, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
+    };
+    record_sent_ = MockConnection::WriteAll(kHelloRequest, sizeof(kHelloRequest));
+    return record_sent_;
+  }
+
+  bool record_sent_;
+};
+
 }  // namespace
 
 /// Construct one reusable TLS context for a protocol-specific peer.
@@ -516,6 +546,8 @@ TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
     : group_policy_(group_policy),
       openssl_close_notify_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY &&
                             CurlClientUsesOpenSsl()),
+      openssl_hello_request_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST &&
+                             CurlClientUsesOpenSsl()),
       context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy)) {}
 
 TlsMockTransport::~TlsMockTransport() = default;
@@ -536,6 +568,9 @@ void TlsMockTransport::Install(CURL* easy) const {
 std::unique_ptr<MockConnection> TlsMockTransport::CreateConnection() {
   if (openssl_close_notify_) {
     return std::make_unique<TlsCloseNotifyConnection>();
+  }
+  if (openssl_hello_request_) {
+    return std::make_unique<TlsHelloRequestConnection>();
   }
   return std::make_unique<TlsMockConnection>(context_.get());
 }

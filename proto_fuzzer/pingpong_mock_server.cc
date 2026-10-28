@@ -163,9 +163,9 @@ void PingpongMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& s
   ResetProtocolState();
 }
 
-/// Apply bounded transport knobs when creating the scripted socket. Target
-/// policies normally clear mail backpressure, but direct corpus replay must
-/// retain deterministic, well-defined behavior.
+/// Apply bounded transport knobs when creating the scripted socket. Fast IMAP
+/// and POP3 retain bounded receive-buffer pressure; direct corpus replay must
+/// also retain deterministic, well-defined behavior.
 /// @param connection Peer receiving the socket settings.
 /// @param script Connection script carrying optional backpressure values.
 void PingpongMockServer::ApplyScriptBackpressure(MockConnection* connection,

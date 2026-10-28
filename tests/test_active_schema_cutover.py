@@ -149,7 +149,20 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
     }
     for slug, body in influence["profiles"].items():
         projection = projections[_profile_name(slug)]
-        assert _projected_structured_paths(projection) == set(body["input_fields"])
+        expected_fields = set(body["input_fields"])
+        # POP3's semantic STLS failure selector and mail recv-buffer pressure
+        # are deliberate post-cutover additions. Keep the historical fixture
+        # frozen and spell out only these reviewed deltas here.
+        if slug in {"compatibility", "fast_pop3"}:
+            expected_fields.add("pop3_starttls_filter_allocation_failure")
+        if slug in {"fast_imap", "fast_pop3"}:
+            expected_fields.update(
+                {
+                    "connection.backpressure",
+                    "connection.backpressure.recv_buf_bytes",
+                }
+            )
+        assert _projected_structured_paths(projection) == expected_fields
 
     profile_schemas = {
         name: contents
@@ -210,8 +223,18 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert "TARGET_PROFILE_DEEP_HTTP" not in primary_backpressure.eligibility.profiles
     assert "TARGET_PROFILE_RESOLVER" not in primary_backpressure.eligibility.profiles
     assert primary_backpressure.contextual_eligibility["primary"].profiles == {
-        "TARGET_PROFILE_FAST_HTTP3"
+        "TARGET_PROFILE_FAST_HTTP3",
+        "TARGET_PROFILE_FAST_IMAP",
+        "TARGET_PROFILE_FAST_POP3",
     }
+    recv_buffer = model.fields["curl.fuzzer.proto.BackpressureConfig.recv_buf_bytes"]
+    assert {
+        "TARGET_PROFILE_FAST_IMAP",
+        "TARGET_PROFILE_FAST_POP3",
+    } <= recv_buffer.eligibility.profiles
+    drain_limit = model.fields["curl.fuzzer.proto.BackpressureConfig.drain_limit"]
+    assert "TARGET_PROFILE_FAST_IMAP" not in drain_limit.eligibility.profiles
+    assert "TARGET_PROFILE_FAST_POP3" not in drain_limit.eligibility.profiles
 
     settings_ack = model.fields["curl.fuzzer.proto.Http2Settings.ack"]
     assert settings_ack.eligibility.profiles == {"TARGET_PROFILE_COMPATIBILITY"}

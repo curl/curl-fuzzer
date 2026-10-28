@@ -712,9 +712,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_MQTT
   allowed_protocols = "mqtt";
 #endif
-#ifdef FUZZ_PROTOCOLS_POP3
-  allowed_protocols = "pop3,pop3s";
-#endif
 #ifdef FUZZ_PROTOCOLS_RTMP
   allowed_protocols = "rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts";
 #endif

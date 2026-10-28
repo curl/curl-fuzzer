@@ -190,6 +190,16 @@ void Arm() noexcept {
   state.armed = state.ordinal_count != 0;
 }
 
+/// Replace the calling thread's ordinal plan with one failure at the next
+/// positive-size allocation. Protocol peers use this at a semantic boundary,
+/// avoiding a fragile count of unrelated setup allocations.
+void ArmNextAllocationFailure() noexcept {
+  state = ThreadState{};
+  state.ordinals[0] = 1;
+  state.ordinal_count = 1;
+  state.armed = true;
+}
+
 /// Stop fault injection while retaining counters for diagnostics and tests.
 void Disarm() noexcept { state.armed = false; }
 

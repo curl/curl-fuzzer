@@ -13,6 +13,7 @@
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/pop3_mock_server.h"
@@ -60,6 +61,11 @@ Pop3RunResult RunScenario(const Scenario &scenario, const char *url) {
              CURLE_OK,
          "POP3 write data setup failed");
   (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_POP3 &&
+      scenario.pop3_starttls_filter_allocation_failure()) {
+    (void)curl_easy_setopt(easy.get(), CURLOPT_USE_SSL,
+                           static_cast<long>(CURLUSESSL_ALL));
+  }
 
   proto_fuzzer::Pop3MockServer server;
   server.Install(easy.get());
@@ -348,6 +354,75 @@ void TestDisabledAuthenticationMechanismIsRejected() {
                    "AUTH or command");
 }
 
+void TestUnavailableScramMechanismIsRejected() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  AddLoginOptions(&scenario);
+  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
+                  "AUTH=SCRAM-SHA-256");
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable(
+      "+OK capabilities\r\nSASL SCRAM-SHA-256\r\nUSER\r\n.\r\n");
+
+  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
+  Expect(result.code == CURLE_LOGIN_DENIED,
+         "POP3 unavailable SCRAM mechanism was not rejected");
+  ExpectTranscript(
+      result, "CAPA\r\n",
+      "POP3 unavailable SCRAM path issued AUTH or another command");
+}
+
+void TestLongRetrCommandWithReceiveBufferPressure() {
+  const std::string message_id(6144, 'A');
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/" + message_id);
+  AddLoginOptions(&scenario);
+  AddGreetingAndCapability(&scenario);
+  auto *connection = scenario.mutable_connection();
+  connection->mutable_backpressure()->set_recv_buf_bytes(2048);
+  connection->add_on_readable("+OK user accepted\r\n");
+  connection->add_on_readable("+OK pass accepted\r\n");
+  connection->add_on_readable("+OK 17 octets\r\nHello from POP3\r\n.\r\n");
+
+  const std::string url = "pop3://pop3.test/" + message_id;
+  const Pop3RunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_OK,
+         "POP3 long RETR did not complete under receive-buffer pressure");
+  Expect(result.body == kMessageBody,
+         "POP3 long RETR pressure path produced the wrong body");
+  Expect(result.transcript.find("RETR " + message_id + "\r\n") !=
+             std::string::npos,
+         "POP3 pressure path did not drain the complete long RETR command");
+}
+
+void TestRejectedStartTlsDoesNotArmAllocationFailure() {
+  proto_fuzzer::allocation_fault_injection::Reset();
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  scenario.set_pop3_starttls_filter_allocation_failure(true);
+  AddLoginOptions(&scenario);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable("+OK capabilities\r\nSTLS\r\nUSER\r\n.\r\n");
+  connection->add_on_readable("-ERR TLS unavailable\r\n");
+
+  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
+  const auto statistics =
+      proto_fuzzer::allocation_fault_injection::GetStatistics();
+  Expect(result.code == CURLE_USE_SSL_FAILED,
+         "POP3 rejected STLS did not report the required upgrade failure");
+  ExpectTranscript(result, "CAPA\r\nSTLS\r\n",
+                   "POP3 rejected STLS issued unexpected commands");
+  Expect(!statistics.armed && statistics.configured_failures == 0 &&
+             statistics.injected_failures == 0,
+         "POP3 rejected STLS armed a semantic allocation failure");
+  proto_fuzzer::allocation_fault_injection::Reset();
+}
+
 void TestUidlAndTopMultilineBoundaries() {
   Scenario uidl;
   uidl.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
@@ -401,6 +476,9 @@ int main() {
   TestPlainAuthenticationUsesSaslInitialResponse();
   TestApopAuthenticationAndDenial();
   TestDisabledAuthenticationMechanismIsRejected();
+  TestUnavailableScramMechanismIsRejected();
+  TestLongRetrCommandWithReceiveBufferPressure();
+  TestRejectedStartTlsDoesNotArmAllocationFailure();
   TestUidlAndTopMultilineBoundaries();
   curl_global_cleanup();
   return 0;

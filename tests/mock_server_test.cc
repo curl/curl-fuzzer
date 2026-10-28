@@ -35,6 +35,7 @@
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/ipfs_url.h"
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/pop3_mock_server.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
 #include "proto_fuzzer/target_policy.h"
@@ -272,6 +273,52 @@ void TestAllocationFailureReachesHttpParser() {
   }
   Expect(parser_failure_found,
          "no selected allocation failed inside HTTP Location parsing");
+}
+
+void TestPop3StartTlsArmsAdjacentFilterFailure() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
+  scenario.set_host_path("pop3.test/1");
+  scenario.set_pop3_starttls_filter_allocation_failure(true);
+  auto *username = scenario.add_options();
+  username->set_option_id(curl::fuzzer::proto::CURLOPT_USERNAME);
+  username->set_string_value("fuzz");
+  auto *password = scenario.add_options();
+  password->set_option_id(curl::fuzzer::proto::CURLOPT_PASSWORD);
+  password->set_string_value("secret");
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("+OK pop3.test ready\r\n");
+  connection->add_on_readable("+OK capabilities\r\nSTLS\r\nUSER\r\n.\r\n");
+  connection->add_on_readable("+OK begin TLS\r\n");
+
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr, "POP3 STLS test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_POP3));
+  Expect(connect_to != nullptr, "POP3 STLS baseline lost CONNECT_TO state");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "pop3://pop3.test/1");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_USE_SSL,
+                         static_cast<long>(CURLUSESSL_ALL));
+  (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
+
+  proto_fuzzer::Pop3MockServer server;
+  server.Install(easy.get());
+  const CURLcode result = server.DriveScenario(easy.get(), scenario);
+  const auto statistics =
+      proto_fuzzer::allocation_fault_injection::GetStatistics();
+  proto_fuzzer::allocation_fault_injection::Reset();
+
+  Expect(result == CURLE_OUT_OF_MEMORY,
+         "POP3 STLS filter allocation failure did not reach curl");
+  Expect(server.control_transcript() == "CAPA\r\nSTLS\r\n",
+         "POP3 STLS semantic failure occurred outside the intended boundary");
+  Expect(statistics.configured_failures == 1 &&
+             statistics.injected_failures == 1 &&
+             statistics.allocation_attempts >= 1,
+         "POP3 STLS semantic arm did not reject exactly one allocation");
+
+  easy.reset();
+  connect_to.reset();
 }
 
 /// Keep COPYPOSTFIELDS ownership setup outside the allocation-failure plan.
@@ -829,8 +876,7 @@ void TestCallbackMimeSeedFailsSecondSameEasyRewind() {
     Expect(request_data.upload_state().offset() ==
                request_data.upload_state().data_size(),
            "callback MIME reuse seed did not consume its callback cursor");
-    Expect(first_request.find("callback-mime-reuse-body") !=
-               std::string::npos,
+    Expect(first_request.find("callback-mime-reuse-body") != std::string::npos,
            "callback MIME reuse seed did not capture its first body");
 
     const CURLcode second = server.DriveScenario(easy.get(), scenario);
@@ -1250,11 +1296,13 @@ Scenario MakeTlsScenario(const std::string &path, const std::string &body) {
 /// completion result. This keeps the tests on the same socketpair/multi path
 /// as fuzz inputs while making failure-path assertions deterministic.
 TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
+  proto_fuzzer::ScopedTraceReset trace_reset;
   TlsTransferResult result;
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "TLS test could not allocate an easy handle");
   struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
-      easy, curl::fuzzer::proto::SCHEME_HTTPS);
+      easy, curl::fuzzer::proto::SCHEME_HTTPS, scenario.trace_ids(),
+      scenario.trace_config());
   const std::string url = "https://" + scenario.host_path();
   curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
 
@@ -1272,8 +1320,9 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
   TraceCapture trace;
   if (scenario.tls_handshake_profile() ==
-      curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY) {
-    curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+          curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY ||
+      scenario.tls_handshake_profile() ==
+          curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST) {
     curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
     curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
   }
@@ -1471,6 +1520,40 @@ void TestTlsOpenSslCloseNotifyProfile() {
          "curl did not identify the clean OpenSSL handshake close");
   Expect(result.response.empty() && result.handshake_count == 0,
          "clean handshake close reached encrypted application data");
+#endif
+}
+
+void TestTlsOpenSslHelloRequestProfile() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/https/https_tls_openssl_hello_request.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the OpenSSL HelloRequest seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastHttpsTraits>(text, &scenario),
+         "could not parse the OpenSSL HelloRequest seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::generated::FastHttpsTraits::kProfile,
+      &proto_fuzzer::generated::FastHttpsTraits::PruneConditionalEligibility);
+  Expect(scenario.tls_handshake_profile() ==
+             curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST,
+         "HTTPS policy discarded the fixed HelloRequest profile");
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+#if defined(CURL_FUZZER_EXPECT_GNUTLS) || defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  Expect(
+      result.code == CURLE_OK && result.response == "unreachable" &&
+          result.verify_result == 0 && result.handshake_count == 1,
+      "non-OpenSSL client did not treat HelloRequest as a normal TLS transfer");
+#else
+  Expect(result.code == CURLE_SSL_CONNECT_ERROR,
+         "pre-handshake HelloRequest was not a terminal TLS error");
+  Expect(result.trace.find("Hello request") != std::string::npos,
+         "OpenSSL message trace did not classify the HelloRequest record");
+  Expect(result.response.empty() && result.handshake_count == 0,
+         "HelloRequest terminal reached encrypted application data");
 #endif
 }
 
@@ -2672,6 +2755,7 @@ int main() {
              proto_fuzzer::allocation_fault_injection::InitializeCurl(),
          "mock-server tests could not install allocation callbacks");
   TestAllocationFailureReachesHttpParser();
+  TestPop3StartTlsArmsAdjacentFilterFailure();
   TestCopyPostFieldsSuppressesAllocationFailures();
   TestStreamSocketDispositionIsExplicit();
   TestRequestHeadersDetachBeforeHandleReuse();
@@ -2707,6 +2791,7 @@ int main() {
   TestTls12OptionsForceNegotiatedVersion();
   TestTlsPublicKeyPins();
   TestTlsOpenSslCloseNotifyProfile();
+  TestTlsOpenSslHelloRequestProfile();
 #if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
   TestTlsClientCredentialProfilesFailInsideOwnedInputs();
   TestTlsCertificateStatusRequestIsBackendChecked();

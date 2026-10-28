@@ -12,7 +12,7 @@ the mutation surface, peer, semantic normalization, and work budget.
 | `curl_fuzzer_proto_http` | High-throughput plaintext HTTP/1 and h2c upgrade negotiation. Retains cheap request options and raw response parsing; removes MIME, uploads, follow-on sockets, prior-knowledge HTTP/2, HTTP/3 selection, and timing controls. |
 | `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, dead connection-pool pruning, authentication, MIME construction and redirected body rewinds, uploads, result APIs, bounded cookie, Alt-Svc, HSTS, and netrc files; harness-owned forward-proxy, HTTP CONNECT (including a bounded pending HAProxy-prefix pollset profile), and abstract Unix-domain transports; plus fixed no-proxy/environment-proxy parsing and owned-loopback interface/keepalive setup. |
 | `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
-| `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, bounded CRL input, closed harness-owned client-credential profiles, and a fixed OpenSSL clean-handshake-close probe. |
+| `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, bounded CRL input, closed harness-owned client-credential profiles, and fixed OpenSSL close-notify and HelloRequest probes. |
 | `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a GnuTLS or mbedTLS curl client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
 | `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, input-selectable X25519 or provider-default key exchange, plus push, live stream-weight, fatal-session, and upkeep probes. |
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
@@ -26,7 +26,7 @@ the mutation surface, peer, semantic normalization, and work budget.
 | `curl_fuzzer_proto_tftp` | Packet-preserving TFTP exchanges over private loopback UDP endpoints. |
 | `curl_fuzzer_proto_smtp` | Single-connection SMTP greeting, EHLO/HELO, mail envelope, DATA body upload and EOB drain, graceful QUIT, and opt-in active pollset probes. The same target also runs implicit-TLS `smtps://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_imap` | Single-connection IMAP greeting, CAPABILITY, LOGIN/AUTHENTICATE (including SASL LOGIN, DIGEST-MD5 challenge handling, and XOAUTH2 bearer construction), SELECT, SEARCH, FETCH literals and custom listings, APPEND uploads, tagged completion, and opt-in active pollset probes. The same target also runs implicit-TLS `imaps://` scenarios through a verified in-process TLS peer. |
-| `curl_fuzzer_proto_pop3` | Single-connection POP3 greeting, CAPA, USER/PASS or APOP, LIST, RETR multi-line bodies, QUIT, and opt-in active pollset probes. The same target also runs implicit-TLS `pop3s://` scenarios through a verified in-process TLS peer. |
+| `curl_fuzzer_proto_pop3` | Single-connection POP3 greeting, CAPA, USER/PASS or APOP, LIST, RETR multi-line bodies, recv-buffer pressure, semantic STLS filter-allocation failure, QUIT, and opt-in active pollset probes. The same target also runs implicit-TLS `pop3s://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. The same target also runs implicit-TLS `mqtts://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
@@ -72,8 +72,10 @@ create unchecked work.
 The packaged libFuzzer configuration also caps each serialized structured
 input at 32 KiB.
 
-Fast lanes clear backpressure because a single mutated value would otherwise
-move an ordinary case into a timed loop. The timing lane does the inverse and
+Fast lanes normally clear backpressure because a single mutated value would
+otherwise move an ordinary case into a timed loop. IMAP and POP3 retain only a
+bounded receive-buffer size and clear drain throttling, so long commands can
+short-write without adding waits. The timing lane retains both controls and
 forces bounded pressure. Direct HTTP/3 discards the stream `Connection`;
 CONNECT-UDP mode retains it and clears direct HTTP/3 actions. FTP, TFTP,
 SMTP, IMAP, POP3, MQTT, DICT, LDAP, LDAPS, FTPS, MQTTS, IMAPS, POP3S, RTSP,
