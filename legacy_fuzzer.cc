@@ -712,9 +712,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_IMAP
   allowed_protocols = "imap,imaps";
 #endif
-#ifdef FUZZ_PROTOCOLS_LDAP
-  allowed_protocols = "ldap,ldaps";
-#endif
 #ifdef FUZZ_PROTOCOLS_MQTT
   allowed_protocols = "mqtt";
 #endif

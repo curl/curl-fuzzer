@@ -512,8 +512,6 @@ const char *DefaultUrl() {
   return "https://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_IMAP)
   return "imap://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_LDAP)
-  return "ldap://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_MQTT)
   return "mqtt://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_POP3)

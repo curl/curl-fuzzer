@@ -1351,7 +1351,6 @@ curl_add_fuzzer(curl_fuzzer_gopher    GOPHER)
 curl_add_fuzzer(curl_fuzzer_http      HTTP)
 curl_add_fuzzer(curl_fuzzer_https     HTTPS)
 curl_add_fuzzer(curl_fuzzer_imap      IMAP)
-curl_add_fuzzer(curl_fuzzer_ldap      LDAP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
 curl_add_fuzzer(curl_fuzzer_pop3      POP3)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
@@ -1585,7 +1584,6 @@ add_custom_target(fuzz
         curl_fuzzer_http
         curl_fuzzer_https
         curl_fuzzer_imap
-        curl_fuzzer_ldap
         curl_fuzzer_mqtt
         curl_fuzzer_pop3
         curl_fuzzer_rtsp
