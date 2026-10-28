@@ -37,7 +37,7 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
  public:
   explicit DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
                                     curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-                                bool malformed_answers = false);
+                                bool malformed_answers = false, bool defer_httpsrr = false);
   ~DohHttpsRrMockServer() override;
 
   DohHttpsRrMockServer(const DohHttpsRrMockServer&) = delete;
@@ -68,6 +68,7 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
     std::string request;
     std::string response;
     std::size_t response_offset = 0;
+    std::size_t deferred_write_turns = 0;
     bool writing = false;
   };
 
@@ -99,6 +100,10 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   /// Replace each otherwise-valid DNS body with a bounded malformed message.
   /// This keeps transport success distinct from DNS parser failure.
   bool malformed_answers_;
+
+  /// Hold a valid HTTPS answer for one outer drive turn. Address resolution
+  /// can then create the TLS filter while ECH's HTTPS-RR lookup is pending.
+  bool defer_httpsrr_;
 
   /// True only after every resolver endpoint and proxy-bypass step has been
   /// installed. RunLoop refuses to perform when setup is partial so curl

@@ -2484,22 +2484,34 @@ void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
 }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-/// Drive an HTTPS transfer whose only DNS source is the loopback DoH
-/// responder. The synthesized HTTPS-RR advertises alpn=h2,h3, so the
-/// HTTPS-connect filter must select h2 from that record (rather than the
-/// configured version preference) and complete a real TLS/ALPN h2 exchange.
-void TestDohHttpsRrDrivesAlpnSelection() {
+struct DohHttpsRrRunResult {
+  CURLcode code = CURLE_FAILED_INIT;
+  std::size_t httpsrr_answer_count = 0;
+  std::string trace;
+  std::string negotiated_alpn;
+};
+
+/// Drive the resolver lane's complete DoH, TLS, and HTTP/2 exchange.
+/// @param request_ech Whether ECH should obtain its configuration from the
+///        HTTPS record after the outer TLS filter has been constructed.
+DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
   proto_fuzzer::ScopedTraceReset trace_reset;
 
-  // The HTTPS-connect filter's trace level defaults to NONE. Enable that
-  // component explicitly so the ALPN source record is observable; curl's
-  // ordinary verbose flag alone does not raise a filter's own log level.
-  (void)curl_global_trace("+HTTPS-CONNECT");
+  // Component trace levels default to NONE. The ordinary case observes only
+  // HTTPS-connect's ALPN source; the ECH case also observes the nested SSL
+  // filter whose pending-record branch is the regression target.
+  (void)curl_global_trace(request_ech ? "all" : "+HTTPS-CONNECT");
 
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
-  scenario.set_host_path("tls.test/doh-httpsrr");
+  scenario.set_host_path(request_ech ? "tls.test/doh-httpsrr-ech"
+                                     : "tls.test/doh-httpsrr");
   scenario.set_doh_https_rr(true);
+  if (request_ech) {
+    auto *ech = scenario.add_options();
+    ech->set_option_id(curl::fuzzer::proto::CURLOPT_ECH);
+    ech->set_string_value("true");
+  }
   auto *http_version = scenario.add_options();
   http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
   http_version->set_uint_value(CURL_HTTP_VERSION_1_1);
@@ -2522,7 +2534,8 @@ void TestDohHttpsRrDrivesAlpnSelection() {
          "DoH HTTPS-RR test could not allocate an easy handle");
   struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTPS);
-  curl_easy_setopt(easy, CURLOPT_URL, "https://tls.test/doh-httpsrr");
+  const std::string url = "https://" + scenario.host_path();
+  curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
   // The resolver lane removes the wildcard override so curl must resolve the
   // origin through CURLOPT_DOH_URL below.
   curl_easy_setopt(easy, CURLOPT_CONNECT_TO, nullptr);
@@ -2532,33 +2545,59 @@ void TestDohHttpsRrDrivesAlpnSelection() {
   curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
   curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
 
-  proto_fuzzer::DohHttpsRrMockServer server;
+  proto_fuzzer::DohHttpsRrMockServer server(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, false,
+      request_ech);
   server.Install(easy);
   Expect(!server.doh_url().empty(),
          "DoH responder did not publish a loopback URL");
-  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 1,
-         "DoH test did not apply its conflicting HTTP version");
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) ==
+             (request_ech ? 2U : 1U),
+         "DoH test did not apply its retained options");
 
-  CURLcode result = CURLE_FAILED_INIT;
+  DohHttpsRrRunResult result;
   {
     proto_fuzzer::ScenarioRequestData request_data(easy, scenario, false);
     server.ConfigureRequestData(&request_data);
-    result = server.DriveScenario(easy, scenario);
+    result.code = server.DriveScenario(easy, scenario);
   }
-
-  Expect(result == CURLE_OK,
-         "HTTPS transfer did not complete through the DoH responder");
-  Expect(server.httpsrr_answer_count() != 0,
-         "DoH responder never synthesized an HTTPS resource record");
-  Expect(trace.text.find("1st attempt uses h2 from HTTPS-RR") !=
-             std::string::npos,
-         "HTTPS-RR did not drive the filter's first ALPN selection");
-  Expect(server.negotiated_alpn() == "h2",
-         "the selected ALPN did not reach the TLS peer's handshake");
+  result.httpsrr_answer_count = server.httpsrr_answer_count();
+  result.trace = trace.text;
+  result.negotiated_alpn = server.negotiated_alpn();
 
   curl_easy_cleanup(easy);
   curl_slist_free_all(connect_to);
+  return result;
 }
+
+/// The ordinary HTTPS-RR response must remain immediate so the
+/// HTTPS-connect filter selects h2 from DNS rather than configured defaults.
+void TestDohHttpsRrDrivesAlpnSelection() {
+  const DohHttpsRrRunResult result = RunDohHttpsRrScenario(false);
+  Expect(result.code == CURLE_OK && result.httpsrr_answer_count != 0,
+         "HTTPS transfer did not complete through the DoH responder");
+  Expect(result.trace.find("1st attempt uses h2 from HTTPS-RR") !=
+             std::string::npos,
+         "HTTPS-RR did not drive the filter's first ALPN selection");
+  Expect(result.negotiated_alpn == "h2",
+         "the selected ALPN did not reach the TLS peer's handshake");
+}
+
+/// ECH without an explicit config asks the TLS backend for the HTTPS record.
+/// The responder delays that record by one deterministic drive turn so the
+/// backend reaches its pending state, then releases it to complete normally.
+#if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
+void TestDohHttpsRrDelaysEchUntilRecordArrives() {
+  const DohHttpsRrRunResult result = RunDohHttpsRrScenario(true);
+  Expect(result.code == CURLE_OK && result.httpsrr_answer_count != 0,
+         "ECH transfer did not complete after its deferred HTTPS record");
+  Expect(result.trace.find("need HTTPS-RR, delaying connect") !=
+             std::string::npos,
+         "TLS setup did not wait for the pending HTTPS resource record");
+  Expect(result.negotiated_alpn == "h2",
+         "deferred HTTPS record changed the negotiated protocol");
+}
+#endif
 
 /// A complete loopback HTTP response carrying malformed DNS bytes must reach
 /// curl's DoH decoder and fail there. This distinguishes typed DoH diagnostics
@@ -2653,6 +2692,9 @@ int main() {
   TestTlsWebSocketCompletesStreamingExchange();
   TestTlsWebSocketFlushesFinalManualFrame();
   TestDohHttpsRrDrivesAlpnSelection();
+#if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
+  TestDohHttpsRrDelaysEchUntilRecordArrives();
+#endif
   TestDohMalformedAnswerReachesDecoder();
   TestDohHttpsRrSetupFailureDoesNotDriveCurl();
 #ifdef CURL_FUZZER_HAS_HTTPSIG

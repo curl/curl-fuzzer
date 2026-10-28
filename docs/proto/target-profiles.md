@@ -88,7 +88,9 @@ without granting access to host files.
 
 The resolver profile also clears arbitrary backpressure. Its successful
 HTTPS-RR exchange has a trace-enabled coverage twin with the same peer
-transcript; trace state remains scoped to that input. Its five threaded
+transcript; trace state remains scoped to that input. A second HTTPS-RR seed
+requests ECH and defers that answer for one drive turn, so TLS setup observes
+the record as pending before the transfer completes. Its five threaded
 `resolver_mode` values install one fixed timed-drive marker instead. Their
 authorities are pinned to names handled by the resolver binary's target-local
 `getaddrinfo` backend: no ambient name service is consulted, returned address

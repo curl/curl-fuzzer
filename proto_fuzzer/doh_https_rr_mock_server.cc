@@ -238,14 +238,17 @@ bool BuildDnsResponse(const std::string& query, std::string* response, bool* htt
 /// by Install(), after the TLS carrier has prepared the outer peer.
 /// @param certificate_chain Certificate chain served by the outer TLS peer.
 /// @param malformed_answers Whether to truncate synthesized DNS answers.
+/// @param defer_httpsrr Whether to defer a valid HTTPS answer by one drive
+///        turn so ECH reaches the TLS backend while its record is pending.
 DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                                           bool malformed_answers)
+                                           bool malformed_answers, bool defer_httpsrr)
     : H2OriginMockServer(certificate_chain),
       easy_(nullptr),
       listener_(-1),
       doh_request_count_(0),
       httpsrr_answer_count_(0),
       malformed_answers_(malformed_answers),
+      defer_httpsrr_(defer_httpsrr),
       setup_ok_(false),
       proxy_bypass_active_(false),
       lower_no_proxy_was_set_(false),
@@ -409,6 +412,7 @@ void DohHttpsRrMockServer::CloseConnection(DohConnection* connection) {
   connection->request.clear();
   connection->response.clear();
   connection->response_offset = 0;
+  connection->deferred_write_turns = 0;
   connection->writing = false;
 }
 
@@ -441,6 +445,7 @@ void DohHttpsRrMockServer::AcceptConnections() {
     slot->request.clear();
     slot->response.clear();
     slot->response_offset = 0;
+    slot->deferred_write_turns = 0;
     slot->writing = false;
   }
 }
@@ -486,6 +491,15 @@ void DohHttpsRrMockServer::ServiceDohConnections() {
     }
 
     if (connection.fd < 0 || !connection.writing) {
+      continue;
+    }
+
+    // Let an address answer advance the outer connection once before making
+    // its HTTPS resource record readable. This deterministic one-turn skew
+    // exercises the TLS backend's normal "HTTPS-RR still pending" state
+    // without a clock, scheduler race, or external resolver.
+    if (connection.deferred_write_turns != 0) {
+      --connection.deferred_write_turns;
       continue;
     }
 
@@ -564,6 +578,7 @@ bool DohHttpsRrMockServer::CompleteRequest(DohConnection* connection) {
     return false;
   }
   connection->response_offset = 0;
+  connection->deferred_write_turns = httpsrr && defer_httpsrr_ ? 1 : 0;
   ++doh_request_count_;
   if (httpsrr) {
     ++httpsrr_answer_count_;
