@@ -418,33 +418,6 @@ void CanonicalizeDictAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path(canonical);
 }
 
-/// Pin a file:// URL to a fixed local source/sink. The path component is what
-/// libcurl opens, so retaining a fuzzed path would let a mutated input read or
-/// write any file visible to the fuzzer process. Keep the fuzz-controlled
-/// authority and any query/fragment so URL parsing still sees mutated bytes,
-/// but always replace the path with /dev/null. An input with no path keeps its
-/// authority and gains /dev/null, so the canonical empty-authority form is
-/// `file:///dev/null`.
-void CanonicalizeFileAuthority(curl::fuzzer::proto::Scenario* scenario) {
-  const std::string& host_path = scenario->host_path();
-  const std::size_t path_start = host_path.find('/');
-  const std::size_t query_start = host_path.find_first_of("?#");
-  std::size_t authority_end = host_path.size();
-  if (path_start != std::string::npos) {
-    authority_end = std::min(authority_end, path_start);
-  }
-  if (query_start != std::string::npos) {
-    authority_end = std::min(authority_end, query_start);
-  }
-
-  std::string canonical = host_path.substr(0, authority_end);
-  canonical += "/dev/null";
-  if (query_start != std::string::npos) {
-    canonical += host_path.substr(query_start);
-  }
-  scenario->set_host_path(canonical);
-}
-
 /// Pin the LDAP directory authority while retaining the complete URL suffix.
 /// In this curl revision OpenLDAP parses the base DN, attributes, scope, and
 /// filter from the URL path (`/dn?attrs?scope?filter`); CURLOPT_CUSTOMREQUEST
@@ -1584,8 +1557,9 @@ void RemoveIgnoredMqttShape(curl::fuzzer::proto::Scenario* scenario) {
 }
 
 /// FILE has no peer, so response scripts, connection controls, MIME, and
-/// HTTP/TELNET/API state are inert. Retain the bounded upload script because
-/// the fixed /dev/null URL makes curl's local write path safe to exercise.
+/// HTTP/TELNET/API state are inert. Retain the bounded source and upload
+/// script because the runtime exposes them only through a session-owned
+/// anonymous descriptor.
 void RemoveIgnoredFileShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_connection();
   scenario->clear_subsequent_connections();
@@ -1740,6 +1714,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     // and TFTP scheme values do not justify rewriting historical mixed-lane
     // inputs.
     return;
+  }
+
+  // Only FastFile may turn protobuf bytes into a local descriptor. Generated
+  // profiles already enforce this ownership; repeat it for direct callers of
+  // the full runtime Scenario before any generic bounds inspect the field.
+  if (profile != TargetProfile::kFastFile) {
+    scenario->clear_file_source();
   }
 
   // The nested selector belongs exclusively to the HTTPS CONNECT proxy lane.
@@ -2193,9 +2174,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
   if (profile == TargetProfile::kFastFile) {
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_FILE);
+    scenario->clear_host_path();
     RemoveIgnoredFileShape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
-    CanonicalizeFileAuthority(scenario);
+    if (scenario->file_source().size() > scenario_limits::kMaxFileInputBytes) {
+      scenario->mutable_file_source()->resize(scenario_limits::kMaxFileInputBytes);
+    }
     return;
   }
 

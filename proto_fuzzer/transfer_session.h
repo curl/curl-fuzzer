@@ -26,7 +26,7 @@ class ApiLifecycle;
 
 /// Own per-transfer resources with one teardown contract: detach request
 /// callbacks and lists, clean the easy, then release share state, baseline
-/// lists, and parser files. The installed peer and any borrowed Scenario must
+/// lists, and anonymous files. The installed peer and any borrowed Scenario must
 /// outlive this session. Multi owners must remove the easy before Close().
 /// Sessions cannot move because callbacks retain addresses of their state.
 class TransferSession {
@@ -48,6 +48,8 @@ class TransferSession {
   bool ResetConfiguration();
 
   bool PrepareInputFiles(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode);
+
+  const char* FileSourcePath() const;
 
   void ApplyInputFiles();
 

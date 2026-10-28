@@ -30,7 +30,7 @@ the mutation surface, peer, semantic normalization, and work budget.
 | `curl_fuzzer_proto_mqtt` | Single-connection binary MQTT CONNECT/CONNACK, PUBLISH or SUBSCRIBE/SUBACK, server-initiated PUBLISH packets, and DISCONNECT. The same target also runs implicit-TLS `mqtts://` scenarios through a verified in-process TLS peer. |
 | `curl_fuzzer_proto_dict` | Single-connection DICT lookups. curl writes CLIENT, one URL-derived command, and QUIT together, then reads the multi-line text response until the peer half-closes. |
 | `curl_fuzzer_proto_gopher` | Bounded Gopher or Gophers selectors through a stream peer, using the TLS peer for Gophers when available. |
-| `curl_fuzzer_proto_file` | `file://` URL parsing with a fuzz-controlled authority and suffix, pinned to `/dev/null`. There is no network peer; bounded uploads exercise the local write path only against that fixed sink. |
+| `curl_fuzzer_proto_file` | Peerless local-file reads, ranges, resumes, metadata, and bounded uploads through a harness-owned anonymous regular file. The runtime constructs the complete `file:///proc/self/fd/N` URL and never accepts a protobuf-controlled pathname. |
 | `curl_fuzzer_proto_ldap` | Single-connection BER/ASN.1 LDAP simple or SASL PLAIN bind and search through OpenLDAP, including bounded root-DSE mechanism discovery, a scripted bind reply, scripted search-result entries, and synthesized search completion. `ldap_starttls` drives a correlated plaintext ExtendedRequest/ExtendedResponse before curl installs its TLS filter; `SCHEME_LDAPS` runs the ordinary exchange over implicit TLS against the in-process OpenSSL peer. |
 | `curl_fuzzer_proto_rtsp` | Single-connection, request-aligned RTSP method/CSeq exchanges, SDP response bodies, and PLAY responses with interleaved RTP packets. |
 | `curl_fuzzer_proto_ipfs` | `ipfs://` and `ipns://` gateway rewrites as ordinary HTTP GETs against the in-process HTTP peer, with a pinned CID/name and a mutation-controlled gateway path. |
@@ -80,13 +80,14 @@ forces bounded pressure. Direct HTTP/3 discards the stream `Connection`;
 CONNECT-UDP mode retains it and clears direct HTTP/3 actions. FTP, TFTP,
 SMTP, IMAP, POP3, MQTT, DICT, LDAP, LDAPS, FTPS, MQTTS, IMAPS, POP3S, RTSP,
 IPFS/IPNS, TELNET, Gopher, and FILE prune fields that their specialized peers
-(or, for FILE, the peerless local reader) cannot observe. The IPFS/IPNS lane
+(or, for FILE, the peerless local handler) cannot observe. The IPFS/IPNS lane
 rewrites both schemes to a `/ipfs/<cid>` or `/ipns/<name>` HTTP path on a fixed
 loopback gateway before the request reaches the ordinary HTTP peer. The FILE
-lane additionally replaces the URL path with `/dev/null`. It retains bounded
-upload state and can write only to that fixed sink; the authority, query, and
-fragment remain mutation-controlled so URL parsing still has fuzzing value
-without granting access to host files.
+lane additionally removes `host_path` from its generated schema and exposes
+bounded `file_source` bytes through a session-owned anonymous descriptor. It
+retains bounded upload state and can read or write only that descriptor; the
+runtime constructs the complete `file:///proc/self/fd/N` URL without granting
+access to host files.
 
 The resolver profile also clears arbitrary backpressure. Its successful
 HTTPS-RR exchange has a trace-enabled coverage twin with the same peer

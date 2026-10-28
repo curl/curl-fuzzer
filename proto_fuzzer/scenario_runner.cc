@@ -362,22 +362,6 @@ std::string ScenarioUrl(const curl::fuzzer::proto::Scenario& scenario, const cha
   return std::string(prefix) + "://" + scenario.host_path();
 }
 
-/// Confirm that FILE normalization replaced the complete opened path. This is
-/// a runtime backstop for direct callers: even if target postprocessing is
-/// accidentally bypassed, neither download nor upload may name a host file.
-/// @param host_path FILE URL authority/path without the scheme prefix.
-/// @return True only for `[authority]/dev/null` plus an optional query or
-///         fragment.
-bool HasCanonicalFilePath(const std::string& host_path) {
-  constexpr char kFilePath[] = "/dev/null";
-  const std::size_t path_start = host_path.find('/');
-  if (path_start == std::string::npos || host_path.compare(path_start, sizeof(kFilePath) - 1, kFilePath) != 0) {
-    return false;
-  }
-  const std::size_t suffix_start = path_start + sizeof(kFilePath) - 1;
-  return suffix_start == host_path.size() || host_path[suffix_start] == '?' || host_path[suffix_start] == '#';
-}
-
 /// Detect the ECH modes that ask the TLS backend to obtain its configuration
 /// from an HTTPS resource record. A literal ECHConfigList already supplies the
 /// configuration, while GREASE deliberately does not wait for DNS.
@@ -630,8 +614,8 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 #endif
       return nullptr;
     case curl::fuzzer::proto::SCHEME_FILE:
-      // FILE reads the local filesystem directly. The dedicated lane pins its
-      // path to /dev/null, so there is no socket or scriptable peer to install.
+      // FILE reads a session-owned anonymous descriptor directly, so there is
+      // no socket or scriptable peer to install.
       return nullptr;
     case curl::fuzzer::proto::SCHEME_LDAP:
       // LDAP is BER/ASN.1 rather than line-oriented and OpenLDAP performs its
@@ -836,7 +820,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   }
 
   const char* prefix = SchemePrefix(scenario.scheme());
-  if (prefix == nullptr || scenario.host_path().empty()) {
+  if (prefix == nullptr) {
     return 0;
   }
 
@@ -848,7 +832,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   if (scenario.scheme() == curl::fuzzer::proto::SCHEME_FILE && !file_lane) {
     return 0;
   }
-  if (file_lane && !HasCanonicalFilePath(scenario.host_path())) {
+  if (!file_lane && scenario.host_path().empty()) {
     return 0;
   }
 
@@ -860,12 +844,23 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   // The peer survives every easy option/callback, including cleanup of a
   // bounded incomplete transfer. TransferSession owns the rest of that graph.
   TransferSession transfer;
-  (void)transfer.PrepareInputFiles(scenario, mode);
+  if (!transfer.PrepareInputFiles(scenario, mode)) {
+    return 0;
+  }
   if (!transfer.Initialize()) {
     return 0;
   }
   CURL* easy = transfer.easy();
-  const std::string url = ScenarioUrl(scenario, prefix);
+  std::string url;
+  if (file_lane) {
+    const char* source_path = transfer.FileSourcePath();
+    if (source_path == nullptr) {
+      return 0;
+    }
+    url = std::string("file://") + source_path;
+  } else {
+    url = ScenarioUrl(scenario, prefix);
+  }
   bool resolver_mode_ready = true;
   const auto configure_easy = [&] {
     transfer.ApplyBaseline(scenario);
@@ -893,12 +888,11 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   transfer.ConfigureAltSvcRouting(scenario.host_path());
 
   if (file_lane) {
-    // The file:// handler reads or writes the pinned /dev/null target (or
-    // rejects a mutated authority) synchronously and never opens a socket.
-    // Install the bounded request-data owner before perform so retained upload
-    // options consume Scenario.upload through curl's read callback instead of
-    // falling back to stdin. The baseline's short timeout still bounds the
-    // transfer.
+    // The file:// handler reads or writes only the session-owned anonymous
+    // descriptor and never opens a socket. Install the bounded request-data
+    // owner before perform so retained upload options consume Scenario.upload
+    // through curl's read callback instead of falling back to stdin. The
+    // baseline's short timeout still bounds the transfer.
     (void)transfer.InstallRequestData(scenario);
     const CURLcode transfer_result = curl_easy_perform(easy);
     (void)transfer_result;

@@ -189,14 +189,13 @@ Other peers intentionally give those fields narrower meanings:
   terminator in the seed when a well-formed body is desired; curl does not
   parse it and treats EOF as end-of-transfer. `initial_response` is normally
   empty because DICT has no server greeting.
-- FILE has no peer and opens the local filesystem directly. Its target policy
-  keeps the fuzz-controlled authority, query, and fragment but replaces the
-  URL path with `/dev/null`; response scripts and socket controls are removed.
-  Bounded upload scripts and their scalar controls are retained because the
-  same fixed path is a safe write sink. Mutations therefore exercise
-  `file://` parsing and curl's local read, write, range, resume,
-  time-condition, and metadata paths without reading or writing an arbitrary
-  host path.
+- FILE has no peer. Its generated schema omits `host_path` and retains bounded
+  `file_source` bytes plus upload scripts and their scalar controls. The
+  runtime places the source in a session-owned anonymous regular file and
+  constructs the complete `file:///proc/self/fd/N` URL. Mutations therefore
+  exercise curl's local read, write, range, resume, time-condition, metadata,
+  and upload rate-limit paths without reading or writing an arbitrary host
+  path.
 - LDAP is BER/ASN.1, not line-oriented. `initial_response`, when present, is
   the scripted bind reply and is released only after curl's bindRequest with
   its envelope messageID rewritten to the request id; an empty value asks the

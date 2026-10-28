@@ -121,7 +121,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         for field in model.fields.values()
         if field.native_name is not None
     }
-    assert set(typed_options) == {option["name"] for option in options["options"]}
+    baseline_options = {option["name"] for option in options["options"]}
+    assert set(typed_options) == baseline_options | {"CURLOPT_MAX_SEND_SPEED_LARGE"}
     for tag, option in enumerate(options["options"], 1):
         field = typed_options[option["name"]]
         assert field.number == tag
@@ -132,6 +133,11 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             # pre-cutover baseline so TLS can observe a pending ECH record.
             expected_profiles.add("TARGET_PROFILE_RESOLVER")
         assert field.eligibility.profiles == expected_profiles
+
+    max_send_speed = typed_options["CURLOPT_MAX_SEND_SPEED_LARGE"]
+    assert max_send_speed.number == 106
+    assert kind_by_type[max_send_speed.proto_type] == "uint64"
+    assert max_send_speed.eligibility.profiles == {"TARGET_PROFILE_FAST_FILE"}
 
     ech = typed_options["CURLOPT_ECH"]
     assert [
@@ -150,9 +156,10 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
     for slug, body in influence["profiles"].items():
         projection = projections[_profile_name(slug)]
         expected_fields = set(body["input_fields"])
-        # POP3's semantic STLS failure selector and mail recv-buffer pressure
-        # are deliberate post-cutover additions. Keep the historical fixture
-        # frozen and spell out only these reviewed deltas here.
+        # POP3's semantic STLS selector, mail recv-buffer pressure, and FILE's
+        # harness-owned anonymous source are deliberate post-cutover changes.
+        # Keep the historical fixture frozen and spell out only these reviewed
+        # deltas here.
         if slug in {"compatibility", "fast_pop3"}:
             expected_fields.add("pop3_starttls_filter_allocation_failure")
         if slug in {"fast_imap", "fast_pop3"}:
@@ -162,6 +169,9 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
                     "connection.backpressure.recv_buf_bytes",
                 }
             )
+        if slug == "fast_file":
+            expected_fields.discard("host_path")
+            expected_fields.add("file_source")
         assert _projected_structured_paths(projection) == expected_fields
 
     profile_schemas = {

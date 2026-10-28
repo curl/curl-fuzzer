@@ -1,0 +1,13 @@
+# Start the upload reader with a one-byte-per-second send limit. The first
+# callback consumes one byte and the synchronous FILE loop stops as soon as
+# the rate limiter reports no immediately available bytes.
+scheme: SCHEME_FILE
+file_source: "sink"
+upload {
+  data: "AB"
+  read_sizes: 2
+  terminal: UPLOAD_TERMINAL_EOF
+}
+options { upload: true }
+options { infilesize_large: 2 }
+options { max_send_speed_large: 1 }

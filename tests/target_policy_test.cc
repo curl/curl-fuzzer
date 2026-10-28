@@ -1107,21 +1107,25 @@ void TestFastFilePolicy() {
   scenario.mutable_multi_plan()->set_transfer_count(4);
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
   scenario.mutable_upload()->set_data("bounded upload bytes");
+  scenario.set_file_source(
+      std::string(proto_fuzzer::scenario_limits::kMaxFileInputBytes + 1, 'f'));
   scenario.mutable_connection()->set_initial_response("ignored peer script");
   scenario.add_subsequent_connections()->set_initial_response("ignored");
   scenario.set_cookie_file("ignored parser input");
   scenario.add_resolve_entries("filehost.test:80:127.0.0.1");
   scenario.set_tls_certificate_chain(
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
+  auto *max_send_speed = scenario.add_options();
+  max_send_speed->set_option_id(
+      curl::fuzzer::proto::CURLOPT_MAX_SEND_SPEED_LARGE);
+  max_send_speed->set_uint_value(1);
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastFile);
 
   Expect(scenario.scheme() == SCHEME_FILE,
          "fast FILE policy did not force the local-file scheme");
-  Expect(scenario.host_path() ==
-             "filehost.test:8080/dev/null?download=1#fragment",
-         "fast FILE policy did not pin the path while retaining the URL "
-         "authority and suffix");
+  Expect(scenario.host_path().empty(),
+         "fast FILE policy retained a mutation-controlled URL path");
   Expect(scenario.connection().initial_response().empty() &&
              scenario.connection().on_readable_size() == 0 &&
              scenario.connection().server_frames_size() == 0 &&
@@ -1134,18 +1138,25 @@ void TestFastFilePolicy() {
              scenario.request_headers_size() == 0 &&
              scenario.telnet_options_size() == 0 &&
              scenario.resolve_entries_size() == 0 &&
-             scenario.cookie_file().empty(),
+             scenario.cookie_file().empty() &&
+             scenario.file_source().size() ==
+                 proto_fuzzer::scenario_limits::kMaxFileInputBytes &&
+             scenario.options_size() == 1 &&
+             scenario.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_MAX_SEND_SPEED_LARGE &&
+             scenario.options(0).uint_value() == 1,
          "fast FILE policy retained an inert shape or dropped upload data");
   Scenario bare;
   bare.set_host_path("localhost");
+  bare.set_file_source("source");
   NormalizeScenarioForTarget(&bare, TargetProfile::kFastFile);
-  Expect(bare.host_path() == "localhost/dev/null",
-         "fast FILE policy did not append the fixed path to a bare authority");
+  Expect(bare.host_path().empty() && bare.file_source() == "source",
+         "fast FILE policy did not retain only the anonymous source bytes");
 
   Scenario traversal;
   traversal.set_host_path("//etc/passwd");
   NormalizeScenarioForTarget(&traversal, TargetProfile::kFastFile);
-  Expect(traversal.host_path() == "/dev/null",
+  Expect(traversal.host_path().empty(),
          "fast FILE policy retained a traversal path or authority");
 }
 
@@ -1160,18 +1171,21 @@ void TestNonFilePoliciesClearFileScheme() {
     Scenario scenario;
     scenario.set_host_path("localhost/etc/passwd");
     scenario.set_scheme(SCHEME_FILE);
+    scenario.set_file_source("must not escape FastFile");
 
     NormalizeScenarioForTarget(&scenario, profile);
 
-    Expect(scenario.scheme() != SCHEME_FILE,
-           "a non-FILE policy retained the local-file scheme");
+    Expect(scenario.scheme() != SCHEME_FILE && scenario.file_source().empty(),
+           "a non-FILE policy retained local-file input");
   }
 
   Scenario compatibility;
   compatibility.set_host_path("localhost/etc/passwd");
   compatibility.set_scheme(SCHEME_FILE);
+  compatibility.set_file_source("append-only unknown field");
   NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
-  Expect(compatibility.scheme() == SCHEME_FILE,
+  Expect(compatibility.scheme() == SCHEME_FILE &&
+             compatibility.file_source() == "append-only unknown field",
          "compatibility unexpectedly rewrote the FILE scheme");
 }
 

@@ -1,0 +1,6 @@
+# Resume four bytes into a known anonymous regular file and read one byte. The
+# correlated source and range cover file.c's size adjustment and successful
+# seek without accepting a protobuf-controlled pathname.
+scheme: SCHEME_FILE
+file_source: "0123456789"
+options { range: "4-4" }

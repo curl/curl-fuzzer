@@ -1893,6 +1893,30 @@ void TestTransferSessionRejectsUnsafeReconfiguration() {
   transfer.Close();
 }
 
+void TestTransferSessionPreparesAnonymousFileSource() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_FILE);
+  scenario.set_file_source("0123456789");
+
+  proto_fuzzer::TransferSession transfer;
+  Expect(transfer.PrepareInputFiles(
+             scenario, proto_fuzzer::ScenarioRunMode::kFileCoverage),
+         "session rejected an anonymous FILE source");
+  const char *path = transfer.FileSourcePath();
+  Expect(path != nullptr &&
+             std::string_view(path).rfind("/proc/self/fd/", 0) == 0,
+         "FILE source did not use a session-owned procfs descriptor");
+  std::ifstream input(path, std::ios::binary);
+  const std::string contents((std::istreambuf_iterator<char>(input)),
+                             std::istreambuf_iterator<char>());
+  Expect(contents == "0123456789",
+         "anonymous FILE source did not preserve the bounded bytes");
+  Expect(transfer.Initialize(), "FILE source test could not allocate easy");
+  Expect(!transfer.PrepareInputFiles(
+             scenario, proto_fuzzer::ScenarioRunMode::kFileCoverage),
+         "session replaced a FILE path retained by an initialized easy");
+}
+
 void TestTransferSessionCleansIncompleteSharedTransfers() {
   for (const auto drive_mode : {curl::fuzzer::proto::API_DRIVE_MULTI_PERFORM,
                                 curl::fuzzer::proto::API_DRIVE_MULTI_SOCKET}) {
@@ -2807,6 +2831,7 @@ int main() {
   TestHttp1ProxyAddsPreemptiveAuthorizationHeader();
 #endif
   TestTransferSessionRejectsUnsafeReconfiguration();
+  TestTransferSessionPreparesAnonymousFileSource();
   TestTransferSessionCleansIncompleteSharedTransfers();
 #if defined(PROTO_FUZZER_API_COVERAGE_PROBES)
   // The compatibility probes must leave the process-wide curl runtime usable

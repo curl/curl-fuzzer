@@ -266,7 +266,6 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_MQTT
         profiles: TARGET_PROFILE_FAST_DICT
         profiles: TARGET_PROFILE_FAST_GOPHER
-        profiles: TARGET_PROFILE_FAST_FILE
         profiles: TARGET_PROFILE_FAST_LDAP
         profiles: TARGET_PROFILE_FAST_RTSP
         profiles: TARGET_PROFILE_FAST_IPFS
@@ -1004,6 +1003,16 @@ message Scenario {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_POP3
+      }
+    }
+  ];
+  // Bytes exposed only to the peerless FILE lane through a harness-owned
+  // anonymous regular file. The runtime constructs the complete
+  // file:///proc/self/fd/N URL; no protobuf bytes can name a host path.
+  bytes file_source = 40 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_FAST_FILE
       }
     }
   ];
@@ -4902,6 +4911,17 @@ message SetOption {
           profiles: TARGET_PROFILE_API
           profiles: TARGET_PROFILE_MULTI
           profiles: TARGET_PROFILE_TIMING
+        }
+      }
+    ];
+    // Keep upload throttling local to the peerless FILE coverage lane. This
+    // append-only option reaches Curl_client_read's rate-limit setup without
+    // changing any accumulated compatibility input.
+    uint64 max_send_speed_large = 106 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAX_SEND_SPEED_LARGE"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_FILE
         }
       }
     ];

@@ -7,7 +7,7 @@ The legacy fuzzers are the `curl_fuzzer` executable and the protocol-specific
 input model from the structured protobuf scenario fuzzers; these targets are
 still maintained and run by OSS-Fuzz.
 
-The current protocol-specific targets cover file, FTP, Gopher, HTTP, MQTT,
+The current protocol-specific targets cover FTP, Gopher, HTTP, MQTT,
 RTSP, SMTP, and TFTP. The unsuffixed
 `curl_fuzzer` target enables the reviewed subset of protocols supported by the
 libcurl build. Direct byte-oriented targets such as `fuzz_url`, `fuzz_doh`,
@@ -47,8 +47,8 @@ introduce an external hostname lookup.
 `legacy_tlv_mutator.cc` exports libFuzzer's custom mutator and crossover
 callbacks. Most mutations operate on complete records. They preserve known
 value shapes, keep numeric values four bytes long, avoid duplicate scalar
-options, and preserve existing URL and, except for the file target,
-initial-response records. When either prerequisite is missing, successive
+options, and preserve existing URL and initial-response records. When either
+prerequisite is missing, successive
 structured mutations add it before making other edits, provided the output
 buffer has enough capacity.
 

@@ -12,7 +12,6 @@ extra_corpus/
 ossfuzz_corpus/
 libstandaloneengine.a
 /fuzz_bufq
-/curl_fuzzer_file
 /curl_fuzzer_ftp
 /curl_fuzzer_gopher
 /curl_fuzzer_http
