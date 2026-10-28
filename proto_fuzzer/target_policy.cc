@@ -344,17 +344,24 @@ void CanonicalizeSmtpAuthority(curl::fuzzer::proto::Scenario* scenario) {
 /// the `;UID=`, `;MAILINDEX=`, `;SECTION=`, and `;PARTIAL=` selectors that
 /// choose FETCH, SEARCH, and LIST states; canonicalizing only the host avoids
 /// spending iterations on failures before curl sends its first command.
+/// Plaintext IMAP retains only an explicit port 80: OAuthBearer omits that
+/// default port from its generated message, covering a distinct stable branch
+/// without reopening arbitrary mutation-controlled ports.
 /// Implicit-TLS inputs use the checked-in certificate's tls.test name so the
 /// verified handshake can complete before the same tagged exchange runs.
 void CanonicalizeImapAuthority(curl::fuzzer::proto::Scenario* scenario) {
   const std::string& host_path = scenario->host_path();
   const std::size_t suffix_start = host_path.find_first_of("/?#");
   const char* host = scenario->scheme() == curl::fuzzer::proto::SCHEME_IMAPS ? "tls.test" : "imap.test";
+  const std::size_t authority_end = suffix_start == std::string::npos ? host_path.size() : suffix_start;
+  const bool retain_default_port = scenario->scheme() == curl::fuzzer::proto::SCHEME_IMAP && authority_end >= 3 &&
+                                   host_path.compare(authority_end - 3, 3, ":80") == 0;
+  const std::string authority = std::string(host) + (retain_default_port ? ":80" : "");
   if (suffix_start == std::string::npos) {
-    scenario->set_host_path(std::string(host) + "/INBOX");
+    scenario->set_host_path(authority + "/INBOX");
     return;
   }
-  scenario->set_host_path(std::string(host) + host_path.substr(suffix_start));
+  scenario->set_host_path(authority + host_path.substr(suffix_start));
 }
 
 /// Give POP3 a mailbox with a message id by default so the lane reaches RETR

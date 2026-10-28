@@ -1,6 +1,6 @@
-# Authored successor (not a byte-for-byte conversion) to the legacy seed
-# corpora/curl_fuzzer_imap/test_xoauth2_imap. Keep the fixed command tags paired
-# with the transcript regression: they pin the audited curl command sequence.
+# Authored successor (not a byte-for-byte conversion) to the former legacy
+# XOAUTH2 seed. Keep the fixed command tags paired with the transcript
+# regression: they pin the audited curl command sequence.
 scheme: SCHEME_IMAP
 host_path: "imap.test/INBOX/;MAILINDEX=1"
 options { username: "fuzz-user" }

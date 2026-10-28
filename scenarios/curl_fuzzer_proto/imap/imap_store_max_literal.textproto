@@ -1,0 +1,15 @@
+# Accept a custom STORE, then advertise the largest curl_off_t literal without
+# a body or tagged completion. Curl must saturate the header-inclusive transfer
+# size instead of overflowing it.
+scheme: SCHEME_IMAP
+host_path: "imap.test/INBOX"
+options { username: "fuzz" }
+options { password: "secret" }
+options { customrequest: "STORE 1 +FLAGS (\\Seen)" }
+connection {
+  initial_response: "* OK imap.test ready\r\n"
+  on_readable: "* CAPABILITY IMAP4rev1\r\nOK CAPABILITY completed\r\n"
+  on_readable: "OK LOGIN completed\r\n"
+  on_readable: "* 1 EXISTS\r\nOK [UIDVALIDITY 7] SELECT completed\r\n"
+  on_readable: "* 1 FETCH (BODY[] {9223372036854775807}\r\n"
+}
