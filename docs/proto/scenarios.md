@@ -45,7 +45,8 @@ The main groups of fields are:
   `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential and handshake profiles,
-  `pop3_starttls_filter_allocation_failure`, `socks_proxy_mode`,
+  `pop3_starttls_filter_allocation_failure`, `gopher_probe_mode`,
+  `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `proxy_socket_option_mode`,
   `trace_ids`, `probe_multi_pollset`, `resolver_mode`, filename-backed parser
   inputs, and
@@ -156,6 +157,11 @@ Other peers intentionally give those fields narrower meanings:
   same recv-buffer-only pressure. Its semantic STLS selector arms one failure
   immediately after the peer accepts STLS, so it targets filter installation
   without depending on earlier allocation ordinals.
+- Gopher normally writes one bounded selector through the stream peer. Its
+  closed probe selector can split that write with no operation deadline, fill
+  the harness-owned socket before a five-millisecond timeout, or select a
+  fixed Gophers authority that reaches the TLS session-key size limit. No
+  protobuf bytes control the environment value, timeout, or oversized host.
 - The proxy-transport lane uses request-triggered chunks for each SOCKS reply
   and then for tunneled HTTP. SOCKS5 advertises deterministic no-auth and
   username/password methods; the scripted method-selection byte chooses the

@@ -1346,7 +1346,6 @@ endif()
 # Main fuzzer and protocol-specific fuzzers
 curl_add_fuzzer(curl_fuzzer           ALL)
 curl_add_fuzzer(curl_fuzzer_ftp       FTP)
-curl_add_fuzzer(curl_fuzzer_gopher    GOPHER)
 curl_add_fuzzer(curl_fuzzer_http      HTTP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
@@ -1575,7 +1574,6 @@ add_custom_target(fuzz
         curl_fuzzer
         curl_fuzzer_full_coverage
         curl_fuzzer_ftp
-        curl_fuzzer_gopher
         curl_fuzzer_http
         curl_fuzzer_mqtt
         curl_fuzzer_rtsp
@@ -1935,6 +1933,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         proto_fuzzer/dict_mock_server.cc
         proto_fuzzer/fuzzer_main.cc
         proto_fuzzer/ftp_mock_server.cc
+        proto_fuzzer/gopher_mock_server.cc
         proto_fuzzer/h2_cleartext_mock_server.cc
         proto_fuzzer/h2_plan.cc
         proto_fuzzer/happy_eyeballs_mock_server.cc
@@ -3115,6 +3114,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         curl_add_proto_peer_test(dict_mock_server_test
             tests/dict_mock_server_test.cc
             proto_fuzzer/dict_mock_server.cc)
+        curl_add_proto_peer_test(gopher_mock_server_test
+            tests/gopher_mock_server_test.cc
+            proto_fuzzer/gopher_mock_server.cc)
         curl_add_proto_peer_test(ldap_mock_server_test
             tests/ldap_mock_server_test.cc
             proto_fuzzer/ldap_mock_server.cc)

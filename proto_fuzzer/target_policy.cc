@@ -43,6 +43,7 @@ constexpr std::uint32_t kHaproxyConnectDrainBytes = 48;
 // port. Retain a useful retry window without letting one mutation request tens
 // of thousands of syscalls from a single transfer.
 constexpr std::uint64_t kMaxLocalPortRange = 16;
+constexpr std::size_t kGopherTlsPeerKeyHostBytes = 10163;
 
 // A default, bounded identifier keeps newly generated inputs on the gateway's
 // /ipfs/ or /ipns/ namespace. The path, query, and fragment after it stay
@@ -149,6 +150,22 @@ void CanonicalizeTlsHandshakeProfile(curl::fuzzer::proto::Scenario* scenario) {
       return;
     default:
       scenario->clear_tls_handshake_profile();
+      return;
+  }
+}
+
+/// Keep Gopher's harness-owned transport probe inside its closed enum. The
+/// fixed TLS hostname is long enough to reach the session-key size limit but
+/// remains below the structured target's 32 KiB input cap.
+void CanonicalizeGopherProbeMode(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->gopher_probe_mode()) {
+    case curl::fuzzer::proto::GOPHER_PROBE_DEFAULT:
+    case curl::fuzzer::proto::GOPHER_PROBE_PARTIAL_WRITE_NO_TIMEOUT:
+    case curl::fuzzer::proto::GOPHER_PROBE_SEND_TIMEOUT:
+    case curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT:
+      return;
+    default:
+      scenario->clear_gopher_probe_mode();
       return;
   }
 }
@@ -1835,6 +1852,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_pop3_starttls_filter_allocation_failure();
   }
 
+  if (profile != TargetProfile::kFastGopher) {
+    scenario->clear_gopher_probe_mode();
+  }
+
   if (profile != TargetProfile::kDeepHttp) {
     scenario->clear_http_transport_mode();
     scenario->clear_proxy_socket_option_mode();
@@ -2163,12 +2184,24 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastGopher) {
-    scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
-                             ? curl::fuzzer::proto::SCHEME_GOPHERS
-                             : curl::fuzzer::proto::SCHEME_GOPHER);
+    CanonicalizeGopherProbeMode(scenario);
+    const auto probe = scenario->gopher_probe_mode();
+    if (probe == curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT) {
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_GOPHERS);
+    } else if (probe != curl::fuzzer::proto::GOPHER_PROBE_DEFAULT) {
+      scenario->set_scheme(curl::fuzzer::proto::SCHEME_GOPHER);
+    } else {
+      scenario->set_scheme(scenario->scheme() == curl::fuzzer::proto::SCHEME_GOPHERS
+                               ? curl::fuzzer::proto::SCHEME_GOPHERS
+                               : curl::fuzzer::proto::SCHEME_GOPHER);
+    }
     RemoveIgnoredGopherShape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
-    CanonicalizeTlsAuthority(scenario);
+    if (probe == curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT) {
+      scenario->set_host_path(std::string(kGopherTlsPeerKeyHostBytes, 'g') + "/1/session-key-limit");
+    } else {
+      CanonicalizeTlsAuthority(scenario);
+    }
     return;
   }
 

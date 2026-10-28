@@ -1016,6 +1016,19 @@ message Scenario {
       }
     }
   ];
+  // Select one closed Gopher send/session-cache probe. The plaintext modes
+  // use only harness-owned socket pressure and deadlines; the TLS mode uses a
+  // fixed oversized authority to exercise the bounded peer-key builder.
+  // Other fixed lanes clear the selector, while compatibility preserves the
+  // append-only field without interpreting it.
+  GopherProbeMode gopher_probe_mode = 41 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_GOPHER
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1052,6 +1065,15 @@ enum TlsHandshakeProfile {
   TLS_HANDSHAKE_DEFAULT = 0;
   TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY = 1;
   TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST = 2;
+}
+
+// Bounded, harness-owned probes for Gopher's synchronous selector write and
+// the TLS session-cache peer-key size limit.
+enum GopherProbeMode {
+  GOPHER_PROBE_DEFAULT = 0;
+  GOPHER_PROBE_PARTIAL_WRITE_NO_TIMEOUT = 1;
+  GOPHER_PROBE_SEND_TIMEOUT = 2;
+  GOPHER_PROBE_TLS_SESSION_KEY_LIMIT = 3;
 }
 
 enum SocksProxyMode {
