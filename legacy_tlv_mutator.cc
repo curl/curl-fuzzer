@@ -512,8 +512,6 @@ const char *DefaultUrl() {
   return "imap://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_MQTT)
   return "mqtt://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_POP3)
-  return "pop3://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_RTMP)
   return "rtmp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_RTSP)
@@ -541,8 +539,6 @@ const char *DefaultResponse() {
   return "220 fuzz ready\r\n";
 #elif defined(FUZZ_PROTOCOLS_IMAP)
   return "* OK fuzz ready\r\n";
-#elif defined(FUZZ_PROTOCOLS_POP3)
-  return "+OK fuzz ready\r\n";
 #elif defined(FUZZ_PROTOCOLS_RTSP)
   return "RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n";
 #elif defined(FUZZ_PROTOCOLS_HTTP) || defined(FUZZ_PROTOCOLS_ALL)

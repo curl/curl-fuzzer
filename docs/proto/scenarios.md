@@ -44,7 +44,8 @@ The main groups of fields are:
 - Focused lanes: `api_plan`, `multi_plan` and its closed state-probe profile,
   `resolve_entries`, `happy_eyeballs`,
   `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
-  bounded HTTPS client-credential profiles, `socks_proxy_mode`,
+  bounded HTTPS client-credential and handshake profiles,
+  `pop3_starttls_filter_allocation_failure`, `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `proxy_socket_option_mode`,
   `trace_ids`, `probe_multi_pollset`, `resolver_mode`, filename-backed parser
   inputs, and
@@ -102,11 +103,11 @@ Other peers intentionally give those fields narrower meanings:
   application data. Its optional `tls_client_credential_profile` selects only
   harness-owned malformed blobs or fixed `/dev/null` engine/provider probes;
   protobuf bytes never become a filename, engine name, or provider name. The
-  separate
-  `tls_handshake_profile` can replace the OpenSSL peer with one fixed
-  pre-handshake `close_notify` record, covering curl's clean terminal error
-  translation without accepting fuzz-selected TLS bytes; GnuTLS and mbedTLS
-  clients treat that profile as the ordinary verified peer. The compatibility
+  separate `tls_handshake_profile` can replace the OpenSSL peer with a fixed
+  pre-handshake `close_notify` or empty HelloRequest record, covering curl's
+  terminal error translation and message classification without accepting
+  fuzz-selected TLS bytes; GnuTLS and mbedTLS clients treat those profiles as
+  the ordinary verified peer. The compatibility
   target preserves its older behavior and treats HTTPS script bytes as raw TLS
   records. These controls deliberately leave `Curl_ssl_cfilter_add` to a
   protocol peer capable of an in-place STARTTLS upgrade. Process-lifecycle
@@ -144,12 +145,17 @@ Other peers intentionally give those fields narrower meanings:
   chunk. An accepted APPEND continuation drains exactly the announced literal
   size. An `SCHEME_IMAPS` scenario runs the identical exchange over implicit
   TLS; its fixed authority is `tls.test`, matching the checked-in trust anchor,
-  and the handshake carries no ALPN extension.
+  and the handshake carries no ALPN extension. IMAP may retain a
+  bounded receive-buffer size to exercise long-command short writes; drain
+  throttling is always cleared.
 - POP3 also uses command-aligned replies, but its `+OK`/`-ERR` status lines
   need no rewriting. Multi-line CAPA, LIST, and RETR replies include their
   terminating dot line and are written unchanged. An `SCHEME_POP3S` scenario
   runs the identical exchange over implicit TLS against the same `tls.test`
-  authority and also negotiates no ALPN protocol.
+  authority and also negotiates no ALPN protocol. POP3 may retain the
+  same recv-buffer-only pressure. Its semantic STLS selector arms one failure
+  immediately after the peer accepts STLS, so it targets filter installation
+  without depending on earlier allocation ordinals.
 - The proxy-transport lane uses request-triggered chunks for each SOCKS reply
   and then for tunneled HTTP. SOCKS5 advertises deterministic no-auth and
   username/password methods; the scripted method-selection byte chooses the

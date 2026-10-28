@@ -74,6 +74,21 @@ constexpr auto kResolverCancelGateWait = std::chrono::milliseconds(500);
 constexpr int kResolverIdlePollAttempts = 4;
 constexpr int kResolverIdlePollTimeoutMs = 250;
 
+/// Return whether a fixed plaintext lane requests an explicit TLS upgrade.
+/// Compatibility preserves these append-only selectors without interpreting
+/// them, so the run mode remains part of the decision.
+bool ScenarioRequestsStartTls(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode mode) {
+  switch (mode) {
+    case ScenarioRunMode::kLdapCoverage:
+      return scenario.scheme() == curl::fuzzer::proto::SCHEME_LDAP && scenario.ldap_starttls();
+    case ScenarioRunMode::kPop3Coverage:
+      return scenario.scheme() == curl::fuzzer::proto::SCHEME_POP3 &&
+             scenario.pop3_starttls_filter_allocation_failure();
+    default:
+      return false;
+  }
+}
+
 struct ResolverIdleTraceState {
   explicit ResolverIdleTraceState(CURL* handle) : easy(handle) {}
 
@@ -861,8 +876,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
-    if (mode == ScenarioRunMode::kLdapCoverage && scenario.scheme() == curl::fuzzer::proto::SCHEME_LDAP &&
-        scenario.ldap_starttls()) {
+    if (ScenarioRequestsStartTls(scenario, mode)) {
       (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
     }
     if (mode == ScenarioRunMode::kResolverCoverage) {

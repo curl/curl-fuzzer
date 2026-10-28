@@ -517,6 +517,14 @@ void TestTlsHandshakeProfilePolicy() {
              curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY,
          "HTTPS policy discarded its OpenSSL handshake terminal");
 
+  Scenario hello_request;
+  hello_request.set_tls_handshake_profile(
+      curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST);
+  NormalizeScenarioForTarget(&hello_request, TargetProfile::kFastHttps);
+  Expect(hello_request.tls_handshake_profile() ==
+             curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST,
+         "HTTPS policy discarded its fixed HelloRequest terminal");
+
   Scenario unknown;
   unknown.set_tls_handshake_profile(
       static_cast<curl::fuzzer::proto::TlsHandshakeProfile>(99));
@@ -1350,9 +1358,11 @@ void TestFastImapPolicy() {
              scenario.upload().data() == "append sentinel",
          "fast IMAP policy removed the APPEND inputs curl can consume");
   Expect(scenario.connection().on_readable(0) == "control reply" &&
-             !scenario.connection().has_backpressure() &&
+             scenario.connection().has_backpressure() &&
+             scenario.connection().backpressure().recv_buf_bytes() == 4096 &&
+             scenario.connection().backpressure().drain_limit() == 0 &&
              scenario.connection().server_frames_size() == 0,
-         "fast IMAP policy changed replies or retained stream-only controls");
+         "fast IMAP policy changed replies or mail pressure controls");
 }
 
 void TestFastPop3Policy() {
@@ -1382,9 +1392,32 @@ void TestFastPop3Policy() {
              scenario.subsequent_connections_size() == 0,
          "fast POP3 policy retained work its download-only peer cannot use");
   Expect(scenario.connection().on_readable(0) == "control reply" &&
-             !scenario.connection().has_backpressure() &&
+             scenario.connection().has_backpressure() &&
+             scenario.connection().backpressure().recv_buf_bytes() == 4096 &&
+             scenario.connection().backpressure().drain_limit() == 0 &&
              scenario.connection().server_frames_size() == 0,
-         "fast POP3 policy changed replies or retained stream-only controls");
+         "fast POP3 policy changed replies or mail pressure controls");
+
+  Scenario starttls;
+  starttls.set_scheme(SCHEME_POP3);
+  starttls.set_pop3_starttls_filter_allocation_failure(true);
+  starttls.add_fail_allocations(7);
+  NormalizeScenarioForTarget(&starttls, TargetProfile::kFastPop3);
+  Expect(starttls.pop3_starttls_filter_allocation_failure() &&
+             starttls.fail_allocations().empty(),
+         "fast POP3 policy combined semantic and ordinal failures");
+
+  Scenario implicit_tls;
+  implicit_tls.set_scheme(SCHEME_POP3S);
+  implicit_tls.set_pop3_starttls_filter_allocation_failure(true);
+  NormalizeScenarioForTarget(&implicit_tls, TargetProfile::kFastPop3);
+  Expect(!implicit_tls.pop3_starttls_filter_allocation_failure(),
+         "implicit POP3S retained the plaintext STLS selector");
+
+  Scenario drain_only = ScenarioWithBackpressure(SCHEME_POP3, 0, 17);
+  NormalizeScenarioForTarget(&drain_only, TargetProfile::kFastPop3);
+  Expect(!drain_only.connection().has_backpressure(),
+         "fast POP3 policy retained drain-only timing work");
 }
 
 void TestFastMqttPolicy() {

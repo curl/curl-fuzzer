@@ -1,0 +1,12 @@
+# Accept STLS, then reject the next libcurl allocation at the protocol
+# boundary where curl installs the TLS connection filter.
+scheme: SCHEME_POP3
+host_path: "pop3.test/1"
+pop3_starttls_filter_allocation_failure: true
+options { username: "fuzz" }
+options { password: "secret" }
+connection {
+  initial_response: "+OK pop3.test ready\r\n"
+  on_readable: "+OK capabilities\r\nSTLS\r\nUSER\r\n.\r\n"
+  on_readable: "+OK begin TLS\r\n"
+}

@@ -145,6 +145,7 @@ void CanonicalizeTlsHandshakeProfile(curl::fuzzer::proto::Scenario* scenario) {
   switch (scenario->tls_handshake_profile()) {
     case curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT:
     case curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY:
+    case curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST:
       return;
     default:
       scenario->clear_tls_handshake_profile();
@@ -1443,14 +1444,17 @@ void RemoveIgnoredHttp3Shape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveMultiOnlyShape(scenario);
 }
 
-/// Remove stream-driver controls that neither file-transfer peer interprets.
-/// FTP consumes raw byte chunks as control/data replies, while TFTP preserves
-/// them as individual datagrams; structured WebSocket frames, manual probes,
-/// and event-loop backpressure therefore cannot affect either curl protocol.
-void RemoveUnusedFileTransferConnectionShape(curl::fuzzer::proto::Connection* connection) {
+/// Remove stream-driver controls unused by a protocol peer. FTP and TFTP
+/// discard every such control; the line-oriented IMAP and POP3 peers opt in to
+/// retaining recv-buffer pressure before a later mail-specific canonicalizer
+/// removes drain throttling.
+void RemoveUnusedFileTransferConnectionShape(curl::fuzzer::proto::Connection* connection,
+                                             bool retain_backpressure = false) {
   connection->clear_server_frames();
   connection->clear_manual_probes();
-  connection->clear_backpressure();
+  if (!retain_backpressure) {
+    connection->clear_backpressure();
+  }
 }
 
 /// Retain only the reusable shapes consumed by the FTP peer: one raw control
@@ -1509,7 +1513,7 @@ void RemoveIgnoredImapShape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
   RemoveMultiOnlyShape(scenario);
-  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection(), true);
 }
 
 /// Retain only the command-aligned control script. POP3 is a download-only
@@ -1523,7 +1527,7 @@ void RemoveIgnoredPop3Shape(curl::fuzzer::proto::Scenario* scenario) {
   RemoveTelnetOnlyShape(scenario);
   RemoveApiOnlyShape(scenario);
   RemoveMultiOnlyShape(scenario);
-  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection());
+  RemoveUnusedFileTransferConnectionShape(scenario->mutable_connection(), true);
 }
 
 void RemoveIgnoredGopherShape(curl::fuzzer::proto::Scenario* scenario) {
@@ -1694,11 +1698,28 @@ void CanonicalizeOptionalBackpressure(curl::fuzzer::proto::Connection* connectio
   backpressure->set_drain_limit(CanonicalizeNonZero(backpressure->drain_limit(), 1, kMaxDrainBytesPerIteration));
 }
 
+/// Keep mail pressure cheap and deterministic: only a small receive buffer is
+/// meaningful to the immediate-service loop. Drain throttling belongs to the
+/// timing lane, and a zero receive-buffer request is no pressure at all.
+void CanonicalizeMailBackpressure(curl::fuzzer::proto::Connection* connection) {
+  if (!connection->has_backpressure()) {
+    return;
+  }
+  auto* backpressure = connection->mutable_backpressure();
+  if (backpressure->recv_buf_bytes() == 0) {
+    connection->clear_backpressure();
+    return;
+  }
+  backpressure->set_recv_buf_bytes(
+      CanonicalizeNonZero(backpressure->recv_buf_bytes(), kMinBackpressureBufferBytes, kMaxBackpressureBufferBytes));
+  backpressure->clear_drain_limit();
+}
+
 /// Canonicalize the fields that determine which server and drive-loop policy
-/// execute. Fast targets discard backpressure because one mutated non-zero
-/// scalar otherwise opts an ordinary input into hundreds of timed waits. The
-/// timing target does the inverse: it guarantees a non-default buffer setting
-/// so its CPU allocation remains focused on the intentionally slower paths.
+/// execute. Fast targets normally discard backpressure because one mutated
+/// non-zero scalar otherwise opts an ordinary input into hundreds of timed
+/// waits; mail retains only recv-buffer pressure. The timing target keeps both
+/// controls and guarantees a non-default buffer setting.
 void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile profile,
                      ConditionalEligibilityPruner prune_conditional_eligibility) {
   if (scenario == nullptr) {
@@ -1820,6 +1841,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // scalar option. Other fixed lanes discard it before their early returns.
   if (profile != TargetProfile::kFastLdap) {
     scenario->clear_ldap_starttls();
+  }
+
+  if (profile != TargetProfile::kFastPop3) {
+    scenario->clear_pop3_starttls_filter_allocation_failure();
   }
 
   if (profile != TargetProfile::kDeepHttp) {
@@ -2102,6 +2127,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
                                                                      : curl::fuzzer::proto::SCHEME_IMAP);
     RemoveIgnoredImapShape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
+    CanonicalizeMailBackpressure(scenario->mutable_connection());
     CanonicalizeImapAuthority(scenario);
     return;
   }
@@ -2113,8 +2139,15 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     const auto scheme = scenario->scheme();
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_POP3S ? curl::fuzzer::proto::SCHEME_POP3S
                                                                      : curl::fuzzer::proto::SCHEME_POP3);
+    if (scenario->scheme() == curl::fuzzer::proto::SCHEME_POP3S) {
+      scenario->clear_pop3_starttls_filter_allocation_failure();
+    }
+    if (scenario->pop3_starttls_filter_allocation_failure()) {
+      scenario->clear_fail_allocations();
+    }
     RemoveIgnoredPop3Shape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
+    CanonicalizeMailBackpressure(scenario->mutable_connection());
     CanonicalizePop3Authority(scenario);
     return;
   }

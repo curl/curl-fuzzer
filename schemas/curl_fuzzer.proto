@@ -994,6 +994,19 @@ message Scenario {
       }
     }
   ];
+  // Upgrade the plaintext POP3 lane with STLS, then fail the first libcurl
+  // allocation made after the peer accepts the command. The peer arms this at
+  // the protocol boundary so the selector remains stable as earlier setup
+  // allocations change. POP3S clears it because implicit TLS has no STLS
+  // transition; compatibility preserves the append-only field.
+  bool pop3_starttls_filter_allocation_failure = 39 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_POP3
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1023,11 +1036,13 @@ enum TlsClientCredentialProfile {
   TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL = 4;
 }
 
-// Safe peer-side handshake terminals for OpenSSL error translation coverage.
-// These profiles contain no protobuf-controlled wire bytes or callback data.
+// Safe peer-side handshake terminals for OpenSSL error translation and
+// message-classification coverage. These profiles contain no
+// protobuf-controlled wire bytes or callback data.
 enum TlsHandshakeProfile {
   TLS_HANDSHAKE_DEFAULT = 0;
   TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY = 1;
+  TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST = 2;
 }
 
 enum SocksProxyMode {
@@ -5023,6 +5038,8 @@ message Connection {
         context: "primary"
         eligibility {
           profiles: TARGET_PROFILE_FAST_HTTP3
+          profiles: TARGET_PROFILE_FAST_IMAP
+          profiles: TARGET_PROFILE_FAST_POP3
         }
       }
     }
@@ -5149,6 +5166,8 @@ message BackpressureConfig {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_HTTP3
+        profiles: TARGET_PROFILE_FAST_IMAP
+        profiles: TARGET_PROFILE_FAST_POP3
         profiles: TARGET_PROFILE_TIMING
       }
     }
