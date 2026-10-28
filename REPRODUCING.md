@@ -15,13 +15,13 @@ OSS-Fuzz report.
 Decode a legacy input with the Python tool:
 
 ```shell
-read_corpus clusterfuzz-testcase-minimized-curl_fuzzer_http-<id>
+read_corpus clusterfuzz-testcase-minimized-curl_fuzzer_ftp-<id>
 ```
 
 For example, a URL-only input is displayed as:
 
 ```text
-TLVContents(type='CURLOPT_URL' (1), length=16, data=b'http://127.0.0.1')
+TLVContents(type='CURLOPT_URL' (1), length=15, data=b'ftp://127.0.0.1')
 ```
 
 The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) provides the
@@ -81,16 +81,16 @@ separate decoder.
 Build the target, optionally against a local curl checkout:
 
 ```shell
-./mainline.sh -t curl_fuzzer_http
-./mainline.sh -c /path/to/curl -t curl_fuzzer_http
+./mainline.sh -t curl_fuzzer_proto_http
+./mainline.sh -c /path/to/curl -t curl_fuzzer_proto_http
 ```
 
 The resulting binary is under `build/`. Set `FUZZ_VERBOSE` to enable detailed
 libcurl logging:
 
 ```shell
-FUZZ_VERBOSE=1 ./build/curl_fuzzer_http \
-  clusterfuzz-testcase-minimized-curl_fuzzer_http-<id>
+FUZZ_VERBOSE=1 ./build/curl_fuzzer_proto_http \
+  clusterfuzz-testcase-minimized-curl_fuzzer_proto_http-<id>
 ```
 
 The default build uses AddressSanitizer. It is suitable for many
@@ -109,8 +109,8 @@ HTTP reproduction is:
 python3 infra/helper.py build_image curl
 python3 infra/helper.py build_fuzzers --sanitizer undefined curl
 python3 infra/helper.py reproduce \
-  curl curl_fuzzer_http \
-  /path/to/clusterfuzz-testcase-minimized-curl_fuzzer_http-<id>
+  curl curl_fuzzer_proto_http \
+  /path/to/clusterfuzz-testcase-minimized-curl_fuzzer_proto_http-<id>
 ```
 
 Once reproduced, use the normal sanitizer stack trace, debugger, and targeted

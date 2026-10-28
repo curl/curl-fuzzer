@@ -134,6 +134,11 @@ def test_extended_http_seeds_retain_correlated_wire_state() -> None:
             "http_version: 5",
             "text/plain",
         ),
+        "http2_connect_flush.textproto": (
+            'trace_config: "protocol,network"',
+            "http2_connect_flush_probe: true",
+            "CONNECT_ONLY",
+        ),
         "http2_upgrade.textproto": (
             "http_version: 3",
             "101 Switching Protocols",

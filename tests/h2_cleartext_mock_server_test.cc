@@ -45,9 +45,18 @@ std::size_t CollectResponse(char *contents, std::size_t size, std::size_t nmemb,
   return bytes;
 }
 
+int CollectTrace(CURL * /*easy*/, curl_infotype type, char *data,
+                 std::size_t size, void *userdata) {
+  if (type == CURLINFO_TEXT && data != nullptr && userdata != nullptr) {
+    static_cast<std::string *>(userdata)->append(data, size);
+  }
+  return 0;
+}
+
 struct H2TransferResult {
   CURLcode code = CURLE_FAILED_INIT;
   std::string response;
+  std::string trace;
   long http_version = CURL_HTTP_VERSION_NONE;
   long new_connection_count = -1;
   std::size_t observed_request_count = 0;
@@ -63,19 +72,26 @@ struct H2TransferResult {
 };
 
 H2TransferResult DriveH2Scenario(const Scenario &scenario) {
+  proto_fuzzer::ScopedTraceReset trace_reset;
   H2TransferResult result;
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "H2 cleartext test could not allocate an easy handle");
   curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
-      easy, curl::fuzzer::proto::SCHEME_HTTP);
+      easy, curl::fuzzer::proto::SCHEME_HTTP, scenario.trace_ids(),
+      scenario.trace_config());
   const std::string url = "http://" + scenario.host_path();
   (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
   (void)curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   (void)curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
+  if (!scenario.trace_config().empty()) {
+    (void)curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CollectTrace);
+    (void)curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &result.trace);
+  }
 
   {
-    proto_fuzzer::H2CleartextMockServer server;
+    proto_fuzzer::H2CleartextMockServer server(
+        scenario.http2_connect_flush_probe());
     server.Install(easy);
     result.code = server.DriveScenario(easy, scenario);
     (void)curl_easy_getinfo(easy, CURLINFO_HTTP_VERSION, &result.http_version);
@@ -137,6 +153,15 @@ Scenario MakeRawScenario() {
       std::string("\x00\x00\x01\x01\x04\x00\x00\x00\x01\x88"
                   "\x00\x00\x03\x00\x01\x00\x00\x00\x01raw",
                   22));
+  return scenario;
+}
+
+Scenario MakeConnectFlushScenario() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("tls.test/h2-connect-flush");
+  scenario.set_trace_config("protocol,network");
+  scenario.set_http2_connect_flush_probe(true);
   return scenario;
 }
 
@@ -225,6 +250,17 @@ void TestRawPriorKnowledgeExchange() {
          "raw h2c peer did not report HTTP/2");
 }
 
+void TestConnectFlushProbeCompletesRepeatedly() {
+  for (int iteration = 0; iteration < 25; ++iteration) {
+    const H2TransferResult result = DriveH2Scenario(MakeConnectFlushScenario());
+    Expect(result.code == CURLE_OK && result.response.empty() &&
+               result.trace.find("flush ->") != std::string::npos &&
+               result.trace.find("connection-window=") != std::string::npos &&
+               result.trace.find("h2 windows") == std::string::npos,
+           "prefilled h2c connection did not complete deterministically");
+  }
+}
+
 void TestContinuationFloodProducesBoundedFatalSessionError() {
   const H2TransferResult result =
       DriveH2Scenario(MakeFatalContinuationScenario());
@@ -288,6 +324,7 @@ void TestAcceptedPushCleanupSuppressesHandleEnumerationFailures() {
 int main() {
   TestStructuredPriorKnowledgeExchange();
   TestRawPriorKnowledgeExchange();
+  TestConnectFlushProbeCompletesRepeatedly();
   TestContinuationFloodProducesBoundedFatalSessionError();
   TestValidPushPromiseReachesCallback();
   TestAcceptedPushCompletesAndCleansUpOneHandle();

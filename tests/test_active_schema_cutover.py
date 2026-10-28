@@ -164,6 +164,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.add("pop3_starttls_filter_allocation_failure")
         if slug in {"compatibility", "fast_gopher"}:
             expected_fields.add("gopher_probe_mode")
+        if slug in {"compatibility", "fast_http2"}:
+            expected_fields.add("http2_connect_flush_probe")
         if slug in {"fast_imap", "fast_pop3"}:
             expected_fields.update(
                 {
@@ -252,6 +254,14 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert gopher_probe.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_GOPHER",
+    }
+
+    h2_flush_probe = model.fields[
+        "curl.fuzzer.proto.Scenario.http2_connect_flush_probe"
+    ]
+    assert h2_flush_probe.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_HTTP2",
     }
 
     settings_ack = model.fields["curl.fuzzer.proto.Http2Settings.ack"]

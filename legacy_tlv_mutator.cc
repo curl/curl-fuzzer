@@ -533,7 +533,7 @@ const char *DefaultResponse() {
   return "220 fuzz ready\r\n";
 #elif defined(FUZZ_PROTOCOLS_RTSP)
   return "RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n";
-#elif defined(FUZZ_PROTOCOLS_HTTP) || defined(FUZZ_PROTOCOLS_ALL)
+#elif defined(FUZZ_PROTOCOLS_ALL)
   return "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 #else
   return "fuzz\r\n";

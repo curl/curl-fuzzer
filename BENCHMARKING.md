@@ -24,7 +24,7 @@ uv run compare_fuzzers \
   --output build/measurements/comparison.json
 ```
 
-The defaults cover the legacy FTP/HTTP/TFTP targets and the fixed
+The defaults cover the legacy FTP/TFTP targets and the fixed
 structured fast HTTP, deep HTTP, HTTPS, WS, WSS, TELNET, FTP, TFTP, API, and
 timing lanes. The deep HTTP target
 retains stateful authentication, redirect, upload, MIME, and result-probe
@@ -52,13 +52,12 @@ target pair:
 uv run compare_fuzzers \
   --baseline-dir /path/to/legacy/out/curl \
   --candidate-dir /path/to/proto/out/curl \
-  --target-pair curl_fuzzer_http=curl_fuzzer_proto_http \
   --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp \
   --target-pair curl_fuzzer_tftp=curl_fuzzer_proto_tftp
 ```
 
 The label in the report is, for example,
-`curl_fuzzer_http=>curl_fuzzer_proto_http`. Each side of a mapped pair receives its
+`curl_fuzzer_ftp=>curl_fuzzer_proto_ftp`. Each side of a mapped pair receives its
 own native corpus and seed archive; legacy TLV bytes are never passed to the
 protobuf target. Same-name `--target` comparisons retain the stricter behavior
 of sharing one content-identical snapshot. `--corpus TARGET=PATH` overrides are
@@ -118,20 +117,18 @@ under `build-coverage/curl/src/curl_external`, which the helper detects:
 uv run compare_fuzzers \
   --baseline-dir /path/to/baseline-libfuzzer-out \
   --candidate-dir /path/to/candidate-libfuzzer-out \
-  --target-pair curl_fuzzer_http=curl_fuzzer_proto_http \
-  --target-pair curl_fuzzer_http=curl_fuzzer_proto_http_deep \
-  --target-pair curl_fuzzer_http=curl_fuzzer_proto_timing \
+  --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp \
+  --target-pair curl_fuzzer_tftp=curl_fuzzer_proto_tftp \
   --coverage-baseline-dir /path/to/baseline-worktree/build-coverage \
   --coverage-candidate-dir /path/to/candidate-worktree/build-coverage \
   --seconds 60 \
   --repeats 5
 ```
 
-The aggregate source-coverage comparison unions the three candidate lanes, so
-the fast target can intentionally omit stateful behavior without making the
-replacement-parity number look worse. Benchmark the fast lane separately when
-judging whether it can take over the legacy HTTP CPU allocation; the deep and
-timing targets exist to retain coverage, not to match its throughput.
+The aggregate source-coverage comparison unions all selected target pairs.
+Benchmark each candidate lane separately when judging whether it can take over
+the corresponding legacy CPU allocation; supporting lanes may retain coverage
+without needing to match the primary lane's throughput.
 
 When curl was supplied with `codecoverage.sh -c`, pass the source roots
 explicitly:

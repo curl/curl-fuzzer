@@ -1,0 +1,7 @@
+# Before fd handoff, fill curl's client-to-peer socket. The harness selects
+# CONNECT_ONLY and leaves the peer open, so initial SETTINGS remain queued until
+# request teardown asks the H2 filter to flush without creating a stream.
+scheme: SCHEME_HTTP
+host_path: "127.0.0.1/http2-connect-flush"
+trace_config: "protocol,network"
+http2_connect_flush_probe: true

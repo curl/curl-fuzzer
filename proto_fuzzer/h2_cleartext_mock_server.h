@@ -26,7 +26,7 @@ namespace proto_fuzzer {
 /// the HTTPS/HTTP2 origin lane.
 class H2CleartextMockServer final : public MockServer {
  public:
-  H2CleartextMockServer();
+  explicit H2CleartextMockServer(bool connect_flush_probe = false);
   ~H2CleartextMockServer() override;
 
   void Install(CURL* easy) override;
@@ -42,6 +42,7 @@ class H2CleartextMockServer final : public MockServer {
   void HandleDetachedMulti(CurlMultiPtr multi) override;
 
  private:
+  const bool connect_flush_probe_;
   H2Runtime runtime_;
   CurlMultiPtr retained_multi_;
 };

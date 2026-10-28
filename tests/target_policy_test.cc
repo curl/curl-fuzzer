@@ -464,6 +464,34 @@ void TestFastHttp2Policy() {
          "fast HTTP/2 policy retained competing raw or timed response work");
 }
 
+void TestFastHttp2ConnectFlushProbePolicy() {
+  Scenario probe;
+  probe.set_http2_connect_flush_probe(true);
+  probe.mutable_http2_plan()->add_actions()->mutable_headers()->set_status_code(
+      200);
+  probe.mutable_connection()->set_initial_response("raw h2 response");
+  probe.mutable_connection()->add_on_readable("more raw h2 response");
+  probe.add_subsequent_connections()->set_initial_response("follow-on peer");
+  NormalizeScenarioForTarget(&probe, TargetProfile::kFastHttp2);
+
+  Expect(probe.http2_connect_flush_probe() && !probe.has_http2_plan() &&
+             !probe.has_connection() &&
+             probe.subsequent_connections_size() == 0,
+         "fast HTTP/2 flush probe retained a competing response script");
+
+  Scenario other;
+  other.set_http2_connect_flush_probe(true);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(!other.http2_connect_flush_probe(),
+         "non-HTTP/2 policy retained the connect-flush probe");
+
+  Scenario compatibility;
+  compatibility.set_http2_connect_flush_probe(true);
+  NormalizeScenarioForTarget(&compatibility, TargetProfile::kCompatibility);
+  Expect(compatibility.http2_connect_flush_probe(),
+         "compatibility discarded the append-only HTTP/2 flush probe");
+}
+
 void TestTlsPoliciesRejectUnknownCertificateChain() {
   constexpr TargetProfile kTlsPolicies[] = {
       TargetProfile::kFastHttps,
@@ -3602,6 +3630,7 @@ int main() {
   TestFastHttpsPolicy();
   TestHttpsH2Policy();
   TestFastHttp2Policy();
+  TestFastHttp2ConnectFlushProbePolicy();
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestTlsClientCredentialProfilePolicy();
   TestTlsHandshakeProfilePolicy();

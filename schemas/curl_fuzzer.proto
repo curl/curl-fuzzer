@@ -1029,6 +1029,18 @@ message Scenario {
       }
     }
   ];
+  // Saturate curl's HTTP/2 socket before fd handoff so its connection filter
+  // must flush buffered setup bytes before a request stream exists. Other
+  // fixed lanes clear the selector, while compatibility preserves the
+  // append-only field without interpreting it.
+  bool http2_connect_flush_probe = 42 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP2
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
