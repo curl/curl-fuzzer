@@ -1292,6 +1292,25 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
+    # Exercise watch exhaustion through the registered socket callback, both
+    # with and without assertions. Test doubles provide libcurl's API here.
+    foreach(_test multi_socket_driver_test multi_socket_driver_ndebug_test)
+        add_executable(${_test}
+            tests/multi_socket_driver_test.cc
+            tests/multi_socket_driver_stubs.c
+            proto_fuzzer/multi_socket_driver.cc)
+        target_compile_features(${_test} PRIVATE cxx_std_17)
+        target_compile_options(${_test} PRIVATE ${COMMON_FLAGS})
+        target_include_directories(${_test} PRIVATE
+            ${CURL_INCLUDE_DIRS}
+            ${CMAKE_SOURCE_DIR})
+        target_link_options(${_test} PRIVATE ${COVERAGE_LINK_FLAGS})
+        add_dependencies(${_test} curl_external)
+        add_test(NAME ${_test} COMMAND ${_test})
+        add_dependencies(fuzzer_unit_tests ${_test})
+    endforeach()
+    target_compile_definitions(multi_socket_driver_ndebug_test PRIVATE NDEBUG)
+
     add_executable(resolver_getaddrinfo_shim_test
         tests/resolver_getaddrinfo_shim_test.cc
         proto_fuzzer/resolver_getaddrinfo_shim.cc)

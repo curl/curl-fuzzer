@@ -356,6 +356,10 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
   // Destroy the multi while both its socket callback storage and mock peer are
   // live, then detach request-data pointers before cleaning each easy handle.
   multi.reset();
+  stats.watch_exhausted = socket_driver.watch_exhausted();
+  if (stats.watch_exhausted) {
+    std::fputs("curl-fuzzer: socket watch capacity exhausted\n", stderr);
+  }
   for (std::size_t index = 0; index < transfer_count; ++index) {
     transfers[index].session.Close();
   }

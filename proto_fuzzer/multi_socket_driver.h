@@ -51,6 +51,9 @@ class MultiSocketDriver {
 
   void ProbeControlApis();
 
+  /// @return true if any socket callback exhausted the fixed watch table in this drive.
+  bool watch_exhausted() const { return watch_exhausted_; }
+
  private:
   /// One stable curl_multi_assign association.
   struct Watch {
@@ -71,14 +74,17 @@ class MultiSocketDriver {
 
   Watch* FindFreeWatch();
 
-  /// Number of stable watch slots. The HTTP mock permits four connections;
-  /// extra slots leave room for transient resolver/filter descriptors.
+  /// Fixed application capacity, not a proven sufficient descriptor bound.
+  /// A sufficient bound must also account for resolver, Happy Eyeballs, and
+  /// internal filter descriptors; mock-connection and easy-handle limits alone
+  /// do not establish one. Exhaustion reports a socket-callback error.
   static constexpr std::size_t kMaxWatches = 16;
 
   CURLM* multi_;
   std::array<Watch, kMaxWatches> watches_;
   long timeout_ms_;
   bool timer_pending_;
+  bool watch_exhausted_;
   std::uint64_t generation_;
 };
 
