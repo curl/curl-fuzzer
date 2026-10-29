@@ -22,8 +22,10 @@ activating the environment.
 `read_corpus` prints one decoded record per line:
 
 ```console
-$ read_corpus corpora/curl_fuzzer_ftp/test_url_ftp
-TLVContents(type='CURLOPT_URL' (1), length=15, data=b'ftp://127.0.0.1')
+$ read_corpus corpora/curl_fuzzer/test_file_nobody
+TLVContents(type='CURLOPT_URL' (1), length=24, data=b'file:///proc/self/status')
+TLVContents(type='CURLOPT_HEADER' (27), length=4, data=b'\x00\x00\x00\x01')
+TLVContents(type='CURLOPT_NOBODY' (28), length=4, data=b'\x00\x00\x00\x01')
 ```
 
 For interactive inspection, use the published
@@ -62,7 +64,8 @@ Responses can instead come from a binary file (`--rsp0file`) or the
 
 Before checking in a seed, put it under the matching active target directory,
 decode it, and replay it with that target. A protocol-specific URL is important:
-an FTP-only executable will reject an HTTP URL before reaching FTP code.
+a protocol-specific executable rejects another scheme before reaching the
+intended protocol code.
 
 ## DoH loopback seeds
 
@@ -92,22 +95,22 @@ seed but never invents them for other inputs. See
 Build one target with the repository's standalone replay engine:
 
 ```shell
-./mainline.sh -t curl_fuzzer_ftp
+./mainline.sh -t curl_fuzzer
 ```
 
 The resulting runner accepts files and directories. A directory is walked
 recursively:
 
 ```shell
-./build/curl_fuzzer_ftp corpora/curl_fuzzer_ftp/test_url_ftp
-./build/curl_fuzzer_ftp corpora/curl_fuzzer_ftp/
+./build/curl_fuzzer corpora/curl_fuzzer/test_file_nobody
+./build/curl_fuzzer corpora/curl_fuzzer/
 ```
 
 Set `FUZZ_VERBOSE=1` when replaying one testcase to show curl's verbose trace
 and the simulated peer traffic:
 
 ```shell
-FUZZ_VERBOSE=1 ./build/curl_fuzzer_ftp /path/to/testcase
+FUZZ_VERBOSE=1 ./build/curl_fuzzer /path/to/testcase
 ```
 
 The default local build replays inputs; it does not perform mutation. Follow

@@ -24,9 +24,8 @@ uv run compare_fuzzers \
   --output build/measurements/comparison.json
 ```
 
-The defaults cover the legacy FTP target and the fixed
-structured fast HTTP, deep HTTP, HTTPS, WS, WSS, TELNET, FTP, TFTP, API, and
-timing lanes. The deep HTTP target
+The defaults cover the fixed structured fast HTTP, deep HTTP, HTTPS, WS, WSS,
+TELNET, FTP, TFTP, API, and timing lanes. The deep HTTP target
 retains stateful authentication, redirect, upload, MIME, and result-probe
 work so the ordinary HTTP lane can concentrate its CPU budget on single-request
 URL and response parsing. The original mixed-semantics
@@ -52,11 +51,11 @@ target pair:
 uv run compare_fuzzers \
   --baseline-dir /path/to/legacy/out/curl \
   --candidate-dir /path/to/proto/out/curl \
-  --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp
+  --target-pair curl_fuzzer=curl_fuzzer_proto
 ```
 
 The label in the report is, for example,
-`curl_fuzzer_ftp=>curl_fuzzer_proto_ftp`. Each side of a mapped pair receives its
+`curl_fuzzer=>curl_fuzzer_proto`. Each side of a mapped pair receives its
 own native corpus and seed archive; legacy TLV bytes are never passed to the
 protobuf target. Same-name `--target` comparisons retain the stricter behavior
 of sharing one content-identical snapshot. `--corpus TARGET=PATH` overrides are
@@ -116,7 +115,7 @@ under `build-coverage/curl/src/curl_external`, which the helper detects:
 uv run compare_fuzzers \
   --baseline-dir /path/to/baseline-libfuzzer-out \
   --candidate-dir /path/to/candidate-libfuzzer-out \
-  --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp \
+  --target-pair curl_fuzzer=curl_fuzzer_proto \
   --coverage-baseline-dir /path/to/baseline-worktree/build-coverage \
   --coverage-candidate-dir /path/to/candidate-worktree/build-coverage \
   --seconds 60 \

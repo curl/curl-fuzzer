@@ -1,9 +1,10 @@
-# Complete passive download: login, PWD, EPSV, TYPE, SIZE, RETR, data EOF,
-# then the final control-channel completion reply.
+# Bounded passive download: SIZE exceeds the requested range, so curl caps the
+# transfer before consuming the final control-channel completion reply.
 scheme: SCHEME_FTP
 host_path: "ftp.test/file.bin"
 options { username: "fuzz" }
 options { password: "secret" }
+options { range: "0-3" }
 connection {
   initial_response: "220 ftp fuzz peer ready\r\n"
   on_readable: "331 password required\r\n"

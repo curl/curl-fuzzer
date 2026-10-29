@@ -15,13 +15,13 @@ OSS-Fuzz report.
 Decode a legacy input with the Python tool:
 
 ```shell
-read_corpus clusterfuzz-testcase-minimized-curl_fuzzer_ftp-<id>
+read_corpus clusterfuzz-testcase-minimized-curl_fuzzer-<id>
 ```
 
 For example, a URL-only input is displayed as:
 
 ```text
-TLVContents(type='CURLOPT_URL' (1), length=15, data=b'ftp://127.0.0.1')
+TLVContents(type='CURLOPT_URL' (1), length=24, data=b'file:///proc/self/status')
 ```
 
 The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) provides the

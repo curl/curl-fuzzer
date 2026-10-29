@@ -44,6 +44,7 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
         "ftp_epsv_retr.textproto": (
             "229 Entering Extended Passive Mode",
             "150 opening data connection",
+            'range: "0-3"',
             'initial_response: "hello world"',
         ),
         "ftp_epsv_malformed_tuple.textproto": (
@@ -102,14 +103,25 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
         ),
         "ftp_wildcard_unix_symlink.textproto": (
             "probe_multi_pollset: true",
+            "trace_ids: true",
             "wildcardmatch: true",
             "link.txt -> match.txt",
             'initial_response: "match"',
         ),
+        "ftp_wildcard_unix_total_crlf_rejected.textproto": (
+            "wildcardmatch: true",
+            "total 5\\r\\n",
+            "226 listing complete",
+        ),
         "ftp_wildcard_windows_list.textproto": (
             "wildcardmatch: true",
+            "<DIR>",
             "04-27-26  11:01AM",
             'initial_response: "match"',
+        ),
+        "ftp_auth_tls_filter_allocation_failure.textproto": (
+            "ftp_auth_tls_filter_allocation_failure: true",
+            "234 begin TLS",
         ),
         "ftp_url_type_ascii.textproto": (
             'host_path: "ftp.test/file.txt;type=a"',

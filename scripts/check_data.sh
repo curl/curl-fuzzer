@@ -32,7 +32,7 @@ fi
 
 for TARGET in ${FUZZ_TARGETS}
 do
-  if [[ ${TARGET} == "curl_fuzzer_ftp" ]] || [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer" ]]
+  if [[ ${TARGET} == "curl_fuzzer_smtp" ]] || [[ ${TARGET} == "curl_fuzzer" ]]
   then
     # For the moment, disable some problematic corpuses
     echo "Skipping ${TARGET}"

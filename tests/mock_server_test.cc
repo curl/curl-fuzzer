@@ -32,6 +32,7 @@
 #endif
 #include "proto_fuzzer/curl_global_lifecycle.h"
 #include "proto_fuzzer/curl_raii.h"
+#include "proto_fuzzer/ftp_mock_server.h"
 #include "proto_fuzzer/happy_eyeballs_mock_server.h"
 #include "proto_fuzzer/ipfs_url.h"
 #include "proto_fuzzer/option_apply.h"
@@ -316,6 +317,48 @@ void TestPop3StartTlsArmsAdjacentFilterFailure() {
              statistics.injected_failures == 1 &&
              statistics.allocation_attempts >= 1,
          "POP3 STLS semantic arm did not reject exactly one allocation");
+
+  easy.reset();
+  connect_to.reset();
+}
+
+void TestFtpAuthTlsArmsAdjacentFilterFailure() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+  scenario.set_host_path("ftp.test/explicit-tls");
+  scenario.set_ftp_auth_tls_filter_allocation_failure(true);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("220 ready\r\n");
+  connection->add_on_readable("234 begin TLS\r\n");
+
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "FTP AUTH TLS test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_FTP));
+  Expect(connect_to != nullptr, "FTP AUTH TLS baseline lost CONNECT_TO state");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
+                         "ftp://ftp.test/explicit-tls");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_USE_SSL,
+                         static_cast<long>(CURLUSESSL_ALL));
+  (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
+
+  proto_fuzzer::FtpMockServer server;
+  server.Install(easy.get());
+  const CURLcode result = server.DriveScenario(easy.get(), scenario);
+  const auto statistics =
+      proto_fuzzer::allocation_fault_injection::GetStatistics();
+  proto_fuzzer::allocation_fault_injection::Reset();
+
+  Expect(result == CURLE_USE_SSL_FAILED,
+         "FTP AUTH TLS filter allocation failure did not reach curl");
+  Expect(
+      server.control_transcript() == "AUTH SSL\r\n",
+      "FTP AUTH TLS semantic failure occurred outside the intended boundary");
+  Expect(statistics.configured_failures == 1 &&
+             statistics.injected_failures == 1 &&
+             statistics.allocation_attempts >= 1,
+         "FTP AUTH TLS semantic arm did not reject exactly one allocation");
 
   easy.reset();
   connect_to.reset();
@@ -2818,6 +2861,7 @@ int main() {
          "mock-server tests could not install allocation callbacks");
   TestAllocationFailureReachesHttpParser();
   TestPop3StartTlsArmsAdjacentFilterFailure();
+  TestFtpAuthTlsArmsAdjacentFilterFailure();
   TestCopyPostFieldsSuppressesAllocationFailures();
   TestStreamSocketDispositionIsExplicit();
   TestRequestHeadersDetachBeforeHandleReuse();

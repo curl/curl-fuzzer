@@ -82,6 +82,8 @@ bool ScenarioRequestsStartTls(const curl::fuzzer::proto::Scenario& scenario, Sce
   switch (mode) {
     case ScenarioRunMode::kLdapCoverage:
       return scenario.scheme() == curl::fuzzer::proto::SCHEME_LDAP && scenario.ldap_starttls();
+    case ScenarioRunMode::kFtpCoverage:
+      return scenario.scheme() == curl::fuzzer::proto::SCHEME_FTP && scenario.ftp_auth_tls_filter_allocation_failure();
     case ScenarioRunMode::kPop3Coverage:
       return scenario.scheme() == curl::fuzzer::proto::SCHEME_POP3 &&
              scenario.pop3_starttls_filter_allocation_failure();

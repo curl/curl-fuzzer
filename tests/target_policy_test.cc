@@ -1077,11 +1077,21 @@ void TestFastFtpPolicy() {
          "fast FTP policy retained a resolving active-mode address");
   Expect(normalized_use_eprt.uint_value() == 1,
          "fast FTP policy did not canonicalize the EPRT selector");
+
+  Scenario explicit_tls;
+  explicit_tls.set_scheme(SCHEME_FTP);
+  explicit_tls.set_ftp_auth_tls_filter_allocation_failure(true);
+  explicit_tls.add_fail_allocations(7);
+  NormalizeScenarioForTarget(&explicit_tls, TargetProfile::kFastFtp);
+  Expect(explicit_tls.ftp_auth_tls_filter_allocation_failure() &&
+             explicit_tls.fail_allocations().empty(),
+         "fast FTP policy combined semantic and ordinal failures");
 }
 
 void TestFastFtpsPolicy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_HTTP, 4096, 17);
   scenario.set_scheme(SCHEME_FTPS);
+  scenario.set_ftp_auth_tls_filter_allocation_failure(true);
   scenario.set_probe_multi_pollset(true);
   scenario.set_host_path("untrusted.invalid:990/secure.bin?query#fragment");
   scenario.add_request_headers("X-Ignored: ftps");
@@ -1096,6 +1106,8 @@ void TestFastFtpsPolicy() {
 
   Expect(scenario.scheme() == SCHEME_FTPS,
          "fast FTP lane did not preserve an explicit FTPS scheme");
+  Expect(!scenario.ftp_auth_tls_filter_allocation_failure(),
+         "implicit FTPS retained the plaintext AUTH selector");
   Expect(scenario.probe_multi_pollset(),
          "fast FTP lane removed the FTPS pollset-probe opt-in");
   Expect(scenario.host_path() == "tls.test/secure.bin?query#fragment",

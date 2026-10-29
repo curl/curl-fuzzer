@@ -6,7 +6,7 @@ The `curl-fuzzer-tools` package requires Python 3.10 or newer.
 
 ```shell
 uv sync
-uv run read_corpus corpora/curl_fuzzer_ftp/test_url_ftp
+uv run read_corpus corpora/curl_fuzzer/test_file_nobody
 ```
 
 Add the Python test extra when developing:
@@ -139,7 +139,7 @@ Manifest mode requires both suites to come from the same coverage build. This
 binds them to one curl checkout, feature configuration, TLS selection, and
 toolchain. When no `--target` or `--target-pair` is supplied, the command uses
 the manifest's ordered target-pair mapping. It validates that mapping against
-`scripts/fuzz_targets`: all 4 legacy targets and all 30 proto lanes must be
+`scripts/fuzz_targets`: all 3 legacy targets and all 30 proto lanes must be
 represented. Only the standalone `fuzz_url`, `fuzz_bufq`, `fuzz_doh`, and
 `fuzz_netrc` targets are outside the migration inventory. Unsupported target
 inventory assignment forms fail closed so a new lane cannot evade the map.

@@ -1343,7 +1343,6 @@ endif()
 
 # Main fuzzer and protocol-specific fuzzers
 curl_add_fuzzer(curl_fuzzer           ALL)
-curl_add_fuzzer(curl_fuzzer_ftp       FTP)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 
 # Deterministic profiling probes share one target rather than adding lanes
@@ -1567,7 +1566,6 @@ add_custom_target(fuzz
     DEPENDS
         curl_fuzzer
         curl_fuzzer_full_coverage
-        curl_fuzzer_ftp
         curl_fuzzer_smtp
         fuzz_bufq
         fuzz_url
@@ -3040,7 +3038,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             proto_fuzzer/tftp_mock_server.cc)
         curl_add_proto_peer_test(ftp_mock_server_test
             tests/ftp_mock_server_test.cc
-            proto_fuzzer/ftp_mock_server.cc)
+            proto_fuzzer/ftp_mock_server.cc
+            proto_fuzzer/allocation_fault_injection.cc)
         target_sources(ftp_mock_server_test PRIVATE
             $<TARGET_OBJECTS:curl_fuzzer_profile_compatibility>
             $<TARGET_OBJECTS:curl_fuzzer_profile_fast_ftp>)
@@ -3325,6 +3324,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         if(TARGET openssl_external)
             add_executable(ftps_mock_server_test
                 tests/ftps_mock_server_test.cc
+                proto_fuzzer/allocation_fault_injection.cc
                 proto_fuzzer/ftps_mock_server.cc
                 proto_fuzzer/ftp_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
