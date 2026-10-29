@@ -231,7 +231,11 @@ Other peers intentionally give those fields narrower meanings:
   headers, an SDP/parameter body, and RFC 2326 interleaved RTP frames
   (`$`, channel, 16-bit length, payload). `CURLOPT_RTSP_REQUEST` selects the
   method, and the response's own CSeq stays mutation-controlled so mismatches
-  reach curl's `CURLE_RTSP_CSEQ_ERROR` path.
+  reach curl's `CURLE_RTSP_CSEQ_ERROR` path. Closed probe modes repeat OPTIONS
+  first at the same origin and then at a fixed second origin to exercise
+  cached-connection and learned-Session handling, or split an invalid RTP
+  channel at a fixed receive boundary and fail only the resulting one-byte
+  body write.
 - IPFS and IPNS are gateway schemes rather than wire protocols. libcurl has no
   `ipfs://` handler; curl's command-line tool rewrites `ipfs://<cid>` and
   `ipns://<name>` to `<gateway>/ipfs/<cid>` or `<gateway>/ipns/<name>` before

@@ -1899,6 +1899,43 @@ void TestFastRtspPolicyFoldsReceiveOntoOptions() {
          "it onto OPTIONS");
 }
 
+void TestFastRtspProbePolicy() {
+  Scenario lifecycle;
+  lifecycle.set_scheme(SCHEME_HTTP);
+  lifecycle.set_host_path("untrusted.invalid/stream");
+  lifecycle.set_rtsp_probe_mode(
+      curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE);
+  NormalizeScenarioForTarget(&lifecycle, TargetProfile::kFastRtsp);
+  Expect(lifecycle.scheme() == SCHEME_RTSP &&
+             lifecycle.host_path() == "rtsp.test/stream" &&
+             lifecycle.rtsp_probe_mode() ==
+                 curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE,
+         "cross-origin RTSP probe did not retain its closed lifecycle mode");
+
+  Scenario write_failure;
+  write_failure.set_rtsp_probe_mode(
+      curl::fuzzer::proto::RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE);
+  NormalizeScenarioForTarget(&write_failure, TargetProfile::kFastRtsp);
+  Expect(
+      write_failure.scheme() == SCHEME_RTSP &&
+          write_failure.rtsp_probe_mode() ==
+              curl::fuzzer::proto::RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE,
+      "split-RTP RTSP probe did not retain its semantic fault mode");
+
+  Scenario unknown;
+  unknown.set_rtsp_probe_mode(
+      static_cast<curl::fuzzer::proto::RtspProbeMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastRtsp);
+  Expect(unknown.rtsp_probe_mode() == curl::fuzzer::proto::RTSP_PROBE_DEFAULT,
+         "fast RTSP policy retained an unknown probe mode");
+
+  Scenario other;
+  other.set_rtsp_probe_mode(curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE);
+  NormalizeScenarioForTarget(&other, TargetProfile::kFastHttp);
+  Expect(other.rtsp_probe_mode() == curl::fuzzer::proto::RTSP_PROBE_DEFAULT,
+         "non-RTSP policy retained an RTSP lifecycle probe");
+}
+
 void TestNonRtspPoliciesClearRtspScheme() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
@@ -3706,6 +3743,7 @@ int main() {
   TestFastLdapsPolicy();
   TestFastRtspPolicy();
   TestFastRtspPolicyFoldsReceiveOntoOptions();
+  TestFastRtspProbePolicy();
   TestNonRtspPoliciesClearRtspScheme();
   TestFastIpfsPolicy();
   TestNonIpfsPoliciesClearIpfsScheme();

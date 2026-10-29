@@ -717,7 +717,9 @@ void ObserveProtocolPeerState(MockServerBase* mock) {
                                                      rtsp->last_client_cseq(),
                                                      rtsp->control_transcript().size(),
                                                      rtsp->last_request_line().size(),
-                                                     rtsp->last_stream_uri().size()};
+                                                     rtsp->last_stream_uri().size(),
+                                                     rtsp->client_write_failure_count(),
+                                                     rtsp->opened_transport_count()};
     (void)rtsp_observation;
   }
 
@@ -871,6 +873,9 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
+    if (auto* rtsp = dynamic_cast<RtspMockServer*>(mock.get())) {
+      rtsp->ConfigureClient(easy, scenario.rtsp_probe_mode());
+    }
     if (mode == ScenarioRunMode::kGopherCoverage &&
         scenario.gopher_probe_mode() == curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT) {
       (void)curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -948,6 +953,12 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer_result = mock->DriveEasyScenario(easy, scenario, true);
   } else if (drive_mode == curl::fuzzer::proto::API_DRIVE_CONNECT_ONLY) {
     transfer_result = mock->DriveConnectOnlyScenario(easy, scenario).connect_result;
+  } else if (mode == ScenarioRunMode::kRtspCoverage &&
+             scenario.rtsp_probe_mode() == curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE) {
+    auto* rtsp = dynamic_cast<RtspMockServer*>(mock.get());
+    if (rtsp != nullptr) {
+      transfer_result = rtsp->DriveCrossOriginReuseScenario(easy, scenario);
+    }
   } else {
     transfer_result = mock->DriveScenario(easy, scenario);
   }

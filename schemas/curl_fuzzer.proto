@@ -1042,6 +1042,19 @@ message Scenario {
       }
     }
   ];
+  // Select one closed RTSP lifecycle or response-write probe. The lifecycle
+  // mode retries once at the original origin and once at a fixed second origin
+  // on the same easy and multi handles; the RTP mode installs one semantic
+  // callback failure and a fixed receive buffer size. Other fixed lanes clear
+  // the selector, while compatibility preserves the append-only field.
+  RtspProbeMode rtsp_probe_mode = 44 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_RTSP
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1087,6 +1100,14 @@ enum GopherProbeMode {
   GOPHER_PROBE_PARTIAL_WRITE_NO_TIMEOUT = 1;
   GOPHER_PROBE_SEND_TIMEOUT = 2;
   GOPHER_PROBE_TLS_SESSION_KEY_LIMIT = 3;
+}
+
+// Bounded, harness-owned probes for RTSP connection/session lifecycle and
+// split interleaved-data write failures.
+enum RtspProbeMode {
+  RTSP_PROBE_DEFAULT = 0;
+  RTSP_PROBE_CROSS_ORIGIN_REUSE = 1;
+  RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE = 2;
 }
 
 enum SocksProxyMode {

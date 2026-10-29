@@ -1345,7 +1345,6 @@ endif()
 curl_add_fuzzer(curl_fuzzer           ALL)
 curl_add_fuzzer(curl_fuzzer_ftp       FTP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
-curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 
 # Deterministic profiling probes share one target rather than adding lanes
@@ -1571,7 +1570,6 @@ add_custom_target(fuzz
         curl_fuzzer_full_coverage
         curl_fuzzer_ftp
         curl_fuzzer_mqtt
-        curl_fuzzer_rtsp
         curl_fuzzer_smtp
         fuzz_bufq
         fuzz_url

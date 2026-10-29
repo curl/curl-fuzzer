@@ -69,3 +69,20 @@ def test_rtsp_error_seed_reaches_status_failure() -> None:
     assert "failonerror: true" in error
     assert "RTSP/1.0 454 Session Not Found" in error
     assert "CSeq: 1" in error
+
+
+def test_rtsp_retirement_probes_keep_lifecycle_and_faults_harness_owned() -> None:
+    lifecycle = (SCENARIO_ROOT / "rtsp_cross_origin_session_reuse.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "RTSP_PROBE_CROSS_ORIGIN_REUSE" in lifecycle
+    assert "Session: learned-session" in lifecycle
+    assert "rtsp-other.test" not in lifecycle
+    assert lifecycle.count("on_readable:") == 3
+
+    write_failure = (
+        SCENARIO_ROOT / "rtsp_split_invalid_rtp_write_failure.textproto"
+    ).read_text(encoding="utf-8")
+    assert "RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE" in write_failure
+    assert "buffersize" not in write_failure
+    assert "on_readable:" not in write_failure
