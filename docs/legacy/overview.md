@@ -1,16 +1,15 @@
 # Legacy TLV fuzzers
 
-The legacy fuzzers are the `curl_fuzzer` executable and the protocol-specific
-`curl_fuzzer_*` executables declared with `curl_add_fuzzer()` in
-`CMakeLists.txt`. They consume a compact binary
+The legacy TLV fuzzer is the `curl_fuzzer` executable declared with
+`curl_add_fuzzer()` in `CMakeLists.txt`. It consumes a compact binary
 [type-length-value stream](tlv-format.md). The name *legacy* distinguishes this
-input model from the structured protobuf scenario fuzzers; these targets are
+input model from the structured protobuf scenario fuzzers; this target is
 still maintained and run by OSS-Fuzz.
 
-The current protocol-specific target covers SMTP. The unsuffixed
-`curl_fuzzer` target enables the reviewed subset of protocols supported by the
-libcurl build. Direct byte-oriented targets such as `fuzz_url`, `fuzz_doh`,
-`fuzz_netrc`, and `fuzz_bufq` do not use the TLV harness.
+The unsuffixed `curl_fuzzer` target enables the reviewed subset of protocols
+supported by the libcurl build. Direct byte-oriented targets such as
+`fuzz_url`, `fuzz_doh`, `fuzz_netrc`, and `fuzz_bufq` do not use the TLV
+harness.
 
 ## Execution model
 
@@ -20,8 +19,8 @@ peer. A particular testcase need not contain every kind of record.
 
 1. A same-named source under `fuzzer_entrypoints/` exports
    `LLVMFuzzerTestOneInput()` and delegates to `LegacyFuzzerTestOneInput()`.
-   Keeping a distinct entrypoint per executable lets Fuzz Introspector
-   attribute coverage to the correct target.
+   The explicit entrypoint lets Fuzz Introspector attribute coverage to the
+   correct target.
 2. `legacy_fuzzer.cc` initializes one `CURL` easy handle and asks
    `curl_fuzzer_tlv.cc` to parse every record. Known records configure curl,
    uploads, MIME data, or one of the two simulated connections.

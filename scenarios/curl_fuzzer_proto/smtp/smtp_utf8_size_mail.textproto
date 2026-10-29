@@ -1,0 +1,18 @@
+# Advertise SIZE and SMTPUTF8, then send a local-only reverse path and a
+# non-ASCII recipient so MAIL FROM carries both extensions.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/utf8.test"
+options { upload: true }
+options { infilesize_large: 7 }
+options { mail_from: "sender" }
+mail_rcpt: "récipient@example.test"
+upload { data: "hello\r\n" }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-SIZE 4096\r\n250 SMTPUTF8\r\n"
+  on_readable: "250 sender accepted\r\n"
+  on_readable: "250 recipient accepted\r\n"
+  on_readable: "354 send the message\r\n"
+  on_readable: "250 message queued\r\n"
+  on_readable: "221 bye\r\n"
+}

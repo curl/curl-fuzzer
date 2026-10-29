@@ -1,0 +1,10 @@
+# Parse a local-only VRFY mailbox while SMTPUTF8 capability is active.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/vrfy.test"
+mail_rcpt: "local"
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-SIZE 4096\r\n250 SMTPUTF8\r\n"
+  on_readable: "250 local mailbox exists\r\n"
+  on_readable: "221 bye\r\n"
+}

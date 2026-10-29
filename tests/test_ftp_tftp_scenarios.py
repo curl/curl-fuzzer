@@ -246,6 +246,48 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "250-AUTH SCRAM-SHA-256" in unavailable
     assert "235" not in unavailable
 
+    starttls_modes = {
+        "smtp_starttls_required_eof.textproto": "SMTP_PROBE_STARTTLS_REQUIRE",
+        "smtp_starttls_try_denied.textproto": "SMTP_PROBE_STARTTLS_TRY",
+        "smtp_starttls_required_denied.textproto": "SMTP_PROBE_STARTTLS_REQUIRE",
+        "smtp_starttls_filter_allocation_failure.textproto": (
+            "SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE"
+        ),
+        "smtp_starttls_response_overflow.textproto": "SMTP_PROBE_STARTTLS_REQUIRE",
+    }
+    for name, mode in starttls_modes.items():
+        seed = (smtp_root / name).read_text(encoding="utf-8")
+        assert f"smtp_probe_mode: {mode}" in seed
+        assert "250 STARTTLS" in seed
+        assert "STARTTLS" in seed
+
+    utf8 = (smtp_root / "smtp_utf8_size_mail.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "250-SIZE 4096" in utf8
+    assert "250 SMTPUTF8" in utf8
+    assert 'mail_from: "sender"' in utf8
+    assert "récipient@example.test" in utf8
+
+    vrfy = (smtp_root / "smtp_utf8_local_vrfy.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert 'mail_rcpt: "local"' in vrfy
+    assert "SMTPUTF8" in vrfy
+
+    allowfails = (
+        smtp_root / "smtp_allowfails_postbody_rejected.textproto"
+    ).read_text(encoding="utf-8")
+    assert "mail_rcpt_allowfails: true" in allowfails
+    assert allowfails.count("mail_rcpt:") == 2
+    assert "550 message rejected after body" in allowfails
+
+    send = (smtp_root / "smtp_send_backpressure.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "SMTP_PROBE_SEND_BACKPRESSURE" in send
+    assert "S" * 80 not in send
+
 
 def test_dict_seeds_keep_lookup_paths_and_response_terminators() -> None:
     """Keep DICT commands URL-derived and responses in one body chunk."""

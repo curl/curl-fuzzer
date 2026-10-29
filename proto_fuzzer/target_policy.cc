@@ -40,6 +40,8 @@ constexpr std::uint32_t kHaproxyConnectBufferBytes = 2048;
 constexpr std::uint32_t kHaproxyConnectDrainBytes = 48;
 constexpr std::uint32_t kMqttProbeBufferBytes = 2048;
 constexpr std::uint32_t kMqttProbeDrainBytes = 1024;
+constexpr std::uint32_t kSmtpProbeBufferBytes = 2048;
+constexpr std::uint32_t kSmtpProbeDrainBytes = 1024;
 
 // CURLOPT_LOCALPORTRANGE performs one synchronous bind attempt per selected
 // port. Retain a useful retry window without letting one mutation request tens
@@ -212,6 +214,22 @@ void CanonicalizeMqttProbeMode(curl::fuzzer::proto::Scenario* scenario) {
       return;
     default:
       scenario->clear_mqtt_probe_mode();
+      return;
+  }
+}
+
+/// Keep SMTP's harness-owned TLS and send probes inside their closed enum.
+/// Compatibility does not run this postprocessor and preserves appended data.
+void CanonicalizeSmtpProbeMode(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->smtp_probe_mode()) {
+    case curl::fuzzer::proto::SMTP_PROBE_DEFAULT:
+    case curl::fuzzer::proto::SMTP_PROBE_STARTTLS_TRY:
+    case curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE:
+    case curl::fuzzer::proto::SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE:
+    case curl::fuzzer::proto::SMTP_PROBE_SEND_BACKPRESSURE:
+      return;
+    default:
+      scenario->clear_smtp_probe_mode();
       return;
   }
 }
@@ -1909,6 +1927,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_mqtt_probe_mode();
   }
 
+  if (profile != TargetProfile::kFastSmtp) {
+    scenario->clear_smtp_probe_mode();
+  }
+
   if (profile != TargetProfile::kFastHttp2) {
     scenario->clear_http2_connect_flush_probe();
   }
@@ -2197,8 +2219,26 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     const auto scheme = scenario->scheme();
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_SMTPS ? curl::fuzzer::proto::SCHEME_SMTPS
                                                                      : curl::fuzzer::proto::SCHEME_SMTP);
+    CanonicalizeSmtpProbeMode(scenario);
+    if (scenario->scheme() == curl::fuzzer::proto::SCHEME_SMTPS) {
+      scenario->clear_smtp_probe_mode();
+    }
+    if (scenario->smtp_probe_mode() == curl::fuzzer::proto::SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE) {
+      scenario->clear_fail_allocations();
+    }
+    if (scenario->smtp_probe_mode() == curl::fuzzer::proto::SMTP_PROBE_SEND_BACKPRESSURE) {
+      scenario->clear_mail_rcpt();
+      scenario->clear_upload();
+      scenario->clear_mime_post();
+    }
     RemoveIgnoredSmtpShape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
+    if (scenario->smtp_probe_mode() == curl::fuzzer::proto::SMTP_PROBE_SEND_BACKPRESSURE) {
+      scenario->set_probe_multi_pollset(true);
+      auto* backpressure = scenario->mutable_connection()->mutable_backpressure();
+      backpressure->set_recv_buf_bytes(kSmtpProbeBufferBytes);
+      backpressure->set_drain_limit(kSmtpProbeDrainBytes);
+    }
     CanonicalizeSmtpAuthority(scenario);
     return;
   }

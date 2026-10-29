@@ -60,6 +60,11 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   // was active and its control socket had been handed to curl.
   std::size_t active_pollset_probe_count() const;
 
+  // Number of opt-in probes where curl requested writable readiness while
+  // the peer held an incomplete control command. A positive count exposes a
+  // pending protocol send rather than a transient writable state.
+  std::size_t writable_pollset_probe_count() const;
+
  protected:
   explicit PingpongMockServer(MultiDrivePolicy drive_policy = MultiDrivePolicy::kPerform);
 
@@ -85,6 +90,11 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   // terminator. Used by protocols such as RTSP whose announced entity body is
   // followed immediately by the next request or by the peer's close.
   void BeginExactBody(std::size_t length);
+
+  // Drain all subsequent carrier bytes without command parsing or capture.
+  // Plaintext upgrade peers use this after accepting STARTTLS because the
+  // following TLS handshake is intentionally opaque to the line parser.
+  void BeginOpaqueDrain();
 
   /// Called after a body phase reached its terminator and the parser returned
   /// to command mode. The default does nothing.
@@ -122,6 +132,11 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   // Write the next scripted reply. Returns false when none remains.
   bool WriteNextReply();
 
+  // Half-close the peer's write side after a protocol-level transport
+  // upgrade response. The existing socket remains readable so the bounded
+  // driver can drain client handshake bytes without parsing them as commands.
+  void ShutdownControlWrite();
+
   // First and second whitespace-delimited tokens of a command line, without
   // interpreting any protocol-specific arguments.
   static std::string_view FirstToken(std::string_view line);
@@ -137,6 +152,7 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
     kMarker,   ///< Scanning for an opaque end-of-body marker.
     kLiteral,  ///< Draining an announced number of bytes, then CRLF.
     kExact,    ///< Draining exactly an announced number of bytes.
+    kOpaque,   ///< Discarding carrier bytes after a transport upgrade.
   };
 
   // Observability must not grow with a future curl loop; these caps exceed the
@@ -169,6 +185,8 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   std::string uploaded_data_;
   /// Opt-in probes made only while the transfer and control socket were live.
   std::size_t active_pollset_probe_count_;
+  /// Writable probes observed while one control command remained incomplete.
+  std::size_t writable_pollset_probe_count_;
   /// Opaque terminator for BodyMode::kMarker.
   std::string body_marker_;
   /// Literal bytes still to drain for BodyMode::kLiteral.
@@ -177,6 +195,8 @@ class PingpongMockServer : public MockServerBase, public IncomingDataObserver {
   std::size_t body_terminator_remaining_;
   /// Current parser phase.
   BodyMode body_mode_;
+  /// Client endpoint handed to curl, retained only as an opaque fd identity.
+  curl_socket_t control_socket_;
   /// Prevent a second control socket from displacing the live first one.
   bool control_opened_;
 };

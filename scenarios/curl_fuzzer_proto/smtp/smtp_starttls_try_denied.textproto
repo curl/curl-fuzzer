@@ -1,0 +1,11 @@
+# CURLUSESSL_TRY must continue in plaintext after a temporary STARTTLS denial.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_TRY
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250 STARTTLS\r\n"
+  on_readable: "454 TLS temporarily unavailable\r\n"
+  on_readable: "214 smtp.test help\r\n"
+  on_readable: "221 bye\r\n"
+}

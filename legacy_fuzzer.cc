@@ -703,9 +703,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_SFTP
   allowed_protocols = "sftp";
 #endif
-#ifdef FUZZ_PROTOCOLS_SMTP
-  allowed_protocols = "smtp,smtps";
-#endif
   FTRY(curl_easy_setopt(fuzz->easy, CURLOPT_PROTOCOLS_STR, allowed_protocols));
 
 EXIT_LABEL:

@@ -63,9 +63,8 @@ Responses can instead come from a binary file (`--rsp0file`) or the
 `--mimepart name:value` may be supplied more than once.
 
 Before checking in a seed, put it under the matching active target directory,
-decode it, and replay it with that target. A protocol-specific URL is important:
-a protocol-specific executable rejects another scheme before reaching the
-intended protocol code.
+decode it, and replay it with that target. Use a URL for the intended protocol:
+the generic legacy target selects the protocol from that URL.
 
 ## DoH loopback seeds
 

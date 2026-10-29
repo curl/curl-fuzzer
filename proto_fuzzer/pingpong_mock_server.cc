@@ -31,9 +31,11 @@ PingpongMockServer::PingpongMockServer(MultiDrivePolicy drive_policy)
       control_reply_count_(0),
       next_control_reply_(0),
       active_pollset_probe_count_(0),
+      writable_pollset_probe_count_(0),
       body_length_remaining_(0),
       body_terminator_remaining_(0),
       body_mode_(BodyMode::kCommand),
+      control_socket_(CURL_SOCKET_BAD),
       control_opened_(false) {}
 
 /// Release the server-owned socketpair half after curl has returned its client
@@ -60,6 +62,13 @@ const std::string& PingpongMockServer::uploaded_data() const { return uploaded_d
 /// counter for default scenarios.
 /// @return Number of active, connected pollset probes in the previous drive.
 std::size_t PingpongMockServer::active_pollset_probe_count() const { return active_pollset_probe_count_; }
+
+/// Report how often curl retained writable interest while the peer held an
+/// incomplete control command. Send-pressure tests use this conjunction to
+/// prove a protocol write remained pending rather than counting generic
+/// perform turns or transient writable states.
+/// @return Writable pollset observations in the previous drive.
+std::size_t PingpongMockServer::writable_pollset_probe_count() const { return writable_pollset_probe_count_; }
 
 /// Create the default plaintext transport. The SMTPS subclass overrides this
 /// factory while retaining the command/reply parser.
@@ -95,6 +104,15 @@ void PingpongMockServer::BeginExactBody(std::size_t length) {
   body_mode_ = BodyMode::kExact;
   body_marker_.clear();
   body_length_remaining_ = length;
+  body_terminator_remaining_ = 0;
+}
+
+/// Enter an opaque drain after a transport upgrade. Every subsequent carrier
+/// byte is consumed without command parsing or test-facing capture.
+void PingpongMockServer::BeginOpaqueDrain() {
+  body_mode_ = BodyMode::kOpaque;
+  body_marker_.clear();
+  body_length_remaining_ = 0;
   body_terminator_remaining_ = 0;
 }
 
@@ -138,7 +156,8 @@ curl_socket_t PingpongMockServer::HandleOpenSocket(curlsocktype purpose, struct 
   }
 
   control_opened_ = true;
-  return connection_->take_client_fd();
+  control_socket_ = connection_->take_client_fd();
+  return control_socket_;
 }
 
 /// Reset every borrowed pointer, descriptor, parser cursor, and observable
@@ -155,10 +174,12 @@ void PingpongMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& s
   control_transcript_.clear();
   uploaded_data_.clear();
   active_pollset_probe_count_ = 0;
+  writable_pollset_probe_count_ = 0;
   body_marker_.clear();
   body_length_remaining_ = 0;
   body_terminator_remaining_ = 0;
   body_mode_ = BodyMode::kCommand;
+  control_socket_ = CURL_SOCKET_BAD;
   control_opened_ = false;
   ResetProtocolState();
 }
@@ -208,6 +229,15 @@ bool PingpongMockServer::WriteControlBytes(std::string_view bytes) {
 bool PingpongMockServer::WriteNextReply() {
   const std::string* response = NextControlReply();
   return response == nullptr ? false : WriteControlBytes(*response);
+}
+
+/// Half-close the server-to-client direction while retaining the read half.
+/// STARTTLS peers use this after their plaintext acceptance response so curl's
+/// newly installed TLS filter observes deterministic EOF instead of waiting.
+void PingpongMockServer::ShutdownControlWrite() {
+  if (connection_ != nullptr) {
+    connection_->ShutdownWrite();
+  }
 }
 
 /// Remove optional leading horizontal whitespace and return the first token
@@ -303,6 +333,12 @@ bool PingpongMockServer::ServiceControlConnection() {
 
   std::size_t consumed = 0;
   while (consumed < pending_control_bytes_.size()) {
+    if (body_mode_ == BodyMode::kOpaque) {
+      consumed = pending_control_bytes_.size();
+      made_progress = true;
+      break;
+    }
+
     if (body_mode_ == BodyMode::kMarker) {
       const std::size_t marker = pending_control_bytes_.find(body_marker_, consumed);
       if (marker == std::string::npos) {
@@ -450,6 +486,11 @@ void PingpongMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::p
     if (scenario.probe_multi_pollset() && still_running && control_opened_) {
       ProbeMultiPollset(multi);
       ++active_pollset_probe_count_;
+      const bool incomplete_command = body_mode_ == BodyMode::kCommand && !pending_control_bytes_.empty() &&
+                                      pending_control_bytes_.find('\n') == std::string::npos;
+      if (incomplete_command && MultiPollsetWantsWrite(multi, control_socket_)) {
+        ++writable_pollset_probe_count_;
+      }
     }
 
     bool made_progress = still_running != running_before;
