@@ -541,7 +541,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       // and a DATA body drain. Only the dedicated lane may reinterpret an
       // append-only scheme value that historical corpus inputs could carry.
       if (mode == ScenarioRunMode::kSmtpCoverage) {
-        return std::make_unique<SmtpMockServer>();
+        return std::make_unique<SmtpMockServer>(scenario.smtp_probe_mode());
       }
       return nullptr;
     case curl::fuzzer::proto::SCHEME_IMAP:
@@ -877,6 +877,9 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     (void)ApplyScenarioOptions(easy, scenario);
     if (auto* rtsp = dynamic_cast<RtspMockServer*>(mock.get())) {
       rtsp->ConfigureClient(easy, scenario.rtsp_probe_mode());
+    }
+    if (auto* smtp = dynamic_cast<SmtpMockServer*>(mock.get())) {
+      smtp->ConfigureClient(easy);
     }
     if (mode == ScenarioRunMode::kGopherCoverage &&
         scenario.gopher_probe_mode() == curl::fuzzer::proto::GOPHER_PROBE_TLS_SESSION_KEY_LIMIT) {

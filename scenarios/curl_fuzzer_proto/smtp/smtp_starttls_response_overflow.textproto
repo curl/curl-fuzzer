@@ -1,0 +1,9 @@
+# A second complete reply pipelined behind STARTTLS acceptance is forbidden.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_REQUIRE
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250 STARTTLS\r\n"
+  on_readable: "220 begin TLS\r\n250 pipelined reply\r\n"
+}

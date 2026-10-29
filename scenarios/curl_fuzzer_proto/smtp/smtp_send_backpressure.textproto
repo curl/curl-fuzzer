@@ -1,0 +1,10 @@
+# Send one fixed harness-owned 16 KiB command through bounded socket pressure.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/pressure.test"
+smtp_probe_mode: SMTP_PROBE_SEND_BACKPRESSURE
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250 smtp.test\r\n"
+  on_readable: "250 command accepted\r\n"
+  on_readable: "221 bye\r\n"
+}

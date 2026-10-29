@@ -1,0 +1,9 @@
+# Arm one allocation failure only after curl receives STARTTLS acceptance.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250 STARTTLS\r\n"
+  on_readable: "220 begin TLS\r\n"
+}

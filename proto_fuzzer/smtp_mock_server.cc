@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/scenario_limits.h"
 
@@ -23,12 +24,55 @@ namespace proto_fuzzer {
 /// Begin without a borrowed protobuf or open socketpair. RunLoop borrows a
 /// Scenario only for the synchronous DriveScenario call in which socket
 /// callbacks can run.
-SmtpMockServer::SmtpMockServer() : recipient_count_(0), rcpt_command_count_(0), auth_exchange_active_(false) {}
+/// @param mode Closed SMTP transport probe selected by target policy.
+SmtpMockServer::SmtpMockServer(curl::fuzzer::proto::SmtpProbeMode mode)
+    : recipient_count_(0),
+      rcpt_command_count_(0),
+      auth_exchange_active_(false),
+      mode_(mode),
+      tls_upgrade_started_(false) {}
 
 /// Release the server-owned socketpair half after curl has returned its client
 /// descriptor. The out-of-line destructor keeps MockConnection's complete type
 /// local to this translation unit.
 SmtpMockServer::~SmtpMockServer() = default;
+
+namespace {
+
+/// A fixed command large enough to leave curl's pingpong send queue pending
+/// under the probe's bounded receive-buffer pressure.
+/// @return Process-lifetime command bytes copied by CURLOPT_CUSTOMREQUEST.
+const std::string& SendBackpressureCommand() {
+  static const std::string command = "NOOP " + std::string(16 * 1024, 'S');
+  return command;
+}
+
+}  // namespace
+
+/// Apply only closed, harness-owned client controls. The ordinary scenario
+/// option list has already run when the production runner calls this hook.
+/// @param easy Easy handle configured for the SMTP transfer.
+void SmtpMockServer::ConfigureClient(CURL* easy) const {
+  if (easy == nullptr) {
+    return;
+  }
+  switch (mode_) {
+    case curl::fuzzer::proto::SMTP_PROBE_STARTTLS_TRY:
+      (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_TRY));
+      break;
+    case curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE:
+    case curl::fuzzer::proto::SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE:
+      (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
+      break;
+    case curl::fuzzer::proto::SMTP_PROBE_SEND_BACKPRESSURE:
+      (void)curl_easy_setopt(easy, CURLOPT_UPLOAD, 0L);
+      (void)curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, SendBackpressureCommand().c_str());
+      break;
+    case curl::fuzzer::proto::SMTP_PROBE_DEFAULT:
+    default:
+      break;
+  }
+}
 
 /// Create the default plaintext transport for the SMTP exchange. The SMTPS
 /// subclass overrides this factory while retaining the command/reply parser.
@@ -45,6 +89,15 @@ void SmtpMockServer::ResetProtocolState() {
                                                                static_cast<std::size_t>(script->mail_rcpt_size()));
   rcpt_command_count_ = 0;
   auth_exchange_active_ = false;
+  tls_upgrade_started_ = false;
+}
+
+/// Return whether the selected probe asks curl to issue STARTTLS.
+/// @return true when STARTTLS is enabled by the closed probe mode.
+bool SmtpMockServer::IsStartTlsMode() const {
+  return mode_ == curl::fuzzer::proto::SMTP_PROBE_STARTTLS_TRY ||
+         mode_ == curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE ||
+         mode_ == curl::fuzzer::proto::SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE;
 }
 
 /// Return whether the effective option list enables curl's
@@ -117,7 +170,17 @@ void SmtpMockServer::HandleLine(std::string_view command) {
   }
 
   const int response_code = FirstReplyCode(*response);
-  (void)WriteControlBytes(*response);
+  const bool response_written = WriteControlBytes(*response);
+
+  if (TokenEquals(verb, "STARTTLS") && IsStartTlsMode() && response_code == 220) {
+    if (response_written && mode_ == curl::fuzzer::proto::SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE) {
+      allocation_fault_injection::ArmNextAllocationFailure();
+    }
+    tls_upgrade_started_ = true;
+    BeginOpaqueDrain();
+    ShutdownControlWrite();
+    return;
+  }
 
   if (TokenEquals(verb, "AUTH")) {
     // A 334 reply is the only wire-visible distinction between SMTP AUTH and
@@ -156,8 +219,9 @@ void SmtpMockServer::HandleLine(std::string_view command) {
   // reply. Everything else can safely see a queued 221 next.
   const bool final_rcpt_error =
       TokenEquals(verb, "RCPT") && (rcpt_command_count_ >= recipient_count_ || !AllowsRecipientFailures());
-  const bool terminal_error = response_code >= 400 && !TokenEquals(verb, "EHLO") && !is_auth_continuation_reply &&
-                              (!TokenEquals(verb, "RCPT") || final_rcpt_error);
+  const bool starttls_denial = TokenEquals(verb, "STARTTLS") && IsStartTlsMode();
+  const bool terminal_error = response_code >= 400 && !TokenEquals(verb, "EHLO") && !starttls_denial &&
+                              !is_auth_continuation_reply && (!TokenEquals(verb, "RCPT") || final_rcpt_error);
   if (terminal_error) {
     (void)WriteControlBytes(kShutdownReply);
   }
@@ -167,6 +231,10 @@ void SmtpMockServer::HandleLine(std::string_view command) {
 /// read has a one-second timeout when no reply is available, so even an
 /// unfinished transfer gets a liveness reply; any real scripted response
 /// already consumed by curl still determines the transfer result.
-void SmtpMockServer::QueueShutdownReply() { (void)WriteControlBytes(kShutdownReply); }
+void SmtpMockServer::QueueShutdownReply() {
+  if (!tls_upgrade_started_) {
+    (void)WriteControlBytes(kShutdownReply);
+  }
+}
 
 }  // namespace proto_fuzzer

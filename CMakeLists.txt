@@ -1341,9 +1341,8 @@ if(BUILD_TESTING)
     add_dependencies(fuzzer_unit_tests legacy_protocol_allowlist_test)
 endif()
 
-# Main fuzzer and protocol-specific fuzzers
+# Main legacy TLV fuzzer
 curl_add_fuzzer(curl_fuzzer           ALL)
-curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
 
 # Deterministic profiling probes share one target rather than adding lanes
 # that compete with the existing fuzzers. The packaging inventory omits this
@@ -1566,7 +1565,6 @@ add_custom_target(fuzz
     DEPENDS
         curl_fuzzer
         curl_fuzzer_full_coverage
-        curl_fuzzer_smtp
         fuzz_bufq
         fuzz_url
         fuzz_doh
@@ -3053,7 +3051,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             PROTO_FUZZER_SCENARIO_DIR="${SCENARIO_SRC_DIR}")
         curl_add_proto_peer_test(smtp_mock_server_test
             tests/smtp_mock_server_test.cc
-            proto_fuzzer/smtp_mock_server.cc)
+            proto_fuzzer/smtp_mock_server.cc
+            proto_fuzzer/allocation_fault_injection.cc)
         curl_add_proto_peer_test(imap_mock_server_test
             tests/imap_mock_server_test.cc
             proto_fuzzer/imap_mock_server.cc)
@@ -3133,6 +3132,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         if(TARGET openssl_external)
             add_executable(smtps_mock_server_test
                 tests/smtps_mock_server_test.cc
+                proto_fuzzer/allocation_fault_injection.cc
                 proto_fuzzer/smtps_mock_server.cc
                 proto_fuzzer/smtp_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc

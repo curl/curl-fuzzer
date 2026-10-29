@@ -47,7 +47,7 @@ The main groups of fields are:
   bounded HTTPS client-credential and handshake profiles,
   `pop3_starttls_filter_allocation_failure`,
   `ftp_auth_tls_filter_allocation_failure`, `gopher_probe_mode`,
-  `mqtt_probe_mode`, `socks_proxy_mode`,
+  `mqtt_probe_mode`, `smtp_probe_mode`, `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `proxy_socket_option_mode`,
   `trace_ids`, `probe_multi_pollset`, `resolver_mode`, filename-backed parser
   inputs, and
@@ -141,7 +141,11 @@ Other peers intentionally give those fields narrower meanings:
   domain rather than the recipient in current libcurl. An `SCHEME_SMTPS`
   scenario runs the identical exchange over implicit TLS; its fixed authority
   is `tls.test`, matching the checked-in trust anchor, and the handshake carries
-  no ALPN extension.
+  no ALPN extension. Plaintext SMTP may select a closed `smtp_probe_mode` for
+  optional or required STARTTLS, the adjacent TLS-filter allocation failure,
+  or one fixed command-send backpressure shape. Accepted STARTTLS probes end
+  the plaintext peer with bounded EOF; implicit SMTPS remains the lane's real
+  successful TLS carrier.
 - IMAP uses the primary connection as command-aligned replies. The initial
   response is the `* OK` greeting, each readable chunk answers the next
   command, and a status line beginning with `OK`, `NO`, `BAD`, or `PREAUTH`

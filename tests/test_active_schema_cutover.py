@@ -215,6 +215,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.add("gopher_probe_mode")
         if slug in {"compatibility", "fast_mqtt"}:
             expected_fields.add("mqtt_probe_mode")
+        if slug in {"compatibility", "fast_smtp"}:
+            expected_fields.add("smtp_probe_mode")
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
         if slug in {"compatibility", "fast_rtsp"}:
@@ -322,6 +324,13 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert ftp_tls_failure.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_FTP",
+    }
+
+    smtp_probe = model.fields["curl.fuzzer.proto.Scenario.smtp_probe_mode"]
+    assert smtp_probe.number == 47
+    assert smtp_probe.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_SMTP",
     }
 
     h2_flush_probe = model.fields[

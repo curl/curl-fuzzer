@@ -1293,11 +1293,47 @@ void TestFastSmtpPolicy() {
                        "fast SMTP policy lost its recipient-failure selector")
              .bool_value(),
          "fast SMTP policy did not canonicalize the recipient-failure flag");
+
+  Scenario starttls;
+  starttls.set_scheme(SCHEME_SMTP);
+  starttls.set_smtp_probe_mode(
+      curl::fuzzer::proto::SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE);
+  starttls.add_fail_allocations(7);
+  NormalizeScenarioForTarget(&starttls, TargetProfile::kFastSmtp);
+  Expect(starttls.smtp_probe_mode() ==
+                 curl::fuzzer::proto::
+                     SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE &&
+             starttls.fail_allocations().empty(),
+         "fast SMTP policy combined semantic and ordinal failures");
+
+  Scenario send;
+  send.set_scheme(SCHEME_SMTP);
+  send.set_smtp_probe_mode(curl::fuzzer::proto::SMTP_PROBE_SEND_BACKPRESSURE);
+  send.add_mail_rcpt("ignored@example.test");
+  send.mutable_upload()->set_data("ignored");
+  send.mutable_mime_post()->add_parts()->set_data("ignored");
+  NormalizeScenarioForTarget(&send, TargetProfile::kFastSmtp);
+  Expect(send.smtp_probe_mode() ==
+                 curl::fuzzer::proto::SMTP_PROBE_SEND_BACKPRESSURE &&
+             send.probe_multi_pollset() && send.mail_rcpt_size() == 0 &&
+             !send.has_upload() && !send.has_mime_post() &&
+             send.connection().backpressure().recv_buf_bytes() == 2048 &&
+             send.connection().backpressure().drain_limit() == 1024,
+         "fast SMTP send probe lost its fixed transport shape");
+
+  Scenario unknown;
+  unknown.set_smtp_probe_mode(
+      static_cast<curl::fuzzer::proto::SmtpProbeMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastSmtp);
+  Expect(unknown.smtp_probe_mode() == curl::fuzzer::proto::SMTP_PROBE_DEFAULT,
+         "fast SMTP policy retained an unknown probe mode");
 }
 
 void TestFastSmtpsPolicy() {
   Scenario scenario;
   scenario.set_scheme(SCHEME_SMTPS);
+  scenario.set_smtp_probe_mode(
+      curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE);
   scenario.set_host_path("untrusted.invalid:2465/client.test?query#fragment");
   scenario.mutable_upload()->set_data("implicit tls mail body");
   scenario.mutable_connection()->set_initial_response("220 smtps.test\r\n");
@@ -1307,6 +1343,8 @@ void TestFastSmtpsPolicy() {
 
   Expect(scenario.scheme() == SCHEME_SMTPS,
          "fast SMTP lane did not preserve an explicit SMTPS scheme");
+  Expect(scenario.smtp_probe_mode() == curl::fuzzer::proto::SMTP_PROBE_DEFAULT,
+         "implicit SMTPS retained a plaintext STARTTLS probe");
   Expect(scenario.host_path() == "tls.test/client.test?query#fragment",
          "fast SMTP lane did not give SMTPS the certifiable authority");
   Expect(scenario.has_upload() &&

@@ -42,12 +42,15 @@ namespace proto_fuzzer {
 /// decoding so the state machine does not depend on the carrier.
 class SmtpMockServer : public PingpongMockServer {
  public:
-  SmtpMockServer();
+  explicit SmtpMockServer(curl::fuzzer::proto::SmtpProbeMode mode = curl::fuzzer::proto::SMTP_PROBE_DEFAULT);
 
   ~SmtpMockServer() override;
 
   SmtpMockServer(const SmtpMockServer&) = delete;
   SmtpMockServer& operator=(const SmtpMockServer&) = delete;
+
+  // Apply the harness-owned client controls after ordinary scenario options.
+  void ConfigureClient(CURL* easy) const;
 
  protected:
   std::unique_ptr<MockConnection> CreateConnection() override;
@@ -69,6 +72,9 @@ class SmtpMockServer : public PingpongMockServer {
 
   bool AllowsRecipientFailures() const;
 
+  // Return whether the selected probe asks curl to issue STARTTLS.
+  bool IsStartTlsMode() const;
+
   /// Number of recipients configured for this drive, bounded by the runtime
   /// limit. Used to recognize the final RCPT TO failure.
   std::size_t recipient_count_;
@@ -78,6 +84,10 @@ class SmtpMockServer : public PingpongMockServer {
   /// SASL cancellation keeps this set because curl may immediately try
   /// another mechanism on the same connection.
   bool auth_exchange_active_;
+  /// Closed probe selected by the fixed SMTP target policy.
+  curl::fuzzer::proto::SmtpProbeMode mode_;
+  /// True after a 220 STARTTLS response has ended plaintext SMTP parsing.
+  bool tls_upgrade_started_;
 };
 
 }  // namespace proto_fuzzer

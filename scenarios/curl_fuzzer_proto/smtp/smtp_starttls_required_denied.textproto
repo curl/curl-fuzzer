@@ -1,0 +1,9 @@
+# Required STARTTLS maps a 454 denial to CURLE_USE_SSL_FAILED.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_REQUIRE
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250 STARTTLS\r\n"
+  on_readable: "454 TLS unavailable\r\n"
+}

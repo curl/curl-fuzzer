@@ -1,0 +1,20 @@
+# Continue after one RCPT failure, upload to the accepted recipient, then
+# reject the completed message body.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/allowfails.test"
+options { upload: true }
+options { infilesize_large: 7 }
+options { mail_from: "sender@example.test" }
+options { mail_rcpt_allowfails: true }
+mail_rcpt: "rejected@example.test"
+mail_rcpt: "accepted@example.test"
+upload { data: "hello\r\n" }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250 smtp.test\r\n"
+  on_readable: "250 sender accepted\r\n"
+  on_readable: "550 first recipient rejected\r\n"
+  on_readable: "250 second recipient accepted\r\n"
+  on_readable: "354 send the message\r\n"
+  on_readable: "550 message rejected after body\r\n"
+}

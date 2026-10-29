@@ -1086,6 +1086,20 @@ message Scenario {
       }
     }
   ];
+  // Select one bounded, harness-owned SMTP transport probe. STARTTLS modes
+  // map only to CURLUSESSL_TRY/ALL and let the command-aware peer provide the
+  // correlated capability and response. The allocation mode arms its failure
+  // only after a 220 response, and the send probe uses a fixed command plus
+  // fixed socket pressure rather than corpus-controlled oversized bytes.
+  // SMTPS clears the selector because implicit TLS has no STARTTLS transition.
+  SmtpProbeMode smtp_probe_mode = 47 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_SMTP
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1148,6 +1162,15 @@ enum MqttProbeMode {
   MQTT_PROBE_SEND_BACKPRESSURE = 1;
   MQTT_PROBE_OVERSIZED_USERNAME = 2;
   MQTT_PROBE_OVERSIZED_PASSWORD = 3;
+}
+
+// Bounded, harness-owned probes for SMTP STARTTLS and queued command sends.
+enum SmtpProbeMode {
+  SMTP_PROBE_DEFAULT = 0;
+  SMTP_PROBE_STARTTLS_TRY = 1;
+  SMTP_PROBE_STARTTLS_REQUIRE = 2;
+  SMTP_PROBE_STARTTLS_FILTER_ALLOCATION_FAILURE = 3;
+  SMTP_PROBE_SEND_BACKPRESSURE = 4;
 }
 
 enum SocksProxyMode {

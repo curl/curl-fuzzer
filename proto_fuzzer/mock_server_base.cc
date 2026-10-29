@@ -338,4 +338,27 @@ void MockServerBase::ProbeMultiPollset(CURLM* multi) {
   (void)curl_multi_poll(multi, nullptr, 0, 0, &numfds);
 }
 
+/// Inspect one socket's current writable interest through curl's public multi
+/// fdset API. MockConnection already rejects descriptors outside FD_SETSIZE,
+/// so the matching FD_ISSET operation remains bounded.
+/// @param multi Multi handle that owns the socket.
+/// @param socket Socket returned to curl by the open-socket callback.
+/// @return true when curl currently waits for the socket to become writable.
+bool MockServerBase::MultiPollsetWantsWrite(CURLM* multi, curl_socket_t socket) {
+  if (multi == nullptr || socket == CURL_SOCKET_BAD || socket < 0 || socket >= FD_SETSIZE) {
+    return false;
+  }
+  fd_set readfds;
+  fd_set writefds;
+  fd_set excfds;
+  FD_ZERO(&readfds);
+  FD_ZERO(&writefds);
+  FD_ZERO(&excfds);
+  int maxfd = -1;
+  if (curl_multi_fdset(multi, &readfds, &writefds, &excfds, &maxfd) != CURLM_OK) {
+    return false;
+  }
+  return socket <= maxfd && FD_ISSET(socket, &writefds);
+}
+
 }  // namespace proto_fuzzer

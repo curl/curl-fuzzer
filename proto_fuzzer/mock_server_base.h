@@ -123,6 +123,9 @@ class MockServerBase {
 
   static void ProbeMultiPollset(CURLM* multi);
 
+  // Ask curl whether one live socket currently needs writable readiness.
+  static bool MultiPollsetWantsWrite(CURLM* multi, curl_socket_t socket);
+
   MultiSocketDriver* multi_socket_driver();
 
   std::size_t additional_handle_cleanup_count() const;
