@@ -12,6 +12,7 @@
 #include <curl/curl.h>
 #include <curl/header.h>
 
+#include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <memory>
@@ -865,7 +866,6 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   } else {
     url = ScenarioUrl(scenario, prefix);
   }
-  bool resolver_mode_ready = true;
   const auto configure_easy = [&] {
     transfer.ApplyBaseline(scenario);
     (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
@@ -889,15 +889,15 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     if (ScenarioRequestsStartTls(scenario, mode)) {
       (void)curl_easy_setopt(easy, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
     }
-    if (mode == ScenarioRunMode::kResolverCoverage) {
-      resolver_mode_ready = ApplyResolverMode(easy, scenario.resolver_mode());
+    if (mode == ScenarioRunMode::kResolverCoverage && !ApplyResolverMode(easy, scenario.resolver_mode())) {
+      return false;
     }
     if (mode == ScenarioRunMode::kTlsCoverage) {
       (void)ApplyTlsClientCredentialProfile(easy, scenario.tls_client_credential_profile());
     }
+    return true;
   };
-  configure_easy();
-  if (!resolver_mode_ready) {
+  if (!configure_easy()) {
     return 0;
   }
   transfer.ConfigureAltSvcRouting(scenario.host_path());
@@ -908,7 +908,9 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     // owner before perform so retained upload options consume Scenario.upload
     // through curl's read callback instead of falling back to stdin. The
     // baseline's short timeout still bounds the transfer.
-    (void)transfer.InstallRequestData(scenario);
+    ScenarioRequestData* request_data = transfer.InstallRequestData(scenario);
+    assert(request_data != nullptr);
+    (void)request_data;
     const CURLcode transfer_result = curl_easy_perform(easy);
     (void)transfer_result;
     ProbeTransferResults(easy);
@@ -931,6 +933,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   ApiLifecycle* api_lifecycle = nullptr;
   if (api_plan != nullptr) {
     api_lifecycle = transfer.InstallApiLifecycle(*api_plan, url);
+    assert(api_lifecycle != nullptr);
     mock->SetMultiObserver([api_lifecycle](CURLM* multi) { api_lifecycle->SetActiveMulti(multi); });
   }
 
@@ -940,6 +943,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   const bool apply_resolve_entries = mode == ScenarioRunMode::kResolverCoverage && !scenario.has_doh() &&
                                      scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;
   ScenarioRequestData* request_data = transfer.InstallRequestData(scenario, apply_resolve_entries);
+  assert(request_data != nullptr);
   if (mode == ScenarioRunMode::kResolverCoverage && !request_data->resolve_entries_ready()) {
     return 0;
   }

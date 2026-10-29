@@ -92,8 +92,7 @@ CURL* TransferSession::easy() const { return easy_.get(); }
 void TransferSession::ApplyBaseline(const curl::fuzzer::proto::Scenario& scenario) {
   if (easy_) {
     // Apply the new pointer before releasing the previous list.
-    connect_to_.reset(
-        ApplyBaselineOptions(easy_.get(), scenario.scheme(), scenario.trace_ids(), scenario.trace_config()));
+    connect_to_ = ApplyBaselineOptions(easy_.get(), scenario.scheme(), scenario.trace_ids(), scenario.trace_config());
   }
 }
 

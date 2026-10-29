@@ -218,8 +218,8 @@ ParserFaultRun DriveParserFaultScenario(std::uint32_t ordinal) {
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   if (easy != nullptr) {
-    connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-        easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+    connect_to = proto_fuzzer::ApplyBaselineOptions(
+        easy.get(), curl::fuzzer::proto::SCHEME_HTTP);
     (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://127.0.0.1/parser");
     (void)curl_easy_setopt(easy.get(), CURLOPT_HEADERFUNCTION,
                            &ObserveParserHeaders);
@@ -386,8 +386,7 @@ void TestCopyPostFieldsSuppressesAllocationFailures() {
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
          "COPYPOSTFIELDS suppression test could not allocate easy");
-  connect_to.reset(
-      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
                          "http://copy.test/suppressed");
 
@@ -461,8 +460,8 @@ void TestRequestHeadersDetachBeforeHandleReuse() {
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "handle-reuse test could not allocate easy");
-  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTP);
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://reuse.test/fresh");
   {
     proto_fuzzer::ScenarioRequestData request_data(easy.get(), original);
@@ -729,7 +728,7 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
 
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "Brotli test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://127.0.0.1/brotli");
   curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
@@ -754,7 +753,7 @@ void TestBrotliResponseExpandsAcrossWriteBufferBoundary() {
          "Brotli response did not decode across CURL_MAX_WRITE_SIZE");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestH2cUpgradeTransitionsToHttp2() {
@@ -781,8 +780,7 @@ void TestH2cUpgradeTransitionsToHttp2() {
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "h2c upgrade test could not allocate an easy handle");
-  connect_to.reset(
-      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "h2c upgrade test could not set its seed URL");
@@ -843,8 +841,7 @@ HttpSeedTranscript CaptureHttpSeed(const char *name) {
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
          "HTTP transcript test could not allocate an easy handle");
-  connect_to.reset(
-      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "HTTP transcript test could not set its seed URL");
@@ -892,8 +889,7 @@ void TestCallbackMimeSeedFailsSecondSameEasyRewind() {
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
          "callback MIME reuse test could not allocate an easy handle");
-  connect_to.reset(
-      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme()));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "callback MIME reuse test could not set its seed URL");
@@ -1159,8 +1155,8 @@ WssTransferResult DriveWssScenario(const Scenario &scenario) {
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "WSS test could not allocate an easy handle");
-  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_WSS));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_WSS);
   const std::string url = "wss://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "WSS test could not set its URL");
@@ -1253,7 +1249,7 @@ std::string CaptureHttpsigRequest(std::uint64_t algorithm,
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "HTTP Message Signature test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://httpsig.test/signed?view=full");
 
@@ -1272,7 +1268,7 @@ std::string CaptureHttpsigRequest(std::uint64_t algorithm,
   const std::string request = server.request();
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
   return request;
 }
 
@@ -1343,7 +1339,7 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   TlsTransferResult result;
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "TLS test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTPS, scenario.trace_ids(),
       scenario.trace_config());
   const std::string url = "https://" + scenario.host_path();
@@ -1403,7 +1399,7 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   result.ech_outer_name = server.ech_outer_name();
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
   return result;
 }
 
@@ -1734,7 +1730,7 @@ void TestH2ProxyCarriesAnHttpOriginResponse() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "HTTP/2 proxy test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h2-proxy");
 
@@ -1755,7 +1751,7 @@ void TestH2ProxyCarriesAnHttpOriginResponse() {
          "HTTP/2 proxy did not preserve the tunneled HTTP response");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
@@ -1778,7 +1774,7 @@ void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "H2 forward-proxy test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy, CURLOPT_URL, url.c_str()) == CURLE_OK,
@@ -1819,7 +1815,7 @@ void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
          "H2 forward proxy changed the parsed authority or used a tunnel");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestHttp1ProxyConsumesChunkedAuthenticationResponse() {
@@ -1836,7 +1832,7 @@ void TestHttp1ProxyConsumesChunkedAuthenticationResponse() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "HTTP/1.1 proxy test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h1-proxy");
 
@@ -1860,7 +1856,7 @@ void TestHttp1ProxyConsumesChunkedAuthenticationResponse() {
          "HTTP/1.1 proxy did not receive the unauthenticated CONNECT");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestHttp1ProxyAddsPreemptiveAuthorizationHeader() {
@@ -1882,7 +1878,7 @@ void TestHttp1ProxyAddsPreemptiveAuthorizationHeader() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "authenticated proxy test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h1-proxy-auth");
 
@@ -1904,7 +1900,7 @@ void TestHttp1ProxyAddsPreemptiveAuthorizationHeader() {
          "HTTP/1.1 proxy did not receive the preemptive Basic header");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 #endif
 
@@ -2027,7 +2023,7 @@ void TestApiLifecycleCompletesSocketActionTransfer() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "API lifecycle test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/");
 
@@ -2057,7 +2053,7 @@ void TestApiLifecycleCompletesSocketActionTransfer() {
 
   curl_easy_cleanup(easy);
   lifecycle.reset();
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestEasyPerformPreloadsIncrementalResponse() {
@@ -2071,7 +2067,7 @@ void TestEasyPerformPreloadsIncrementalResponse() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "easy-perform test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/easy");
 
@@ -2088,7 +2084,7 @@ void TestEasyPerformPreloadsIncrementalResponse() {
       "curl_easy_perform did not consume the preloaded incremental response");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestEasyEventsPreloadsIncrementalResponse() {
@@ -2102,7 +2098,7 @@ void TestEasyEventsPreloadsIncrementalResponse() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "event-based easy test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/events");
 
@@ -2118,7 +2114,7 @@ void TestEasyEventsPreloadsIncrementalResponse() {
          "curl_easy_perform_ev did not consume the preloaded response");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestConnectOnlyExercisesDirectIo() {
@@ -2131,7 +2127,7 @@ void TestConnectOnlyExercisesDirectIo() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "CONNECT_ONLY test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/connect-only");
 
@@ -2150,7 +2146,7 @@ void TestConnectOnlyExercisesDirectIo() {
          "curl_easy_recv did not consume the preloaded direct-I/O response");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestApiResponseCallbackPausesAndResumes() {
@@ -2166,7 +2162,7 @@ void TestApiResponseCallbackPausesAndResumes() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "API response-pause test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/pause");
 
@@ -2183,7 +2179,7 @@ void TestApiResponseCallbackPausesAndResumes() {
 
   curl_easy_cleanup(easy);
   lifecycle.reset();
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 /// Pausing after the content decoder has already produced output exercises the
@@ -2227,7 +2223,7 @@ void TestApiPausedDecodingBuffersEncodedRemainder() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "paused decode test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/pause-buffered");
   (void)proto_fuzzer::ApplyScenarioOptions(easy, scenario);
@@ -2245,7 +2241,7 @@ void TestApiPausedDecodingBuffersEncodedRemainder() {
 
   curl_easy_cleanup(easy);
   lifecycle.reset();
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 /// Public API calls fired from inside the response callback must be screened by
@@ -2272,7 +2268,7 @@ void TestApiReentrancyProbesAreRejectedInsideCallback() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "API reentrancy test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/reentrancy");
 
@@ -2295,7 +2291,7 @@ void TestApiReentrancyProbesAreRejectedInsideCallback() {
 
   curl_easy_cleanup(easy);
   lifecycle.reset();
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 /// CURLOPT_CONNECT_ONLY disables curl's own transfer timeout, and value 2 keeps
@@ -2326,7 +2322,7 @@ void TestEasyPerformBoundsConnectOnlyUpload() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "connect-only upload test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://api.test/easy");
 
@@ -2356,7 +2352,7 @@ void TestEasyPerformBoundsConnectOnlyUpload() {
          "CONNECT_ONLY disabled the easy-perform drive's transfer timeout");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestTelnetPreloadsChunksAndNeverReadsStdin() {
@@ -2382,7 +2378,7 @@ void TestTelnetPreloadsChunksAndNeverReadsStdin() {
 
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "TELNET test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_TELNET);
   curl_easy_setopt(easy, CURLOPT_URL, "telnet://127.0.0.1/");
 
@@ -2409,7 +2405,7 @@ void TestTelnetPreloadsChunksAndNeverReadsStdin() {
          "TELNET did not flatten chunks or normalize CR-NUL data");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 void TestTelnetMaximumAmplificationCannotBlock() {
@@ -2440,7 +2436,7 @@ void TestTelnetMaximumAmplificationCannotBlock() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "TELNET amplification test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_TELNET);
   curl_easy_setopt(easy, CURLOPT_URL, "telnet://127.0.0.1/");
 
@@ -2477,7 +2473,7 @@ void TestTelnetMaximumAmplificationCannotBlock() {
          "TELNET amplification controls leaked into response data");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 /// The happy-eyeballs peer must start a second real connect while the first
@@ -2495,7 +2491,7 @@ void TestHappyEyeballsRacesMultipleAddresses() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "happy-eyeballs test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://resolve.test/happy");
   // The resolver lane removes the wildcard override so the structured
@@ -2519,7 +2515,7 @@ void TestHappyEyeballsRacesMultipleAddresses() {
          "happy-eyeballs serving listener accepted no connection");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 /// A redirect must receive subsequent_connections[0] on the second accepted
@@ -2539,7 +2535,7 @@ void TestHappyEyeballsAdvancesSubsequentScripts() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "happy-eyeballs redirect test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://resolve.test/happy");
   curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
@@ -2564,7 +2560,7 @@ void TestHappyEyeballsAdvancesSubsequentScripts() {
          "redirect accepted the wrong number of serving connections");
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 }
 
 /// The timing lane folds the mail/MQTT TLS schemes onto HTTP because their
@@ -2587,8 +2583,8 @@ void TestTimingLaneReachesCurlForPeerlessSchemes() {
     proto_fuzzer::CurlSlistPtr connect_to;
     proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
     Expect(easy != nullptr, "timing reachability test could not allocate easy");
-    connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-        easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+    connect_to = proto_fuzzer::ApplyBaselineOptions(
+        easy.get(), curl::fuzzer::proto::SCHEME_HTTP);
     (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "http://timing.test/path");
     RequestCapturingServer server;
     server.Install(easy.get());
@@ -2615,8 +2611,8 @@ void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "IPFS gateway test could not allocate easy");
-  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_HTTP));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTP);
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str());
   RequestCapturingServer server;
   server.Install(easy.get());
@@ -2683,7 +2679,7 @@ DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "DoH HTTPS-RR test could not allocate an easy handle");
-  struct curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTPS);
   const std::string url = "https://" + scenario.host_path();
   curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
@@ -2717,7 +2713,7 @@ DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
   result.negotiated_alpn = server.negotiated_alpn();
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
   return result;
 }
 
@@ -2764,8 +2760,8 @@ void TestDohMalformedAnswerReachesDecoder() {
   Expect(easy != nullptr,
          "DoH malformed-answer test could not allocate an easy handle");
   proto_fuzzer::CurlSlistPtr connect_to;
-  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS);
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "https://tls.test/doh-error");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
 
@@ -2798,8 +2794,8 @@ void TestDohHttpStatusErrorPrecedesDecoder() {
   Expect(easy != nullptr,
          "DoH HTTP-error test could not allocate an easy handle");
   proto_fuzzer::CurlSlistPtr connect_to;
-  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS);
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
                          "https://tls.test/doh-http-error");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
@@ -2834,8 +2830,8 @@ void TestDohHttpsRrSetupFailureDoesNotDriveCurl() {
   Expect(easy != nullptr,
          "DoH setup-failure test could not allocate an easy handle");
   proto_fuzzer::CurlSlistPtr connect_to;
-  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS);
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
                          "https://localhost/doh-setup-failure");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
