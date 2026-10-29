@@ -83,71 +83,84 @@ void RecordNotification(CURLM*, unsigned int notification, CURL*, void* userdata
   }
 }
 
-/// Consume every currently queued completion before handle removal can discard
-/// it. Re-added handles may complete more than once, so count messages rather
-/// than only distinct easy pointers.
-bool DrainCompletionMessages(CURLM* multi, std::array<TransferState, scenario_limits::kMaxMultiTransfers>* transfers,
-                             std::size_t transfer_count, MultiTransferRunStats* stats) {
-  bool consumed = false;
-  int messages_remaining = 0;
-  CURLMsg* message = nullptr;
-  while ((message = curl_multi_info_read(multi, &messages_remaining)) != nullptr) {
-    consumed = true;
-    if (message->msg != CURLMSG_DONE) {
-      continue;
-    }
-    for (std::size_t index = 0; index < transfer_count; ++index) {
-      TransferState& transfer = (*transfers)[index];
-      if (transfer.session.easy() == message->easy_handle) {
-        ++stats->completion_messages;
-        break;
+/// Group the operations that share one multi and its bounded transfer set.
+/// RunMultiTransferScenario owns every borrowed object and performs cleanup;
+/// the driver never destroys or detaches a transfer when its scope ends.
+class MultiTransferDriver {
+ public:
+  MultiTransferDriver(CURLM* multi, std::array<TransferState, scenario_limits::kMaxMultiTransfers>& transfers,
+                      std::size_t transfer_count, MultiTransferRunStats& stats)
+      : multi_(multi), transfers_(transfers), transfer_count_(transfer_count), stats_(stats) {}
+
+  /// Consume every queued completion before handle removal can discard it.
+  /// Re-added handles may complete more than once, so count messages rather
+  /// than only distinct easy pointers.
+  bool DrainCompletionMessages() {
+    bool consumed = false;
+    int messages_remaining = 0;
+    CURLMsg* message = nullptr;
+    while ((message = curl_multi_info_read(multi_, &messages_remaining)) != nullptr) {
+      consumed = true;
+      if (message->msg != CURLMSG_DONE) {
+        continue;
+      }
+      for (std::size_t index = 0; index < transfer_count_; ++index) {
+        TransferState& transfer = transfers_[index];
+        if (transfer.session.easy() == message->easy_handle) {
+          ++stats_.completion_messages;
+          break;
+        }
       }
     }
-  }
-  return consumed;
-}
-
-/// Apply one schema-safe lifecycle transition. Return true only when libcurl
-/// accepted a state change; consuming an ineffective action is tracked
-/// separately so later ordered actions remain reachable.
-bool ApplyAction(const curl::fuzzer::proto::MultiAction& action, CURLM* multi,
-                 std::array<TransferState, scenario_limits::kMaxMultiTransfers>* transfers,
-                 std::size_t transfer_count) {
-  if (transfer_count == 0) {
-    return false;
-  }
-  TransferState& transfer = (*transfers)[static_cast<std::size_t>(action.transfer_selector()) % transfer_count];
-  CURL* easy = transfer.session.easy();
-  if (easy == nullptr) {
-    return false;
+    return consumed;
   }
 
-  switch (action.kind()) {
-    case curl::fuzzer::proto::MULTI_ACTION_PAUSE_RECV:
-      return curl_easy_pause(easy, CURLPAUSE_RECV) == CURLE_OK;
-    case curl::fuzzer::proto::MULTI_ACTION_PAUSE_SEND:
-      return curl_easy_pause(easy, CURLPAUSE_SEND) == CURLE_OK;
-    case curl::fuzzer::proto::MULTI_ACTION_PAUSE_ALL:
-      return curl_easy_pause(easy, CURLPAUSE_ALL) == CURLE_OK;
-    case curl::fuzzer::proto::MULTI_ACTION_RESUME:
-      return curl_easy_pause(easy, CURLPAUSE_CONT) == CURLE_OK;
-    case curl::fuzzer::proto::MULTI_ACTION_REMOVE:
-      if (transfer.attached && curl_multi_remove_handle(multi, easy) == CURLM_OK) {
-        transfer.attached = false;
-        return true;
-      }
+  /// Apply one schema-safe lifecycle transition. Return true only when
+  /// libcurl accepted a state change; the caller tracks action consumption
+  /// separately so later ordered actions remain reachable.
+  bool ApplyAction(const curl::fuzzer::proto::MultiAction& action) {
+    if (transfer_count_ == 0) {
       return false;
-    case curl::fuzzer::proto::MULTI_ACTION_READD:
-      if (!transfer.attached && curl_multi_add_handle(multi, easy) == CURLM_OK) {
-        transfer.attached = true;
-        return true;
-      }
+    }
+    TransferState& transfer = transfers_[static_cast<std::size_t>(action.transfer_selector()) % transfer_count_];
+    CURL* easy = transfer.session.easy();
+    if (easy == nullptr) {
       return false;
-    case curl::fuzzer::proto::MULTI_ACTION_NONE:
-    default:
-      return false;
+    }
+
+    switch (action.kind()) {
+      case curl::fuzzer::proto::MULTI_ACTION_PAUSE_RECV:
+        return curl_easy_pause(easy, CURLPAUSE_RECV) == CURLE_OK;
+      case curl::fuzzer::proto::MULTI_ACTION_PAUSE_SEND:
+        return curl_easy_pause(easy, CURLPAUSE_SEND) == CURLE_OK;
+      case curl::fuzzer::proto::MULTI_ACTION_PAUSE_ALL:
+        return curl_easy_pause(easy, CURLPAUSE_ALL) == CURLE_OK;
+      case curl::fuzzer::proto::MULTI_ACTION_RESUME:
+        return curl_easy_pause(easy, CURLPAUSE_CONT) == CURLE_OK;
+      case curl::fuzzer::proto::MULTI_ACTION_REMOVE:
+        if (transfer.attached && curl_multi_remove_handle(multi_, easy) == CURLM_OK) {
+          transfer.attached = false;
+          return true;
+        }
+        return false;
+      case curl::fuzzer::proto::MULTI_ACTION_READD:
+        if (!transfer.attached && curl_multi_add_handle(multi_, easy) == CURLM_OK) {
+          transfer.attached = true;
+          return true;
+        }
+        return false;
+      case curl::fuzzer::proto::MULTI_ACTION_NONE:
+      default:
+        return false;
+    }
   }
-}
+
+ private:
+  CURLM* multi_;
+  std::array<TransferState, scenario_limits::kMaxMultiTransfers>& transfers_;
+  const std::size_t transfer_count_;
+  MultiTransferRunStats& stats_;
+};
 
 /// Cover the public wait/poll/fdset queries from a valid shared-multi state
 /// without introducing wall-clock delay.
@@ -280,21 +293,21 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
     return stats;
   }
 
+  MultiTransferDriver driver(multi.get(), transfers, transfer_count, stats);
   ProbeLegacyMultiSocketApis(multi.get());
 
   const std::size_t action_count = std::min<std::size_t>(plan.actions_size(), scenario_limits::kMaxMultiActions);
   std::size_t next_action = 0;
   bool initial_action_changed = false;
   if (next_action < action_count) {
-    initial_action_changed =
-        ApplyAction(plan.actions(static_cast<int>(next_action++)), multi.get(), &transfers, transfer_count);
+    initial_action_changed = driver.ApplyAction(plan.actions(static_cast<int>(next_action++)));
     ++stats.actions_consumed;
   }
 
   int running_handles = 0;
   CURLMcode result = socket_driver_installed ? socket_driver.Start(&running_handles)
                                              : curl_multi_perform(multi.get(), &running_handles);
-  bool completion_progress = DrainCompletionMessages(multi.get(), &transfers, transfer_count, &stats);
+  bool completion_progress = driver.DrainCompletionMessages();
   ProbeMultiWaitApis(multi.get());
   if (plan.wake_multi()) {
     if (socket_driver_installed) {
@@ -312,9 +325,7 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
 
     bool made_progress = mock.ServiceConnections();
     if (next_action < action_count) {
-      made_progress =
-          ApplyAction(plan.actions(static_cast<int>(next_action++)), multi.get(), &transfers, transfer_count) ||
-          made_progress;
+      made_progress = driver.ApplyAction(plan.actions(static_cast<int>(next_action++))) || made_progress;
       ++stats.actions_consumed;
       // Consuming an ordered no-op is still harness progress: continue to the
       // next action instead of letting an idle transport hide its suffix.
@@ -330,7 +341,7 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
       result = curl_multi_perform(multi.get(), &running_handles);
       made_progress = running_handles != running_before || made_progress;
     }
-    made_progress = DrainCompletionMessages(multi.get(), &transfers, transfer_count, &stats) || made_progress;
+    made_progress = driver.DrainCompletionMessages() || made_progress;
 
     if (made_progress) {
       idle_iterations = 0;
@@ -339,7 +350,7 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
     }
   }
 
-  (void)DrainCompletionMessages(multi.get(), &transfers, transfer_count, &stats);
+  (void)driver.DrainCompletionMessages();
   stats.opened_connections = mock.opened_connection_count();
   for (std::size_t index = 0; index < transfer_count; ++index) {
     TransferState& transfer = transfers[index];
