@@ -194,8 +194,17 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
     assert shared_main.count("std::size_t ProtoFuzzerCustomMutator(") == 1
     assert shared_main.count("std::size_t ProtoFuzzerCustomCrossOver(") == 1
     assert shared_main.count("proto_fuzzer::RunScenario(") == 1
+    assert shared_main.count("void ProbeMutationEntrypoints()") == 1
+    mutation_probe = shared_main[
+        shared_main.index("void ProbeMutationEntrypoints()") :
+        shared_main.index("}  // namespace")
+    ]
+    assert mutation_probe.count("LLVMFuzzerCustomMutator(") == 2
+    assert mutation_probe.count("LLVMFuzzerCustomCrossOver(") == 1
     dispatcher = shared_main[shared_main.index("int ProtoFuzzerTestOneInput(") :]
     reset_before_load = dispatcher.index("allocation_fault_injection::Reset()")
+    mutation_probe_call = dispatcher.index("ProbeMutationEntrypoints()")
+    typed_probe_gate = dispatcher.index("if (traits.probe_mutation_helpers != nullptr)")
     load = dispatcher.index("traits.load_input(data, size, &scenario)")
     normalize = dispatcher.index("NormalizeScenarioForExecution(&scenario)")
     configure = dispatcher.index("allocation_fault_injection::Configure(")
@@ -203,7 +212,15 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
     run = dispatcher.index("proto_fuzzer::RunScenario(")
     reset_after_run = dispatcher.index("allocation_fault_injection::Reset()", run)
     assert (
-        reset_before_load < load < normalize < configure < arm < run < reset_after_run
+        reset_before_load
+        < mutation_probe_call
+        < typed_probe_gate
+        < load
+        < normalize
+        < configure
+        < arm
+        < run
+        < reset_after_run
     )
     assert "RunModeFor(traits.profile)" in dispatcher
     assert "PROTO_FUZZER_TARGET_" not in shared_main
