@@ -126,8 +126,8 @@ do
   cp -v "${BUILD_DIR}/${TARGET}" "${TARGET}_seed_corpus.zip" "$OUT"/
 done
 
-# Copy dictionary and options file to $OUT.
-cp -v ossconfig/*.dict ossconfig/*.options "$OUT"/
+# Copy options files to $OUT.
+cp -v ossconfig/*.options "$OUT"/
 
 # Copy the built GDB installation to $OUT if requested. The GDB build
 # directory is named after its version (e.g. gdb-13.2-install), so resolve

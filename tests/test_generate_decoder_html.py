@@ -320,9 +320,7 @@ def test_generate_html_embeds_schema_bundle_and_licenses_safely(
         flags=re.IGNORECASE,
     )
 
-    typemap = _embedded_json(document, "typemap-data")
-    assert isinstance(typemap, dict)
-    assert typemap["1"] == "CURLOPT_URL"
+    assert 'id="typemap-data"' not in document
     assert "Third-party licenses" in document
     assert "Long license &lt;terms&gt;" in document
     assert "Protobuf license &amp; terms" in document

@@ -2,7 +2,7 @@
 
 ## Checked-in seeds
 
-Legacy and direct-fuzzer seeds are binary files under `corpora/<target>/`.
+Direct-fuzzer seeds are binary files under `corpora/<target>/`.
 Structured seeds are authored as textproto under
 `scenarios/curl_fuzzer_proto/<lane>/`; their generated binary form belongs in
 the build tree and must not be checked in.
@@ -63,6 +63,6 @@ structured directories.
 ## Seed archives
 
 `scripts/create_zip.sh` is used by the OSS-Fuzz build to package seed corpora.
-For structured targets it reads the generated manifest; for legacy and direct
-targets it archives the corresponding checked-in corpus directory. Per-target
-runtime settings and dictionaries live under `ossconfig/`.
+For structured targets it reads the generated manifest; for direct targets it
+archives the corresponding checked-in corpus directory. Per-target runtime
+settings live under `ossconfig/`.

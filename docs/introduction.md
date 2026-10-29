@@ -6,26 +6,22 @@ testcase tools used by curl's
 It can also build standalone binaries for local regression testing and crash
 reproduction.
 
-The repository has three target families:
+The repository has two target families:
 
-- **Legacy fuzzers** (`curl_fuzzer` and its protocol variants) drive libcurl
-  from a stable Type-Length-Value (TLV) input.
 - **Structured fuzzers** use typed protobuf scenarios, generated
   target-specific mutation roots, and bounded in-process protocol peers.
 - **Direct fuzzers** feed raw bytes to focused parsers such as URL, DoH, netrc,
   and buffer-queue code.
 
-Start with [Getting started](getting-started.md), then use the dedicated
-[legacy](legacy/overview.md) or [structured](proto/overview.md) guide when
-changing a harness or adding seeds.
+Start with [Getting started](getting-started.md), then use the
+[structured harness guide](proto/overview.md) when changing a harness or adding
+protobuf seeds.
 
 ## Online tools
 
-The [corpus decoder](https://fuzz.curl.se/corpus-decoder/) accepts legacy TLV
-and structured protobuf `Scenario` files. It normally detects the format,
-allows manual selection for ambiguous inputs, and runs entirely in the browser.
-Selected testcase data never leaves the device. For command-line protobuf
-decoding, see
+The [corpus decoder](https://fuzz.curl.se/corpus-decoder/) accepts structured
+protobuf `Scenario` files and runs entirely in the browser. Selected testcase
+data never leaves the device. For command-line protobuf decoding, see
 [Scenarios and corpora](proto/scenarios.md).
 
 ## Sources of truth
@@ -42,6 +38,6 @@ Avoid copying lists that must be kept synchronized:
   defines the profile registry and eligibility metadata interpreted at build
   time. It does not define a second serialized Scenario format.
 - [`corpora/`](https://github.com/curl/curl-fuzzer/tree/master/corpora)
-  contains checked-in legacy and direct-fuzzer inputs.
+  contains checked-in direct-fuzzer inputs.
 - [`scenarios/curl_fuzzer_proto/`](https://github.com/curl/curl-fuzzer/tree/master/scenarios/curl_fuzzer_proto)
   contains the reviewable structured seed sources.

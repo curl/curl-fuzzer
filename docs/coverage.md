@@ -65,7 +65,7 @@ For controlled A/B performance and source-coverage comparisons, see
 [Benchmarking](benchmarking.md).
 
 `curl_fuzzer_proto_api` supplements corpus replay with deterministic public
-compatibility API probes, such as formatting and legacy form serialization.
+compatibility API probes, such as formatting and deprecated form serialization.
 The probes execute once per process in coverage builds (`ENABLE_COVERAGE=ON`
 or `SANITIZER=coverage`) and Fuzz Introspector builds
 (`SANITIZER=introspector`). They reuse the proto runtime's global curl
@@ -74,32 +74,9 @@ runtime releases its global resolver and TLS state only during process exit.
 An initialization hook covers empty-corpus merge jobs, while the first input
 callback is a fallback for standalone replay engines that omit that hook.
 
-`curl_fuzzer_full_coverage` retains the same curl probes temporarily while the
-legacy-to-proto parity gate is measured, in addition to its legacy mutator
-probe. It is not evidence that the proto lane restored those functions until a
-source-coverage replay confirms the delta.
-
-The full-coverage target's initialization-safe probes execute once per process
-in coverage builds (`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`) and Fuzz
-Introspector builds (`SANITIZER=introspector`).
-Ordinary sanitizer builds do not package this profiling helper as a fuzz
-target. The checked-in nonempty seed triggers standalone replay; the target
-ignores its contents. The libFuzzer initialization hook also runs the probes,
-because OSS-Fuzz's `-merge=1` coverage pass can have an empty saved corpus and
-therefore make no input callbacks. Keep additional curl API probes in the
-structured API lane rather than creating another protocol lane.
-The legacy-mutator probe remains on the input hook because it exercises
-`LLVMFuzzerMutate`, which libFuzzer does not make usable until initialization
-has returned.
-
-The target also exercises the legacy TLV custom mutator and crossover,
-including their ABI adapters, fixed mutation seeds, and bounded framing and
-capacity cases. This runs on local byte buffers without performing a transfer.
-Standalone replay covers the weak byte-mutator fallback; engine-provided byte
-mutation and sanitizer-specific paths depend on the selected build/runtime.
-
-Utility probes cover the version string, documented date formats, and legacy
-escape/unescape aliases with short fixed strings and explicit binary lengths.
+Utility probes cover the version string, documented date formats, and
+deprecated escape/unescape aliases with short fixed strings and explicit binary
+lengths.
 
 Dynamic formatting probes use curl's real private buffer type and small
 explicit limits to exercise exact fits, staging boundaries, and size-limit

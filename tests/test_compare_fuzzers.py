@@ -8,47 +8,12 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from curl_fuzzer_tools import compare_fuzzers
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _test_parity_manifest() -> compare_fuzzers.ParityManifest:
-    return compare_fuzzers.ParityManifest(
-        path=Path("external-parity-manifest.json"),
-        sha256="0" * 64,
-        baseline_id="test-parity-baseline",
-        immutable_baseline_sha256="1" * 64,
-        source_identity={},
-        replay_input_timeout_seconds=10,
-        replay_sanitizer_environment={
-            "ASAN_OPTIONS": "detect_leaks=0",
-            "LSAN_OPTIONS": None,
-        },
-        gate_scope="development_function_parity",
-        retirement_eligible=False,
-        region_status="indeterminate_nondeterministic",
-        gate_rationale="test manifest",
-        target_pairs=(("legacy", "proto"),),
-        baseline_inventory=frozenset({"legacy"}),
-        candidate_inventory=frozenset({"proto"}),
-        excluded_inventory=frozenset(),
-        baseline_corpora={"legacy": (1, "2" * 64)},
-        baseline_function_count=1,
-        baseline_function_sha256="3" * 64,
-        baseline_region_count=1,
-        baseline_region_sha256="4" * 64,
-        initial_functions=frozenset({("lib/test.c", "test_function")}),
-        initial_regions=frozenset({("lib/test.c", "test_function", 1, 1, 1, 2)}),
-        resolved_functions=frozenset(),
-        resolved_regions=frozenset(),
-        identity_canonicalization={},
-        provenance={},
-    )
 
 
 def _run_cli(
@@ -396,7 +361,7 @@ def test_cli_uses_a_fresh_corpus_for_every_run(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     document = json.loads(output.read_text(encoding="utf-8"))
-    assert document["schema_version"] == 4
+    assert document["schema_version"] == 5
     assert [run["corpus_before"]["count"] for run in document["runs"]] == [
         1,
         1,
@@ -468,9 +433,31 @@ def test_specialized_lanes_are_default_benchmark_targets() -> None:
     }.issubset(compare_fuzzers.DEFAULT_TARGETS)
 
 
-def test_ftp_and_tftp_lanes_are_default_benchmark_targets() -> None:
-    assert "curl_fuzzer_proto_ftp" in compare_fuzzers.DEFAULT_TARGETS
-    assert "curl_fuzzer_proto_tftp" in compare_fuzzers.DEFAULT_TARGETS
+def test_default_benchmark_targets_cover_packaged_proto_lanes() -> None:
+    environment = os.environ.copy()
+    environment.pop("CURL_FUZZ_TARGET", None)
+    environment.update({"ARCHITECTURE": "x86_64", "SANITIZER": "address"})
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            '. scripts/fuzz_targets; printf "%s\\n" "$FUZZ_TARGETS"',
+        ],
+        cwd=REPO_ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    packaged_proto_targets = {
+        target
+        for target in result.stdout.split()
+        if target.startswith("curl_fuzzer_proto")
+    }
+
+    assert packaged_proto_targets - {"curl_fuzzer_proto"} == set(
+        compare_fuzzers.DEFAULT_TARGETS
+    )
 
 
 def test_cli_compares_native_corpora_and_source_coverage_for_target_pair(
@@ -680,7 +667,7 @@ def test_source_only_cli_uses_coverage_seed_archives_and_retains_evidence(
 
     assert result.returncode == 0, result.stderr
     document = json.loads(output.read_text(encoding="utf-8"))
-    assert document["schema_version"] == 4
+    assert document["schema_version"] == 5
     assert document["measurement_scope"] == "source-only"
     assert document["config"]["source_only"] is True
     assert document["config"]["coverage_input_timeout"] == 7
@@ -1174,98 +1161,20 @@ def test_cli_rejects_counter_comparison_without_candidate(tmp_path: Path) -> Non
     assert "requires --candidate-dir" in result.stderr
 
 
-def test_generic_and_parity_coverage_replay_defaults_are_distinct() -> None:
-    generic = compare_fuzzers._parse_args([])
-    compare_fuzzers._resolve_coverage_replay_settings(generic, None)
+def test_coverage_replay_settings_use_defaults_or_explicit_values() -> None:
+    defaults = compare_fuzzers._parse_args([])
+    compare_fuzzers._resolve_coverage_replay_settings(defaults)
 
-    assert generic.coverage_input_timeout == 25
-    assert generic.coverage_wall_timeout == 300
+    assert defaults.coverage_input_timeout == 25
+    assert defaults.coverage_wall_timeout == 300
 
-    parity = compare_fuzzers._parse_args([])
-    manifest = _test_parity_manifest()
-    compare_fuzzers._resolve_coverage_replay_settings(parity, manifest)
-
-    assert parity.coverage_input_timeout == 10
-    assert parity.coverage_wall_timeout == 7200
-
-
-def test_parity_coverage_replay_settings_allow_only_matching_input_timeout() -> None:
-    manifest = _test_parity_manifest()
-    matching = compare_fuzzers._parse_args(
+    explicit = compare_fuzzers._parse_args(
         ["--coverage-input-timeout", "10", "--coverage-wall-timeout", "900"]
     )
+    compare_fuzzers._resolve_coverage_replay_settings(explicit)
 
-    compare_fuzzers._resolve_coverage_replay_settings(matching, manifest)
-
-    assert matching.coverage_input_timeout == 10
-    assert matching.coverage_wall_timeout == 900
-
-    mismatched = compare_fuzzers._parse_args(["--coverage-input-timeout", "11"])
-    with pytest.raises(compare_fuzzers.MeasurementError, match="expected 10"):
-        compare_fuzzers._resolve_coverage_replay_settings(mismatched, manifest)
-
-
-def test_parity_coverage_replay_settings_reject_sanitizer_policy_drift(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
-    manifest = _test_parity_manifest()
-    args = compare_fuzzers._parse_args([])
-    monkeypatch.setattr(
-        compare_fuzzers,
-        "COVERAGE_REPLAY_SANITIZER_ENVIRONMENT",
-        {"ASAN_OPTIONS": "detect_leaks=1", "LSAN_OPTIONS": None},
-    )
-
-    with pytest.raises(compare_fuzzers.MeasurementError, match="sanitizer environment"):
-        compare_fuzzers._resolve_coverage_replay_settings(args, manifest)
-
-
-def test_parity_socket_preflight_exchanges_complete_payload() -> None:
-    sender = MagicMock()
-    receiver = MagicMock()
-    sender.__enter__.return_value = sender
-    receiver.__enter__.return_value = receiver
-    receiver.recv.side_effect = [b"curl-fuzzer-", b"parity-preflight"]
-    socketpair_factory = MagicMock(return_value=(sender, receiver))
-
-    compare_fuzzers._validate_parity_socket_capability(socketpair_factory)
-
-    socketpair_factory.assert_called_once_with(
-        compare_fuzzers.socket.AF_UNIX,
-        compare_fuzzers.socket.SOCK_STREAM,
-    )
-    sender.sendall.assert_called_once_with(b"curl-fuzzer-parity-preflight")
-    assert receiver.recv.call_count == 2
-
-
-def test_parity_socket_preflight_reports_denied_local_io() -> None:
-    def denied_socketpair(_family: int, _kind: int):  # type: ignore[no-untyped-def]
-        raise PermissionError(1, "Operation not permitted")
-
-    with pytest.raises(
-        compare_fuzzers.MeasurementError,
-        match=(
-            "requires local AF_UNIX socket send/receive capability.*"
-            "permits local socket I/O"
-        ),
-    ):
-        compare_fuzzers._validate_parity_socket_capability(denied_socketpair)
-
-
-def test_parity_socket_preflight_rejects_truncated_exchange() -> None:
-    sender = MagicMock()
-    receiver = MagicMock()
-    sender.__enter__.return_value = sender
-    receiver.__enter__.return_value = receiver
-    receiver.recv.side_effect = [b"truncated", b""]
-
-    with pytest.raises(
-        compare_fuzzers.MeasurementError,
-        match="preflight returned 9 of 28 bytes",
-    ):
-        compare_fuzzers._validate_parity_socket_capability(
-            lambda _family, _kind: (sender, receiver)
-        )
+    assert explicit.coverage_input_timeout == 10
+    assert explicit.coverage_wall_timeout == 900
 
 
 @pytest.mark.parametrize(
@@ -1311,112 +1220,6 @@ def test_binary_must_resolve_to_a_direct_build_directory_child(
 
     with pytest.raises(compare_fuzzers.MeasurementError, match="direct child"):
         compare_fuzzers._binary_path(binary_dir, "target")
-
-
-def test_cli_requires_trusted_previous_manifest_for_every_parity_run(
-    tmp_path: Path,
-) -> None:
-    coverage = tmp_path / "coverage"
-    result = _run_cli(
-        [
-            "--source-only",
-            "--coverage-baseline-dir",
-            str(coverage),
-            "--coverage-candidate-dir",
-            str(coverage),
-            "--parity-manifest",
-            str(tmp_path / "external-manifest.json"),
-            "--output",
-            str(tmp_path / "result.json"),
-        ]
-    )
-
-    assert result.returncode == 2
-    assert "requires a trusted --previous-parity-manifest" in result.stderr
-
-
-def test_cli_parity_requires_one_shared_coverage_build(tmp_path: Path) -> None:
-    manifest = tmp_path / "external-manifest.json"
-    result = _run_cli(
-        [
-            "--source-only",
-            "--coverage-baseline-dir",
-            str(tmp_path / "baseline"),
-            "--coverage-candidate-dir",
-            str(tmp_path / "candidate"),
-            "--parity-manifest",
-            str(manifest),
-            "--previous-parity-manifest",
-            str(manifest),
-            "--output",
-            str(tmp_path / "result.json"),
-        ]
-    )
-
-    assert result.returncode == 2
-    assert "same build directory" in result.stderr
-
-
-def test_cli_parity_rejects_input_timeout_that_differs_from_manifest(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    manifest = tmp_path / "external-manifest.json"
-    coverage = tmp_path / "coverage"
-    monkeypatch.setattr(
-        compare_fuzzers,
-        "load_parity_manifest",
-        lambda _path: _test_parity_manifest(),
-    )
-
-    result = compare_fuzzers.main(
-        [
-            "--source-only",
-            "--coverage-baseline-dir",
-            str(coverage),
-            "--coverage-candidate-dir",
-            str(coverage),
-            "--coverage-input-timeout",
-            "11",
-            "--parity-manifest",
-            str(manifest),
-            "--previous-parity-manifest",
-            str(manifest),
-            "--output",
-            str(tmp_path / "result.json"),
-        ]
-    )
-
-    assert result == 2
-    assert "does not match the parity manifest: expected 10" in capsys.readouterr().err
-    assert not (tmp_path / "result.json").exists()
-
-
-def test_cli_never_unlinks_a_manifest_used_as_its_output(tmp_path: Path) -> None:
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text('{"important":true}\n', encoding="utf-8")
-    coverage = tmp_path / "coverage"
-
-    result = _run_cli(
-        [
-            "--source-only",
-            "--coverage-baseline-dir",
-            str(coverage),
-            "--coverage-candidate-dir",
-            str(coverage),
-            "--parity-manifest",
-            str(manifest),
-            "--previous-parity-manifest",
-            str(manifest),
-            "--output",
-            str(manifest),
-        ]
-    )
-
-    assert result.returncode == 2
-    assert "must not overwrite" in result.stderr
-    assert manifest.read_text(encoding="utf-8") == '{"important":true}\n'
 
 
 def test_cli_never_unlinks_a_direct_build_directory_child(tmp_path: Path) -> None:
@@ -1600,61 +1403,3 @@ def test_cli_rejects_symlinked_log_directory_before_cleanup(tmp_path: Path) -> N
     assert result.returncode == 2
     assert "log directory must not be a symlink" in result.stderr
     assert sentinel.read_text(encoding="utf-8") == "keep"
-
-
-@pytest.mark.parametrize("invalid_input", ["manifest", "inventory"])
-def test_cli_clears_stale_result_before_manifest_or_inventory_validation(
-    tmp_path: Path,
-    invalid_input: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    manifest = tmp_path / "external-manifest.json"
-    inventory = REPO_ROOT / "scripts" / "fuzz_targets"
-    if invalid_input == "manifest":
-        manifest = tmp_path / "bad-manifest.json"
-        manifest.write_text("not json", encoding="utf-8")
-    else:
-        inventory = tmp_path / "bad-inventory"
-        inventory.write_text(
-            'FUZZ_TARGETS_LIST+=" curl_fuzzer_new"\n', encoding="utf-8"
-        )
-        monkeypatch.setattr(
-            compare_fuzzers,
-            "load_parity_manifest",
-            lambda _path: _test_parity_manifest(),
-        )
-
-        def reject_inventory(
-            _manifest: compare_fuzzers.ParityManifest, _path: Path
-        ) -> None:
-            raise compare_fuzzers.CoverageParityError("invalid test inventory")
-
-        monkeypatch.setattr(
-            compare_fuzzers, "validate_live_inventory", reject_inventory
-        )
-    output = tmp_path / "stale.json"
-    output.write_text('{"status":"passed"}\n', encoding="utf-8")
-    coverage = tmp_path / "coverage"
-
-    arguments = [
-        "--source-only",
-        "--coverage-baseline-dir",
-        str(coverage),
-        "--coverage-candidate-dir",
-        str(coverage),
-        "--parity-manifest",
-        str(manifest),
-        "--previous-parity-manifest",
-        str(manifest),
-        "--target-inventory",
-        str(inventory),
-        "--output",
-        str(output),
-    ]
-    if invalid_input == "manifest":
-        status = _run_cli(arguments).returncode
-    else:
-        status = compare_fuzzers.main(arguments)
-
-    assert status == 2
-    assert not output.exists()

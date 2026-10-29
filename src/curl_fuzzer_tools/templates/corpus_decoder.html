@@ -22,11 +22,6 @@
             display: flex;
             flex-direction: column;
             gap: 0.25rem;
-
-            tbody tr {
-                background: rgba(255, 255, 255, 0.03);
-                border-color: rgba(255, 255, 255, 0.08);
-            }
             margin-bottom: 1.5rem;
         }
 
@@ -100,15 +95,6 @@
             display: none;
         }
 
-        select {
-            border: 1px solid rgba(0, 0, 0, 0.2);
-            border-radius: 999px;
-            padding: 0.6rem 1rem;
-            background: inherit;
-            color: inherit;
-            font-size: 1rem;
-        }
-
         pre.proto-output {
             max-height: 70vh;
             overflow: auto;
@@ -132,55 +118,10 @@
             display: none !important;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-
-        .table-wrapper {
-            width: 100%;
-            overflow-x: auto;
-            border-radius: 10px;
-        }
-
-        th, td {
-            padding: 0.6rem 0.75rem;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            background: rgba(0, 0, 0, 0.03);
-            position: sticky;
-            top: 0;
-        }
-
-        tbody tr:hover {
-            background: rgba(0, 0, 0, 0.04);
-        }
-
         .mono {
             font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
             font-size: 0.9rem;
             word-break: break-word;
-        }
-
-        /* Subtle styling for visualization glyphs (interpunct, NUL, etc.) */
-        .viz-char {
-            opacity: 0.3;
-        }
-
-        .label {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.2rem 0.6rem;
-            border-radius: 999px;
-            background: rgba(0, 120, 212, 0.12);
-            color: #004578;
-            font-size: 0.85rem;
         }
 
         .summary {
@@ -250,52 +191,12 @@
                 box-shadow: none;
             }
 
-            th {
-                background: rgba(255, 255, 255, 0.05);
-            }
-
-            tbody tr:hover {
-                background: rgba(255, 255, 255, 0.04);
-            }
-
-            .label {
-                background: rgba(0, 120, 212, 0.25);
-                color: #9cd4ff;
-            }
-
             pre.proto-output {
                 background: rgba(255, 255, 255, 0.05);
             }
 
             .message-error {
                 color: #ffb4ab;
-            }
-        }
-
-        @media (prefers-color-scheme: dark) and (max-width: 640px) {
-            tbody tr {
-                background: rgba(255, 255, 255, 0.08);
-                border-color: rgba(255, 255, 255, 0.18);
-                box-shadow: none;
-            }
-
-            tbody tr:hover {
-                background: rgba(255, 255, 255, 0.12);
-            }
-
-            tbody tr[data-entry]::before {
-                color: rgba(255, 255, 255, 0.75);
-                background: rgba(255, 255, 255, 0.18);
-            }
-
-            tbody tr td::before {
-                color: rgba(255, 255, 255, 0.65);
-            }
-        }
-
-        @media (prefers-color-scheme: light) and (max-width: 640px) {
-            tbody tr td::before {
-                color: rgba(0, 0, 0, 0.55);
             }
         }
 
@@ -335,107 +236,6 @@
                 flex-direction: column;
             }
 
-            .table-wrapper {
-                overflow-x: visible;
-            }
-
-            table {
-                font-size: 0.95rem;
-            }
-
-            table,
-            thead,
-            tbody,
-            th,
-            td,
-            tr {
-                display: block;
-            }
-
-            thead {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                padding: 0;
-                margin: -1px;
-                overflow: hidden;
-                clip: rect(0, 0, 0, 0);
-                border: 0;
-            }
-
-            tbody {
-                display: flex;
-                flex-direction: column;
-                gap: 0.75rem;
-            }
-
-            tbody tr {
-                position: relative;
-                background: rgba(0, 0, 0, 0.03);
-                border: 1px solid rgba(0, 0, 0, 0.07);
-                border-radius: 12px;
-                padding: 1.2rem 1rem 1rem;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            }
-
-            tbody tr:hover {
-                background: rgba(0, 0, 0, 0.045);
-            }
-
-            tbody tr[data-entry]::before {
-                content: "#" attr(data-entry);
-                position: absolute;
-                top: 0.75rem;
-                right: 1rem;
-                font-size: 0.75rem;
-                font-weight: 600;
-                letter-spacing: 0.08em;
-                color: rgba(0, 0, 0, 0.45);
-                background: rgba(0, 0, 0, 0.05);
-                border-radius: 999px;
-                padding: 0.15rem 0.6rem;
-            }
-
-            tbody tr td {
-                border: 0;
-                padding: 0;
-                margin-top: 0.55rem;
-                display: flex;
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            /* In preview/hex cells, render inline content normally to avoid one-span-per-line */
-            tbody tr td.mono {
-                display: block;
-                align-items: initial;
-            }
-
-            tbody tr[data-entry] td:first-child {
-                display: none;
-            }
-
-            tbody tr[data-entry] td:nth-child(2) {
-                margin-top: 0;
-            }
-
-            tbody tr:not([data-entry]) td:first-child {
-                margin-top: 0;
-            }
-
-            tbody tr td:last-child {
-                margin-bottom: 0;
-            }
-
-            tbody tr td::before {
-                content: attr(data-label);
-                display: block;
-                font-size: 0.75rem;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-                margin-bottom: 0.25rem;
-            }
-
             .mono {
                 white-space: pre-wrap;
                 word-break: break-word;
@@ -448,7 +248,7 @@
 <body>
     <header>
         <h1>curl corpus decoder</h1>
-        <p>Inspect legacy TLV and structured protobuf corpus files locally in your browser. Files stay on your device. Generated: <span id="generated-at">{{ generated_at }}</span></p>
+        <p>Inspect structured protobuf Scenario corpus files locally in your browser. Files stay on your device. Generated: <span id="generated-at">{{ generated_at }}</span></p>
     </header>
 
     <main>
@@ -457,36 +257,9 @@
             <p>Select a file or drop it on the area below. Files stay on your device.</p>
             <div class="actions">
                 <label for="corpus-input">Choose file</label>
-                <select id="format-select" aria-label="Corpus format">
-                    <option value="auto">Auto-detect format</option>
-                    <option value="tlv">Legacy TLV</option>
-                    <option value="proto">Protobuf Scenario</option>
-                </select>
             </div>
             <div class="dropzone" id="dropzone">Drop a corpus file here</div>
             <input type="file" id="corpus-input" accept="*/*" />
-        </section>
-
-        <section class="card" id="tlv-results" aria-labelledby="table-header" hidden>
-            <h2 id="table-header">Decoded TLVs</h2>
-            <div class="table-wrapper">
-                <table aria-describedby="table-header">
-                    <thead>
-                        <tr>
-                            <th scope="col">#</th>
-                            <th scope="col">Type</th>
-                            <th scope="col">Length</th>
-                            <th scope="col">Preview</th>
-                            <th scope="col">Hex</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tlv-table-body">
-                        <tr>
-                            <td colspan="5">Open a corpus file to see decoded entries.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
         </section>
 
         <section class="card" id="proto-results" aria-labelledby="proto-header" hidden>
@@ -530,30 +303,21 @@
         </details>
     </footer>
 
-    <script type="application/json" id="typemap-data">{{ typemap | tojson(indent=2) | replace('</', '<\\/') }}</script>
     <script type="application/json" id="proto-source-data">{{ proto_source | tojson | replace('</', '<\\/') }}</script>
     <script>{{ javascript_bundle | safe }}</script>
     <script>
         /* eslint-disable no-console */
-        const TYPEMAP = JSON.parse(document.getElementById("typemap-data").textContent);
         const PROTO_SOURCE = JSON.parse(document.getElementById("proto-source-data").textContent);
         const PROTO_ROOT = protobuf.parse(PROTO_SOURCE, { keepCase: true }).root;
         const SCENARIO_TYPE = PROTO_ROOT.lookupType({{ scenario_message | tojson }});
 
-        const decoder = new TextDecoder("utf-8", { fatal: false });
-        const MAX_PREVIEW = 512;
-        const MAX_HEX_BYTES = 256;
         const MAX_PROTO_OUTPUT = 1024 * 1024;
         const MAX_PROTO_DEPTH = 32;
         const MAX_PROTO_FIELDS = 10000;
-        const MAX_TLV_ENTRIES = 10000;
         const MAX_FILE_BYTES = 16 * 1024 * 1024;
-        const INTERPUNCT = "\u00B7";
-        const NULL_SYMBOL = "\u2300";
 
         const elements = {
             fileInput: document.getElementById("corpus-input"),
-            formatSelect: document.getElementById("format-select"),
             dropzone: document.getElementById("dropzone"),
             summaryName: document.getElementById("summary-name"),
             summarySize: document.getElementById("summary-size"),
@@ -562,14 +326,9 @@
             summaryCount: document.getElementById("summary-count"),
             summaryErrors: document.getElementById("summary-errors"),
             messages: document.getElementById("messages"),
-            tlvResults: document.getElementById("tlv-results"),
-            tableBody: document.getElementById("tlv-table-body"),
             protoResults: document.getElementById("proto-results"),
             protoOutput: document.getElementById("proto-output"),
         };
-
-        let currentBuffer = null;
-        let currentFileName = "(memory)";
 
         class DecodeError extends Error {}
 
@@ -585,52 +344,6 @@
                 idx += 1;
             }
             return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
-        }
-
-        function sanitizeString(bytes) {
-            if (!bytes || !bytes.length) {
-                return "";
-            }
-            try {
-                const truncated = bytes.length > MAX_PREVIEW ? bytes.slice(0, MAX_PREVIEW) : bytes;
-                return renderVisibleHTML(decoder.decode(truncated));
-            } catch (err) {
-                console.debug("Failed to decode as UTF-8", err);
-                return "";
-            }
-        }
-
-        function escapeHTML(s) {
-            return s.replace(/[&<>"']/g, (ch) => (
-                ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : ch === ">" ? "&gt;" : ch === "\"" ? "&quot;" : "&#39;"
-            ));
-        }
-
-        function renderVisibleHTML(text) {
-            if (!text) return "";
-            let out = "";
-            for (let i = 0; i < text.length; i += 1) {
-                const ch = text[i];
-                const code = text.charCodeAt(i);
-                if (code === 0x0000) {
-                    out += `<span class="viz-char" title="NUL (0x00)">${NULL_SYMBOL}</span>`;
-                } else if (ch === " " || ch === "\t" || ch === "\v" || ch === "\f" || ch === "\r" || ch === "\u00A0") {
-                    out += `<span class="viz-char" title="Whitespace">${INTERPUNCT}</span>`;
-                } else {
-                    out += escapeHTML(ch);
-                }
-            }
-            return out;
-        }
-
-        function toHex(bytes, limit = MAX_HEX_BYTES) {
-            if (!bytes || !bytes.length) {
-                return "";
-            }
-            const truncated = bytes.length > limit ? bytes.slice(0, limit) : bytes;
-            const parts = Array.from(truncated, (value) => value.toString(16).padStart(2, "0"));
-            const hexString = parts.join(" ");
-            return bytes.length > limit ? `${hexString} …` : hexString;
         }
 
         function updateSummary({ name, size, format, count, countLabel, errors }) {
@@ -649,114 +362,6 @@
             div.textContent = message;
             div.className = `message message-${variant}`;
             elements.messages.appendChild(div);
-        }
-
-        function showResults(format) {
-            elements.tlvResults.hidden = format !== "tlv";
-            elements.protoResults.hidden = format !== "proto";
-        }
-
-        function typeLabel(type) {
-            const displayName = TYPEMAP[String(type)] ?? "<unknown>";
-            const label = document.createElement("span");
-            label.className = "label";
-            label.textContent = `${displayName} (#${type})`;
-            return label;
-        }
-
-        function renderTable(rows) {
-            elements.tableBody.innerHTML = "";
-            if (!rows.length) {
-                const emptyRow = document.createElement("tr");
-                const td = document.createElement("td");
-                td.dataset.label = "Status";
-                td.colSpan = 5;
-                td.textContent = "No TLVs found in this file.";
-                emptyRow.appendChild(td);
-                elements.tableBody.appendChild(emptyRow);
-                return;
-            }
-            rows.forEach((row, index) => {
-                const tr = document.createElement("tr");
-                tr.dataset.entry = String(index + 1);
-
-                const indexCell = document.createElement("td");
-                indexCell.dataset.label = "Entry";
-                indexCell.textContent = index + 1;
-
-                const typeCell = document.createElement("td");
-                typeCell.dataset.label = "Type";
-                typeCell.appendChild(typeLabel(row.type));
-
-                const lengthCell = document.createElement("td");
-                lengthCell.dataset.label = "Length";
-                lengthCell.textContent = `${row.length}`;
-
-                const previewCell = document.createElement("td");
-                previewCell.className = "mono";
-                previewCell.dataset.label = "Preview";
-                previewCell.innerHTML = row.preview || "\u00a0";
-
-                const hexCell = document.createElement("td");
-                hexCell.className = "mono";
-                hexCell.dataset.label = "Hex";
-                hexCell.textContent = row.hex || "\u00a0";
-
-                tr.append(indexCell, typeCell, lengthCell, previewCell, hexCell);
-                elements.tableBody.appendChild(tr);
-            });
-        }
-
-        function parseTLV(buffer) {
-            const view = new DataView(buffer);
-            const bytes = new Uint8Array(buffer);
-            const rows = [];
-            let pos = 0;
-            let errors = 0;
-            let incomplete = false;
-            let known = 0;
-            let firstKnown = false;
-
-            while (pos + 6 <= view.byteLength) {
-                if (rows.length >= MAX_TLV_ENTRIES) {
-                    errors += 1;
-                    incomplete = true;
-                    console.warn(`Legacy TLV entry limit of ${MAX_TLV_ENTRIES} exceeded.`);
-                    break;
-                }
-                const type = view.getUint16(pos, false);
-                const length = view.getUint32(pos + 2, false);
-                if (pos === 0) firstKnown = Object.hasOwn(TYPEMAP, String(type));
-                pos += 6;
-                if (length > view.byteLength - pos) {
-                    errors += 1;
-                    incomplete = true;
-                    console.warn(`Incomplete TLV: expected ${length} bytes, have ${view.byteLength - pos}`);
-                    break;
-                }
-                const data = bytes.slice(pos, pos + length);
-                rows.push({
-                    type,
-                    length,
-                    preview: sanitizeString(data),
-                    hex: toHex(data),
-                });
-                if (Object.hasOwn(TYPEMAP, String(type))) known += 1;
-                pos += length;
-            }
-
-            const trailing = incomplete ? 0 : view.byteLength - pos;
-            if (trailing) {
-                errors += 1;
-                console.warn(`Trailing ${trailing} bytes after parsing TLVs.`);
-            }
-            return {
-                rows,
-                errors,
-                known,
-                firstKnown,
-                confident: rows.length > 0 && known === rows.length && !incomplete && trailing < 6,
-            };
         }
 
         function inspectProtoMessage(type, message, depth, budget) {
@@ -818,9 +423,6 @@
                 0,
                 { fields: 0 },
             );
-            const topLevelUnknownBytes = Object.hasOwn(message, "$unknowns")
-                ? message.$unknowns.reduce((total, field) => total + field.length, 0)
-                : 0;
             const formatted = protobuf.textformat.toText(
                 SCENARIO_TYPE,
                 message,
@@ -838,30 +440,12 @@
                 text,
                 known: stats.known,
                 unknown: stats.unknown,
-                confident: bytes.length > topLevelUnknownBytes,
                 truncated,
             };
         }
 
-        function renderTLVResult(parsed, fileName, size) {
-            showResults("tlv");
-            renderTable(parsed.rows);
-            updateSummary({
-                name: fileName,
-                size,
-                format: "Legacy TLV",
-                count: parsed.rows.length,
-                countLabel: "TLVs parsed",
-                errors: parsed.errors,
-            });
-            displayMessage(
-                parsed.errors ? `${parsed.errors} issues detected while parsing legacy TLVs.` : `Decoded ${parsed.rows.length} TLVs successfully.`,
-                parsed.errors ? "error" : "info",
-            );
-        }
-
         function renderProtoResult(parsed, fileName, size) {
-            showResults("proto");
+            elements.protoResults.hidden = false;
             elements.protoOutput.textContent = parsed.text;
             updateSummary({
                 name: fileName,
@@ -881,61 +465,20 @@
             displayMessage(`Decoded protobuf Scenario successfully.${suffix}`);
         }
 
-        function decodeSelectedFormat(buffer, fileName, requestedFormat) {
-            if (requestedFormat === "proto") {
-                renderProtoResult(decodeProto(buffer), fileName, buffer.byteLength);
-                return;
-            }
-            const tlv = parseTLV(buffer);
-            if (requestedFormat === "tlv") {
-                renderTLVResult(tlv, fileName, buffer.byteLength);
-                return;
-            }
-            if (tlv.confident || tlv.firstKnown) {
-                renderTLVResult(tlv, fileName, buffer.byteLength);
-                return;
-            }
-
-            try {
-                const proto = decodeProto(buffer);
-                if (proto.confident) {
-                    renderProtoResult(proto, fileName, buffer.byteLength);
-                    return;
-                }
-            } catch (err) {
-                console.debug("Protobuf auto-detection failed", err);
-            }
-            showResults(null);
-            updateSummary({
-                name: fileName,
-                size: buffer.byteLength,
-                format: "Unknown",
-                count: 0,
-                countLabel: "Entries decoded",
-                errors: 1,
-            });
-            displayMessage(
-                "Could not identify this file as a legacy TLV corpus or protobuf Scenario. Select a format to force decoding.",
-                "error",
-            );
-        }
-
         function handleBuffer(buffer, fileName = "(memory)") {
-            currentBuffer = buffer;
-            currentFileName = fileName;
             try {
                 if (buffer.byteLength > MAX_FILE_BYTES) {
                     throw new DecodeError(`File exceeds the ${humanBytes(MAX_FILE_BYTES)} browser-decoder limit`);
                 }
-                decodeSelectedFormat(buffer, fileName, elements.formatSelect.value);
+                renderProtoResult(decodeProto(buffer), fileName, buffer.byteLength);
             } catch (err) {
-                showResults(null);
+                elements.protoResults.hidden = true;
                 updateSummary({
                     name: fileName,
                     size: buffer.byteLength,
-                    format: "Unknown",
+                    format: "Protobuf Scenario",
                     count: 0,
-                    countLabel: "Entries decoded",
+                    countLabel: "Fields decoded",
                     errors: 1,
                 });
                 displayMessage(err instanceof Error ? err.message : String(err), "error");
@@ -945,15 +488,13 @@
         function handleFile(file) {
             if (!file) return;
             if (file.size > MAX_FILE_BYTES) {
-                currentBuffer = null;
-                currentFileName = file.name;
-                showResults(null);
+                elements.protoResults.hidden = true;
                 updateSummary({
                     name: file.name,
                     size: file.size,
-                    format: "Unknown",
+                    format: "Protobuf Scenario",
                     count: 0,
-                    countLabel: "Entries decoded",
+                    countLabel: "Fields decoded",
                     errors: 1,
                 });
                 displayMessage(
@@ -1002,15 +543,12 @@
                 const files = event.target?.files;
                 if (files && files.length) handleFile(files[0]);
             });
-            elements.formatSelect.addEventListener("change", () => {
-                if (currentBuffer) handleBuffer(currentBuffer, currentFileName);
-            });
         }
 
         function init() {
             setupInputs();
             setupDragAndDrop();
-            displayMessage("Ready to decode legacy TLV or protobuf Scenario files.");
+            displayMessage("Ready to decode protobuf Scenario files.");
         }
 
         init();

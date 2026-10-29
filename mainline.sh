@@ -41,9 +41,9 @@ fi
 
 "${SCRIPTDIR}"/compile_target.sh "${TARGET}"
 
-# The fuzz target does not execute regression tests. Run the allocation-free
-# TLV mutator and proto policy tests on AddressSanitizer builds so mutation
-# invariants cannot regress behind a green CI job. The
+# The fuzz target does not execute regression tests. Run the unit and policy
+# tests on AddressSanitizer builds so mutation invariants cannot regress behind
+# a green CI job. The
 # runner's distro libstdc++ is not MSan-instrumented, so executing these tests
 # in the memory lane would turn library-boundary false positives into failures;
 # that lane remains a genuine instrumented compile/link check.

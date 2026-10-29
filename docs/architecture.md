@@ -1,6 +1,6 @@
 # Architecture
 
-Every packaged legacy or structured target has a same-named source file under
+Every packaged structured target has a same-named source file under
 [`fuzzer_entrypoints/`](https://github.com/curl/curl-fuzzer/tree/master/fuzzer_entrypoints).
 These thin files give OSS-Fuzz and Fuzz Introspector an unambiguous target
 identity while sharing the substantial harness implementation. Direct targets
@@ -8,7 +8,6 @@ define their entrypoints in their top-level implementation files instead.
 
 | Target family | Shared implementation | Input model |
 | --- | --- | --- |
-| `curl_fuzzer` and protocol variants | `legacy_fuzzer.cc`, `curl_fuzzer_tlv.cc`, and callback/socket helpers | Stable binary TLV stream |
 | `curl_fuzzer_proto*` | `proto_fuzzer/`, generated profile Traits, ordinary profile descriptors, and generated protobuf sources | Target-specific generated message lowered to an internal `Scenario` |
 | `fuzz_url`, `fuzz_bufq`, `fuzz_doh`, `fuzz_netrc` | Dedicated source files | Raw target-specific bytes |
 
@@ -18,8 +17,7 @@ The normal data flow is:
 seed corpus -> fuzzer engine -> target entrypoint -> shared harness -> libcurl
 ```
 
-Legacy targets configure transfers and scripted responses from TLVs. Each
-structured target asks libprotobuf-mutator to operate on its generated
+Each structured target asks libprotobuf-mutator to operate on its generated
 restricted message type, lowers that message into the common internal runtime
 `Scenario`, applies semantic normalization and bounds, then runs it against an
 appropriate bounded in-process peer. The compatibility target has a generated

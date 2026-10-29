@@ -165,7 +165,8 @@ def main() -> None:
         run(["docker", "push", tag])
     else:
         log.info(
-            "Usage: docker run --rm -v /path/to/testcase:/testcase %s ./curl_fuzzer /testcase",
+            "Usage: docker run --rm -v /path/to/testcase:/testcase %s "
+            "./curl_fuzzer_proto /testcase",
             tag,
         )
 

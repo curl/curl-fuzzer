@@ -44,23 +44,21 @@ uv run compare_fuzzers \
   --target fuzz_url
 ```
 
-To compare a legacy target with a differently named proto replacement, use a
-target pair:
+To compare differently named targets, use a target pair:
 
 ```shell
 uv run compare_fuzzers \
-  --baseline-dir /path/to/legacy/out/curl \
-  --candidate-dir /path/to/proto/out/curl \
-  --target-pair curl_fuzzer=curl_fuzzer_proto
+  --baseline-dir /path/to/baseline/out/curl \
+  --candidate-dir /path/to/candidate/out/curl \
+  --target-pair curl_fuzzer_proto=curl_fuzzer_proto_http
 ```
 
 The label in the report is, for example,
-`curl_fuzzer=>curl_fuzzer_proto`. Each side of a mapped pair receives its
-own native corpus and seed archive; legacy TLV bytes are never passed to the
-protobuf target. Same-name `--target` comparisons retain the stricter behavior
-of sharing one content-identical snapshot. `--corpus TARGET=PATH` overrides are
-keyed by the actual binary target name, so a mapped pair may supply one override
-for each side.
+`curl_fuzzer_proto=>curl_fuzzer_proto_http`. Each side of a mapped pair receives
+its own native corpus and seed archive. Same-name `--target` comparisons retain
+the stricter behavior of sharing one content-identical snapshot. `--corpus
+TARGET=PATH` overrides are keyed by the actual binary target name, so a mapped
+pair may supply one override for each side.
 
 For a same-name target, the input snapshot combines the checked-in corpus with
 the baseline's `<target>_seed_corpus.zip`, deduplicating by SHA-256. A mapped
@@ -100,9 +98,9 @@ comparison below for coverage parity across different binaries.
 ## Compare curl source coverage
 
 Raw libFuzzer `cov` and `ft` counters include each harness and cannot prove
-coverage parity between a legacy target and a proto target. The comparison
-helper can additionally replay the fixed native corpus through standalone LLVM
-coverage builds and compare curl-relative function and code-region identities.
+source coverage parity between different binaries. The comparison helper can
+additionally replay the fixed native corpus through standalone LLVM coverage
+builds and compare curl-relative function and code-region identities.
 
 Create an instrumented build in each source worktree with `codecoverage.sh`.
 The default build layout puts binaries under `build-coverage/` and curl sources
@@ -115,7 +113,7 @@ under `build-coverage/curl/src/curl_external`, which the helper detects:
 uv run compare_fuzzers \
   --baseline-dir /path/to/baseline-libfuzzer-out \
   --candidate-dir /path/to/candidate-libfuzzer-out \
-  --target-pair curl_fuzzer=curl_fuzzer_proto \
+  --target-pair curl_fuzzer_proto=curl_fuzzer_proto_http \
   --coverage-baseline-dir /path/to/baseline-worktree/build-coverage \
   --coverage-candidate-dir /path/to/candidate-worktree/build-coverage \
   --seconds 60 \
@@ -123,9 +121,9 @@ uv run compare_fuzzers \
 ```
 
 The aggregate source-coverage comparison unions all selected target pairs.
-Benchmark each candidate lane separately when judging whether it can take over
-the corresponding legacy CPU allocation; supporting lanes may retain coverage
-without needing to match the primary lane's throughput.
+Benchmark each candidate lane separately when judging whether a change should
+shift its CPU allocation; supporting lanes may retain coverage without needing
+to match the primary lane's throughput.
 
 When curl was supplied with `codecoverage.sh -c`, pass the source roots
 explicitly:

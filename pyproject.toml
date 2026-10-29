@@ -41,15 +41,11 @@ python-tests = [
 ]
 
 [project.scripts]
-read_corpus = "curl_fuzzer_tools.read_corpus:run"
 read_proto_corpus = "curl_fuzzer_tools.read_proto_corpus:run"
-generate_corpus = "curl_fuzzer_tools.generate_corpus:run"
-corpus_to_pcap = "curl_fuzzer_tools.corpus_to_pcap:run"
 generate_matrix = "curl_fuzzer_tools.generate_matrix:run"
 prepare_fuzzer = "curl_fuzzer_tools.prepare_fuzzer:main"
 generate_decoder_html = "curl_fuzzer_tools.generate_decoder_html:run"
 generate_schema_eligibility = "curl_fuzzer_tools.schema_eligibility:run"
-tlv_to_proto = "curl_fuzzer_tools.tlv_to_proto:run"
 compare_fuzzers = "curl_fuzzer_tools.compare_fuzzers:main"
 profile_fuzzer = "curl_fuzzer_tools.profile_fuzzer:main"
 bootstrap_http2_corpus = "curl_fuzzer_tools.bootstrap_http2_corpus:main"
@@ -69,7 +65,6 @@ dev = [
     "jinja2>=3.1.0,<4.0.0",
     "mypy==2.4.1",
     "ruff==0.17.3",
-    "scapy>=2.6.1,<3.0.0",
 ]
 
 # Dependencies of the Fuzz Introspector source frontend checked out by

@@ -32,16 +32,10 @@ fi
 
 for TARGET in ${FUZZ_TARGETS}
 do
-  if [[ ${TARGET} == "curl_fuzzer" ]]
-  then
-    # For the moment, disable some problematic corpuses
-    echo "Skipping ${TARGET}"
-  else
-    # The standalone runner walks directories itself, so we just hand it the
-    # corpus directory (plus any extra local corpus). One process per target,
-    # and a non-zero exit from a crash still fails the run under `set -e`.
-    CORPUS_DIR=$(fuzz_local_corpus_dir "${TARGET}" "${BUILD_ROOT}" "${ACTIVE_BUILD_DIR}")
-    # shellcheck disable=SC2248
-    "${ACTIVE_BUILD_DIR}/${TARGET}" "${CORPUS_DIR}/" ${EXTRA_CORPUS}
-  fi
+  # The standalone runner walks directories itself, so we just hand it the
+  # corpus directory (plus any extra local corpus). One process per target,
+  # and a non-zero exit from a crash still fails the run under `set -e`.
+  CORPUS_DIR=$(fuzz_local_corpus_dir "${TARGET}" "${BUILD_ROOT}" "${ACTIVE_BUILD_DIR}")
+  # shellcheck disable=SC2248
+  "${ACTIVE_BUILD_DIR}/${TARGET}" "${CORPUS_DIR}/" ${EXTRA_CORPUS}
 done

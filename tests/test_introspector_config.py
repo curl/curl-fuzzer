@@ -34,13 +34,12 @@ def test_introspector_excludes_only_declared_non_fuzz_surfaces() -> None:
         "/src/curl/src/tool_operate.c",
         "/src/curl/tests/unit/unit1300.c",
         "/src/curl_fuzzer/standalone_fuzz_target_runner.cc",
-        "/src/curl_fuzzer/tests/legacy_tlv_mutator_test.cc",
+        "/src/curl_fuzzer/tests/target_policy_test.cc",
     }
     included = {
         "/src/curl/lib/http.c",
         "/src/curl/lib/vtls/openssl.c",
-        "/src/curl_fuzzer/legacy_fuzzer.cc",
-        "/src/curl_fuzzer/fuzzer_entrypoints/curl_fuzzer.cc",
+        "/src/curl_fuzzer/fuzzer_entrypoints/curl_fuzzer_proto.cc",
         "/src/curl_fuzzer/proto_fuzzer/scenario_runner.cc",
         # Exact local-only file rules must not swallow similarly named code.
         "/src/curl_fuzzer/standalone_fuzz_target_runner.cc.backup",

@@ -5,16 +5,10 @@
 build/
 build-coverage/
 curl-fuzzer---*
-/curl_fuzzer
-/curl_fuzzer_full_coverage
-/curl_fuzzer_seed_corpus.zip
 extra_corpus/
 ossfuzz_corpus/
 libstandaloneengine.a
 /fuzz_bufq
-/curl_fuzzer_rtmp
-/curl_fuzzer_scp
-/curl_fuzzer_sftp
 /curl_fuzzer_proto
 /curl_fuzzer_proto_http
 /curl_fuzzer_proto_http_deep

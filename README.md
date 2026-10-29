@@ -14,7 +14,6 @@ repository supplies the harnesses used by curl's
 
 | Family | Purpose | Seed source |
 | --- | --- | --- |
-| Legacy `curl_fuzzer` and protocol variants | Protocol-specific libcurl transfers driven by the established TLV format | `corpora/<target>/` |
 | Structured `curl_fuzzer_proto*` | Typed protobuf scenarios projected into generated target-specific mutation roots, with in-process protocol peers | `scenarios/curl_fuzzer_proto/` |
 | Direct `fuzz_*` targets | Focused fuzzing of URL, buffer queue, DoH, and netrc parsing | `corpora/<target>/` |
 
@@ -72,7 +71,7 @@ The Python package requires Python 3.10 or newer. With
 
 ```shell
 uv sync
-uv run read_corpus corpora/curl_fuzzer/test_file_nobody
+uv run read_proto_corpus /path/to/testcase
 ```
 
 Or use a conventional virtual environment:
@@ -81,19 +80,15 @@ Or use a conventional virtual environment:
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-read_corpus corpora/curl_fuzzer/test_file_nobody
+read_proto_corpus /path/to/testcase
 ```
 
 Useful commands include:
 
-- `read_corpus` for legacy TLV inputs.
 - `read_proto_corpus` for binary protobuf scenarios; named fields require
   `protoc`, but do not require a prior build from a source checkout.
-- `generate_corpus` for legacy TLV seeds.
-- `tlv_to_proto` for converting supported fields from legacy TLV inputs to
-  textproto.
-- `generate_decoder_html` for the standalone browser decoder for legacy TLV
-  and protobuf `Scenario` inputs. Run `npm ci --ignore-scripts` once before
+- `generate_decoder_html` for the standalone browser decoder for protobuf
+  `Scenario` inputs. Run `npm ci --ignore-scripts` once before
   building it so the pinned protobuf.js runtime can be bundled into the page.
   For an annotated schema, the generator uses `protoc` to produce the current
   metadata-free authoring view; it falls back to a staged build copy only when
@@ -159,7 +154,7 @@ or file inputs; `--output-zip` writes a reproducible selected-input archive for
 a one-time upload to the dedicated OSS-Fuzz target. Keep ZIPs and manifests
 outside replay directories. Run `uv run bootstrap_http2_corpus --help` for paths.
 
-For legacy targets, checked-in binary seeds live in `corpora/`. For structured
+For direct targets, checked-in binary seeds live in `corpora/`. For structured
 targets, checked-in textproto files under `scenarios/` are the source of truth.
 They use the full typed authoring schema; CMake encodes them with ordinary
 `protoc --encode` into the build tree. Generated profile roots preserve the
@@ -201,22 +196,10 @@ features and other platforms need their own builds, and failures or incomplete
 corpus replay need investigation before interpreting a result as complete.
 Compare changes using the same curl revision, toolchain, features, and corpora.
 
-`curl_fuzzer_full_coverage` runs deterministic, bounded compatibility API and
-legacy mutator probes once per process during LLVM coverage or Fuzz Introspector
-builds
-(`ENABLE_COVERAGE=ON` or `SANITIZER=coverage`/`introspector`). It supplements
-corpus replay without adding protocol lanes. Ordinary sanitizer builds do not
-package this profiling helper as a fuzz target. Its seed input only triggers
-the probes; its contents are ignored.
-Mutator probes exercise framing, routing, capacity limits, and crossover on
-local byte buffers. They perform no transfers and cover the custom-mutator ABI
-adapters that corpus replay normally skips.
-
-The structured `curl_fuzzer_proto_api` coverage/introspection build also runs
+The structured `curl_fuzzer_proto_api` coverage/introspection build runs
 the curl API probes once during initialization, with a first-callback fallback
 for standalone runners. Those probes reuse the live proto curl runtime; global
-cleanup is deferred until process exit. Retaining the legacy target alongside
-this migration allows source replay to measure parity before deletion.
+cleanup is deferred until process exit.
 
 Pass `-c /path/to/curl` to cover a local curl checkout. The manual `Coverage`
 GitHub Actions workflow publishes the same reports and reuses a public-corpus
@@ -232,7 +215,7 @@ uv run pytest tests/test_*.py
 ./lint.sh
 ```
 
-Contributor documentation for the legacy and structured harnesses is in the
+Contributor documentation for the structured and direct harnesses is in the
 [documentation site](https://fuzz.curl.se/). See
 [REPRODUCING.md](REPRODUCING.md) for crash investigation and
 [BENCHMARKING.md](BENCHMARKING.md) for controlled performance and source

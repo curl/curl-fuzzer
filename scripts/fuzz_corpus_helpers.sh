@@ -36,7 +36,7 @@ fuzz_local_corpus_name() {
 }
 
 # Resolve the corpus directory produced for a target. A build-tree manifest is
-# the authoritative signal that this is a generated proto corpus; legacy
+# the authoritative signal that this is a generated proto corpus; direct
 # targets continue to use checked-in source corpora. Centralizing this choice
 # keeps packaging, replay, and coverage from accidentally consulting stale
 # source-tree artefacts left by an older build layout.
