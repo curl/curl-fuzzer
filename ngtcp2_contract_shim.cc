@@ -21,15 +21,22 @@ enum class TransactionOrigin {
   Datagram,
 };
 
-struct CoalescingTransaction {
+enum class ContractState {
+  Coalescing,
+  CloseOnly,
+};
+
+struct ConnectionContract {
   const ngtcp2_conn *conn = nullptr;
   const char *write_api = nullptr;
+  ngtcp2_ssize error_result = 0;
   const ngtcp2_path *path = nullptr;
   const ngtcp2_pkt_info *pi = nullptr;
   const uint8_t *dest = nullptr;
   size_t destlen = 0;
   ngtcp2_tstamp timestamp = 0;
   TransactionOrigin origin = TransactionOrigin::Stream;
+  ContractState state = ContractState::Coalescing;
 };
 
 struct ContinuationState {
@@ -39,9 +46,9 @@ struct ContinuationState {
 
 // Fault injection must not disable or perturb the monitor itself.
 constexpr std::size_t kMaximumTrackedConnections = 256;
-std::array<CoalescingTransaction, kMaximumTrackedConnections> transactions{};
-std::mutex transactions_mutex;
-std::atomic<std::size_t> transaction_count{0};
+std::array<ConnectionContract, kMaximumTrackedConnections> contracts{};
+std::mutex contracts_mutex;
+std::atomic<std::size_t> contract_count{0};
 
 #if defined(NGTCP2_CONTRACT_TESTING)
 struct ForcedWriteResult {
@@ -77,7 +84,7 @@ bool TakeForcedDatagramResult(ngtcp2_ssize *result, int *accepted) {
 
 // Static libngtcp2 contains calls to its public APIs. --wrap redirects those
 // calls too, so nested calls made by a real ngtcp2 function bypass the monitor
-// and cannot be mistaken for application calls during coalescing.
+// and cannot be mistaken for application calls while a restriction is active.
 thread_local unsigned real_call_depth = 0;
 
 class RealCallScope {
@@ -91,16 +98,27 @@ public:
 
 bool IsRealCallActive() { return real_call_depth != 0; }
 
-CoalescingTransaction *FindTransaction(const ngtcp2_conn *conn) {
-  for (CoalescingTransaction &transaction : transactions) {
-    if (transaction.conn == conn)
-      return &transaction;
+ConnectionContract *FindContract(const ngtcp2_conn *conn) {
+  for (ConnectionContract &contract : contracts) {
+    if (contract.conn == conn)
+      return &contract;
   }
   return nullptr;
 }
 
 [[noreturn]] void AbortForbiddenCall(const char *attempted_api,
-                                     const CoalescingTransaction &transaction) {
+                                     const ConnectionContract &transaction) {
+  if (transaction.state == ContractState::CloseOnly) {
+    std::fprintf(stderr,
+                 "ngtcp2 contract assertion failed: %s called on connection "
+                 "%p after %s returned %td; the connection is close-only, "
+                 "and only connection close, terminal status inspection, or "
+                 "connection teardown is allowed\n",
+                 attempted_api, static_cast<const void *>(transaction.conn),
+                 transaction.write_api, transaction.error_result);
+    std::fflush(stderr);
+    std::abort();
+  }
   std::fprintf(stderr,
                "ngtcp2 contract assertion failed: %s called on connection "
                "%p while a packet started by %s is being coalesced; only "
@@ -114,7 +132,7 @@ CoalescingTransaction *FindTransaction(const ngtcp2_conn *conn) {
 
 [[noreturn]] void AbortTupleMismatch(const char *attempted_api,
                                      const char *field,
-                                     const CoalescingTransaction &transaction) {
+                                     const ConnectionContract &transaction) {
   std::fprintf(stderr,
                "ngtcp2 contract assertion failed: %s changed %s on "
                "connection %p while continuing a packet started by %s; "
@@ -136,29 +154,35 @@ CoalescingTransaction *FindTransaction(const ngtcp2_conn *conn) {
   std::abort();
 }
 
-[[noreturn]] void AbortTrackingOverflow(const CoalescingTransaction &value) {
+[[noreturn]] void AbortTrackingOverflow(const ConnectionContract &value) {
   std::fprintf(stderr,
                "ngtcp2 contract assertion failed: cannot track connection "
-               "%p after %s began packet coalescing; transaction table is "
-               "full\n",
+               "%p after %s established a restricted state; contract table "
+               "is full\n",
                static_cast<const void *>(value.conn), value.write_api);
   std::fflush(stderr);
   std::abort();
 }
 
-void CheckNoTransaction(const ngtcp2_conn *conn, const char *attempted_api) {
-  if (conn == nullptr || transaction_count.load(std::memory_order_acquire) == 0)
+void CheckNoTransaction(const ngtcp2_conn *conn, const char *attempted_api,
+                        bool allow_coalescing = false,
+                        bool allow_close_only = false) {
+  if (conn == nullptr || contract_count.load(std::memory_order_acquire) == 0)
     return;
 
-  CoalescingTransaction value;
+  ConnectionContract value;
   {
-    std::lock_guard<std::mutex> lock(transactions_mutex);
-    const CoalescingTransaction *transaction = FindTransaction(conn);
-    if (transaction != nullptr)
-      value = *transaction;
+    std::lock_guard<std::mutex> lock(contracts_mutex);
+    const ConnectionContract *contract = FindContract(conn);
+    if (contract != nullptr)
+      value = *contract;
   }
-  if (value.conn != nullptr)
-    AbortForbiddenCall(attempted_api, value);
+  if (value.conn == nullptr)
+    return;
+  if ((allow_coalescing && value.state == ContractState::Coalescing) ||
+      (allow_close_only && value.state == ContractState::CloseOnly))
+    return;
+  AbortForbiddenCall(attempted_api, value);
 }
 
 ContinuationState CheckContinuation(const ngtcp2_conn *conn,
@@ -167,17 +191,20 @@ ContinuationState CheckContinuation(const ngtcp2_conn *conn,
                                     const uint8_t *dest, size_t destlen,
                                     ngtcp2_tstamp timestamp,
                                     const char *attempted_api) {
-  if (conn == nullptr || transaction_count.load(std::memory_order_acquire) == 0)
+  if (conn == nullptr || contract_count.load(std::memory_order_acquire) == 0)
     return ContinuationState{};
 
-  CoalescingTransaction value;
+  ConnectionContract value;
   {
-    std::lock_guard<std::mutex> lock(transactions_mutex);
-    const CoalescingTransaction *transaction = FindTransaction(conn);
-    if (transaction == nullptr)
+    std::lock_guard<std::mutex> lock(contracts_mutex);
+    const ConnectionContract *contract = FindContract(conn);
+    if (contract == nullptr)
       return ContinuationState{};
-    value = *transaction;
+    value = *contract;
   }
+
+  if (value.state == ContractState::CloseOnly)
+    AbortForbiddenCall(attempted_api, value);
 
   if (value.path != path)
     AbortTupleMismatch(attempted_api, "path", value);
@@ -195,16 +222,47 @@ ContinuationState CheckContinuation(const ngtcp2_conn *conn,
   return state;
 }
 
-void ForgetTransaction(const ngtcp2_conn *conn) {
-  if (conn == nullptr || transaction_count.load(std::memory_order_acquire) == 0)
+void ForgetContract(const ngtcp2_conn *conn) {
+  if (conn == nullptr || contract_count.load(std::memory_order_acquire) == 0)
     return;
 
-  std::lock_guard<std::mutex> lock(transactions_mutex);
-  CoalescingTransaction *transaction = FindTransaction(conn);
-  if (transaction != nullptr) {
-    *transaction = CoalescingTransaction{};
-    transaction_count.fetch_sub(1, std::memory_order_release);
+  std::lock_guard<std::mutex> lock(contracts_mutex);
+  ConnectionContract *contract = FindContract(conn);
+  if (contract != nullptr) {
+    *contract = ConnectionContract{};
+    contract_count.fetch_sub(1, std::memory_order_release);
   }
+}
+
+void StoreContract(ConnectionContract value, bool preserve_origin) {
+  bool added = false;
+  bool table_full = false;
+  {
+    std::lock_guard<std::mutex> lock(contracts_mutex);
+    ConnectionContract *contract = FindContract(value.conn);
+    if (contract == nullptr) {
+      for (ConnectionContract &entry : contracts) {
+        if (entry.conn == nullptr) {
+          contract = &entry;
+          added = true;
+          break;
+        }
+      }
+    }
+    if (contract != nullptr) {
+      if (!added && preserve_origin &&
+          contract->state == ContractState::Coalescing) {
+        value.write_api = contract->write_api;
+        value.origin = contract->origin;
+      }
+      *contract = value;
+      if (added)
+        contract_count.fetch_add(1, std::memory_order_release);
+    } else
+      table_full = true;
+  }
+  if (table_full)
+    AbortTrackingOverflow(value);
 }
 
 void RecordTransaction(const ngtcp2_conn *conn, const char *write_api,
@@ -215,11 +273,11 @@ void RecordTransaction(const ngtcp2_conn *conn, const char *write_api,
   if (conn == nullptr)
     return;
   if (!keep_open) {
-    ForgetTransaction(conn);
+    ForgetContract(conn);
     return;
   }
 
-  CoalescingTransaction value;
+  ConnectionContract value;
   value.conn = conn;
   value.write_api = write_api;
   value.path = path;
@@ -228,33 +286,20 @@ void RecordTransaction(const ngtcp2_conn *conn, const char *write_api,
   value.destlen = destlen;
   value.timestamp = timestamp;
   value.origin = origin;
-  bool added = false;
-  bool table_full = false;
-  {
-    std::lock_guard<std::mutex> lock(transactions_mutex);
-    CoalescingTransaction *transaction = FindTransaction(conn);
-    if (transaction == nullptr) {
-      for (CoalescingTransaction &entry : transactions) {
-        if (entry.conn == nullptr) {
-          transaction = &entry;
-          added = true;
-          break;
-        }
-      }
-    }
-    if (transaction != nullptr) {
-      if (!added) {
-        value.write_api = transaction->write_api;
-        value.origin = transaction->origin;
-      }
-      *transaction = value;
-      if (added)
-        transaction_count.fetch_add(1, std::memory_order_release);
-    } else
-      table_full = true;
-  }
-  if (table_full)
-    AbortTrackingOverflow(value);
+  StoreContract(value, true);
+}
+
+void RecordCloseOnly(const ngtcp2_conn *conn, const char *write_api,
+                     ngtcp2_ssize error_result) {
+  if (conn == nullptr)
+    return;
+
+  ConnectionContract value;
+  value.conn = conn;
+  value.write_api = write_api;
+  value.error_result = error_result;
+  value.state = ContractState::CloseOnly;
+  StoreContract(value, false);
 }
 
 bool IsStreamContinuationResult(ngtcp2_ssize result) {
@@ -263,6 +308,8 @@ bool IsStreamContinuationResult(ngtcp2_ssize result) {
          result == NGTCP2_ERR_STREAM_NOT_FOUND ||
          result == NGTCP2_ERR_STREAM_SHUT_WR;
 }
+
+bool IsFatalResult(ngtcp2_ssize result) { return result < NGTCP2_ERR_FATAL; }
 
 void ValidateStreamPostcondition(const char *api, ngtcp2_ssize result,
                                  const ngtcp2_ssize *pdatalen) {
@@ -380,7 +427,7 @@ extern "C" int __wrap_ngtcp2_conn_client_new_versioned(
         user_data);
   }
   if (result == 0 && pconn != nullptr)
-    ForgetTransaction(*pconn);
+    ForgetContract(*pconn);
   return result;
 }
 ASSERT_SIGNATURE(ngtcp2_conn_client_new_versioned);
@@ -406,7 +453,7 @@ extern "C" int __wrap_ngtcp2_conn_server_new_versioned(
         user_data);
   }
   if (result == 0 && pconn != nullptr)
-    ForgetTransaction(*pconn);
+    ForgetContract(*pconn);
   return result;
 }
 ASSERT_SIGNATURE(ngtcp2_conn_server_new_versioned);
@@ -416,7 +463,7 @@ extern "C" void __wrap_ngtcp2_conn_del(ngtcp2_conn *conn) {
     __real_ngtcp2_conn_del(conn);
     return;
   }
-  ForgetTransaction(conn);
+  ForgetContract(conn);
   RealCallScope real_call;
   __real_ngtcp2_conn_del(conn);
 }
@@ -446,6 +493,18 @@ ASSERT_SIGNATURE(ngtcp2_conn_del);
   }                                                                            \
   ASSERT_SIGNATURE(name)
 
+#define DEFINE_TERMINAL_INSPECTION_WRAPPER(name, parameters, arguments,        \
+                                           conn_argument)                      \
+  extern "C" auto __wrap_##name parameters                                     \
+      ->decltype(__real_##name arguments) {                                    \
+    if (IsRealCallActive())                                                    \
+      return __real_##name arguments;                                          \
+    CheckNoTransaction(conn_argument, #name, false, true);                     \
+    RealCallScope real_call;                                                   \
+    return __real_##name arguments;                                            \
+  }                                                                            \
+  ASSERT_SIGNATURE(name)
+
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_decode_and_set_0rtt_transport_params,
                        (ngtcp2_conn * conn, const uint8_t *data,
                         size_t datalen),
@@ -460,8 +519,8 @@ DEFINE_CHECKED_WRAPPER(ngtcp2_conn_extend_max_stream_offset,
                        (ngtcp2_conn * conn, int64_t stream_id,
                         uint64_t datalen),
                        (conn, stream_id, datalen), conn);
-DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_ccerr, (ngtcp2_conn * conn), (conn),
-                       conn);
+DEFINE_TERMINAL_INSPECTION_WRAPPER(ngtcp2_conn_get_ccerr, (ngtcp2_conn * conn),
+                                   (conn), conn);
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_cwnd_left, (ngtcp2_conn * conn), (conn),
                        conn);
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_expiry, (ngtcp2_conn * conn), (conn),
@@ -487,15 +546,13 @@ DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_streams_uni_left, (ngtcp2_conn * conn),
                        (conn), conn);
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_timestamp, (const ngtcp2_conn *conn),
                        (conn), conn);
-DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_tls_alert, (ngtcp2_conn * conn), (conn),
-                       conn);
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_get_tls_early_data_rejected2,
                        (const ngtcp2_conn *conn), (conn), conn);
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_handle_expiry,
                        (ngtcp2_conn * conn, ngtcp2_tstamp timestamp),
                        (conn, timestamp), conn);
-DEFINE_CHECKED_WRAPPER(ngtcp2_conn_in_draining_period, (ngtcp2_conn * conn),
-                       (conn), conn);
+DEFINE_TERMINAL_INSPECTION_WRAPPER(ngtcp2_conn_in_draining_period,
+                                   (ngtcp2_conn * conn), (conn), conn);
 DEFINE_CHECKED_WRAPPER(ngtcp2_conn_open_bidi_stream,
                        (ngtcp2_conn * conn, int64_t *stream_id,
                         void *stream_user_data),
@@ -531,6 +588,10 @@ DEFINE_CHECKED_WRAPPER(ngtcp2_conn_write_pkt_versioned,
                         timestamp),
                        conn);
 
+DEFINE_TERMINAL_INSPECTION_WRAPPER(ngtcp2_conn_get_tls_alert,
+                                   (ngtcp2_conn * conn), (conn), conn);
+
+#undef DEFINE_TERMINAL_INSPECTION_WRAPPER
 #undef DEFINE_CHECKED_VOID_WRAPPER
 #undef DEFINE_CHECKED_WRAPPER
 
@@ -539,6 +600,7 @@ DEFINE_CHECKED_WRAPPER(ngtcp2_conn_write_pkt_versioned,
                                int64_t stream_id, uint64_t app_error_code) {   \
     if (IsRealCallActive())                                                    \
       return __real_##name(conn, flags, stream_id, app_error_code);            \
+    CheckNoTransaction(conn, #name, true, false);                              \
     RealCallScope real_call;                                                   \
     return __real_##name(conn, flags, stream_id, app_error_code);              \
   }                                                                            \
@@ -607,15 +669,25 @@ ASSERT_SIGNATURE(ngtcp2_conn_write_connection_close_versioned);
                              count_name, timestamp);                           \
     }                                                                          \
     ValidateStreamPostcondition(#name, result, pdatalen);                      \
+    const TransactionOrigin origin =                                           \
+        continuation.active ? continuation.origin : TransactionOrigin::Stream; \
+    const bool stream_coalescing =                                             \
+        origin == TransactionOrigin::Stream &&                                 \
+        (continuation.active || (flags & NGTCP2_WRITE_STREAM_FLAG_MORE) != 0); \
+    const bool connection_error =                                              \
+        IsFatalResult(result) || (stream_coalescing && result < 0 &&           \
+                                  !IsStreamContinuationResult(result));        \
+    if (connection_error) {                                                    \
+      RecordCloseOnly(conn, #name, result);                                    \
+      return result;                                                           \
+    }                                                                          \
     const bool keep_open =                                                     \
         (IsStreamContinuationResult(result) &&                                 \
          (continuation.active ||                                               \
           (flags & NGTCP2_WRITE_STREAM_FLAG_MORE) != 0)) ||                    \
         (continuation.active &&                                                \
          continuation.origin == TransactionOrigin::Datagram && result <= 0);   \
-    RecordTransaction(conn, #name, path, pi, dest, destlen, timestamp,         \
-                      continuation.active ? continuation.origin                \
-                                          : TransactionOrigin::Stream,         \
+    RecordTransaction(conn, #name, path, pi, dest, destlen, timestamp, origin, \
                       keep_open);                                              \
     return result;                                                             \
   }                                                                            \
@@ -651,6 +723,10 @@ DEFINE_STREAM_WRITE_WRAPPER(ngtcp2_conn_writev_stream_versioned,
                              count_name, timestamp);                           \
     }                                                                          \
     ValidateDatagramPostcondition(#name, result, paccepted);                   \
+    if (IsFatalResult(result)) {                                               \
+      RecordCloseOnly(conn, #name, result);                                    \
+      return result;                                                           \
+    }                                                                          \
     const bool keep_open =                                                     \
         result == NGTCP2_ERR_WRITE_MORE ||                                     \
         (continuation.active &&                                                \
