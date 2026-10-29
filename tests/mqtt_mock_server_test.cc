@@ -38,7 +38,8 @@ size_t CollectResponse(char *contents, size_t size, size_t nmemb,
   return bytes;
 }
 
-std::string ServerPublish(const std::string &topic, const std::string &payload) {
+std::string ServerPublish(const std::string &topic,
+                          const std::string &payload) {
   std::string body;
   body.push_back(static_cast<char>((topic.size() >> 8U) & 0xffU));
   body.push_back(static_cast<char>(topic.size() & 0xffU));
@@ -87,7 +88,7 @@ MqttRunResult RunScenario(const Scenario &scenario, const char *url) {
          "MQTT write data setup failed");
   (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
 
-  proto_fuzzer::MqttMockServer server;
+  proto_fuzzer::MqttMockServer server(scenario.mqtt_probe_mode());
   server.Install(easy.get());
   {
     proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
@@ -133,8 +134,7 @@ void TestPublishSendsConnectAndDisconnect() {
          "current curl unexpectedly emitted a QoS 1 PUBLISH");
   Expect(result.packets == 3,
          "MQTT publish did not send CONNECT, PUBLISH, and DISCONNECT");
-  Expect(result.topic == kTopic,
-         "MQTT peer parsed the wrong publish topic");
+  Expect(result.topic == kTopic, "MQTT peer parsed the wrong publish topic");
   Expect(result.payload == kPayload,
          "MQTT peer parsed the wrong publish payload");
   Expect(result.transcript.find(kTopic) != std::string::npos,
@@ -157,6 +157,48 @@ void TestPublishProbesLivePollsetWhenRequested() {
          "MQTT opt-in did not probe a live protocol pollset");
 }
 
+void TestSendBackpressureFlushesFixedPublish() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
+  scenario.set_mqtt_probe_mode(
+      curl::fuzzer::proto::MQTT_PROBE_SEND_BACKPRESSURE);
+  scenario.set_probe_multi_pollset(true);
+  auto *backpressure = scenario.mutable_connection()->mutable_backpressure();
+  backpressure->set_recv_buf_bytes(2048);
+  backpressure->set_drain_limit(1024);
+  scenario.mutable_connection()->set_initial_response(kAcceptedConnack);
+
+  const MqttRunResult result =
+      RunScenario(scenario, "mqtt://mqtt.test/sensors/pressure");
+  Expect(result.code == CURLE_OK,
+         "MQTT send-backpressure probe did not complete");
+  Expect(result.connects == 1 && result.publishes == 1 && result.packets == 3,
+         "MQTT send-backpressure probe lost a client packet");
+  Expect(result.payload.size() == 8192,
+         "MQTT send-backpressure probe did not deliver the bounded capture");
+  Expect(result.active_pollset_probes > 1,
+         "MQTT send-backpressure probe did not span writable pollsets");
+}
+
+void TestOversizedCredentialProbesRejectConnect() {
+  for (const auto mode : {
+           curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_USERNAME,
+           curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_PASSWORD,
+       }) {
+    Scenario scenario;
+    scenario.set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
+    scenario.set_mqtt_probe_mode(mode);
+    scenario.mutable_connection()->set_initial_response(kAcceptedConnack);
+
+    const MqttRunResult result =
+        RunScenario(scenario, "mqtt://mqtt.test/sensors/credentials");
+    Expect(result.code == CURLE_WEIRD_SERVER_REPLY,
+           "oversized MQTT credential did not reach protocol rejection");
+    Expect(result.packets == 0 && result.connects == 0,
+           "oversized MQTT credential unexpectedly sent CONNECT");
+  }
+}
+
 void TestSubscribeDeliversServerPublish() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_MQTT);
@@ -167,8 +209,8 @@ void TestSubscribeDeliversServerPublish() {
   // letting the final half-close look like a truncated packet.
   connection->add_on_readable(std::string("\xe0\x00", 2));
 
-  const MqttRunResult result = RunScenario(
-      scenario, "mqtt://mqtt.test/sensors/kitchen");
+  const MqttRunResult result =
+      RunScenario(scenario, "mqtt://mqtt.test/sensors/kitchen");
   Expect(result.code == CURLE_OK,
          "MQTT subscribe did not complete after server DISCONNECT");
   Expect(result.connects == 1 && result.subscribes == 1 &&
@@ -218,6 +260,8 @@ int main() {
   }
   TestPublishSendsConnectAndDisconnect();
   TestPublishProbesLivePollsetWhenRequested();
+  TestSendBackpressureFlushesFixedPublish();
+  TestOversizedCredentialProbesRejectConnect();
   TestSubscribeDeliversServerPublish();
   TestRejectedConnackStopsBeforePublish();
   curl_global_cleanup();

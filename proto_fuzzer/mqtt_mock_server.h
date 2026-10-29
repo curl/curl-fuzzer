@@ -56,7 +56,7 @@ namespace proto_fuzzer {
 /// decoding so the parser does not depend on the carrier.
 class MqttMockServer : public MockServerBase, public IncomingDataObserver {
  public:
-  MqttMockServer();
+  explicit MqttMockServer(curl::fuzzer::proto::MqttProbeMode mode = curl::fuzzer::proto::MQTT_PROBE_DEFAULT);
 
   ~MqttMockServer() override;
 
@@ -128,6 +128,8 @@ class MqttMockServer : public MockServerBase, public IncomingDataObserver {
 
   void FinishConnections();
 
+  void ApplyProbeOptions(CURL* easy) const;
+
   /// A client packet larger than this cannot be produced by the bounded
   /// scenario surface. Treating it as a protocol error prevents a mutated
   /// remaining-length field from retaining data until the drive budget.
@@ -141,6 +143,9 @@ class MqttMockServer : public MockServerBase, public IncomingDataObserver {
   /// several coalesced packets progressing without letting a malformed stream
   /// occupy the whole drive iteration.
   static constexpr int kMaxPacketsPerService = 16;
+
+  /// Closed harness-owned setup selected by the dedicated MQTT profile.
+  const curl::fuzzer::proto::MqttProbeMode mode_;
 
   /// Borrowed only while RunLoop is active, including every socket callback.
   const curl::fuzzer::proto::Scenario* scenario_;

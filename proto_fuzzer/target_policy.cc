@@ -38,6 +38,8 @@ constexpr std::uint32_t kMaxBackpressureBufferBytes = 4096;
 constexpr std::uint32_t kMaxDrainBytesPerIteration = 1024;
 constexpr std::uint32_t kHaproxyConnectBufferBytes = 2048;
 constexpr std::uint32_t kHaproxyConnectDrainBytes = 48;
+constexpr std::uint32_t kMqttProbeBufferBytes = 2048;
+constexpr std::uint32_t kMqttProbeDrainBytes = 1024;
 
 // CURLOPT_LOCALPORTRANGE performs one synchronous bind attempt per selected
 // port. Retain a useful retry window without letting one mutation request tens
@@ -194,6 +196,22 @@ void CanonicalizeRtspProbeMode(curl::fuzzer::proto::Scenario* scenario) {
       return;
     default:
       scenario->clear_rtsp_probe_mode();
+      return;
+  }
+}
+
+/// Keep MQTT's harness-owned send and credential probes inside their closed
+/// enum. The compatibility target preserves this append-only field without
+/// reaching this postprocessor.
+void CanonicalizeMqttProbeMode(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->mqtt_probe_mode()) {
+    case curl::fuzzer::proto::MQTT_PROBE_DEFAULT:
+    case curl::fuzzer::proto::MQTT_PROBE_SEND_BACKPRESSURE:
+    case curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_USERNAME:
+    case curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_PASSWORD:
+      return;
+    default:
+      scenario->clear_mqtt_probe_mode();
       return;
   }
 }
@@ -1883,6 +1901,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_rtsp_probe_mode();
   }
 
+  if (profile != TargetProfile::kFastMqtt) {
+    scenario->clear_mqtt_probe_mode();
+  }
+
   if (profile != TargetProfile::kFastHttp2) {
     scenario->clear_http2_connect_flush_probe();
   }
@@ -2210,11 +2232,20 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     // variants through one packet-aware parser. Preserve an explicitly
     // supplied MQTTS scheme so the seed and mutations can select the TLS peer;
     // every other scheme falls back to the historical plaintext lane.
+    CanonicalizeMqttProbeMode(scenario);
+    const auto probe = scenario->mqtt_probe_mode();
     const auto scheme = scenario->scheme();
-    scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_MQTTS ? curl::fuzzer::proto::SCHEME_MQTTS
-                                                                     : curl::fuzzer::proto::SCHEME_MQTT);
+    scenario->set_scheme(probe == curl::fuzzer::proto::MQTT_PROBE_DEFAULT && scheme == curl::fuzzer::proto::SCHEME_MQTTS
+                             ? curl::fuzzer::proto::SCHEME_MQTTS
+                             : curl::fuzzer::proto::SCHEME_MQTT);
     RemoveIgnoredMqttShape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
+    if (probe == curl::fuzzer::proto::MQTT_PROBE_SEND_BACKPRESSURE) {
+      auto* backpressure = scenario->mutable_connection()->mutable_backpressure();
+      backpressure->set_recv_buf_bytes(kMqttProbeBufferBytes);
+      backpressure->set_drain_limit(kMqttProbeDrainBytes);
+      scenario->set_probe_multi_pollset(true);
+    }
     CanonicalizeMqttAuthority(scenario);
     return;
   }

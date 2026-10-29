@@ -34,6 +34,8 @@ constexpr unsigned char kMqttSuback = 0x90;
 constexpr unsigned char kMqttPingreq = 0xc0;
 constexpr unsigned char kMqttPingresp = 0xd0;
 constexpr unsigned char kMqttDisconnect = 0xe0;
+constexpr std::size_t kMqttProbePublishBytes = 16 * 1024;
+constexpr std::size_t kOversizedMqttCredentialBytes = 0x10000;
 
 unsigned char ByteAt(std::string_view bytes, std::size_t index) { return static_cast<unsigned char>(bytes[index]); }
 
@@ -42,8 +44,10 @@ unsigned char ByteAt(std::string_view bytes, std::size_t index) { return static_
 /// Begin without a borrowed protobuf or open socketpair. RunLoop borrows a
 /// Scenario only for the synchronous DriveScenario call in which socket
 /// callbacks can run.
-MqttMockServer::MqttMockServer()
-    : scenario_(nullptr),
+/// @param mode Closed harness-owned probe shape to apply before the transfer.
+MqttMockServer::MqttMockServer(curl::fuzzer::proto::MqttProbeMode mode)
+    : mode_(mode),
+      scenario_(nullptr),
       server_chunk_count_(0),
       next_server_chunk_(0),
       packet_count_(0),
@@ -411,6 +415,43 @@ void MqttMockServer::FinishConnections() {
   }
 }
 
+/// Install one fixed option shape after ordinary scenario options but before
+/// curl starts the transfer. The static strings outlive the easy handle;
+/// notably CURLOPT_POSTFIELDS borrows rather than copies its pointer.
+/// @param easy Handle receiving the harness-owned probe values.
+void MqttMockServer::ApplyProbeOptions(CURL* easy) const {
+  if (easy == nullptr) {
+    return;
+  }
+
+  switch (mode_) {
+    case curl::fuzzer::proto::MQTT_PROBE_SEND_BACKPRESSURE: {
+      static const std::string publish_body(kMqttProbePublishBytes, 'p');
+      (void)curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(publish_body.size()));
+      (void)curl_easy_setopt(easy, CURLOPT_POSTFIELDS, publish_body.c_str());
+      return;
+    }
+
+    case curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_USERNAME: {
+      static const std::string username(kOversizedMqttCredentialBytes, 'u');
+      (void)curl_easy_setopt(easy, CURLOPT_USERNAME, username.c_str());
+      (void)curl_easy_setopt(easy, CURLOPT_PASSWORD, "");
+      return;
+    }
+
+    case curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_PASSWORD: {
+      static const std::string password(kOversizedMqttCredentialBytes, 'p');
+      (void)curl_easy_setopt(easy, CURLOPT_USERNAME, "");
+      (void)curl_easy_setopt(easy, CURLOPT_PASSWORD, password.c_str());
+      return;
+    }
+
+    case curl::fuzzer::proto::MQTT_PROBE_DEFAULT:
+    default:
+      return;
+  }
+}
+
 /// Alternate curl transitions with immediate peer service until the transfer
 /// completes or deterministic idle/operation caps win. No select(), poll(), or
 /// sleep is needed: the CONNACK is preloaded, synthesized acknowledgements are
@@ -420,7 +461,7 @@ void MqttMockServer::FinishConnections() {
 /// @param easy Easy handle already installed on this mock.
 /// @param scenario Connection script to borrow.
 void MqttMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) {
-  (void)easy;
+  ApplyProbeOptions(easy);
   ResetForScenario(scenario);
 
   int still_running = 1;
