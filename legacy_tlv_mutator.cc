@@ -508,8 +508,6 @@ const char *DefaultUrl() {
   return "mqtt://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_RTMP)
   return "rtmp://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_RTSP)
-  return "rtsp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_SCP)
   return "scp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_SFTP)
@@ -529,8 +527,6 @@ const char *DefaultUrl() {
 const char *DefaultResponse() {
 #if defined(FUZZ_PROTOCOLS_FTP) || defined(FUZZ_PROTOCOLS_SMTP)
   return "220 fuzz ready\r\n";
-#elif defined(FUZZ_PROTOCOLS_RTSP)
-  return "RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n";
 #elif defined(FUZZ_PROTOCOLS_ALL)
   return "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 #else

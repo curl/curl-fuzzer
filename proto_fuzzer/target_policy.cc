@@ -184,6 +184,20 @@ void CanonicalizeGopherProbeMode(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep RTSP's harness-owned lifecycle and client-write probes inside their
+/// closed enum. Unknown values preserve the ordinary single-transfer path.
+void CanonicalizeRtspProbeMode(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->rtsp_probe_mode()) {
+    case curl::fuzzer::proto::RTSP_PROBE_DEFAULT:
+    case curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE:
+    case curl::fuzzer::proto::RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE:
+      return;
+    default:
+      scenario->clear_rtsp_probe_mode();
+      return;
+  }
+}
+
 /// Keep the proxied origin parseable while retaining every path, query, and
 /// fragment byte. The fixed numeric proxy endpoint handles routing separately;
 /// mutating the origin authority would therefore buy only early URL failures,
@@ -1865,6 +1879,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_gopher_probe_mode();
   }
 
+  if (profile != TargetProfile::kFastRtsp) {
+    scenario->clear_rtsp_probe_mode();
+  }
+
   if (profile != TargetProfile::kFastHttp2) {
     scenario->clear_http2_connect_flush_probe();
   }
@@ -2263,6 +2281,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_RTSP);
     RemoveIgnoredRtspShape(scenario);
     CanonicalizeRtspOptionModes(scenario);
+    CanonicalizeRtspProbeMode(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
     CanonicalizeRtspAuthority(scenario);
     return;

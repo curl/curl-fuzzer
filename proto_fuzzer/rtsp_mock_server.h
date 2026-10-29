@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 
+#include "curl_fuzzer.pb.h"
 #include "proto_fuzzer/pingpong_mock_server.h"
 
 namespace proto_fuzzer {
@@ -36,9 +37,10 @@ namespace proto_fuzzer {
 /// bytes are followed immediately by the next request rather than by a line
 /// terminator. The response text remains entirely fuzz-controlled: it is not
 /// rewritten to match the observed CSeq, so a mismatch still reaches curl's
-/// CURLE_RTSP_CSEQ_ERROR path. RTSP cannot open follow-on sockets or pipeline
-/// multiple outstanding requests, so a second socket is refused by the shared
-/// base class.
+/// CURLE_RTSP_CSEQ_ERROR path. An ordinary drive cannot open follow-on sockets
+/// or pipeline multiple outstanding requests. The closed lifecycle probe runs
+/// three sequential drives so curl can replace one half-closed cached
+/// transport before changing origins.
 class RtspMockServer : public PingpongMockServer {
  public:
   RtspMockServer();
@@ -47,6 +49,10 @@ class RtspMockServer : public PingpongMockServer {
 
   RtspMockServer(const RtspMockServer&) = delete;
   RtspMockServer& operator=(const RtspMockServer&) = delete;
+
+  void ConfigureClient(CURL* easy, curl::fuzzer::proto::RtspProbeMode mode);
+
+  CURLcode DriveCrossOriginReuseScenario(CURL* easy, const curl::fuzzer::proto::Scenario& scenario);
 
   std::size_t request_count() const;
 
@@ -60,7 +66,14 @@ class RtspMockServer : public PingpongMockServer {
 
   const std::string& last_stream_uri() const;
 
+  std::size_t client_write_failure_count() const;
+
+  std::size_t opened_transport_count() const;
+
  protected:
+  curl_socket_t HandleOpenSocket(curlsocktype purpose = CURLSOCKTYPE_IPCXN,
+                                 struct curl_sockaddr* address = nullptr) override;
+
   void HandleLine(std::string_view line) override;
 
   void HandleBodyComplete() override;
@@ -68,6 +81,8 @@ class RtspMockServer : public PingpongMockServer {
   void ResetProtocolState() override;
 
  private:
+  static std::size_t ProbeWriteCallback(char* contents, std::size_t size, std::size_t nmemb, void* userdata);
+
   void BeginRequest(std::string_view line);
 
   void FinishRequest();
@@ -86,6 +101,9 @@ class RtspMockServer : public PingpongMockServer {
   std::string last_request_line_;
   std::string last_method_;
   std::string last_stream_uri_;
+  curl::fuzzer::proto::RtspProbeMode probe_mode_;
+  std::size_t client_write_failure_count_;
+  std::size_t opened_transport_count_;
 };
 
 }  // namespace proto_fuzzer

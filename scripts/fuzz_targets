@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-FUZZ_TARGETS_LIST="curl_fuzzer_ftp curl_fuzzer_mqtt curl_fuzzer_rtsp curl_fuzzer_smtp curl_fuzzer fuzz_url fuzz_bufq fuzz_doh fuzz_netrc"
+FUZZ_TARGETS_LIST="curl_fuzzer_ftp curl_fuzzer_mqtt curl_fuzzer_smtp curl_fuzzer fuzz_url fuzz_bufq fuzz_doh fuzz_netrc"
 
 # This helper deliberately terminates immediately outside profiling builds, so
 # exposing it to ordinary libFuzzer smoke checks makes it look like a broken

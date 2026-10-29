@@ -1,0 +1,7 @@
+# The closed probe emits a response whose trailing '$' lands exactly at curl's
+# fixed receive-buffer boundary. The following invalid channel makes curl
+# release that buffered marker as body data, where the semantic callback fails.
+scheme: SCHEME_RTSP
+host_path: "rtsp.test/split-invalid-channel"
+rtsp_probe_mode: RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE
+options { rtsp_request: 1 }

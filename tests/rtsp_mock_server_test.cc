@@ -44,6 +44,8 @@ struct RtspRunResult {
   std::uint32_t client_cseq = 0;
   std::string method;
   std::string stream_uri;
+  std::size_t client_write_failure_count = 0;
+  std::size_t opened_transport_count = 0;
 };
 
 std::size_t CaptureBody(char *ptr, std::size_t size, std::size_t nmemb,
@@ -73,9 +75,15 @@ RtspRunResult RunScenario(const Scenario &scenario, const char *url) {
 
   proto_fuzzer::RtspMockServer server;
   server.Install(easy.get());
+  server.ConfigureClient(easy.get(), scenario.rtsp_probe_mode());
   {
     proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario);
-    result.code = server.DriveScenario(easy.get(), scenario);
+    if (scenario.rtsp_probe_mode() ==
+        curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE) {
+      result.code = server.DriveCrossOriginReuseScenario(easy.get(), scenario);
+    } else {
+      result.code = server.DriveScenario(easy.get(), scenario);
+    }
   }
   result.transcript = server.control_transcript();
   result.uploaded = server.uploaded_data();
@@ -84,6 +92,8 @@ RtspRunResult RunScenario(const Scenario &scenario, const char *url) {
   result.client_cseq = server.last_client_cseq();
   result.method = server.last_method();
   result.stream_uri = server.last_stream_uri();
+  result.client_write_failure_count = server.client_write_failure_count();
+  result.opened_transport_count = server.opened_transport_count();
 
   // CONNECT_TO storage must remain valid through easy cleanup.
   easy.reset();
@@ -231,6 +241,62 @@ void TestPlayDeliversInterleavedRtp() {
          "curl did not deliver the validated interleaved RTP frame");
 }
 
+void TestCrossOriginReuseSuppressesLearnedSession() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_RTSP);
+  scenario.set_host_path("rtsp.test/session-reuse");
+  scenario.set_rtsp_probe_mode(
+      curl::fuzzer::proto::RTSP_PROBE_CROSS_ORIGIN_REUSE);
+  auto *request = scenario.add_options();
+  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+  request->set_uint_value(CURL_RTSPREQ_OPTIONS);
+  scenario.mutable_connection()->add_on_readable(
+      "RTSP/1.0 200 OK\r\nCSeq: 1\r\nSession: learned-session\r\n"
+      "Content-Length: 0\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable(
+      "RTSP/1.0 200 OK\r\nCSeq: 2\r\nContent-Length: 0\r\n\r\n");
+  scenario.mutable_connection()->add_on_readable(
+      "RTSP/1.0 200 OK\r\nCSeq: 3\r\nContent-Length: 0\r\n\r\n");
+
+  const RtspRunResult result =
+      RunScenario(scenario, "rtsp://rtsp.test/session-reuse");
+  Expect(result.code == CURLE_OK,
+         "final cross-origin RTSP transfer did not complete");
+  Expect(result.opened_transport_count == 3,
+         "RTSP reuse probe did not replace the cached half-closed transport");
+  Expect(result.request_count == 1 && result.response_count == 1 &&
+             result.client_cseq == 3,
+         "RTSP reuse probe did not complete its final exchange");
+  Expect(result.transcript.find("OPTIONS * RTSP/1.0\r\n") != std::string::npos,
+         "cross-origin probe did not issue its final OPTIONS request");
+  Expect(result.transcript.find("Session: learned-session\r\n") ==
+             std::string::npos,
+         "curl forwarded an automatically learned RTSP Session cross-origin");
+}
+
+void TestSplitInvalidChannelFailsBufferedDollarWrite() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_RTSP);
+  scenario.set_host_path("rtsp.test/split-invalid-channel");
+  scenario.set_rtsp_probe_mode(
+      curl::fuzzer::proto::RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE);
+  auto *request = scenario.add_options();
+  request->set_option_id(curl::fuzzer::proto::CURLOPT_RTSP_REQUEST);
+  request->set_uint_value(CURL_RTSPREQ_OPTIONS);
+
+  const RtspRunResult result =
+      RunScenario(scenario, "rtsp://rtsp.test/split-invalid-channel");
+  const std::string failure = "split invalid RTP channel returned " +
+                              std::to_string(static_cast<int>(result.code)) +
+                              " with write-failure count " +
+                              std::to_string(result.client_write_failure_count);
+  Expect(result.code == CURLE_WRITE_ERROR, failure.c_str());
+  Expect(result.request_count == 1 && result.response_count == 1,
+         "split invalid RTP probe did not pair its request and fixed response");
+  Expect(result.client_write_failure_count == 1,
+         "RTSP probe did not reject exactly the buffered '$' body write");
+}
+
 } // namespace
 
 int main() {
@@ -242,6 +308,8 @@ int main() {
   TestCseqMismatchFailsTransfer();
   TestSetParameterDrainsExactRequestBody();
   TestPlayDeliversInterleavedRtp();
+  TestCrossOriginReuseSuppressesLearnedSession();
+  TestSplitInvalidChannelFailsBufferedDollarWrite();
   curl_global_cleanup();
   return 0;
 }

@@ -703,9 +703,6 @@ int fuzz_set_allowed_protocols(FUZZ_DATA *fuzz)
 #ifdef FUZZ_PROTOCOLS_RTMP
   allowed_protocols = "rtmp,rtmpe,rtmps,rtmpt,rtmpte,rtmpts";
 #endif
-#ifdef FUZZ_PROTOCOLS_RTSP
-  allowed_protocols = "rtsp";
-#endif
 #ifdef FUZZ_PROTOCOLS_SCP
   allowed_protocols = "scp";
 #endif

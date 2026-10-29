@@ -7,7 +7,7 @@ The legacy fuzzers are the `curl_fuzzer` executable and the protocol-specific
 input model from the structured protobuf scenario fuzzers; these targets are
 still maintained and run by OSS-Fuzz.
 
-The current protocol-specific targets cover FTP, MQTT, RTSP, and SMTP. The
+The current protocol-specific targets cover FTP, MQTT, and SMTP. The
 unsuffixed
 `curl_fuzzer` target enables the reviewed subset of protocols supported by the
 libcurl build. Direct byte-oriented targets such as `fuzz_url`, `fuzz_doh`,

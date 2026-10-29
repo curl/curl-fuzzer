@@ -213,6 +213,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.add("gopher_probe_mode")
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
+        if slug in {"compatibility", "fast_rtsp"}:
+            expected_fields.add("rtsp_probe_mode")
         if slug in {"fast_imap", "fast_pop3"}:
             expected_fields.update(
                 {
@@ -308,6 +310,13 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert h2_flush_probe.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_HTTP2",
+    }
+
+    rtsp_probe = model.fields["curl.fuzzer.proto.Scenario.rtsp_probe_mode"]
+    assert rtsp_probe.number == 44
+    assert rtsp_probe.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_RTSP",
     }
 
     settings_ack = model.fields["curl.fuzzer.proto.Http2Settings.ack"]

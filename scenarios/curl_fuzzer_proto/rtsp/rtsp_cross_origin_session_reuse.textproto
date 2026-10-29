@@ -1,0 +1,13 @@
+# Three OPTIONS transfers share one easy handle and multi connection cache. The
+# first response teaches curl a Session ID; the same-origin retry exercises the
+# cached connection's liveness check, then the probe moves the final request to
+# a fixed different origin, where curl must omit that stored ID.
+scheme: SCHEME_RTSP
+host_path: "rtsp.test/session-reuse"
+rtsp_probe_mode: RTSP_PROBE_CROSS_ORIGIN_REUSE
+options { rtsp_request: 1 }
+connection {
+  on_readable: "RTSP/1.0 200 OK\r\nCSeq: 1\r\nSession: learned-session\r\nContent-Length: 0\r\n\r\n"
+  on_readable: "RTSP/1.0 200 OK\r\nCSeq: 2\r\nContent-Length: 0\r\n\r\n"
+  on_readable: "RTSP/1.0 200 OK\r\nCSeq: 3\r\nContent-Length: 0\r\n\r\n"
+}
