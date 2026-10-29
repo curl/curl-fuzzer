@@ -151,6 +151,28 @@ void FinishCoalescing(TestConnection &connection) {
          "empty continuation did not preserve the no-stream-data sentinel");
 }
 
+void ForceStreamNOMEM(TestConnection &connection) {
+  constexpr size_t kDataLength = 10;
+  std::array<uint8_t, kDataLength> bytes{};
+  ngtcp2_vec data{};
+  data.base = bytes.data();
+  data.len = bytes.size();
+
+  // A late allocation failure may happen after ngtcp2 has accepted stream
+  // data, so pdatalen is deliberately nonnegative for this fatal result.
+  curl_fuzzer_ngtcp2_contract_test_force_stream_result(NGTCP2_ERR_NOMEM,
+                                                       kDataLength);
+  ngtcp2_ssize data_length = -1;
+  const ngtcp2_ssize result = ngtcp2_conn_writev_stream(
+      connection.connection(), connection.path(), nullptr,
+      connection.destination(), connection.destination_size(), &data_length,
+      NGTCP2_WRITE_STREAM_FLAG_MORE, 100, &data, 1, TestConnection::kTimestamp);
+  Expect(result == NGTCP2_ERR_NOMEM,
+         "forced stream allocation failure result changed");
+  Expect(data_length == static_cast<ngtcp2_ssize>(kDataLength),
+         "fatal stream result lost its accepted data length");
+}
+
 void TestCompletedTransactionAllowsOtherCalls() {
   TestConnection connection;
   BeginCoalescing(connection);
@@ -189,6 +211,56 @@ void TestConnectionCloseIsAllowed() {
   connection.Free();
 }
 
+void TestCloseOnlyAllowsConnectionClose() {
+  TestConnection connection;
+  ForceStreamNOMEM(connection);
+
+  ngtcp2_ccerr error;
+  ngtcp2_ccerr_default(&error);
+  ngtcp2_ccerr_set_liberr(&error, NGTCP2_ERR_NOMEM, nullptr, 0);
+  (void)ngtcp2_conn_write_connection_close(
+      connection.connection(), connection.path(), nullptr,
+      connection.destination(), connection.destination_size(), &error,
+      TestConnection::kTimestamp);
+  connection.Free();
+}
+
+void TestCloseOnlyAllowsTerminalStatusInspection() {
+  TestConnection connection;
+  ForceStreamNOMEM(connection);
+  (void)ngtcp2_conn_get_tls_alert(connection.connection());
+  (void)ngtcp2_conn_in_draining_period(connection.connection());
+  (void)ngtcp2_conn_get_ccerr(connection.connection());
+}
+
+void TestCloseOnlyAllowsTeardown() {
+  TestConnection connection;
+  ForceStreamNOMEM(connection);
+  connection.Free();
+}
+
+void TestCloseOnlyLeavesOtherConnectionsUsable() {
+  TestConnection failed;
+  TestConnection unrelated;
+  ForceStreamNOMEM(failed);
+  (void)ngtcp2_conn_get_max_data_left(unrelated.connection());
+}
+
+void TestNonfatalStreamErrorOutsideCoalescingDoesNotPoison() {
+  TestConnection connection;
+  curl_fuzzer_ngtcp2_contract_test_force_stream_result(
+      NGTCP2_ERR_INVALID_ARGUMENT, -1);
+  ngtcp2_ssize data_length = 0;
+  const ngtcp2_ssize result = ngtcp2_conn_writev_stream(
+      connection.connection(), connection.path(), nullptr,
+      connection.destination(), connection.destination_size(), &data_length,
+      NGTCP2_WRITE_STREAM_FLAG_NONE, 100, nullptr, 0,
+      TestConnection::kTimestamp);
+  Expect(result == NGTCP2_ERR_INVALID_ARGUMENT,
+         "forced nonfatal stream result changed");
+  (void)ngtcp2_conn_get_max_data_left(connection.connection());
+}
+
 void BeginForcedDatagramCoalescing(TestConnection &connection) {
   curl_fuzzer_ngtcp2_contract_test_force_datagram_result(NGTCP2_ERR_WRITE_MORE,
                                                          1);
@@ -220,7 +292,7 @@ void TestPositiveDatagramResultEndsTransaction() {
   (void)ngtcp2_conn_get_max_data_left(connection.connection());
 }
 
-void TestFatalDatagramResultAllowsConnectionClose() {
+void TestDatagramErrorAllowsConnectionClose() {
   TestConnection connection;
   BeginForcedDatagramCoalescing(connection);
   ContinueForcedDatagram(connection, NGTCP2_ERR_INVALID_STATE);
@@ -311,6 +383,23 @@ void TestTeardownForgetsReusedAddress() {
   (void)ngtcp2_conn_get_max_data_left(replacement.connection());
 }
 
+void TestCloseOnlyTeardownForgetsReusedAddress() {
+  static ReusingArena arena;
+  ngtcp2_conn *old_address = nullptr;
+  {
+    TestConnection connection(arena.memory());
+    old_address = connection.connection();
+    ForceStreamNOMEM(connection);
+    connection.Free();
+  }
+
+  arena.Reset();
+  TestConnection replacement(arena.memory());
+  Expect(replacement.connection() == old_address,
+         "test arena did not reuse the close-only connection address");
+  (void)ngtcp2_conn_get_max_data_left(replacement.connection());
+}
+
 using Violation = void (*)();
 
 void ViolateLikeCurrentCurlNextLoop() {
@@ -330,6 +419,46 @@ void ViolateWithChangedDestination() {
                                   -1, nullptr, 0, TestConnection::kTimestamp);
 }
 
+void ViolateStreamWriteAfterNOMEM() {
+  TestConnection connection;
+  ForceStreamNOMEM(connection);
+  ngtcp2_ssize data_length = -1;
+  (void)ngtcp2_conn_writev_stream(connection.connection(), connection.path(),
+                                  nullptr, connection.destination(),
+                                  connection.destination_size(), &data_length,
+                                  NGTCP2_WRITE_STREAM_FLAG_MORE, -1, nullptr, 0,
+                                  TestConnection::kTimestamp);
+}
+
+void ViolateGetterAfterCoalescingNOMEM() {
+  TestConnection connection;
+  BeginCoalescing(connection);
+  ForceStreamNOMEM(connection);
+  (void)ngtcp2_conn_get_max_data_left(connection.connection());
+}
+
+void ViolateAfterCoalescingStreamError() {
+  TestConnection connection;
+  BeginCoalescing(connection);
+  curl_fuzzer_ngtcp2_contract_test_force_stream_result(
+      NGTCP2_ERR_INVALID_ARGUMENT, -1);
+  ngtcp2_ssize data_length = 0;
+  const ngtcp2_ssize result = ngtcp2_conn_writev_stream(
+      connection.connection(), connection.path(), nullptr,
+      connection.destination(), connection.destination_size(), &data_length,
+      NGTCP2_WRITE_STREAM_FLAG_MORE, 100, nullptr, 0,
+      TestConnection::kTimestamp);
+  Expect(result == NGTCP2_ERR_INVALID_ARGUMENT,
+         "forced coalescing stream error result changed");
+  (void)ngtcp2_conn_get_max_data_left(connection.connection());
+}
+
+void ViolateShutdownAfterNOMEM() {
+  TestConnection connection;
+  ForceStreamNOMEM(connection);
+  (void)ngtcp2_conn_shutdown_stream_write(connection.connection(), 0, 100, 0);
+}
+
 void ViolateAfterZeroDatagramResult() {
   TestConnection connection;
   BeginForcedDatagramCoalescing(connection);
@@ -339,13 +468,20 @@ void ViolateAfterZeroDatagramResult() {
   (void)ngtcp2_conn_get_max_data_left(connection.connection());
 }
 
-void ViolateAfterFatalDatagramResult() {
+void ViolateAfterDatagramError() {
   TestConnection connection;
   BeginForcedDatagramCoalescing(connection);
   ContinueForcedDatagram(connection, NGTCP2_ERR_INVALID_STATE);
   // The DATAGRAM-origin rule requires a positive result. A later error can be
   // handled with connection close, stream shutdown, or connection teardown,
   // but it does not authorize arbitrary ngtcp2 calls.
+  (void)ngtcp2_conn_get_max_data_left(connection.connection());
+}
+
+void ViolateAfterDatagramNOMEM() {
+  TestConnection connection;
+  BeginForcedDatagramCoalescing(connection);
+  ContinueForcedDatagram(connection, NGTCP2_ERR_NOMEM);
   (void)ngtcp2_conn_get_max_data_left(connection.connection());
 }
 
@@ -441,11 +577,48 @@ void TestZeroDatagramResultKeepsTransaction() {
                     "ngtcp2_conn_writev_datagram_versioned"}});
 }
 
-void TestFatalDatagramResultKeepsTransaction() {
-  ExpectViolation(ViolateAfterFatalDatagramResult,
+void TestDatagramErrorKeepsTransaction() {
+  ExpectViolation(ViolateAfterDatagramError,
                   {{"ngtcp2 contract assertion failed",
                     "ngtcp2_conn_get_max_data_left called",
                     "ngtcp2_conn_writev_datagram_versioned"}});
+}
+
+void TestDatagramNOMEMEntersCloseOnly() {
+  ExpectViolation(ViolateAfterDatagramNOMEM,
+                  {{"ngtcp2_conn_get_max_data_left called",
+                    "ngtcp2_conn_writev_datagram_versioned returned -501",
+                    "the connection is close-only"}});
+}
+
+void TestStreamWriteAfterNOMEMAbortsWithDiagnostic() {
+  ExpectViolation(
+      ViolateStreamWriteAfterNOMEM,
+      {{"ngtcp2 contract assertion failed",
+        "ngtcp2_conn_writev_stream_versioned called",
+        "after ngtcp2_conn_writev_stream_versioned returned -501"}});
+}
+
+void TestNOMEMReplacesCoalescingWithCloseOnly() {
+  ExpectViolation(ViolateGetterAfterCoalescingNOMEM,
+                  {{"ngtcp2_conn_get_max_data_left called",
+                    "returned -501; the connection is close-only",
+                    "only connection close"}});
+}
+
+void TestCoalescingStreamErrorEntersCloseOnly() {
+  ExpectViolation(ViolateAfterCoalescingStreamError,
+                  {{"ngtcp2_conn_get_max_data_left called",
+                    "ngtcp2_conn_writev_stream_versioned returned -201",
+                    "the connection is close-only"}});
+}
+
+void TestShutdownAfterNOMEMAbortsWithDiagnostic() {
+  ExpectViolation(
+      ViolateShutdownAfterNOMEM,
+      {{"ngtcp2 contract assertion failed",
+        "ngtcp2_conn_shutdown_stream_write called",
+        "after ngtcp2_conn_writev_stream_versioned returned -501"}});
 }
 
 void TestStreamPostconditionAbortsWithDiagnostic() {
@@ -469,13 +642,24 @@ int main() {
   TestOtherConnectionsRemainUsable();
   TestStreamShutdownIsAllowedAndKeepsTransaction();
   TestConnectionCloseIsAllowed();
+  TestCloseOnlyAllowsConnectionClose();
+  TestCloseOnlyAllowsTerminalStatusInspection();
+  TestCloseOnlyAllowsTeardown();
+  TestCloseOnlyLeavesOtherConnectionsUsable();
+  TestNonfatalStreamErrorOutsideCoalescingDoesNotPoison();
   TestPositiveDatagramResultEndsTransaction();
-  TestFatalDatagramResultAllowsConnectionClose();
+  TestDatagramErrorAllowsConnectionClose();
   TestTeardownForgetsReusedAddress();
+  TestCloseOnlyTeardownForgetsReusedAddress();
   TestCurrentCurlNextLoopAbortsWithDiagnostic();
   TestChangedTupleAbortsWithDiagnostic();
   TestZeroDatagramResultKeepsTransaction();
-  TestFatalDatagramResultKeepsTransaction();
+  TestDatagramErrorKeepsTransaction();
+  TestDatagramNOMEMEntersCloseOnly();
+  TestStreamWriteAfterNOMEMAbortsWithDiagnostic();
+  TestNOMEMReplacesCoalescingWithCloseOnly();
+  TestCoalescingStreamErrorEntersCloseOnly();
+  TestShutdownAfterNOMEMAbortsWithDiagnostic();
   TestStreamPostconditionAbortsWithDiagnostic();
   TestZeroDatagramPostconditionAbortsWithDiagnostic();
   return 0;
