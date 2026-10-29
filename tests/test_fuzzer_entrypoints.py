@@ -15,14 +15,10 @@ CUSTOM_MUTATOR_PATTERN = re.compile(
 CUSTOM_CROSSOVER_PATTERN = re.compile(
     r'extern\s+"C"\s+std::size_t\s+LLVMFuzzerCustomCrossOver\s*\('
 )
-LEGACY_TARGET_PATTERN = re.compile(
-    r"^\s*curl_add_fuzzer\(\s*([a-z0-9_]+)", re.MULTILINE
-)
 PROTO_TARGET_PATTERN = re.compile(
     r"^\s*curl_add_proto_fuzzer\(\s*([a-z0-9_]+)", re.MULTILINE
 )
 STANDALONE_TARGETS = {
-    "curl_fuzzer_full_coverage",
     "fuzz_bufq",
     "fuzz_doh",
     "fuzz_netrc",
@@ -122,16 +118,6 @@ def test_base_proto_targets_are_packaged_for_i386_asan() -> None:
     )
 
 
-def test_full_coverage_target_is_only_packaged_for_profiling() -> None:
-    """Do not expose the profiling helper as an ordinary fuzz target."""
-    target = "curl_fuzzer_full_coverage"
-
-    assert target not in _packaged_targets(sanitizer="address")
-    assert target not in _packaged_targets(sanitizer="memory")
-    assert target in _packaged_targets(sanitizer="coverage")
-    assert target in _packaged_targets(sanitizer="introspector")
-
-
 def _checked_in_cpp_sources() -> list[Path]:
     sources = list(REPO_ROOT.glob("*.cc"))
     sources.extend((REPO_ROOT / "fuzzer_entrypoints").glob("*.cc"))
@@ -159,14 +145,13 @@ def test_packaged_fuzzers_have_unique_same_named_entrypoints() -> None:
 
 
 def test_cmake_builds_every_packaged_entrypoint() -> None:
-    """Prevent profiling packaging and CMake declarations from drifting."""
+    """Prevent packaging and CMake declarations from drifting."""
     cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
-    cmake_targets = set(LEGACY_TARGET_PATTERN.findall(cmake))
-    cmake_targets.update(PROTO_TARGET_PATTERN.findall(cmake))
+    cmake_targets = set(PROTO_TARGET_PATTERN.findall(cmake))
     cmake_targets.update(STANDALONE_TARGETS)
 
     assert cmake_targets == _packaged_targets(sanitizer="coverage")
-    assert cmake.count("fuzzer_entrypoints/${_name}.cc") == 2
+    assert cmake.count("fuzzer_entrypoints/${_name}.cc") == 1
 
 
 def test_proto_entrypoints_bind_generated_traits_in_source() -> None:

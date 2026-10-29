@@ -195,10 +195,10 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
   // makes replay independent of the machine running the fuzzer.
   curl_easy_setopt(easy, CURLOPT_PROXY, "");
 
-  // Keep raw secure-scheme inputs independent of the host trust store,
-  // matching the legacy harness. The dedicated TLS mock installs its own
-  // in-memory trust anchor after this baseline; scenario options still run
-  // last and can deliberately select verification failures.
+  // Keep raw secure-scheme inputs independent of the host trust store. The
+  // dedicated TLS mock installs its own in-memory trust anchor after this
+  // baseline; scenario options still run last and can deliberately select
+  // verification failures.
   curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 0L);
 
   // Force every name lookup to the fuzzer's in-process mock peer. The caller
@@ -223,14 +223,14 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
   curl_easy_setopt(easy, CURLOPT_ALTSVC, kDevNull);
   curl_easy_setopt(easy, CURLOPT_HSTS, kDevNull);
   curl_easy_setopt(easy, CURLOPT_NETRC_FILE, kDevNull);
-  // Do not set CRLFILE merely to mirror the legacy harness. An empty CRL is
+  // Do not set CRLFILE to a placeholder path. An empty CRL is
   // not a harmless sink: when a scenario restores certificate verification,
   // OpenSSL rejects /dev/null before it can exercise useful handshake and
   // verification paths. The option is absent from the mutation manifest, so
   // leaving it unset introduces neither filesystem writes nor external input.
 
-  // Match the legacy TLV fuzzer: FUZZ_VERBOSE in the environment flips curl's
-  // own verbose logging on. Useful when reproducing a crashing corpus entry.
+  // FUZZ_VERBOSE in the environment flips curl's own verbose logging on. This
+  // is useful when reproducing a crashing corpus entry.
   if (user_requested_verbose) {
     curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
   }

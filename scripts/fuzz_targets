@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 
-FUZZ_TARGETS_LIST="curl_fuzzer fuzz_url fuzz_bufq fuzz_doh fuzz_netrc"
-
-# This helper deliberately terminates immediately outside profiling builds, so
-# exposing it to ordinary libFuzzer smoke checks makes it look like a broken
-# target. Coverage and Introspector builds execute its deterministic probes.
-case "${SANITIZER:-}" in
-    coverage|introspector)
-        FUZZ_TARGETS_LIST="${FUZZ_TARGETS_LIST} curl_fuzzer_full_coverage"
-        ;;
-esac
+FUZZ_TARGETS_LIST="fuzz_url fuzz_bufq fuzz_doh fuzz_netrc"
 
 # OSS-Fuzz supports i386 with AddressSanitizer. The base structured suite uses
 # the same OpenSSL dependency stack that is already available in that build.

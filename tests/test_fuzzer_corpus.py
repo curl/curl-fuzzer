@@ -245,7 +245,7 @@ def test_shell_epoch_guard_matches_python_marker(tmp_path: Path) -> None:
         )
         return result.returncode == 0
 
-    assert ready("curl_fuzzer")
+    assert ready("fuzz_url")
     assert not ready("curl_fuzzer_proto_http")
     _mark_current_structured_epoch(tmp_path)
     assert ready("curl_fuzzer_proto_http")

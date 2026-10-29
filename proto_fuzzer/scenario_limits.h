@@ -101,9 +101,9 @@ inline constexpr std::size_t kMaxGeneratedMimePatternBytes = 256;
 /// Retain both sides of curl's 64 KiB send-buffer boundary. This budget is
 /// shared by all generated MIME parts in one scenario.
 inline constexpr std::size_t kMaxGeneratedMimeDataBytes = 64 * 1024 + 1;
-// Match the legacy callback's 16 KiB stream: it is large enough to fill the
-// deliberately tightened timing-lane socket while remaining cheap per case.
-/// Maximum callback-backed body bytes visible in one scenario.
+/// Maximum callback-backed body bytes visible in one scenario. A 16 KiB stream
+/// is large enough to fill the deliberately tightened timing-lane socket while
+/// remaining cheap per case.
 inline constexpr std::size_t kMaxUploadBytes = 16 * 1024;
 /// TELNET writes upload bytes while its blocking driver owns the thread, so
 /// keep total callback work small while retaining payload and IAC coverage.

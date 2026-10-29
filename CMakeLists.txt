@@ -812,15 +812,7 @@ else()
     set(LIB_FUZZING_ENGINE_DEP standaloneengine)
 endif()
 
-# Common sources and flags
-set(COMMON_SOURCES
-    legacy_fuzzer.cc
-    curl_fuzzer_tlv.cc
-    curl_fuzzer_callback.cc
-    curl_fuzzer_doh.cc
-    legacy_protocol_allowlist.cc
-    legacy_tlv_mutator.cc
-)
+# Common compiler flags
 set(COMMON_FLAGS -g -DCURL_DISABLE_DEPRECATION ${COVERAGE_COMPILE_FLAGS})
 
 # SSL_ERROR_SSL and SSL_ERROR_SYSCALL terminate an OpenSSL connection: no
@@ -1219,37 +1211,11 @@ endif()
 set(FUZZ_DEPS curl_external ${CURL_DEPS} ${LIB_FUZZING_ENGINE_DEP}
     ${OPENSSL_CONTRACT_DEP} ${ZSTD_CONTRACT_DEP} ${NGHTTP2_CONTRACT_DEP})
 
-# Helper macro to define a fuzzer target
-macro(curl_add_fuzzer _name _proto)
-    add_executable(${_name}
-        fuzzer_entrypoints/${_name}.cc
-        ${COMMON_SOURCES}
-    )
-    target_compile_options(${_name} PRIVATE ${COMMON_FLAGS} -DFUZZ_PROTOCOLS_${_proto}
-        -DLEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS)
-    target_include_directories(${_name} PRIVATE
-        ${CMAKE_SOURCE_DIR}
-        ${CURL_INCLUDE_DIRS}
-    )
-    target_link_libraries(${_name} PRIVATE ${COMMON_LINK_LIBS})
-    target_link_options(${_name} PRIVATE ${COMMON_LINK_OPTIONS})
-    add_dependencies(${_name} ${FUZZ_DEPS})
-endmacro()
-
-# The mutator is deliberately independent of libcurl so its framing, bounds,
-# repair, and crossover behavior can be tested without constructing a transfer.
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(legacy_tlv_mutator_test
-        legacy_tlv_mutator.cc
-        tests/legacy_tlv_mutator_test.cc
-    )
-    target_compile_features(legacy_tlv_mutator_test PRIVATE cxx_std_11)
-    target_include_directories(legacy_tlv_mutator_test PRIVATE ${CMAKE_SOURCE_DIR})
-    add_test(NAME legacy_tlv_mutator_test COMMAND legacy_tlv_mutator_test)
     # Kept separate from `fuzz` so OSS-Fuzz packaging does not build test-only
     # binaries. mainline.sh builds this target and then invokes CTest.
-    add_custom_target(fuzzer_unit_tests DEPENDS legacy_tlv_mutator_test)
+    add_custom_target(fuzzer_unit_tests)
 
     # CURL_BROTLI=ON makes a missing library a configure error; this runtime
     # check also prevents a future curl/CMake change from silently producing a
@@ -1323,56 +1289,6 @@ if(BUILD_TESTING)
         add_dependencies(fuzzer_unit_tests curl_http3_features_test)
     endif()
 
-    add_executable(legacy_protocol_allowlist_test
-        legacy_protocol_allowlist.cc
-        tests/legacy_protocol_allowlist_test.cc
-    )
-    target_compile_features(legacy_protocol_allowlist_test PRIVATE cxx_std_11)
-    target_compile_options(legacy_protocol_allowlist_test PRIVATE ${COMMON_FLAGS})
-    target_include_directories(legacy_protocol_allowlist_test PRIVATE
-        ${CMAKE_SOURCE_DIR})
-    target_link_libraries(legacy_protocol_allowlist_test PRIVATE
-        curl_client_default)
-    target_link_options(legacy_protocol_allowlist_test PRIVATE
-        ${COVERAGE_LINK_FLAGS})
-    add_dependencies(legacy_protocol_allowlist_test curl_external ${CURL_DEPS})
-    add_test(NAME legacy_protocol_allowlist_test
-        COMMAND legacy_protocol_allowlist_test)
-    add_dependencies(fuzzer_unit_tests legacy_protocol_allowlist_test)
-endif()
-
-# Main legacy TLV fuzzer
-curl_add_fuzzer(curl_fuzzer           ALL)
-
-# Deterministic profiling probes share one target rather than adding lanes
-# that compete with the existing fuzzers. The packaging inventory omits this
-# helper from ordinary sanitizer builds; coverage and Introspector builds
-# execute the probes.
-add_executable(curl_fuzzer_full_coverage
-    fuzzer_entrypoints/curl_fuzzer_full_coverage.cc)
-target_compile_features(curl_fuzzer_full_coverage PRIVATE cxx_std_11)
-target_compile_options(curl_fuzzer_full_coverage PRIVATE ${COMMON_FLAGS})
-target_include_directories(curl_fuzzer_full_coverage PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries(curl_fuzzer_full_coverage PRIVATE ${COMMON_LINK_LIBS})
-target_link_options(curl_fuzzer_full_coverage PRIVATE ${COMMON_LINK_OPTIONS})
-add_dependencies(curl_fuzzer_full_coverage ${FUZZ_DEPS})
-if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
-   "$ENV{SANITIZER}" STREQUAL "introspector")
-    target_compile_definitions(curl_fuzzer_full_coverage PRIVATE
-        CURL_FUZZER_COVERAGE_ONLY
-        FUZZ_PROTOCOLS_ALL
-        LEGACY_TLV_MUTATOR_CHECK_HARNESS_CONSTANTS
-        BUILDING_LIBCURL
-        DEBUGBUILD
-        HAVE_CONFIG_H)
-    target_include_directories(curl_fuzzer_full_coverage PRIVATE
-        ${CURL_PRIVATE_INCLUDE_DIRS})
-    target_sources(curl_fuzzer_full_coverage PRIVATE
-        full_coverage/public_api.cc
-        full_coverage/utility_api.cc
-        full_coverage/dynamic_formatting.cc
-        full_coverage/legacy_mutator.cc
-        legacy_tlv_mutator.cc)
 endif()
 
 if(BUILD_TESTING)
@@ -1407,16 +1323,6 @@ if(BUILD_TESTING)
         COMMAND resolver_queued_cancel_test)
     set_tests_properties(resolver_queued_cancel_test PROPERTIES TIMEOUT 10)
     add_dependencies(fuzzer_unit_tests resolver_queued_cancel_test)
-    add_executable(full_coverage_mutator_test
-        tests/full_coverage_mutator_test.cc
-        full_coverage/legacy_mutator.cc
-        legacy_tlv_mutator.cc)
-    target_compile_features(full_coverage_mutator_test PRIVATE cxx_std_11)
-    target_compile_definitions(full_coverage_mutator_test PRIVATE FUZZ_PROTOCOLS_ALL)
-    target_include_directories(full_coverage_mutator_test PRIVATE ${CMAKE_SOURCE_DIR})
-    add_test(NAME full_coverage_mutator_test COMMAND full_coverage_mutator_test)
-    add_dependencies(fuzzer_unit_tests full_coverage_mutator_test)
-
     add_executable(fault_injection_test
         tests/fault_injection_test.cc
         proto_fuzzer/allocation_fault_injection.cc)
@@ -1563,8 +1469,6 @@ add_dependencies(fuzz_netrc ${FUZZ_DEPS})
 # Create a custom target for all fuzzers
 add_custom_target(fuzz
     DEPENDS
-        curl_fuzzer
-        curl_fuzzer_full_coverage
         fuzz_bufq
         fuzz_url
         fuzz_doh
@@ -1574,8 +1478,7 @@ add_custom_target(fuzz
 # -----------------------------------------------------------------------------
 # Structured (libprotobuf-mutator) network target suite
 #
-# These binaries live entirely under proto_fuzzer/ and share no source with
-# the TLV fuzzers above. OSS-Fuzz supports i386 with AddressSanitizer, where
+# OSS-Fuzz supports i386 with AddressSanitizer, where
 # the LPM/protobuf dependency stack is built and executed as 32-bit code.
 # -----------------------------------------------------------------------------
 if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR

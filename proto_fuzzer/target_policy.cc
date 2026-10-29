@@ -1420,7 +1420,7 @@ void CanonicalizeRtspOptionModes(curl::fuzzer::proto::Scenario* scenario) {
 /// before BoundScenarioShape so a fast iteration never walks or normalizes a
 /// MIME tree, upload script, or follow-on connection that it will discard.
 /// Raw response chunks and request headers stay intact because they reach the
-/// core HTTP parser cheaply and provide much of the legacy fuzzer's coverage.
+/// core HTTP parser cheaply and preserve broad parser coverage.
 void RemoveDeepHttpShape(curl::fuzzer::proto::Scenario* scenario) {
   scenario->clear_mime_post();
   scenario->clear_upload();
@@ -2212,10 +2212,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
 
   if (profile == TargetProfile::kFastSmtp) {
-    // The legacy target and its structured replacement both service plaintext
-    // SMTP and implicit-TLS SMTPS through one command/reply parser. Preserve an
-    // explicitly supplied SMTPS scheme so the seed and mutations can select the
-    // TLS peer; every other scheme falls back to the historical plaintext lane.
+    // One command/reply parser services plaintext SMTP and implicit-TLS SMTPS.
+    // Preserve an explicitly supplied SMTPS scheme so the seed and mutations
+    // can select the TLS peer; every other scheme falls back to the historical
+    // plaintext lane.
     const auto scheme = scenario->scheme();
     scenario->set_scheme(scheme == curl::fuzzer::proto::SCHEME_SMTPS ? curl::fuzzer::proto::SCHEME_SMTPS
                                                                      : curl::fuzzer::proto::SCHEME_SMTP);

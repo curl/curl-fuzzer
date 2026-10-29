@@ -39,7 +39,7 @@ cargo install mdbook-mermaid --version "=${MDBOOK_MERMAID_VERSION}" --locked
 Install CMake and Doxygen for the [C++ reference](proto/cpp-reference.md), plus
 `protoc` for preparing the browser's metadata-free authoring schema. With
 Node.js 18 or newer, install the locked JavaScript dependencies used by the
-browser decoder:
+protobuf corpus decoder:
 
 ```shell
 npm ci --ignore-scripts --no-audit --no-fund
@@ -88,5 +88,5 @@ also be configured in the repository's Pages settings.
 Do not commit `_site/`, `build/generated_corpora/`, generated schema/profile
 artifacts under `build/schemas/` or `build/schema_eligibility/`, or downloaded
 public corpora. Commit the annotated schemas under `schemas/`, authored
-Markdown under `docs/`, legacy binary seeds under `corpora/`, and full
-authoring textproto seeds under `scenarios/curl_fuzzer_proto/`.
+Markdown under `docs/`, direct-fuzzer seeds under `corpora/`, and full authoring
+textproto seeds under `scenarios/curl_fuzzer_proto/`.

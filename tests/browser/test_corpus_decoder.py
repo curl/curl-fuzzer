@@ -12,27 +12,7 @@ try:
 except ImportError:
     sync_playwright = None
 
-from curl_fuzzer_tools.corpus import TLVDecoder
 from curl_fuzzer_tools.generate_decoder_html import generate_html
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
-def _example_corpus() -> Path:
-    repo_root = _repo_root()
-    candidate = repo_root / "corpora" / "curl_fuzzer" / "oss-fuzz-3327"
-    if not candidate.exists():
-        pytest.skip(
-            f"Example corpus file not present in repository checkout: {candidate}"
-        )
-    return candidate
-
-
-def _expected_tlvs(corpus_path: Path) -> int:
-    data = corpus_path.read_bytes()
-    return sum(1 for _ in TLVDecoder(data))
 
 
 def _write_input(tmp_path: Path, name: str, data: bytes) -> Path:
@@ -58,10 +38,6 @@ def _proto_bytes(field_number: int, value: bytes) -> bytes:
     return _varint((field_number << 3) | 2) + _varint(len(value)) + value
 
 
-def _tlv(tlv_type: int, value: bytes) -> bytes:
-    return tlv_type.to_bytes(2, "big") + len(value).to_bytes(4, "big") + value
-
-
 def _example_scenario() -> bytes:
     option = _proto_varint(59, 1)
     connection = _proto_bytes(1, b"HTTP/1.1 200 OK\r\n\r\n")
@@ -77,43 +53,8 @@ def _example_scenario() -> bytes:
 
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
-def test_upload_repository_corpus(tmp_path: Path) -> None:
-    """Ensure the decoder UI handles uploading the repository corpus file."""
-    html_path = tmp_path / "index.html"
-    generate_html(html_path)
-
-    corpus_path = _example_corpus()
-    expected_tlvs = _expected_tlvs(corpus_path)
-
-    file_url = html_path.resolve().as_uri()
-
-    if sync_playwright is None:
-        pytest.skip("Playwright not installed")
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        page = browser.new_page()
-        page.goto(file_url)
-
-        assert page.title() == "curl corpus decoder"
-
-        page.set_input_files("#corpus-input", str(corpus_path))
-        page.wait_for_selector(f"text=Decoded {expected_tlvs} TLVs successfully.")
-
-        assert page.locator("#summary-format").inner_text().strip() == "Legacy TLV"
-        summary_value = page.locator("#summary-count").inner_text()
-        assert summary_value.strip() == str(expected_tlvs)
-
-        assert page.locator("#tlv-results").is_visible()
-        assert not page.locator("#proto-results").is_visible()
-        rows = page.locator("#tlv-table-body tr[data-entry]")
-        assert rows.count() == expected_tlvs
-
-        browser.close()
-
-
-@pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
 def test_upload_protobuf_scenario_without_network_access(tmp_path: Path) -> None:
-    """Auto-detect and decode named, nested, and unknown protobuf fields."""
+    """Decode named, nested, and unknown protobuf fields without network I/O."""
     html_path = tmp_path / "index.html"
     generate_html(html_path)
     scenario_path = _write_input(tmp_path, "browser.scenario", _example_scenario())
@@ -143,7 +84,6 @@ def test_upload_protobuf_scenario_without_network_access(tmp_path: Path) -> None
             page.locator("#summary-format").inner_text().strip() == "Protobuf Scenario"
         )
         assert page.locator("#proto-results").is_visible()
-        assert not page.locator("#tlv-results").is_visible()
         output = page.locator("#proto-output").inner_text()
         assert "scheme: SCHEME_HTTP" in output
         assert 'host_path: "127.0.0.1/browser"' in output
@@ -252,8 +192,6 @@ def test_protobuf_text_format_and_presence_semantics(tmp_path: Path) -> None:
         assert "SCHEME_HTTP\n" not in output
 
         page.set_input_files("#corpus-input", str(wrong_wire))
-        page.wait_for_selector("text=Could not identify this file")
-        page.locator("#format-select").select_option("proto")
         page.wait_for_selector("text=Decoded protobuf Scenario successfully.")
         assert page.locator("#proto-output").inner_text().strip() == "2: 1"
 
@@ -261,14 +199,12 @@ def test_protobuf_text_format_and_presence_semantics(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
-def test_ambiguous_wire_input_can_be_overridden(tmp_path: Path) -> None:
-    """Prefer the recognized Scenario but allow its valid TLV interpretation."""
+def test_scenario_bytes_have_one_unambiguous_decoder(tmp_path: Path) -> None:
+    """Decode Scenario bytes directly without a retired format selector."""
     html_path = tmp_path / "index.html"
     generate_html(html_path)
-    # Protobuf field 2 containing four NULs is also a zero-length TLV whose
-    # unknown type is 0x1204. There is no magic prefix that disambiguates it.
-    ambiguous_path = _write_input(
-        tmp_path, "ambiguous-input", b"\x12\x04\x00\x00\x00\x00"
+    scenario_path = _write_input(
+        tmp_path, "zero-host.scenario", b"\x12\x04\x00\x00\x00\x00"
     )
 
     if sync_playwright is None:
@@ -277,7 +213,7 @@ def test_ambiguous_wire_input_can_be_overridden(tmp_path: Path) -> None:
         browser = playwright.chromium.launch()
         page = browser.new_page()
         page.goto(html_path.resolve().as_uri())
-        page.set_input_files("#corpus-input", str(ambiguous_path))
+        page.set_input_files("#corpus-input", str(scenario_path))
         page.wait_for_selector("text=Decoded protobuf Scenario successfully.")
 
         assert (
@@ -287,57 +223,16 @@ def test_ambiguous_wire_input_can_be_overridden(tmp_path: Path) -> None:
             'host_path: "\\000\\000\\000\\000"'
             in page.locator("#proto-output").inner_text()
         )
-
-        page.locator("#format-select").select_option("tlv")
-        page.wait_for_selector("text=Decoded 1 TLVs successfully.")
-        assert page.locator("#summary-format").inner_text().strip() == "Legacy TLV"
-        assert page.locator("#tlv-table-body tr[data-entry]").count() == 1
-        assert "<unknown> (#4612)" in page.locator("#tlv-table-body").inner_text()
+        assert page.locator("#format-select").count() == 0
 
         browser.close()
 
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
-@pytest.mark.parametrize("trailing", [b"\xaa", b"\xaa\xbb"])
-def test_known_tlv_with_short_trailing_data_is_detected(
-    tmp_path: Path, trailing: bytes
-) -> None:
-    """Mirror the harness rule that fewer than six trailing bytes end a stream."""
+def test_malformed_input_reports_the_protobuf_decoder_error(tmp_path: Path) -> None:
+    """Report malformed protobuf input without a format-selection round trip."""
     html_path = tmp_path / "index.html"
     generate_html(html_path)
-    corpus_path = _write_input(
-        tmp_path,
-        f"trailing-{len(trailing)}",
-        _tlv(1, b"http://127.0.0.1") + trailing,
-    )
-
-    if sync_playwright is None:
-        pytest.skip("Playwright not installed")
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        page = browser.new_page()
-        page.goto(html_path.resolve().as_uri())
-        page.set_input_files("#corpus-input", str(corpus_path))
-        page.wait_for_selector("text=issues detected while parsing legacy TLVs.")
-
-        assert page.locator("#summary-format").inner_text().strip() == "Legacy TLV"
-        assert page.locator("#summary-count").inner_text().strip() == "1"
-        assert page.locator("#summary-errors").inner_text().strip() == "1"
-        assert "CURLOPT_URL (#1)" in page.locator("#tlv-table-body").inner_text()
-
-        browser.close()
-
-
-@pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
-def test_malformed_inputs_report_the_selected_decoder_error(tmp_path: Path) -> None:
-    """Keep malformed legacy diagnostics and expose forced protobuf errors."""
-    html_path = tmp_path / "index.html"
-    generate_html(html_path)
-    malformed_tlv = _write_input(
-        tmp_path,
-        "malformed-tlv",
-        b"\x00\x01\x00\x00\x00\x04x",
-    )
     malformed_proto = _write_input(tmp_path, "malformed-proto", b"\x12\x04a")
 
     if sync_playwright is None:
@@ -347,27 +242,20 @@ def test_malformed_inputs_report_the_selected_decoder_error(tmp_path: Path) -> N
         page = browser.new_page()
         page.goto(html_path.resolve().as_uri())
 
-        page.set_input_files("#corpus-input", str(malformed_tlv))
-        page.wait_for_selector("text=issues detected while parsing legacy TLVs.")
-        assert page.locator("#summary-format").inner_text().strip() == "Legacy TLV"
-        assert page.locator("#summary-errors").inner_text().strip() == "1"
-
         page.set_input_files("#corpus-input", str(malformed_proto))
-        page.wait_for_selector("text=Could not identify this file")
-        assert page.locator("#summary-format").inner_text().strip() == "Unknown"
-
-        page.locator("#format-select").select_option("proto")
         page.wait_for_selector("text=Invalid protobuf Scenario:")
+        assert (
+            page.locator("#summary-format").inner_text().strip() == "Protobuf Scenario"
+        )
         assert page.locator("#summary-errors").inner_text().strip() == "1"
         assert not page.locator("#proto-results").is_visible()
-        assert not page.locator("#tlv-results").is_visible()
 
         browser.close()
 
 
 @pytest.mark.skipif(sync_playwright is None, reason="Playwright not installed")
-def test_unknown_only_and_empty_inputs_require_an_override(tmp_path: Path) -> None:
-    """Treat formatless protobuf inputs as uncertain while permitting inspection."""
+def test_unknown_only_and_empty_scenarios_are_inspectable(tmp_path: Path) -> None:
+    """Render valid protobuf inputs even when they have no known fields."""
     html_path = tmp_path / "index.html"
     generate_html(html_path)
     unknown_path = _write_input(
@@ -383,20 +271,11 @@ def test_unknown_only_and_empty_inputs_require_an_override(tmp_path: Path) -> No
         page.goto(html_path.resolve().as_uri())
 
         page.set_input_files("#corpus-input", str(unknown_path))
-        page.wait_for_selector("text=Could not identify this file")
-        assert page.locator("#summary-format").inner_text().strip() == "Unknown"
-
-        page.locator("#format-select").select_option("proto")
         page.wait_for_selector("text=Decoded protobuf Scenario successfully.")
         assert "100: 7" in page.locator("#proto-output").inner_text()
         assert page.locator("#summary-count").inner_text().strip() == "0"
 
-        page.locator("#format-select").select_option("auto")
         page.set_input_files("#corpus-input", str(empty_path))
-        page.wait_for_selector("text=Could not identify this file")
-        assert page.locator("#summary-format").inner_text().strip() == "Unknown"
-
-        page.locator("#format-select").select_option("proto")
         page.wait_for_selector("text=Decoded protobuf Scenario successfully.")
         assert (
             page.locator("#proto-output").inner_text().strip()
@@ -422,9 +301,7 @@ def test_accessibility_after_upload_in_light_and_dark(
     """
     html_path = tmp_path / "index.html"
     generate_html(html_path)
-
-    corpus_path = _example_corpus()
-    expected_tlvs = _expected_tlvs(corpus_path)
+    scenario_path = _write_input(tmp_path, "browser.scenario", _example_scenario())
 
     file_url = html_path.resolve().as_uri()
 
@@ -437,13 +314,13 @@ def test_accessibility_after_upload_in_light_and_dark(
         page.emulate_media(color_scheme=scheme)  # Apply requested color scheme
         page.goto(file_url)
 
-        # Upload corpus and wait for summary
-        page.set_input_files("#corpus-input", str(corpus_path))
-        page.wait_for_selector(f"text=Decoded {expected_tlvs} TLVs successfully.")
+        # Upload a Scenario and wait for summary
+        page.set_input_files("#corpus-input", str(scenario_path))
+        page.wait_for_selector("text=Decoded protobuf Scenario successfully.")
 
         # Verify headings and summary exist
         assert page.locator("header h1").count() == 1
-        assert page.locator("#summary-count").inner_text().strip() == str(expected_tlvs)
+        assert int(page.locator("#summary-count").inner_text().strip()) > 0
 
         # Page-wide contrast sweep over visible text nodes; collect failures (< 3.0)
         results = page.evaluate(

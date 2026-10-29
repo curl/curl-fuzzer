@@ -14,7 +14,6 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .corpus import BaseType
 from .logger import common_logging
 from .read_proto_corpus import SCENARIO_MESSAGE, find_proto_file
 from .schema_eligibility import authoring_schema_files, load_schema_model
@@ -199,11 +198,9 @@ def _render_html(
 ) -> str:
     template = env.get_template(_TEMPLATE_NAME)
     generated_at = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-    typemap = {str(key): value for key, value in BaseType.TYPEMAP.items()}
     return template.render(
         generated_at=generated_at,
         scenario_message=SCENARIO_MESSAGE,
-        typemap=typemap,
         proto_source=proto_source,
         javascript_bundle=javascript_bundle,
         third_party_licenses=third_party_licenses,

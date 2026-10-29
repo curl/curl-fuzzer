@@ -10,29 +10,10 @@ OSS-Fuzz report.
 
 ## Inspect the testcase
 
-### Legacy TLV targets
-
-Decode a legacy input with the Python tool:
-
-```shell
-read_corpus clusterfuzz-testcase-minimized-curl_fuzzer-<id>
-```
-
-For example, a URL-only input is displayed as:
-
-```text
-TLVContents(type='CURLOPT_URL' (1), length=24, data=b'file:///proc/self/status')
-```
-
-The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) provides the
-same kind of inspection in a browser without uploading the file. It recognizes
-legacy TLV inputs automatically.
-
 ### Structured protobuf targets
 
-The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) also decodes
-protobuf `Scenario` files entirely in the browser. It normally detects the
-format, or you can select it manually for ambiguous inputs.
+The hosted [corpus decoder](https://fuzz.curl.se/corpus-decoder/) decodes
+protobuf `Scenario` files entirely in the browser without uploading them.
 
 From a source checkout, `read_proto_corpus` uses the full authoring schema to
 print field names. Current generated profile roots preserve its retained field

@@ -63,7 +63,7 @@ def coverage_fixture(
     build = checkout / "build with spaces"
     build.mkdir()
     curl_source = build / "curl-source"
-    target = "curl_fuzzer_full_coverage"
+    target = "fuzz_url"
     local_corpus = checkout / "corpora" / target
     local_corpus.mkdir(parents=True)
     (local_corpus / "seed").write_bytes(b"seed")

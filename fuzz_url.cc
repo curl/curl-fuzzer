@@ -21,10 +21,9 @@
  ***************************************************************************/
 
 #include <stdlib.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <curl/curl.h>
-#include "curl_fuzzer.h"
 
 /**
  * Fuzzing entry point. This function is passed a buffer containing a test

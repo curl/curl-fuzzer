@@ -18,7 +18,7 @@ namespace proto_fuzzer {
 enum class TargetProfile {
   /// Preserve the original mixed target and its accumulated corpus exactly.
   kCompatibility,
-  /// Keep ordinary HTTP iterations competitive with the legacy byte fuzzers.
+  /// Keep ordinary HTTP iterations cheap enough for a high mutation rate.
   kFastHttp,
   /// Retain HTTP's complete structured request and response surface.
   kDeepHttp,

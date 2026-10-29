@@ -4,7 +4,7 @@ Benchmark and compare production-style libFuzzer binaries.
 The helper keeps seeds and fuzzer arguments fixed between variants. Each run
 receives a fresh content-addressed corpus snapshot, so discoveries or
 reductions cannot influence later runs. Same-name targets share one snapshot;
-explicit legacy-to-proto target pairs use their respective native formats.
+explicit differently named target pairs use their respective native formats.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import platform
 import re
 import resource
 import shutil
-import socket
 import statistics
 import subprocess
 import sys
@@ -30,20 +29,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TypeVar
 
-from .coverage_parity import (
-    TARGET_NAME_RE,
-    CoverageParityError,
-    CoverageUniverse,
-    DuplicateJsonKeyError,
-    ParityManifest,
-    evaluate_parity,
-    load_parity_manifest,
-    strict_json_loads,
-    validate_baseline_corpora,
-    validate_live_inventory,
-    validate_manifest_progression,
-    validate_source_identity,
-)
 from .fuzzer_corpus import (
     CorpusError,
     CorpusSnapshotBuilder,
@@ -81,6 +66,7 @@ DEFAULT_TARGETS = (
     "curl_fuzzer_proto_ldap",
     "curl_fuzzer_proto_rtsp",
     "curl_fuzzer_proto_ipfs",
+    "curl_fuzzer_proto_gopher",
     "curl_fuzzer_proto_api",
     "curl_fuzzer_proto_multi",
     "curl_fuzzer_proto_timing",
@@ -102,7 +88,6 @@ REPLAY_COUNTER_NAMES = (
 )
 DEFAULT_COVERAGE_WALL_TIMEOUT = 300
 DEFAULT_COVERAGE_INPUT_TIMEOUT = 25
-PARITY_COVERAGE_WALL_TIMEOUT = 7200
 LLVM_COVERAGE_COUNTER_SATURATION = (1 << 63) - 1
 COVERAGE_REPLAY_SANITIZER_ENVIRONMENT: dict[str, str | None] = {
     "ASAN_OPTIONS": "detect_leaks=0",
@@ -117,10 +102,31 @@ EVENT_RE = re.compile(
     r"(?:.*?exec/s:\s*(?P<exec_per_second>\d+))?"
 )
 STAT_RE = re.compile(r"^stat::(?P<name>[a-z_]+):\s*(?P<value>\d+)\s*$")
+TARGET_NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 class MeasurementError(RuntimeError):
     """Raised for invalid configuration or unavailable measurement inputs."""
+
+
+class DuplicateJsonKeyError(ValueError):
+    """Raised when measurement JSON repeats an object key."""
+
+
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise DuplicateJsonKeyError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def strict_json_loads(payload: str | bytes | bytearray) -> object:
+    """Decode JSON while rejecting duplicate keys at every nesting level."""
+    return json.loads(payload, object_pairs_hook=_reject_duplicate_json_keys)
 
 
 @dataclass(frozen=True)
@@ -314,7 +320,7 @@ def parse_source_coverage_export(
                     continue
                 # Region kind 0 is an ordinary code region. Expansion, skipped,
                 # gap, and branch records have different counting semantics and
-                # are intentionally excluded from the parity metric.
+                # are intentionally excluded from the source comparison.
                 kind = raw_region[7] if len(raw_region) >= 8 else 0
                 if kind != 0:
                     continue
@@ -1404,7 +1410,7 @@ def _measure_source_coverage(
     llvm_profdata: Path,
     llvm_cov: Path,
     tool_versions: dict[str, str],
-) -> tuple[dict[str, object], SourceCoverageIndex, SourceCoverageIndex]:
+) -> dict[str, object]:
     """Measure and compare fixed-corpus curl source coverage per target."""
     variant_documents: dict[str, object] = {}
     indexes: dict[str, dict[str, SourceCoverageIndex]] = {}
@@ -1563,7 +1569,7 @@ def _measure_source_coverage(
             ),
         },
     }
-    return document, baseline_aggregate, candidate_aggregate
+    return document
 
 
 def _print_source_coverage(document: dict[str, object]) -> None:
@@ -1710,43 +1716,20 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--coverage-wall-timeout",
         type=int,
         default=argparse.SUPPRESS,
-        help=(
-            "outer timeout for each fixed-corpus coverage replay; defaults to "
-            "300s, or 7200s in parity-manifest mode"
-        ),
+        help=("outer timeout for each fixed-corpus coverage replay; defaults to 300s"),
     )
     parser.add_argument(
         "--coverage-input-timeout",
         type=int,
         default=argparse.SUPPRESS,
         help=(
-            "per-input timeout exported to standalone coverage runners; "
-            "defaults to 25s, or the immutable manifest value in parity mode"
+            "per-input timeout exported to standalone coverage runners; defaults to 25s"
         ),
     )
     parser.add_argument(
         "--source-only",
         action="store_true",
         help="run deterministic source replay without timed libFuzzer benchmarks",
-    )
-    parser.add_argument(
-        "--parity-manifest",
-        type=Path,
-        help="immutable function-parity manifest to bind and ratchet",
-    )
-    parser.add_argument(
-        "--previous-parity-manifest",
-        type=Path,
-        help=(
-            "trusted prior manifest used to reject immutable baseline changes "
-            "and resolved-gap removals"
-        ),
-    )
-    parser.add_argument(
-        "--target-inventory",
-        type=Path,
-        default=REPO_ROOT / "scripts" / "fuzz_targets",
-        help="repository target inventory validated in parity-manifest mode",
     )
     parser.add_argument(
         "--llvm-profdata",
@@ -1812,26 +1795,6 @@ def _validate_args(args: argparse.Namespace) -> None:
             "--source-only requires --coverage-baseline-dir and "
             "--coverage-candidate-dir"
         )
-    if args.parity_manifest is not None and (
-        args.coverage_baseline_dir is None or args.coverage_candidate_dir is None
-    ):
-        raise MeasurementError(
-            "--parity-manifest requires both coverage build directories"
-        )
-    if args.previous_parity_manifest is not None and args.parity_manifest is None:
-        raise MeasurementError("--previous-parity-manifest requires --parity-manifest")
-    if args.parity_manifest is not None and args.previous_parity_manifest is None:
-        raise MeasurementError(
-            "--parity-manifest requires a trusted --previous-parity-manifest"
-        )
-    if args.parity_manifest is not None:
-        baseline_coverage = args.coverage_baseline_dir.resolve()
-        candidate_coverage = args.coverage_candidate_dir.resolve()
-        if baseline_coverage != candidate_coverage:
-            raise MeasurementError(
-                "--parity-manifest requires baseline and candidate coverage "
-                "targets from the same build directory"
-            )
     for argument in args.fuzzer_arg:
         if not argument.startswith("-"):
             raise MeasurementError(f"fuzzer argument must begin with '-': {argument}")
@@ -1841,66 +1804,12 @@ def _validate_args(args: argparse.Namespace) -> None:
             )
 
 
-def _resolve_coverage_replay_settings(
-    args: argparse.Namespace, parity_manifest: ParityManifest | None
-) -> None:
-    """Apply generic defaults or bind parity replay settings to the manifest."""
-    if parity_manifest is None:
-        if args.coverage_wall_timeout is None:
-            args.coverage_wall_timeout = DEFAULT_COVERAGE_WALL_TIMEOUT
-        if args.coverage_input_timeout is None:
-            args.coverage_input_timeout = DEFAULT_COVERAGE_INPUT_TIMEOUT
-        return
-
-    expected_input_timeout = parity_manifest.replay_input_timeout_seconds
-    if args.coverage_input_timeout is None:
-        args.coverage_input_timeout = expected_input_timeout
-    elif args.coverage_input_timeout != expected_input_timeout:
-        raise MeasurementError(
-            "--coverage-input-timeout does not match the parity manifest: "
-            f"expected {expected_input_timeout}"
-        )
-    if (
-        COVERAGE_REPLAY_SANITIZER_ENVIRONMENT
-        != parity_manifest.replay_sanitizer_environment
-    ):
-        raise MeasurementError(
-            "coverage replay sanitizer environment does not match the parity manifest"
-        )
+def _resolve_coverage_replay_settings(args: argparse.Namespace) -> None:
+    """Apply default source-coverage replay limits."""
     if args.coverage_wall_timeout is None:
-        args.coverage_wall_timeout = PARITY_COVERAGE_WALL_TIMEOUT
-
-
-def _validate_parity_socket_capability(
-    socketpair_factory: Callable[
-        [int, int], tuple[socket.socket, socket.socket]
-    ] = socket.socketpair,
-) -> None:
-    """Fail before replay when local protocol peers cannot exchange bytes."""
-    payload = b"curl-fuzzer-parity-preflight"
-    try:
-        sender, receiver = socketpair_factory(socket.AF_UNIX, socket.SOCK_STREAM)
-        with sender, receiver:
-            sender.sendall(payload)
-            received = bytearray()
-            while len(received) < len(payload):
-                chunk = receiver.recv(len(payload) - len(received))
-                if not chunk:
-                    break
-                received.extend(chunk)
-    except OSError as error:
-        raise MeasurementError(
-            "parity source replay requires local AF_UNIX socket send/receive "
-            f"capability; the preflight failed: {error}. Run the comparison in "
-            "an execution environment that permits local socket I/O; completed "
-            "callback counts alone do not prove protocol execution"
-        ) from error
-    if bytes(received) != payload:
-        raise MeasurementError(
-            "parity source replay local AF_UNIX socket preflight returned "
-            f"{len(received)} of {len(payload)} bytes; completed callback counts "
-            "alone do not prove protocol execution"
-        )
+        args.coverage_wall_timeout = DEFAULT_COVERAGE_WALL_TIMEOUT
+    if args.coverage_input_timeout is None:
+        args.coverage_input_timeout = DEFAULT_COVERAGE_INPUT_TIMEOUT
 
 
 def _validate_output_separation(
@@ -1945,17 +1854,6 @@ def _validate_output_separation(
         if any(output.is_relative_to(source) for source in inferred_sources):
             raise MeasurementError(
                 "--output must not be inside an inferred curl source directory"
-            )
-
-    file_inputs = (
-        args.parity_manifest,
-        args.previous_parity_manifest,
-        args.target_inventory,
-    )
-    for raw_file in file_inputs:
-        if raw_file is not None and output == raw_file.resolve():
-            raise MeasurementError(
-                f"--output must not overwrite an input file: {raw_file.resolve()}"
             )
 
     for raw_source in raw_corpus_sources:
@@ -2003,11 +1901,7 @@ def _validate_output_separation(
     }
     protected_paths = {
         output,
-        *(
-            raw_path.resolve()
-            for raw_path in (*directory_inputs, *file_inputs)
-            if raw_path is not None
-        ),
+        *(raw_path.resolve() for raw_path in directory_inputs if raw_path is not None),
         *(raw_source.resolve() for raw_source in raw_corpus_sources),
         *inferred_source_paths,
         *resolved_tools,
@@ -2093,36 +1987,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         _remove_stale_output(output)
         _validate_args(args)
         overrides = parse_corpus_mappings(args.corpus)
-        parity_manifest: ParityManifest | None = None
-        previous_parity_manifest: ParityManifest | None = None
-        if args.parity_manifest is not None:
-            parity_manifest = load_parity_manifest(args.parity_manifest)
-        _resolve_coverage_replay_settings(args, parity_manifest)
-        if parity_manifest is not None:
-            validate_live_inventory(parity_manifest, args.target_inventory)
-            if args.previous_parity_manifest is not None:
-                previous_parity_manifest = load_parity_manifest(
-                    args.previous_parity_manifest
-                )
-                validate_manifest_progression(previous_parity_manifest, parity_manifest)
-            _validate_parity_socket_capability()
-        if parity_manifest is not None and not args.targets and not args.target_pair:
-            target_pairs = tuple(
-                TargetPair(baseline, candidate)
-                for baseline, candidate in parity_manifest.target_pairs
-            )
-        else:
-            target_pairs = _target_pairs(args.targets, args.target_pair)
-        if (
-            parity_manifest is not None
-            and tuple(
-                (pair.baseline_target, pair.candidate_target) for pair in target_pairs
-            )
-            != parity_manifest.target_pairs
-        ):
-            raise MeasurementError(
-                "selected target mapping does not match --parity-manifest"
-            )
+        _resolve_coverage_replay_settings(args)
+        target_pairs = _target_pairs(args.targets, args.target_pair)
         target_labels = tuple(pair.label for pair in target_pairs)
         variants: list[Variant] = []
         if not args.source_only:
@@ -2201,8 +2067,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "and region coordinates are comparable only for identical "
                     "curl sources"
                 )
-            if parity_manifest is not None:
-                validate_source_identity(parity_manifest, source_identities["baseline"])
             llvm_profdata = _resolve_tool(args.llvm_profdata, "llvm-profdata")
             llvm_cov = _resolve_tool(args.llvm_cov, "llvm-cov")
             tool_versions = {
@@ -2220,8 +2084,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         runs: list[dict[str, object]] = []
         corpus_metadata: dict[str, dict[str, object]] = {}
         source_coverage_document: dict[str, object] | None = None
-        parity_result: dict[str, object] | None = None
-        parity_binding_failed = False
         wall_timeout = args.wall_timeout or max(60, args.seconds * 4 + 30)
 
         with tempfile.TemporaryDirectory(prefix="curl-fuzzer-measure-") as raw_temp:
@@ -2389,19 +2251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                             ],
                         }
 
-                baseline_corpora: dict[str, dict[str, object]] | None = None
-                if parity_manifest is not None:
-                    baseline_corpora = {
-                        target: coverage_metadata[("baseline", target)]
-                        for target in parity_manifest.baseline_inventory
-                    }
-                    validate_baseline_corpora(parity_manifest, baseline_corpora)
-
-                (
-                    source_coverage_document,
-                    baseline_aggregate,
-                    candidate_aggregate,
-                ) = _measure_source_coverage(
+                source_coverage_document = _measure_source_coverage(
                     variants=coverage_variants,
                     source_roots=source_roots,
                     source_identities=source_identities,
@@ -2417,47 +2267,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llvm_cov=llvm_cov,
                     tool_versions=tool_versions,
                 )
-                if parity_manifest is not None:
-                    if baseline_corpora is None:
-                        raise MeasurementError(
-                            "baseline corpus identities were not initialized"
-                        )
-                    try:
-                        parity_result = evaluate_parity(
-                            parity_manifest,
-                            source_identity=source_identities["baseline"],
-                            target_pairs=tuple(
-                                (pair.baseline_target, pair.candidate_target)
-                                for pair in target_pairs
-                            ),
-                            baseline_corpora=baseline_corpora,
-                            baseline=CoverageUniverse(
-                                functions=baseline_aggregate.covered_functions,
-                                regions=baseline_aggregate.covered_regions,
-                            ),
-                            candidate=CoverageUniverse(
-                                functions=candidate_aggregate.covered_functions,
-                                regions=candidate_aggregate.covered_regions,
-                            ),
-                        )
-                    except CoverageParityError as error:
-                        parity_binding_failed = True
-                        parity_result = {
-                            "manifest": str(parity_manifest.path),
-                            "manifest_sha256": parity_manifest.sha256,
-                            "immutable_baseline_sha256": (
-                                parity_manifest.immutable_baseline_sha256
-                            ),
-                            "gate_scope": parity_manifest.gate_scope,
-                            "retirement_eligible": (
-                                parity_manifest.retirement_eligible
-                            ),
-                            "status": "invalid",
-                            "error": {
-                                "kind": "binding",
-                                "message": str(error),
-                            },
-                        }
 
         summaries = _summaries(runs, variants, target_labels)
         comparable_counter_labels = (
@@ -2498,7 +2307,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             measurement_scope = "benchmark"
         result_document = {
-            "schema_version": 4,
+            "schema_version": 5,
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "repository_revision": _git_revision(),
             "measurement_scope": measurement_scope,
@@ -2536,29 +2345,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "coverage_replay_sanitizer_environment": dict(
                     COVERAGE_REPLAY_SANITIZER_ENVIRONMENT
                 ),
-                "parity_manifest": (
-                    {
-                        "path": str(parity_manifest.path),
-                        "sha256": parity_manifest.sha256,
-                        "baseline_id": parity_manifest.baseline_id,
-                        "immutable_baseline_sha256": (
-                            parity_manifest.immutable_baseline_sha256
-                        ),
-                        "gate_scope": parity_manifest.gate_scope,
-                        "retirement_eligible": parity_manifest.retirement_eligible,
-                    }
-                    if parity_manifest is not None
-                    else None
-                ),
-                "previous_parity_manifest": (
-                    {
-                        "path": str(previous_parity_manifest.path),
-                        "sha256": previous_parity_manifest.sha256,
-                        "baseline_id": previous_parity_manifest.baseline_id,
-                    }
-                    if previous_parity_manifest is not None
-                    else None
-                ),
             },
             "binaries": binary_metadata,
             "corpora": corpus_metadata,
@@ -2568,8 +2354,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         if source_coverage_document is not None:
             result_document["source_coverage"] = source_coverage_document
-        if parity_result is not None:
-            result_document["parity"] = parity_result
         output.write_text(
             json.dumps(result_document, indent=2) + "\n", encoding="utf-8"
         )
@@ -2583,13 +2367,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"\nJSON: {output}")
         print(f"Logs: {log_root}")
 
-        if parity_binding_failed:
-            print(
-                "function-parity evidence did not bind to the manifest; "
-                "see the JSON result",
-                file=sys.stderr,
-            )
-            return 2
         failures = [run for run in runs if run["status"] != "ok"]
         if failures:
             print(
@@ -2597,16 +2374,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        if parity_result is not None and parity_result.get("status") != "passed":
-            print(
-                "function-parity ratchet failed; see the JSON result",
-                file=sys.stderr,
-            )
-            return 1
         return 0
     except (
         CorpusError,
-        CoverageParityError,
         MeasurementError,
         OSError,
         UnicodeError,
