@@ -52,4 +52,13 @@ void Pop3MockServer::HandleLine(std::string_view line) {
 /// reply that will never arrive.
 void Pop3MockServer::QueueShutdownReply() { (void)WriteControlBytes(kShutdownReply); }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void Pop3MockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  PingpongMockServer::ObserveState();
+  const volatile std::size_t pop3_observation[] = {control_transcript().size(), uploaded_data().size()};
+  (void)pop3_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

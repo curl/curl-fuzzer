@@ -31,6 +31,8 @@ class ProxyOptionMockServer final : public MockServer, public IncomingDataObserv
   explicit ProxyOptionMockServer(curl::fuzzer::proto::ProxySocketOptionMode mode);
   ~ProxyOptionMockServer() override;
 
+  void ObserveState() override;
+
   ProxyOptionMockServer(const ProxyOptionMockServer&) = delete;
   ProxyOptionMockServer& operator=(const ProxyOptionMockServer&) = delete;
 

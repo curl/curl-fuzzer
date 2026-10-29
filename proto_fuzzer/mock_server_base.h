@@ -71,6 +71,8 @@ class MockServerBase {
   MockServerBase(const MockServerBase&) = delete;
   MockServerBase& operator=(const MockServerBase&) = delete;
 
+  virtual void ObserveState();
+
   virtual void Install(CURL* easy);
 
   virtual void ConfigureRequestData(ScenarioRequestData* request_data);

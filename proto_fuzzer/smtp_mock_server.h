@@ -46,6 +46,8 @@ class SmtpMockServer : public PingpongMockServer {
 
   ~SmtpMockServer() override;
 
+  void ObserveState() override;
+
   SmtpMockServer(const SmtpMockServer&) = delete;
   SmtpMockServer& operator=(const SmtpMockServer&) = delete;
 

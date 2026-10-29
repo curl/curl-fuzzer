@@ -1659,4 +1659,14 @@ void Http3MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::prot
   }
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void Http3MockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServerBase::ObserveState();
+  const volatile std::size_t http3_observation[] = {handshake_complete(), request_headers_received(),
+                                                    executed_action_count(), server_port()};
+  (void)http3_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

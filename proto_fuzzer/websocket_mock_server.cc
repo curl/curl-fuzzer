@@ -571,4 +571,13 @@ void WebSocketMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::
   }
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void WebSocketMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServerBase::ObserveState();
+  const volatile std::size_t websocket_observation = manual_received_bytes();
+  (void)websocket_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

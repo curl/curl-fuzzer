@@ -29,6 +29,8 @@ class HttpTransportMockServer final : public MockServer, public IncomingDataObse
   HttpTransportMockServer(curl::fuzzer::proto::HttpTransportMode mode, bool haproxy_protocol);
   ~HttpTransportMockServer() override = default;
 
+  void ObserveState() override;
+
   HttpTransportMockServer(const HttpTransportMockServer&) = delete;
   HttpTransportMockServer& operator=(const HttpTransportMockServer&) = delete;
 

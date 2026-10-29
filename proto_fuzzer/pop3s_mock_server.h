@@ -39,6 +39,8 @@ class Pop3sMockServer final : public Pop3MockServer {
 
   ~Pop3sMockServer() override;
 
+  void ObserveState() override;
+
   Pop3sMockServer(const Pop3sMockServer&) = delete;
   Pop3sMockServer& operator=(const Pop3sMockServer&) = delete;
 

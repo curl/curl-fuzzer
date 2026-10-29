@@ -39,6 +39,8 @@ class ImapsMockServer final : public ImapMockServer {
 
   ~ImapsMockServer() override;
 
+  void ObserveState() override;
+
   ImapsMockServer(const ImapsMockServer&) = delete;
   ImapsMockServer& operator=(const ImapsMockServer&) = delete;
 

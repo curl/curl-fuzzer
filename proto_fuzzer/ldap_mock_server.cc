@@ -820,4 +820,15 @@ void LdapMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto
   scenario_ = nullptr;
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void LdapMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServerBase::ObserveState();
+  const volatile std::size_t ldap_observation[] = {packet_transcript().size(), bind_request_count(),
+                                                   search_request_count(),     scripted_message_count(),
+                                                   synthesized_done_count(),   starttls_request_count()};
+  (void)ldap_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

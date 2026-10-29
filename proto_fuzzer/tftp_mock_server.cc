@@ -337,4 +337,13 @@ void TftpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto
   }
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void TftpMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServerBase::ObserveState();
+  const volatile std::size_t tftp_observation[] = {received_datagrams().size(), request_port(), transfer_port()};
+  (void)tftp_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

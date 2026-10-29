@@ -80,6 +80,11 @@ MockServerBase::MockServerBase(MultiDrivePolicy drive_policy)
 /// instantiated for destruction).
 MockServerBase::~MockServerBase() = default;
 
+/// Default no-op for peers without protocol-specific observations. Overrides
+/// retain bounded state only in coverage and introspector builds; a derived
+/// peer calls its base implementation before observing its own state.
+void MockServerBase::ObserveState() {}
+
 /// @return the owned MockConnection, or nullptr if one has not been opened.
 MockConnection* MockServerBase::connection() { return connection_.get(); }
 

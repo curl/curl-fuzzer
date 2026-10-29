@@ -833,4 +833,14 @@ void FtpMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto:
   scenario_ = nullptr;
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void FtpMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServerBase::ObserveState();
+  const volatile std::size_t ftp_observation[] = {control_transcript().size(), uploaded_data().size(),
+                                                  opened_data_connection_count()};
+  (void)ftp_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

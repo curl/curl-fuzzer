@@ -46,6 +46,8 @@ class FtpMockServer : public MockServerBase, public IncomingDataObserver {
 
   ~FtpMockServer() override;
 
+  void ObserveState() override;
+
   const std::string& control_transcript() const;
 
   const std::string& uploaded_data() const;

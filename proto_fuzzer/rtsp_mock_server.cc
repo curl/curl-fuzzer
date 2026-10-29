@@ -416,4 +416,20 @@ void RtspMockServer::HandleLine(std::string_view line) {
 /// Release the reply after an announced request body was drained exactly.
 void RtspMockServer::HandleBodyComplete() { FinishRequest(); }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void RtspMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  PingpongMockServer::ObserveState();
+  const volatile std::size_t rtsp_observation[] = {request_count(),
+                                                   response_count(),
+                                                   last_client_cseq(),
+                                                   control_transcript().size(),
+                                                   last_request_line().size(),
+                                                   last_stream_uri().size(),
+                                                   client_write_failure_count(),
+                                                   opened_transport_count()};
+  (void)rtsp_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

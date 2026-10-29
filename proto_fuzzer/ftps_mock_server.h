@@ -47,6 +47,8 @@ class FtpsMockServer final : public FtpMockServer {
 
   ~FtpsMockServer() override;
 
+  void ObserveState() override;
+
   FtpsMockServer(const FtpsMockServer&) = delete;
   FtpsMockServer& operator=(const FtpsMockServer&) = delete;
 
