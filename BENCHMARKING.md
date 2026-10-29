@@ -24,7 +24,7 @@ uv run compare_fuzzers \
   --output build/measurements/comparison.json
 ```
 
-The defaults cover the legacy FTP/TFTP targets and the fixed
+The defaults cover the legacy FTP target and the fixed
 structured fast HTTP, deep HTTP, HTTPS, WS, WSS, TELNET, FTP, TFTP, API, and
 timing lanes. The deep HTTP target
 retains stateful authentication, redirect, upload, MIME, and result-probe
@@ -52,8 +52,7 @@ target pair:
 uv run compare_fuzzers \
   --baseline-dir /path/to/legacy/out/curl \
   --candidate-dir /path/to/proto/out/curl \
-  --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp \
-  --target-pair curl_fuzzer_tftp=curl_fuzzer_proto_tftp
+  --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp
 ```
 
 The label in the report is, for example,
@@ -118,7 +117,6 @@ uv run compare_fuzzers \
   --baseline-dir /path/to/baseline-libfuzzer-out \
   --candidate-dir /path/to/candidate-libfuzzer-out \
   --target-pair curl_fuzzer_ftp=curl_fuzzer_proto_ftp \
-  --target-pair curl_fuzzer_tftp=curl_fuzzer_proto_tftp \
   --coverage-baseline-dir /path/to/baseline-worktree/build-coverage \
   --coverage-candidate-dir /path/to/candidate-worktree/build-coverage \
   --seconds 60 \

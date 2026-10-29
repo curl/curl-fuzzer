@@ -2613,7 +2613,8 @@ DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
   scenario.set_host_path(request_ech ? "tls.test/doh-httpsrr-ech"
                                      : "tls.test/doh-httpsrr");
-  scenario.set_doh_https_rr(true);
+  scenario.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
   if (request_ech) {
     auto *ech = scenario.add_options();
     ech->set_option_id(curl::fuzzer::proto::CURLOPT_ECH);
@@ -2653,8 +2654,8 @@ DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
   curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
 
   proto_fuzzer::DohHttpsRrMockServer server(
-      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, false,
-      request_ech);
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL, request_ech);
   server.Install(easy);
   Expect(!server.doh_url().empty(),
          "DoH responder did not publish a loopback URL");
@@ -2713,8 +2714,8 @@ void TestDohMalformedAnswerReachesDecoder() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
   scenario.set_host_path("tls.test/doh-error");
-  scenario.set_resolver_mode(curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
-  scenario.set_doh_https_rr(true);
+  scenario.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS);
 
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
@@ -2726,7 +2727,8 @@ void TestDohMalformedAnswerReachesDecoder() {
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
 
   proto_fuzzer::DohHttpsRrMockServer server(
-      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, true);
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS);
   server.Install(easy.get());
   proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
   server.ConfigureRequestData(&request_data);
@@ -2740,6 +2742,41 @@ void TestDohMalformedAnswerReachesDecoder() {
          "malformed DoH test recorded a valid HTTPS-RR answer");
 }
 
+/// A non-success response from the owned listener must fail at curl's DoH
+/// HTTP-status gate before the empty body reaches its DNS decoder.
+void TestDohHttpStatusErrorPrecedesDecoder() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/doh-http-error");
+  scenario.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR);
+
+  proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
+  Expect(easy != nullptr,
+         "DoH HTTP-error test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to;
+  connect_to.reset(proto_fuzzer::ApplyBaselineOptions(
+      easy.get(), curl::fuzzer::proto::SCHEME_HTTPS));
+  (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
+                         "https://tls.test/doh-http-error");
+  (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
+
+  proto_fuzzer::DohHttpsRrMockServer server(
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR);
+  server.Install(easy.get());
+  proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
+  server.ConfigureRequestData(&request_data);
+
+  const CURLcode result = server.DriveScenario(easy.get(), scenario);
+  Expect(result == CURLE_COULDNT_RESOLVE_HOST,
+         "DoH HTTP error did not fail name resolution");
+  Expect(server.doh_request_count() != 0,
+         "DoH HTTP-error test served no complete probe");
+  Expect(server.httpsrr_answer_count() == 0,
+         "DoH HTTP error recorded a valid HTTPS-RR answer");
+}
+
 /// A partial local-DoH setup must not perform the outer transfer. Otherwise an
 /// unset CURLOPT_DOH_URL silently selects the process's native resolver before
 /// the mock's socket callback gets a chance to confine the connection.
@@ -2747,7 +2784,8 @@ void TestDohHttpsRrSetupFailureDoesNotDriveCurl() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
   scenario.set_host_path("localhost/doh-setup-failure");
-  scenario.set_doh_https_rr(true);
+  scenario.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
 
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
@@ -2804,6 +2842,7 @@ int main() {
   TestDohHttpsRrDelaysEchUntilRecordArrives();
 #endif
   TestDohMalformedAnswerReachesDecoder();
+  TestDohHttpStatusErrorPrecedesDecoder();
   TestDohHttpsRrSetupFailureDoesNotDriveCurl();
 #ifdef CURL_FUZZER_HAS_HTTPSIG
   TestHttpsigAlgorithmsEmitSignatureHeaders();

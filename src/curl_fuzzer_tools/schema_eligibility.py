@@ -823,10 +823,7 @@ def _render_structured_transfer(
 
 _GUARD_FACT_CPP = {
     "SELECTOR_FACT_IMPLICIT_FTPS": "scenario->scheme() == ::curl::fuzzer::proto::SCHEME_FTPS",
-    "SELECTOR_FACT_RESOLVER_USES_DOH": (
-        "scenario->doh_https_rr() || scenario->resolver_mode() == "
-        "::curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR"
-    ),
+    "SELECTOR_FACT_RESOLVER_USES_DOH": "scenario->has_doh()",
     "SELECTOR_FACT_TIMING_WEBSOCKET": (
         "scenario->scheme() == ::curl::fuzzer::proto::SCHEME_WS || "
         "scenario->scheme() == ::curl::fuzzer::proto::SCHEME_WSS"
@@ -845,12 +842,6 @@ _GUARD_FACT_CPP = {
     ),
     "SELECTOR_FACT_RESOLVER_DEFAULT_MODE": (
         "scenario->resolver_mode() == ::curl::fuzzer::proto::RESOLVER_MODE_DEFAULT"
-    ),
-    "SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL": (
-        "scenario->resolver_mode() == "
-        "::curl::fuzzer::proto::RESOLVER_MODE_DEFAULT || "
-        "scenario->resolver_mode() == "
-        "::curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR"
     ),
     "SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY": (
         "scenario->http_transport_mode() == "
@@ -891,7 +882,7 @@ _GUARD_FACT_CPP = {
 # fact has schema inputs; there are no policy-owned exceptions.
 _GUARD_FACT_INPUTS: dict[str, tuple[tuple[str, ...], ...]] = {
     "SELECTOR_FACT_IMPLICIT_FTPS": (("scheme",),),
-    "SELECTOR_FACT_RESOLVER_USES_DOH": (("doh_https_rr",), ("resolver_mode",)),
+    "SELECTOR_FACT_RESOLVER_USES_DOH": (("doh",),),
     "SELECTOR_FACT_TIMING_WEBSOCKET": (("scheme",),),
     "SELECTOR_FACT_HTTP3_CONNECT_UDP_PROXY": (
         ("http3_plan",),
@@ -904,7 +895,6 @@ _GUARD_FACT_INPUTS: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
     "SELECTOR_FACT_IMPLICIT_LDAPS": (("scheme",),),
     "SELECTOR_FACT_RESOLVER_DEFAULT_MODE": (("resolver_mode",),),
-    "SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL": (("resolver_mode",),),
     "SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY": (("http_transport_mode",),),
     "SELECTOR_FACT_DEEP_HTTP_DEFAULT_SOCKET_ROUTE": (("proxy_socket_option_mode",),),
     "SELECTOR_FACT_DEEP_HTTP_REWRITE_FILES_ALLOWED": (

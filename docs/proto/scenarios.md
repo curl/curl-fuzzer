@@ -43,7 +43,7 @@ The main groups of fields are:
   frames, and `http3_plan`.
 - Focused lanes: `api_plan`, `multi_plan` and its closed state-probe profile,
   `resolve_entries`, `happy_eyeballs`,
-  `doh_https_rr`, TLS certificate selection, HTTPS/H2 key-exchange selection,
+  `doh`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential and handshake profiles,
   `pop3_starttls_filter_allocation_failure`, `gopher_probe_mode`,
   `socks_proxy_mode`,
@@ -239,10 +239,12 @@ Other peers intentionally give those fields narrower meanings:
   against a fixed loopback gateway and the in-process HTTP peer. `host_path`
   holds a pinned CID/name followed by the mutation-controlled gateway path,
   query, and fragment; the runner prepends the gateway authority.
-- The resolver lane's `doh_https_rr` flag binds a loopback DoH responder and
-  points `CURLOPT_DOH_URL` at it. The responder answers address and HTTPS
-  queries; its HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer
-  completes through the in-process TLS/ALPN h2 peer using `http2_plan`.
+- The resolver lane's `doh` settings bind a loopback DoH responder and point
+  `CURLOPT_DOH_URL` at it. Normal mode answers address and HTTPS queries; its
+  HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer completes
+  through the in-process TLS/ALPN h2 peer using `http2_plan`. Malformed-DNS
+  mode returns HTTP 200 with a one-byte DNS body, while HTTP-error mode returns
+  a non-success status before curl can decode DNS bytes.
   `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records. A
   paired coverage seed repeats that exact exchange with `trace_config: "all"`;
   tracing is reset at the input boundary and does not become a resolver-lane
@@ -262,12 +264,12 @@ Other peers intentionally give those fields narrower meanings:
   condition wait without using elapsed time as the coverage contract.
   Unix-socket mode passes `/curl-fuzzer-resolver.sock` to curl's address
   builder, but the open-socket callback replaces it with an anonymous peer and
-  never opens that filesystem path. DoH-error mode returns HTTP 200 with a
-  one-byte DNS body and enables silent typed diagnostics, distinguishing DNS
-  decode failures from transport failures without writing per-input logs. The
-  global-lifecycle mode finishes a localhost transfer, calls the public global
-  cleanup entrypoint only after all resolver workers are gone, and reinstalls
-  the harness allocator callbacks before another input runs.
+  never opens that filesystem path. DoH error settings enable silent typed
+  diagnostics, distinguishing DNS decode failures from HTTP failures without
+  writing per-input logs. The global-lifecycle mode finishes a localhost
+  transfer, calls the public global cleanup entrypoint only after all resolver
+  workers are gone, and reinstalls the harness allocator callbacks before
+  another input runs.
 - HTTP/2 origin lanes treat connection bytes as raw HTTP/2 frames after a
   fixed prior-knowledge or TLS/ALPN setup. The HTTPS CONNECT proxy does the
   same when `connection.proxy_protocol` is zero; its explicit HTTP/1 profile

@@ -35,9 +35,11 @@ namespace proto_fuzzer {
 /// build supports HTTP/2.
 class DohHttpsRrMockServer : public H2OriginMockServer {
  public:
-  explicit DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-                                    curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-                                bool malformed_answers = false, bool defer_httpsrr = false);
+  explicit DohHttpsRrMockServer(
+      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
+          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      curl::fuzzer::proto::DohResponseMode response_mode = curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
+      bool defer_httpsrr = false);
   ~DohHttpsRrMockServer() override;
 
   DohHttpsRrMockServer(const DohHttpsRrMockServer&) = delete;
@@ -97,9 +99,8 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   std::size_t doh_request_count_;
   std::size_t httpsrr_answer_count_;
 
-  /// Replace each otherwise-valid DNS body with a bounded malformed message.
-  /// This keeps transport success distinct from DNS parser failure.
-  bool malformed_answers_;
+  /// Fixed HTTP/DNS terminal for every complete request in this drive.
+  curl::fuzzer::proto::DohResponseMode response_mode_;
 
   /// Hold a valid HTTPS answer for one outer drive turn. Address resolution
   /// can then create the TLS filter while ECH's HTTPS-RR lookup is pending.

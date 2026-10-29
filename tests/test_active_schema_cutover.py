@@ -92,6 +92,49 @@ def _compile_generated_schemas(
     )
 
 
+def test_active_schema_uses_doh_settings_cutover(tmp_path: Path) -> None:
+    descriptor_set = descriptor_pb2.FileDescriptorSet.FromString(
+        _active_descriptor(tmp_path)
+    )
+    schema = next(
+        file_proto
+        for file_proto in descriptor_set.file
+        if file_proto.name == "curl_fuzzer.proto"
+    )
+    scenario = next(
+        message for message in schema.message_type if message.name == "Scenario"
+    )
+    assert "doh_https_rr" in scenario.reserved_name
+    assert any(
+        reserved.start <= 29 < reserved.end for reserved in scenario.reserved_range
+    )
+    doh = next(field for field in scenario.field if field.name == "doh")
+    assert doh.number == 43
+    assert doh.type_name == ".curl.fuzzer.proto.DohSettings"
+
+    resolver_mode = next(
+        enum for enum in schema.enum_type if enum.name == "ResolverMode"
+    )
+    assert {
+        "RESOLVER_MODE_DOH_ERROR",
+        "RESOLVER_MODE_DOH_HTTP_ERROR",
+    } <= set(resolver_mode.reserved_name)
+    assert {5, 9} <= {
+        number
+        for reserved in resolver_mode.reserved_range
+        for number in range(reserved.start, reserved.end + 1)
+    }
+
+    response_mode = next(
+        enum for enum in schema.enum_type if enum.name == "DohResponseMode"
+    )
+    assert {value.name: value.number for value in response_mode.value} == {
+        "DOH_RESPONSE_MODE_NORMAL": 0,
+        "DOH_RESPONSE_MODE_MALFORMED_DNS": 1,
+        "DOH_RESPONSE_MODE_HTTP_ERROR": 2,
+    }
+
+
 def test_active_schema_matches_baselines_and_projects_all_profiles(
     tmp_path: Path,
 ) -> None:
@@ -156,10 +199,14 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
     for slug, body in influence["profiles"].items():
         projection = projections[_profile_name(slug)]
         expected_fields = set(body["input_fields"])
-        # Semantic protocol probes, mail recv-buffer pressure, and FILE's
-        # harness-owned anonymous source are deliberate post-cutover changes.
+        # The DoH settings cutover, semantic protocol probes, mail recv-buffer
+        # pressure, and FILE's harness-owned anonymous source are deliberate
+        # post-cutover changes.
         # Keep the historical fixture frozen and spell out only these reviewed
         # deltas here.
+        if slug in {"compatibility", "resolver"}:
+            expected_fields.discard("doh_https_rr")
+            expected_fields.update({"doh", "doh.response_mode"})
         if slug in {"compatibility", "fast_pop3"}:
             expected_fields.add("pop3_starttls_filter_allocation_failure")
         if slug in {"compatibility", "fast_gopher"}:
@@ -212,7 +259,6 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
         "SELECTOR_FACT_H2_PROXY_HTTP2",
         "SELECTOR_FACT_IMPLICIT_LDAPS",
         "SELECTOR_FACT_RESOLVER_DEFAULT_MODE",
-        "SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL",
         "SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY",
         "SELECTOR_FACT_DEEP_HTTP_DEFAULT_SOCKET_ROUTE",
         "SELECTOR_FACT_DEEP_HTTP_REWRITE_FILES_ALLOWED",

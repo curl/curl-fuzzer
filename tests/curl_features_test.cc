@@ -60,8 +60,8 @@ int main() {
     std::fputs("libcurl did not report its linked Brotli version\n", stderr);
     return 1;
   }
-  if (HasNamedFeature(info, "NTLM")) {
-    std::fputs("libcurl was built with deprecated NTLM support\n", stderr);
+  if (HasNamedFeature(info, "gsasl")) {
+    std::fputs("libcurl was built with unexpected GSASL support\n", stderr);
     return 1;
   }
 #if defined(CURL_FUZZER_EXPECT_OPENSSL) || \

@@ -468,10 +468,9 @@ def test_specialized_lanes_are_default_benchmark_targets() -> None:
     }.issubset(compare_fuzzers.DEFAULT_TARGETS)
 
 
-def test_ftp_and_tftp_lanes_keep_legacy_speed_baselines() -> None:
+def test_ftp_lane_keeps_legacy_speed_baseline() -> None:
     assert "curl_fuzzer_ftp" in compare_fuzzers.DEFAULT_TARGETS
     assert "curl_fuzzer_proto_ftp" in compare_fuzzers.DEFAULT_TARGETS
-    assert "curl_fuzzer_tftp" in compare_fuzzers.DEFAULT_TARGETS
     assert "curl_fuzzer_proto_tftp" in compare_fuzzers.DEFAULT_TARGETS
 
 

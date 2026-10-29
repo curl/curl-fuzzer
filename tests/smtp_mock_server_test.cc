@@ -333,21 +333,21 @@ void TestNoUploadCustomExpnCommand() {
          "SMTP no-upload EXPN command unexpectedly entered body mode");
 }
 
-void TestDisabledAuthenticationMechanismIsRejected() {
+void TestUnavailableScramMechanismIsRejected() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_SMTP);
   AddLoginOptions(&scenario);
   AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
-                  "AUTH=NTLM");
+                  "AUTH=SCRAM-SHA-256");
   auto *connection = scenario.mutable_connection();
   connection->set_initial_response("220 smtp.test ESMTP fuzz peer\r\n");
   connection->add_on_readable(
-      "250-smtp.test\r\n250-AUTH NTLM\r\n250 8BITMIME\r\n");
+      "250-smtp.test\r\n250-AUTH SCRAM-SHA-256\r\n250 8BITMIME\r\n");
 
   const SmtpRunResult result =
       RunScenario(scenario, "smtp://smtp.test/unavailable.test");
   Expect(result.code == CURLE_LOGIN_DENIED,
-         "SMTP disabled NTLM mechanism was not rejected");
+         "SMTP unavailable SCRAM mechanism was not rejected");
   ExpectTranscript(result, "EHLO unavailable.test\r\n",
                    "SMTP unavailable-mechanism path issued an unexpected "
                    "AUTH or command");
@@ -366,7 +366,7 @@ int main() {
   TestPlainAuthenticationUsesSaslInitialResponse();
   TestEhloRejectionFallsBackToHelo();
   TestNoUploadCustomExpnCommand();
-  TestDisabledAuthenticationMechanismIsRejected();
+  TestUnavailableScramMechanismIsRejected();
   curl_global_cleanup();
   return 0;
 }
