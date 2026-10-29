@@ -19,6 +19,6 @@ connection {
   on_readable: "226 file complete\r\n"
 }
 subsequent_connections {
-  initial_response: "04-27-26  11:01AM                  5 match.txt\r\n"
+  initial_response: "04-27-26  11:00AM       <DIR>          folder\r\n04-27-26  11:01AM                  5 match.txt\r\n"
 }
 subsequent_connections { initial_response: "match" }

@@ -502,9 +502,7 @@ uint16_t RandomKnownType(Random *random) {
  * structured mutations still exit before exercising the intended protocol.
  */
 const char *DefaultUrl() {
-#if defined(FUZZ_PROTOCOLS_FTP)
-  return "ftp://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_RTMP)
+#if defined(FUZZ_PROTOCOLS_RTMP)
   return "rtmp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_SCP)
   return "scp://127.0.0.1/";
@@ -523,7 +521,7 @@ const char *DefaultUrl() {
  * common state machines farther than an arbitrary byte on first insertion.
  */
 const char *DefaultResponse() {
-#if defined(FUZZ_PROTOCOLS_FTP) || defined(FUZZ_PROTOCOLS_SMTP)
+#if defined(FUZZ_PROTOCOLS_SMTP)
   return "220 fuzz ready\r\n";
 #elif defined(FUZZ_PROTOCOLS_ALL)
   return "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";

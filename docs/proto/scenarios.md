@@ -45,7 +45,8 @@ The main groups of fields are:
   `resolve_entries`, `happy_eyeballs`,
   `doh`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential and handshake profiles,
-  `pop3_starttls_filter_allocation_failure`, `gopher_probe_mode`,
+  `pop3_starttls_filter_allocation_failure`,
+  `ftp_auth_tls_filter_allocation_failure`, `gopher_probe_mode`,
   `mqtt_probe_mode`, `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `proxy_socket_option_mode`,
   `trace_ids`, `probe_multi_pollset`, `resolver_mode`, filename-backed parser
@@ -125,7 +126,10 @@ Other peers intentionally give those fields narrower meanings:
   Its fixed authority is `tls.test`, matching the checked-in trust anchor, and
   the handshakes carry no ALPN extension. Active mode is not available in this
   lane because it would require wrapping a real TCP listener rather than a
-  socketpair; `CURLOPT_FTPPORT` is removed from FTPS inputs.
+  socketpair; `CURLOPT_FTPPORT` is removed from FTPS inputs. The plaintext-only
+  `ftp_auth_tls_filter_allocation_failure` selector accepts AUTH SSL and fails
+  the adjacent TLS-filter allocation without relying on a build-specific
+  allocation ordinal.
 - TFTP preserves packet boundaries: the initial response and each readable
   chunk are separate datagrams.
 - SMTP uses the primary connection as command-aligned replies. The initial

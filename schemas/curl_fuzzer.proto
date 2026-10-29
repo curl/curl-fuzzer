@@ -1068,6 +1068,24 @@ message Scenario {
       }
     }
   ];
+  // Upgrade the plaintext FTP lane with AUTH SSL, then fail the first libcurl
+  // allocation made after the peer accepts the command. Arming at this
+  // protocol boundary keeps the selector stable as earlier setup allocations
+  // change. Implicit FTPS has no AUTH transition and clears the selector;
+  // compatibility preserves the append-only field without interpreting it.
+  bool ftp_auth_tls_filter_allocation_failure = 46 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_FTP
+        guards {
+          fact: SELECTOR_FACT_IMPLICIT_FTPS
+          expected: false
+          profiles: TARGET_PROFILE_FAST_FTP
+        }
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

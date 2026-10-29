@@ -24,6 +24,7 @@
 #include <string>
 #include <string_view>
 
+#include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/mock_server.h"
 #include "proto_fuzzer/scenario_limits.h"
 
@@ -660,9 +661,13 @@ void FtpMockServer::HandleControlCommand(std::string_view command) {
   }
 
   const int response_code = FirstReplyCode(*response);
-  (void)WriteControlBytes(*response);
+  const bool response_written = WriteControlBytes(*response);
 
   const std::string_view verb = CommandVerb(command);
+  if (response_written && scenario_->ftp_auth_tls_filter_allocation_failure() && VerbEquals(verb, "AUTH") &&
+      (response_code == 234 || response_code == 334)) {
+    allocation_fault_injection::ArmNextAllocationFailure();
+  }
   if ((VerbEquals(verb, "EPRT") || VerbEquals(verb, "PORT")) && response_code >= 200 && response_code < 300) {
     ConnectActiveDataChannel();
   }

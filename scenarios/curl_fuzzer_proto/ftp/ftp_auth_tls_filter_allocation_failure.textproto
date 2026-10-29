@@ -1,0 +1,9 @@
+# Accept AUTH SSL, then reject the next libcurl allocation at the protocol
+# boundary where curl installs the TLS connection filter.
+scheme: SCHEME_FTP
+host_path: "ftp.test/explicit-tls"
+ftp_auth_tls_filter_allocation_failure: true
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "234 begin TLS\r\n"
+}

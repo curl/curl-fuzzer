@@ -72,7 +72,7 @@ The Python package requires Python 3.10 or newer. With
 
 ```shell
 uv sync
-uv run read_corpus corpora/curl_fuzzer_ftp/test_url_ftp
+uv run read_corpus corpora/curl_fuzzer/test_file_nobody
 ```
 
 Or use a conventional virtual environment:
@@ -81,7 +81,7 @@ Or use a conventional virtual environment:
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-read_corpus corpora/curl_fuzzer_ftp/test_url_ftp
+read_corpus corpora/curl_fuzzer/test_file_nobody
 ```
 
 Useful commands include:

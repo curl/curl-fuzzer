@@ -61,7 +61,8 @@ FtpRunResult RunScenario(const Scenario &scenario, const char *url) {
   CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "curl_easy_init failed");
   CurlSlistPtr connect_to(proto_fuzzer::ApplyBaselineOptions(
-      easy.get(), curl::fuzzer::proto::SCHEME_FTP));
+      easy.get(), curl::fuzzer::proto::SCHEME_FTP, scenario.trace_ids(),
+      scenario.trace_config()));
   Expect(connect_to != nullptr, "FTP baseline did not create CONNECT_TO state");
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url) == CURLE_OK,
          "FTP URL setup failed");
@@ -148,6 +149,27 @@ void TestAsciiUrlTypeSeedCompletesDataTransfer() {
          "FTP ASCII seed did not issue TYPE A before RETR");
   Expect(result.transcript.find("SIZE ") == std::string::npos,
          "FTP ASCII seed unexpectedly issued SIZE in ASCII mode");
+}
+
+void TestRangeSeedCapsKnownSize() {
+  const std::string path =
+      std::string(PROTO_FUZZER_SCENARIO_DIR) + "/ftp/ftp_epsv_retr.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the FTP range seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastFtpTraits>(text, &scenario),
+         "could not parse the FTP range seed");
+
+  const std::string url = "ftp://" + scenario.host_path();
+  const FtpRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_OK && result.body == "hell",
+         "FTP range seed did not cap its known-size download");
+  Expect(result.transcript.find("SIZE file.bin\r\n") != std::string::npos &&
+             result.transcript.find("RETR file.bin\r\n") != std::string::npos,
+         "FTP range seed did not traverse SIZE before RETR");
 }
 
 void TestEpsvFailureFallsBackToPasv() {
@@ -294,6 +316,7 @@ void AddWildcardListingReplies(Scenario *scenario) {
 void TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch() {
   Scenario scenario;
   scenario.set_probe_multi_pollset(true);
+  scenario.set_trace_ids(true);
   AddWildcardListingReplies(&scenario);
   scenario.add_subsequent_connections()->set_initial_response(
       "lrwxrwxrwx 1 ftp ftp 9 Apr 27 11:01 link.txt -> match.txt\r\n"
@@ -321,10 +344,35 @@ void TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch() {
          "FTP opt-in did not probe a live protocol pollset");
 }
 
+void TestWildcardUnixTotalCrLfIsRejected() {
+  const std::string path =
+      std::string(PROTO_FUZZER_SCENARIO_DIR) +
+      "/ftp/ftp_wildcard_unix_total_crlf_rejected.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the FTP total-header seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastFtpTraits>(text, &scenario),
+         "could not parse the FTP total-header seed");
+
+  const std::string url = "ftp://" + scenario.host_path();
+  const FtpRunResult result = RunScenario(scenario, url.c_str());
+  Expect(result.code == CURLE_FTP_BAD_FILE_LIST,
+         "CRLF UNIX total header did not reach its parser terminal");
+  Expect(result.transcript.find("LIST\r\n") != std::string::npos &&
+             result.transcript.find("RETR ") == std::string::npos,
+         "CRLF UNIX total header escaped the listing phase");
+  Expect(result.data_connections == 1,
+         "CRLF UNIX total header opened an unexpected data connection");
+}
+
 void TestWildcardWindowsListingRetrievesMatch() {
   Scenario scenario;
   AddWildcardListingReplies(&scenario);
   scenario.add_subsequent_connections()->set_initial_response(
+      "04-27-26  11:00AM       <DIR>          folder\r\n"
       "04-27-26  11:01AM                  5 match.txt\r\n");
   scenario.add_subsequent_connections()->set_initial_response("match");
 
@@ -436,12 +484,14 @@ int main() {
   }
   TestEpsvDownloadAndFinalReply();
   TestAsciiUrlTypeSeedCompletesDataTransfer();
+  TestRangeSeedCapsKnownSize();
   TestEpsvFailureFallsBackToPasv();
   TestMalformedEpsvFallsBackToPasv();
   TestMalformed229EpsvIsTerminal();
   TestUploadIsDrainedWithoutLosingControlChannel();
   TestCustomListingCommandReceivesPassiveData();
   TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch();
+  TestWildcardUnixTotalCrLfIsRejected();
   TestWildcardWindowsListingRetrievesMatch();
   TestExplicitEmptyCompletionExposesControlEof();
   TestActiveDownload(true);

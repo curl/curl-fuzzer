@@ -1893,6 +1893,10 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_pop3_starttls_filter_allocation_failure();
   }
 
+  if (profile != TargetProfile::kFastFtp) {
+    scenario->clear_ftp_auth_tls_filter_allocation_failure();
+  }
+
   if (profile != TargetProfile::kFastGopher) {
     scenario->clear_gopher_probe_mode();
   }
@@ -2163,6 +2167,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     const auto scheme = scenario->scheme();
     const bool implicit_tls = scheme == curl::fuzzer::proto::SCHEME_FTPS;
     scenario->set_scheme(implicit_tls ? curl::fuzzer::proto::SCHEME_FTPS : curl::fuzzer::proto::SCHEME_FTP);
+    if (implicit_tls) {
+      scenario->clear_ftp_auth_tls_filter_allocation_failure();
+    }
+    if (scenario->ftp_auth_tls_filter_allocation_failure()) {
+      scenario->clear_fail_allocations();
+    }
     RemoveIgnoredFtpShape(scenario);
     CanonicalizeFtpOptionModes(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);

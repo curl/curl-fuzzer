@@ -3,6 +3,7 @@
 scheme: SCHEME_FTP
 host_path: "ftp.test/pub/*.txt"
 probe_multi_pollset: true
+trace_ids: true
 options { wildcardmatch: true }
 connection {
   initial_response: "220 ready\r\n"
