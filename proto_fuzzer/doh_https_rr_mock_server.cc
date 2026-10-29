@@ -237,17 +237,17 @@ bool BuildDnsResponse(const std::string& query, std::string* response, bool* htt
 /// Construct an idle responder. The listener and proxy bypass are installed
 /// by Install(), after the TLS carrier has prepared the outer peer.
 /// @param certificate_chain Certificate chain served by the outer TLS peer.
-/// @param malformed_answers Whether to truncate synthesized DNS answers.
+/// @param response_mode HTTP/DNS terminal returned for each complete request.
 /// @param defer_httpsrr Whether to defer a valid HTTPS answer by one drive
 ///        turn so ECH reaches the TLS backend while its record is pending.
 DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                                           bool malformed_answers, bool defer_httpsrr)
+                                           curl::fuzzer::proto::DohResponseMode response_mode, bool defer_httpsrr)
     : H2OriginMockServer(certificate_chain),
       easy_(nullptr),
       listener_(-1),
       doh_request_count_(0),
       httpsrr_answer_count_(0),
-      malformed_answers_(malformed_answers),
+      response_mode_(response_mode),
       defer_httpsrr_(defer_httpsrr),
       setup_ok_(false),
       proxy_bypass_active_(false),
@@ -556,7 +556,7 @@ bool DohHttpsRrMockServer::CompleteRequest(DohConnection* connection) {
   if (!BuildDnsResponse(body, &dns, &httpsrr)) {
     dns.clear();
   }
-  if (malformed_answers_) {
+  if (response_mode_ == curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS) {
     // A non-empty, header-short message reaches curl's DoH decode error path
     // after an otherwise successful HTTP exchange. Keeping one byte avoids
     // conflating the parser failure with an empty response body.
@@ -564,10 +564,17 @@ bool DohHttpsRrMockServer::CompleteRequest(DohConnection* connection) {
     httpsrr = false;
   }
 
+  if (response_mode_ == curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR) {
+    dns.clear();
+    httpsrr = false;
+  }
+
   connection->response =
-      "HTTP/1.1 200 DoH\r\n"
-      "Content-Type: application/dns-message\r\n"
-      "Content-Length: " +
+      (response_mode_ == curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR ? "HTTP/1.1 404 DoH\r\n"
+                                                                           : "HTTP/1.1 200 DoH\r\n") +
+      std::string(
+          "Content-Type: application/dns-message\r\n"
+          "Content-Length: ") +
       std::to_string(dns.size()) +
       "\r\n"
       "Connection: close\r\n"

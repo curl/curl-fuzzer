@@ -8,7 +8,9 @@
 # silent per-input trace path. ScopedTraceReset prevents leakage to other inputs.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/doh-httpsrr"
-doh_https_rr: true
+doh {
+  response_mode: DOH_RESPONSE_MODE_NORMAL
+}
 trace_config: "all"
 http2_plan {
   actions {

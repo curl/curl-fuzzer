@@ -3,7 +3,9 @@
 # the native resolver or requiring the outer TLS request to succeed.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/doh-error"
-resolver_mode: RESOLVER_MODE_DOH_ERROR
+doh {
+  response_mode: DOH_RESPONSE_MODE_MALFORMED_DNS
+}
 # Verbose DoH diagnostics are routed through the harness's silent debug
 # callback. This intentionally evaluates curl's typed error formatter without
 # producing per-input log traffic.

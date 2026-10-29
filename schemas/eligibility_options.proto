@@ -56,6 +56,9 @@ enum EmptyOptionPolicy {
 // Closed selector facts may conditionally remove fields after their mutable
 // selectors have been normalized. They never alter a profile's root type.
 enum SelectorFact {
+  reserved 9;
+  reserved "SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL";
+
   SELECTOR_FACT_UNSPECIFIED = 0;
   SELECTOR_FACT_IMPLICIT_FTPS = 1;
   SELECTOR_FACT_RESOLVER_USES_DOH = 2;
@@ -65,7 +68,6 @@ enum SelectorFact {
   SELECTOR_FACT_H2_PROXY_HTTP2 = 6;
   SELECTOR_FACT_IMPLICIT_LDAPS = 7;
   SELECTOR_FACT_RESOLVER_DEFAULT_MODE = 8;
-  SELECTOR_FACT_RESOLVER_ACCEPTS_DOH_CONTROL = 9;
   SELECTOR_FACT_DEEP_HTTP_CONNECT_PROXY = 10;
   SELECTOR_FACT_DEEP_HTTP_DEFAULT_SOCKET_ROUTE = 11;
   SELECTOR_FACT_DEEP_HTTP_REWRITE_FILES_ALLOWED = 12;

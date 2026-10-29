@@ -6,7 +6,9 @@
 # "1st attempt uses h2 from HTTPS-RR" decision.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/doh-httpsrr"
-doh_https_rr: true
+doh {
+  response_mode: DOH_RESPONSE_MODE_NORMAL
+}
 http2_plan {
   actions {
     wait {

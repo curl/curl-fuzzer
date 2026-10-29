@@ -18,7 +18,7 @@ the mutation surface, peer, semantic normalization, and work budget.
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS CONNECT proxy. `connection.proxy_protocol` selects the existing HTTP/2 frame peer or a bounded HTTP/1.1 CONNECT response profile; proxy authentication options remain owned by this lane. |
 | `curl_fuzzer_proto_socks4` | HTTP through an in-process SOCKS4, SOCKS4A, SOCKS5, or SOCKS5-hostname proxy, including scripted SOCKS5 username/password authentication and an optional fixed HAProxy protocol-v1 prefix. The historical basename is retained as the target identity. |
-| `curl_fuzzer_proto_resolver` | Localhost and bounded `CURLOPT_RESOLVE` cache operations; deterministic positive, negative, link-local retry, queued-cancellation/idle-wait, and Unix-socket resolver states; a real loopback happy-eyeballs race; and loopback DoH success or malformed-answer diagnostics. |
+| `curl_fuzzer_proto_resolver` | Localhost and bounded `CURLOPT_RESOLVE` cache operations; deterministic positive, negative, link-local retry, queued-cancellation/idle-wait, and Unix-socket resolver states; a real loopback happy-eyeballs race; and loopback DoH normal, malformed-DNS, or HTTP-error responses. |
 | `curl_fuzzer_proto_ws` | Plaintext WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_wss` | Verified in-process TLS followed by the WebSocket handshake, framing, callbacks, and manual-drive paths. |
 | `curl_fuzzer_proto_telnet` | Bounded TELNET negotiation and callback-backed input against a preloaded local peer. |
@@ -103,11 +103,11 @@ cancels only later queue-owned work, then requires the public `THREADS` trace
 to report the worker idle after release; acquiring that trace state proves the
 worker entered its configured timed wait. The Unix mode gives curl a fixed
 nonexistent pathname, but the open-socket callback still substitutes its
-anonymous socketpair. The DoH error mode serves one-byte DNS messages over the
-same loopback HTTP transport used by the successful HTTPS-RR mode. A dedicated
-localhost seed balances the process-wide curl cleanup and
-allocator-preserving reinitialization lifecycle between inputs, after all
-per-transfer resolver workers have been joined.
+anonymous socketpair. The DoH settings select normal HTTPS-RR answers,
+one-byte malformed DNS messages, or a non-success HTTP status over the same
+loopback transport. A dedicated localhost seed balances the process-wide curl
+cleanup and allocator-preserving reinitialization lifecycle between inputs,
+after all per-transfer resolver workers have been joined.
 
 The fixed SMTP, IMAP, POP3, FTP/FTPS, MQTT/MQTTS, and proxy-transport profiles
 retain `probe_multi_pollset`; deep HTTP retains it only for its CONNECT proxy

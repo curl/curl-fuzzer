@@ -335,25 +335,6 @@ void TestApopAuthenticationAndDenial() {
          "POP3 APOP denial unexpectedly produced a body");
 }
 
-void TestDisabledAuthenticationMechanismIsRejected() {
-  Scenario scenario;
-  scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
-  scenario.set_host_path("pop3.test/1");
-  AddLoginOptions(&scenario);
-  AddStringOption(&scenario, curl::fuzzer::proto::CURLOPT_LOGIN_OPTIONS,
-                  "AUTH=NTLM");
-  auto *connection = scenario.mutable_connection();
-  connection->set_initial_response("+OK pop3.test ready\r\n");
-  connection->add_on_readable("+OK capabilities\r\nSASL NTLM\r\nUSER\r\n.\r\n");
-
-  const Pop3RunResult result = RunScenario(scenario, "pop3://pop3.test/1");
-  Expect(result.code == CURLE_LOGIN_DENIED,
-         "POP3 disabled NTLM mechanism was not rejected");
-  ExpectTranscript(result, "CAPA\r\n",
-                   "POP3 unavailable-mechanism path issued an unexpected "
-                   "AUTH or command");
-}
-
 void TestUnavailableScramMechanismIsRejected() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_POP3);
@@ -475,7 +456,6 @@ int main() {
   TestInvalidCramChallengeFallsBackToPlain();
   TestPlainAuthenticationUsesSaslInitialResponse();
   TestApopAuthenticationAndDenial();
-  TestDisabledAuthenticationMechanismIsRejected();
   TestUnavailableScramMechanismIsRejected();
   TestLongRetrCommandWithReceiveBufferPressure();
   TestRejectedStartTlsDoesNotArmAllocationFailure();

@@ -57,7 +57,6 @@ SOURCE_CHECKOUT = find_source_checkout()
 REPO_ROOT = SOURCE_CHECKOUT or Path.cwd()
 DEFAULT_TARGETS = (
     "curl_fuzzer_ftp",
-    "curl_fuzzer_tftp",
     "curl_fuzzer_proto_http",
     "curl_fuzzer_proto_http_deep",
     "curl_fuzzer_proto_http2",

@@ -85,6 +85,20 @@ void CanonicalizeTlsAuthority(curl::fuzzer::proto::Scenario* scenario) {
   scenario->set_host_path("tls.test" + host_path.substr(suffix_start));
 }
 
+/// Give CONNECT-UDP one fixed IPv6 destination when the input selects a
+/// bracketed authority. The proxy transport remains the owned loopback peer;
+/// only curl's MASQUE URI encoder consumes this destination literal.
+void CanonicalizeHttp3Authority(curl::fuzzer::proto::Scenario* scenario) {
+  const std::string& host_path = scenario->host_path();
+  if (!scenario->http3_plan().use_h1_connect_udp_proxy() || host_path.empty() || host_path.front() != '[') {
+    CanonicalizeTlsAuthority(scenario);
+    return;
+  }
+  const std::size_t suffix_start = host_path.find_first_of("/?#");
+  scenario->set_host_path(std::string("[::1]") +
+                          (suffix_start == std::string::npos ? "/" : host_path.substr(suffix_start)));
+}
+
 /// Alt-Svc lookup cannot run while the harness's wildcard CONNECT_TO route is
 /// active. Give file-backed Alt-Svc inputs one fixed origin whose port can be
 /// populated in curl's DNS cache before that override is safely detached,
@@ -278,13 +292,10 @@ void CanonicalizeResolverAuthority(curl::fuzzer::proto::Scenario* scenario) {
     case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
       host = "localhost";
       break;
-    case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
-      host = "tls.test";
-      break;
     case curl::fuzzer::proto::RESOLVER_MODE_DEFAULT:
     default:
       host =
-          scenario->doh_https_rr()
+          scenario->has_doh()
               ? "tls.test"
               : ((scenario->happy_eyeballs() || !scenario->resolve_entries().empty()) ? "resolve.test" : "localhost");
       break;
@@ -1826,9 +1837,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_http3_plan();
   }
 
-  const bool resolver_uses_doh =
-      profile == TargetProfile::kResolver &&
-      (scenario->doh_https_rr() || scenario->resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  const bool resolver_uses_doh = profile == TargetProfile::kResolver && scenario->has_doh();
   if (profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp2 && !resolver_uses_doh) {
     scenario->clear_http2_plan();
   }
@@ -1868,7 +1877,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   if (profile != TargetProfile::kResolver) {
     scenario->clear_resolve_entries();
     scenario->clear_happy_eyeballs();
-    scenario->clear_doh_https_rr();
+    scenario->clear_doh();
     scenario->clear_resolver_mode();
   }
 
@@ -1926,7 +1935,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       scenario->clear_connection();
     }
     BoundHttp3PlanShape(scenario->mutable_http3_plan());
-    CanonicalizeTlsAuthority(scenario);
+    CanonicalizeHttp3Authority(scenario);
     CanonicalizeTlsCertificateChain(scenario);
     return;
   }
@@ -2038,7 +2047,6 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       case curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE:
       case curl::fuzzer::proto::RESOLVER_MODE_THREADED_LINK_LOCAL:
       case curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET:
-      case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
       case curl::fuzzer::proto::RESOLVER_MODE_THREADED_PARTIAL:
       case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
       case curl::fuzzer::proto::RESOLVER_MODE_THREADED_QUEUED_CANCEL:
@@ -2047,18 +2055,25 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
         scenario->clear_resolver_mode();
         break;
     }
+    if (scenario->has_doh()) {
+      switch (scenario->doh().response_mode()) {
+        case curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL:
+        case curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS:
+        case curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR:
+          break;
+        default:
+          scenario->mutable_doh()->set_response_mode(curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
+          break;
+      }
+    }
     const bool fixed_resolver_mode = scenario->resolver_mode() != curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;
     if (fixed_resolver_mode) {
       scenario->clear_resolve_entries();
       scenario->clear_happy_eyeballs();
+      scenario->clear_doh();
     }
-    if (scenario->resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR) {
-      scenario->set_doh_https_rr(true);
-    } else if (fixed_resolver_mode) {
-      scenario->clear_doh_https_rr();
-    }
-    const bool doh_https_rr = scenario->doh_https_rr();
-    scenario->set_scheme(doh_https_rr ? curl::fuzzer::proto::SCHEME_HTTPS : curl::fuzzer::proto::SCHEME_HTTP);
+    const bool uses_doh = scenario->has_doh();
+    scenario->set_scheme(uses_doh ? curl::fuzzer::proto::SCHEME_HTTPS : curl::fuzzer::proto::SCHEME_HTTP);
     RemoveApiOnlyShape(scenario);
     RemoveMultiOnlyShape(scenario);
     RemoveTelnetOnlyShape(scenario);
@@ -2077,7 +2092,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       // lifecycle contract.
       scenario->set_trace_config("+THREADS");
     }
-    if (doh_https_rr) {
+    if (uses_doh) {
       // CURLOPT_RESOLVE cannot carry an HTTPS record, and the responder owns
       // both the address and HTTPS answers. Clearing the address entries keeps
       // the DoH query on the only path that can reach the ALPN selector.

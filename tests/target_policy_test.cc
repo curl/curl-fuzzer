@@ -672,6 +672,14 @@ void TestFastHttp3ProxyPolicyRetainsStreamScript() {
   Expect(scenario.http3_plan().use_h1_connect_udp_proxy() &&
              scenario.http3_plan().actions_size() == 0,
          "HTTP/3 proxy policy retained direct-peer actions");
+
+  Scenario ipv6;
+  ipv6.set_host_path("[2001:db8::1]:8443/masque?query#fragment");
+  ipv6.mutable_connection()->set_initial_response("proxy response");
+  ipv6.mutable_http3_plan()->set_use_h1_connect_udp_proxy(true);
+  NormalizeScenarioForTarget(&ipv6, TargetProfile::kFastHttp3);
+  Expect(ipv6.host_path() == "[::1]/masque?query#fragment",
+         "HTTP/3 proxy policy did not retain a fixed IPv6 destination");
 }
 
 void TestFastHttp3PolicyBoundsOrderedActions() {
@@ -2103,7 +2111,8 @@ void TestResolverPolicy() {
 
   Scenario doh;
   doh.set_host_path("untrusted.invalid/doh");
-  doh.set_doh_https_rr(true);
+  doh.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
   doh.add_resolve_entries("example.test:443:127.0.0.1");
   doh.set_happy_eyeballs(true);
   doh.mutable_http2_plan();
@@ -2116,19 +2125,30 @@ void TestResolverPolicy() {
          "DoH resolver policy retained contradictory address-resolution state");
   Expect(doh.has_http2_plan(),
          "DoH resolver policy discarded the selected ALPN h2 response plan");
+
+  Scenario invalid_doh;
+  invalid_doh.mutable_doh()->set_response_mode(
+      static_cast<curl::fuzzer::proto::DohResponseMode>(99));
+  NormalizeScenarioForTarget(&invalid_doh, TargetProfile::kResolver);
+  Expect(invalid_doh.has_doh() &&
+             invalid_doh.doh().response_mode() ==
+                 curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
+         "DoH resolver policy did not canonicalize an unknown response mode");
+
   Scenario threaded;
   threaded.set_host_path("untrusted.invalid/threaded");
   threaded.set_resolver_mode(
       curl::fuzzer::proto::RESOLVER_MODE_THREADED_POSITIVE);
   threaded.add_resolve_entries("*:80:203.0.113.1");
   threaded.set_happy_eyeballs(true);
-  threaded.set_doh_https_rr(true);
+  threaded.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR);
   NormalizeScenarioForTarget(&threaded, TargetProfile::kResolver);
   Expect(threaded.scheme() == SCHEME_HTTP &&
              threaded.host_path() == "resolver-positive.test/threaded",
          "threaded resolver policy did not select its fixed authority");
   Expect(threaded.resolve_entries_size() == 0 && !threaded.happy_eyeballs() &&
-             !threaded.doh_https_rr(),
+             !threaded.has_doh(),
          "threaded resolver policy retained a bypassing resolver source");
   Expect(
       threaded.connection().backpressure().drain_limit() == 1,
@@ -2175,7 +2195,8 @@ void TestResolverPolicy() {
 
   Scenario doh_error;
   doh_error.set_host_path("untrusted.invalid/doh-error");
-  doh_error.set_resolver_mode(curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR);
+  doh_error.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS);
   doh_error.mutable_http2_plan()
       ->add_actions()
       ->mutable_headers()
@@ -2183,9 +2204,28 @@ void TestResolverPolicy() {
   NormalizeScenarioForTarget(&doh_error, TargetProfile::kResolver);
   Expect(doh_error.scheme() == SCHEME_HTTPS &&
              doh_error.host_path() == "tls.test/doh-error" &&
-             doh_error.doh_https_rr() && doh_error.has_http2_plan() &&
+             doh_error.has_doh() &&
+             doh_error.doh().response_mode() ==
+                 curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS &&
+             doh_error.has_http2_plan() &&
              doh_error.http2_plan().actions_size() == 1,
          "DoH error policy did not retain the confined DoH transport");
+
+  Scenario doh_http_error;
+  doh_http_error.set_host_path("untrusted.invalid/doh-http-error");
+  doh_http_error.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR);
+  doh_http_error.mutable_http2_plan()->add_actions()->mutable_wait()->set_count(
+      1);
+  NormalizeScenarioForTarget(&doh_http_error, TargetProfile::kResolver);
+  Expect(doh_http_error.scheme() == SCHEME_HTTPS &&
+             doh_http_error.host_path() == "tls.test/doh-http-error" &&
+             doh_http_error.has_doh() &&
+             doh_http_error.doh().response_mode() ==
+                 curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR &&
+             doh_http_error.has_http2_plan() &&
+             doh_http_error.http2_plan().actions_size() == 1,
+         "DoH HTTP error policy did not retain the confined DoH transport");
 
   Scenario global_lifecycle;
   global_lifecycle.set_host_path("untrusted.invalid/global");
@@ -2199,7 +2239,8 @@ void TestResolverPolicy() {
   Scenario ordinary;
   ordinary.add_resolve_entries("example.test:80:127.0.0.1");
   ordinary.set_happy_eyeballs(true);
-  ordinary.set_doh_https_rr(true);
+  ordinary.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
   ordinary.set_resolver_mode(
       curl::fuzzer::proto::RESOLVER_MODE_THREADED_NEGATIVE);
   NormalizeScenarioForTarget(&ordinary, TargetProfile::kFastHttp);
@@ -2207,7 +2248,7 @@ void TestResolverPolicy() {
          "non-resolver policy retained structured DNS work");
   Expect(!ordinary.happy_eyeballs(),
          "non-resolver policy retained happy-eyeballs state");
-  Expect(!ordinary.doh_https_rr(),
+  Expect(!ordinary.has_doh(),
          "non-resolver policy retained the DoH responder selector");
   Expect(ordinary.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DEFAULT,
          "non-resolver policy retained the target-local resolver selector");

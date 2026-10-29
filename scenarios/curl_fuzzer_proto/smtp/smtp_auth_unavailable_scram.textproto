@@ -1,0 +1,11 @@
+# Advertise SCRAM without the optional GSASL implementation used by curl's
+# build. Curl reports the selected mechanism as unavailable before AUTH.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/unavailable.test"
+options { username: "fuzz" }
+options { password: "secret" }
+options { login_options: "AUTH=SCRAM-SHA-256" }
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250-smtp.test\r\n250-AUTH SCRAM-SHA-256\r\n250 8BITMIME\r\n"
+}

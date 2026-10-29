@@ -140,7 +140,6 @@ bool ApplyResolverMode(CURL* easy, curl::fuzzer::proto::ResolverMode mode) {
     case curl::fuzzer::proto::RESOLVER_MODE_UNIX_SOCKET:
       return curl_easy_setopt(easy, CURLOPT_UNIX_SOCKET_PATH, kResolverUnixSocketPath) == CURLE_OK;
     case curl::fuzzer::proto::RESOLVER_MODE_DEFAULT:
-    case curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR:
     case curl::fuzzer::proto::RESOLVER_MODE_GLOBAL_LIFECYCLE:
     default:
       return true;
@@ -442,14 +441,13 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     }
   }
 
-  if (mode == ScenarioRunMode::kResolverCoverage && scenario.doh_https_rr()) {
+  if (mode == ScenarioRunMode::kResolverCoverage && scenario.has_doh()) {
     // The DoH responder answers both the address and HTTPS resource-record
     // queries; its TLS/ALPN h2 carrier then completes the outer HTTPS
     // transfer selected from the record.
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-    return std::make_unique<DohHttpsRrMockServer>(
-        scenario.tls_certificate_chain(), scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DOH_ERROR,
-        EchNeedsPendingHttpsRr(scenario));
+    return std::make_unique<DohHttpsRrMockServer>(scenario.tls_certificate_chain(), scenario.doh().response_mode(),
+                                                  EchNeedsPendingHttpsRr(scenario));
 #else
     // MemorySanitizer builds deliberately omit OpenSSL, so no verified TLS
     // peer exists for the HTTPS-RR lane. Keep the target available while
@@ -929,7 +927,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   // The DoH lane lets the loopback responder answer every lookup, including
   // the address query, so it must not install the resolver lane's fixed
   // CURLOPT_RESOLVE cache entries.
-  const bool apply_resolve_entries = mode == ScenarioRunMode::kResolverCoverage && !scenario.doh_https_rr() &&
+  const bool apply_resolve_entries = mode == ScenarioRunMode::kResolverCoverage && !scenario.has_doh() &&
                                      scenario.resolver_mode() == curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;
   ScenarioRequestData* request_data = transfer.InstallRequestData(scenario, apply_resolve_entries);
   if (mode == ScenarioRunMode::kResolverCoverage && !request_data->resolve_entries_ready()) {

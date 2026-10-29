@@ -509,11 +509,9 @@ set(CURL_COMMON_CMAKE_ARGS
     -DCURL_DISABLE_FTP=OFF
     -DCURL_DISABLE_TFTP=OFF
     -DCURL_DISABLE_GOPHER=OFF
-    # SMB and NTLM are deprecated upstream and no longer fuzzed here. Keep
-    # them disabled explicitly so curl default changes cannot restore either
-    # surface to the aggregate legacy fuzzer.
-    -DCURL_ENABLE_SMB=OFF
-    -DCURL_ENABLE_NTLM=OFF
+    # Keep SCRAM recognized but unavailable so the SMTP and POP3 scenarios
+    # exercise curl's blocked-SASL path deterministically.
+    -DCURL_USE_GSASL=OFF
     # Keep the HTTPS resource-record parser available in every sanitizer
     # configuration, including MSan where this project deliberately omits a
     # TLS backend. ECH consumes these records when TLS is present, while the
@@ -1349,7 +1347,6 @@ curl_add_fuzzer(curl_fuzzer_ftp       FTP)
 curl_add_fuzzer(curl_fuzzer_mqtt      MQTT)
 curl_add_fuzzer(curl_fuzzer_rtsp      RTSP)
 curl_add_fuzzer(curl_fuzzer_smtp      SMTP)
-curl_add_fuzzer(curl_fuzzer_tftp      TFTP)
 
 # Deterministic profiling probes share one target rather than adding lanes
 # that compete with the existing fuzzers. The packaging inventory omits this
@@ -1576,7 +1573,6 @@ add_custom_target(fuzz
         curl_fuzzer_mqtt
         curl_fuzzer_rtsp
         curl_fuzzer_smtp
-        curl_fuzzer_tftp
         fuzz_bufq
         fuzz_url
         fuzz_doh

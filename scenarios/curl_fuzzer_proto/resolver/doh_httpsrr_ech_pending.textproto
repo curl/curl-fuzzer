@@ -4,7 +4,9 @@
 # record as pending before the same in-process HTTP/2 exchange completes.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/doh-httpsrr-ech-pending"
-doh_https_rr: true
+doh {
+  response_mode: DOH_RESPONSE_MODE_NORMAL
+}
 trace_config: "all"
 options {
   ech: "true"

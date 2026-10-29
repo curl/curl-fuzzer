@@ -1,0 +1,9 @@
+# Drive curl's CONNECT-UDP MASQUE path with a bracketed IPv6 destination. The
+# target policy fixes the literal to ::1 while the HTTP proxy remains the owned
+# in-process stream peer.
+scheme: SCHEME_HTTPS
+host_path: "[2001:db8::1]/capsule"
+connection {
+  initial_response: "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: connect-udp\r\nCapsule-Protocol: ?1\r\n\r\n\000\300\000\000\000\000\000\000\002\000\377"
+}
+http3_plan { use_h1_connect_udp_proxy: true }

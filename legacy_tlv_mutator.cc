@@ -516,8 +516,6 @@ const char *DefaultUrl() {
   return "sftp://127.0.0.1/";
 #elif defined(FUZZ_PROTOCOLS_SMTP)
   return "smtp://127.0.0.1/";
-#elif defined(FUZZ_PROTOCOLS_TFTP)
-  return "tftp://127.0.0.1/file";
 #else
   return "http://127.0.0.1/";
 #endif

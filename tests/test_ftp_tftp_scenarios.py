@@ -227,11 +227,11 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "upload:" not in expn
     assert "250 member@example.test" in expn
 
-    unavailable = (smtp_root / "smtp_auth_unavailable_ntlm.textproto").read_text(
+    unavailable = (smtp_root / "smtp_auth_unavailable_scram.textproto").read_text(
         encoding="utf-8"
     )
-    assert 'login_options: "AUTH=NTLM"' in unavailable
-    assert "250-AUTH NTLM" in unavailable
+    assert 'login_options: "AUTH=SCRAM-SHA-256"' in unavailable
+    assert "250-AUTH SCRAM-SHA-256" in unavailable
     assert "235" not in unavailable
 
 
@@ -420,13 +420,6 @@ def test_imap_and_pop3_seeds_keep_command_and_literal_order() -> None:
     apop_denied = (pop3_root / "pop3_apop_denied.textproto").read_text(encoding="utf-8")
     assert 'login_options: "AUTH=+APOP"' in apop_denied
     assert "-ERR invalid digest" in apop_denied
-
-    unavailable = (pop3_root / "pop3_auth_unavailable_ntlm.textproto").read_text(
-        encoding="utf-8"
-    )
-    assert 'login_options: "AUTH=NTLM"' in unavailable
-    assert "SASL NTLM" in unavailable
-    assert "+OK authentication succeeded" not in unavailable
 
     unavailable_scram = (pop3_root / "pop3_auth_unavailable_scram.textproto").read_text(
         encoding="utf-8"
