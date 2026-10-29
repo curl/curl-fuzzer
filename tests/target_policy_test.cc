@@ -1549,6 +1549,48 @@ void TestFastMqttsPolicy() {
          "fast MQTT lane removed the MQTTS CONNACK");
 }
 
+void TestFastMqttProbePolicy() {
+  Scenario send = ScenarioWithBackpressure(SCHEME_MQTTS, 4096, 17);
+  send.set_mqtt_probe_mode(curl::fuzzer::proto::MQTT_PROBE_SEND_BACKPRESSURE);
+  send.set_host_path("untrusted.invalid/sensors/pressure");
+
+  NormalizeScenarioForTarget(&send, TargetProfile::kFastMqtt);
+
+  Expect(send.scheme() == SCHEME_MQTT,
+         "MQTT send probe did not force its plaintext peer");
+  Expect(send.mqtt_probe_mode() ==
+             curl::fuzzer::proto::MQTT_PROBE_SEND_BACKPRESSURE,
+         "fast MQTT policy removed the send probe selector");
+  Expect(send.probe_multi_pollset(),
+         "MQTT send probe did not enable live pollset coverage");
+  Expect(send.connection().backpressure().recv_buf_bytes() == 2048 &&
+             send.connection().backpressure().drain_limit() == 1024,
+         "MQTT send probe did not install fixed socket pressure");
+  Expect(send.host_path() == "mqtt.test/sensors/pressure",
+         "MQTT send probe did not canonicalize its plaintext authority");
+
+  for (const auto probe : {
+           curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_USERNAME,
+           curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_PASSWORD,
+       }) {
+    Scenario credential = ScenarioWithBackpressure(SCHEME_MQTTS, 4096, 17);
+    credential.set_mqtt_probe_mode(probe);
+    NormalizeScenarioForTarget(&credential, TargetProfile::kFastMqtt);
+    Expect(credential.scheme() == SCHEME_MQTT &&
+               credential.mqtt_probe_mode() == probe,
+           "MQTT credential probe did not retain its closed selector");
+    Expect(!credential.connection().has_backpressure(),
+           "MQTT credential probe retained unrelated timing work");
+  }
+
+  Scenario unknown;
+  unknown.set_mqtt_probe_mode(
+      static_cast<curl::fuzzer::proto::MqttProbeMode>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastMqtt);
+  Expect(unknown.mqtt_probe_mode() == curl::fuzzer::proto::MQTT_PROBE_DEFAULT,
+         "fast MQTT policy retained an unknown probe selector");
+}
+
 void TestNonMqttPoliciesClearMqttScheme() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp, TargetProfile::kDeepHttp,
@@ -1560,11 +1602,16 @@ void TestNonMqttPoliciesClearMqttScheme() {
     Scenario scenario;
     scenario.set_host_path("mqtt.test/topic");
     scenario.set_scheme(SCHEME_MQTT);
+    scenario.set_mqtt_probe_mode(
+        curl::fuzzer::proto::MQTT_PROBE_OVERSIZED_USERNAME);
 
     NormalizeScenarioForTarget(&scenario, profile);
 
     Expect(scenario.scheme() != SCHEME_MQTT,
            "a non-MQTT policy retained the MQTT scheme");
+    Expect(scenario.mqtt_probe_mode() ==
+               curl::fuzzer::proto::MQTT_PROBE_DEFAULT,
+           "a non-MQTT policy retained the MQTT probe selector");
   }
 
   Scenario compatibility;
@@ -3734,6 +3781,7 @@ int main() {
   TestFastPop3Policy();
   TestFastMqttPolicy();
   TestFastMqttsPolicy();
+  TestFastMqttProbePolicy();
   TestNonMqttPoliciesClearMqttScheme();
   TestFastDictPolicy();
   TestNonDictPoliciesClearDictScheme();

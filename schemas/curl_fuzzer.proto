@@ -1055,6 +1055,19 @@ message Scenario {
       }
     }
   ];
+  // Select one closed MQTT send or credential-size probe. The send probe uses
+  // only harness-owned socket pressure and a fixed publish body; credential
+  // probes use fixed values one byte beyond MQTT's 16-bit string limit.
+  // Other fixed lanes clear the selector, while compatibility preserves the
+  // append-only field without interpreting it.
+  MqttProbeMode mqtt_probe_mode = 45 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_MQTT
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1108,6 +1121,15 @@ enum RtspProbeMode {
   RTSP_PROBE_DEFAULT = 0;
   RTSP_PROBE_CROSS_ORIGIN_REUSE = 1;
   RTSP_PROBE_SPLIT_INVALID_RTP_WRITE_FAILURE = 2;
+}
+
+// Bounded, harness-owned probes for MQTT's queued send tail and 16-bit
+// CONNECT credential lengths.
+enum MqttProbeMode {
+  MQTT_PROBE_DEFAULT = 0;
+  MQTT_PROBE_SEND_BACKPRESSURE = 1;
+  MQTT_PROBE_OVERSIZED_USERNAME = 2;
+  MQTT_PROBE_OVERSIZED_PASSWORD = 3;
 }
 
 enum SocksProxyMode {

@@ -1,0 +1,8 @@
+# Publish a fixed harness-owned body through a deliberately small socket. The
+# peer drains it incrementally so curl must retain and flush the queued tail.
+scheme: SCHEME_MQTT
+host_path: "mqtt.test/sensors/pressure"
+mqtt_probe_mode: MQTT_PROBE_SEND_BACKPRESSURE
+connection {
+  initial_response: "\040\002\000\000"
+}

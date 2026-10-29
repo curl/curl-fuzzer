@@ -46,7 +46,7 @@ The main groups of fields are:
   `doh`, TLS certificate selection, HTTPS/H2 key-exchange selection,
   bounded HTTPS client-credential and handshake profiles,
   `pop3_starttls_filter_allocation_failure`, `gopher_probe_mode`,
-  `socks_proxy_mode`,
+  `mqtt_probe_mode`, `socks_proxy_mode`,
   `haproxy_protocol`, `http_transport_mode`, `proxy_socket_option_mode`,
   `trace_ids`, `probe_multi_pollset`, `resolver_mode`, filename-backed parser
   inputs, and
@@ -184,7 +184,10 @@ Other peers intentionally give those fields narrower meanings:
   `CURLOPT_POSTFIELDS` supplies the publish payload. An `SCHEME_MQTTS` scenario
   runs the identical packet exchange over implicit TLS; its fixed authority is
   `tls.test`, matching the checked-in trust anchor, and the handshake carries
-  no ALPN extension.
+  no ALPN extension. Its closed probe selector can publish a fixed 16 KiB body
+  through a small, incrementally drained socket or install a fixed 65,536-byte
+  username or password. This reaches queued-send and 16-bit credential-limit
+  handling without placing oversized values in the protobuf corpus.
 - DICT uses the primary connection for one request/response exchange. curl
   writes a `CLIENT` identification line, a command derived from the URL path
   (`DEFINE` from `/d:word`, `MATCH` from `/match:word:db`, `SHOW` from

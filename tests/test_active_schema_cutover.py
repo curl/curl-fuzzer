@@ -211,6 +211,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.add("pop3_starttls_filter_allocation_failure")
         if slug in {"compatibility", "fast_gopher"}:
             expected_fields.add("gopher_probe_mode")
+        if slug in {"compatibility", "fast_mqtt"}:
+            expected_fields.add("mqtt_probe_mode")
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
         if slug in {"compatibility", "fast_rtsp"}:
@@ -302,6 +304,13 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert gopher_probe.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_GOPHER",
+    }
+
+    mqtt_probe = model.fields["curl.fuzzer.proto.Scenario.mqtt_probe_mode"]
+    assert mqtt_probe.number == 45
+    assert mqtt_probe.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_MQTT",
     }
 
     h2_flush_probe = model.fields[

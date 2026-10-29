@@ -1,0 +1,8 @@
+# Replace the ordinary bounded username with a fixed 65,536-byte value at
+# runtime, one byte beyond MQTT's 16-bit string-length limit.
+scheme: SCHEME_MQTT
+host_path: "mqtt.test/sensors/credentials"
+mqtt_probe_mode: MQTT_PROBE_OVERSIZED_USERNAME
+connection {
+  initial_response: "\040\002\000\000"
+}

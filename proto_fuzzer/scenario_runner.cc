@@ -560,7 +560,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
       // reinterpret an append-only scheme value that historical corpus
       // inputs could carry.
       if (mode == ScenarioRunMode::kMqttCoverage) {
-        return std::make_unique<MqttMockServer>();
+        return std::make_unique<MqttMockServer>(scenario.mqtt_probe_mode());
       }
       return nullptr;
     case curl::fuzzer::proto::SCHEME_DICT:
