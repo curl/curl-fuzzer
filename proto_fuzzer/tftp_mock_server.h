@@ -62,6 +62,8 @@ class TftpMockServer final : public MockServerBase {
   TftpMockServer();
   ~TftpMockServer() override;
 
+  void ObserveState() override;
+
   TftpMockServer(const TftpMockServer&) = delete;
   TftpMockServer& operator=(const TftpMockServer&) = delete;
 

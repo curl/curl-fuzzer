@@ -30,6 +30,8 @@ class ProxyTransportMockServer final : public MockServer, public IncomingDataObs
   ProxyTransportMockServer(curl::fuzzer::proto::SocksProxyMode mode, bool haproxy_protocol);
   ~ProxyTransportMockServer() override = default;
 
+  void ObserveState() override;
+
   ProxyTransportMockServer(const ProxyTransportMockServer&) = delete;
   ProxyTransportMockServer& operator=(const ProxyTransportMockServer&) = delete;
 

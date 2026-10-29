@@ -40,6 +40,8 @@ class Pop3MockServer : public PingpongMockServer {
 
   ~Pop3MockServer() override;
 
+  void ObserveState() override;
+
   Pop3MockServer(const Pop3MockServer&) = delete;
   Pop3MockServer& operator=(const Pop3MockServer&) = delete;
 

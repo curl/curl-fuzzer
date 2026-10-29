@@ -237,4 +237,13 @@ void SmtpMockServer::QueueShutdownReply() {
   }
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void SmtpMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  PingpongMockServer::ObserveState();
+  const volatile std::size_t smtp_observation[] = {control_transcript().size(), uploaded_data().size()};
+  (void)smtp_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

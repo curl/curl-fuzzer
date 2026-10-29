@@ -100,4 +100,13 @@ void HttpTransportMockServer::ObserveIncomingData(const unsigned char* data, std
   client_transcript_.append(reinterpret_cast<const char*>(data), std::min(size, remaining));
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void HttpTransportMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServer::ObserveState();
+  const volatile std::size_t transport_observation = client_transcript().size();
+  (void)transport_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

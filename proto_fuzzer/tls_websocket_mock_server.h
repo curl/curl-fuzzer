@@ -29,6 +29,8 @@ class TlsWebSocketMockServer final : public WebSocketMockServer {
                                       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC);
   ~TlsWebSocketMockServer() override;
 
+  void ObserveState() override;
+
   TlsWebSocketMockServer(const TlsWebSocketMockServer&) = delete;
   TlsWebSocketMockServer& operator=(const TlsWebSocketMockServer&) = delete;
 

@@ -39,6 +39,8 @@ class SmtpsMockServer final : public SmtpMockServer {
 
   ~SmtpsMockServer() override;
 
+  void ObserveState() override;
+
   SmtpsMockServer(const SmtpsMockServer&) = delete;
   SmtpsMockServer& operator=(const SmtpsMockServer&) = delete;
 

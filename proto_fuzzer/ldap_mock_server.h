@@ -75,6 +75,8 @@ class LdapMockServer : public MockServerBase, public IncomingDataObserver {
 
   ~LdapMockServer() override;
 
+  void ObserveState() override;
+
   LdapMockServer(const LdapMockServer&) = delete;
   LdapMockServer& operator=(const LdapMockServer&) = delete;
 

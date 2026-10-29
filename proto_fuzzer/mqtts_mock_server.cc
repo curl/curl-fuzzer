@@ -50,4 +50,15 @@ std::size_t MqttsMockServer::completed_handshake_count() const { return transpor
 /// @return ALPN protocol selected by curl, or an empty string when absent.
 std::string MqttsMockServer::negotiated_alpn() const { return transport_.negotiated_alpn(); }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void MqttsMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MqttMockServer::ObserveState();
+  const volatile std::size_t mqtts_observation[] = {completed_handshake_count(),
+                                                    static_cast<std::size_t>(negotiated_tls_version()),
+                                                    negotiated_alpn().size(), packet_count()};
+  (void)mqtts_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

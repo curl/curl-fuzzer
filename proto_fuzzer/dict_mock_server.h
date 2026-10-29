@@ -36,6 +36,8 @@ class DictMockServer : public PingpongMockServer {
 
   ~DictMockServer() override;
 
+  void ObserveState() override;
+
   DictMockServer(const DictMockServer&) = delete;
   DictMockServer& operator=(const DictMockServer&) = delete;
 

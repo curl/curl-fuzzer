@@ -60,6 +60,8 @@ class MqttMockServer : public MockServerBase, public IncomingDataObserver {
 
   ~MqttMockServer() override;
 
+  void ObserveState() override;
+
   MqttMockServer(const MqttMockServer&) = delete;
   MqttMockServer& operator=(const MqttMockServer&) = delete;
 

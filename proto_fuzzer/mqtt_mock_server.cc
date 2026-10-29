@@ -501,4 +501,14 @@ void MqttMockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto
   scenario_ = nullptr;
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void MqttMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServerBase::ObserveState();
+  const volatile std::size_t mqtt_observation[] = {packet_transcript().size(), packet_count(), publish_count(),
+                                                   subscribe_count(), published_payload().size()};
+  (void)mqtt_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

@@ -39,6 +39,8 @@ class MqttsMockServer final : public MqttMockServer {
 
   ~MqttsMockServer() override;
 
+  void ObserveState() override;
+
   MqttsMockServer(const MqttsMockServer&) = delete;
   MqttsMockServer& operator=(const MqttsMockServer&) = delete;
 

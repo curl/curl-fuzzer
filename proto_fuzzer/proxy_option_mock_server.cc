@@ -158,4 +158,13 @@ void InterfaceOptionMockServer::Install(CURL* easy) {
   (void)curl_easy_setopt(easy, CURLOPT_TCP_KEEPCNT, 1L);
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void ProxyOptionMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServer::ObserveState();
+  const volatile std::size_t option_observation = client_transcript().size();
+  (void)option_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

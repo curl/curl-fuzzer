@@ -37,6 +37,8 @@ class WebSocketMockServer : public MockServerBase, public IncomingDataObserver {
   WebSocketMockServer();
   ~WebSocketMockServer() override;
 
+  void ObserveState() override;
+
   void Install(CURL* easy) override;
 
   void SetFrames(std::vector<std::string> frames);

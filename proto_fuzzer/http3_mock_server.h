@@ -39,6 +39,8 @@ class Http3MockServer final : public MockServerBase {
 
   ~Http3MockServer() override;
 
+  void ObserveState() override;
+
   Http3MockServer(const Http3MockServer&) = delete;
   Http3MockServer& operator=(const Http3MockServer&) = delete;
 

@@ -165,4 +165,13 @@ void DictMockServer::HandleLine(std::string_view line) {
   FinishResponse();
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void DictMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  PingpongMockServer::ObserveState();
+  const volatile std::size_t dict_observation[] = {control_transcript().size(), uploaded_data().size()};
+  (void)dict_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

@@ -47,6 +47,8 @@ class RtspMockServer : public PingpongMockServer {
 
   ~RtspMockServer() override;
 
+  void ObserveState() override;
+
   RtspMockServer(const RtspMockServer&) = delete;
   RtspMockServer& operator=(const RtspMockServer&) = delete;
 

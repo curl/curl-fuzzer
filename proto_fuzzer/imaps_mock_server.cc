@@ -50,4 +50,14 @@ std::size_t ImapsMockServer::completed_handshake_count() const { return transpor
 /// @return ALPN protocol selected by curl, or an empty string when absent.
 std::string ImapsMockServer::negotiated_alpn() const { return transport_.negotiated_alpn(); }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void ImapsMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  ImapMockServer::ObserveState();
+  const volatile std::size_t imaps_observation[] = {
+      completed_handshake_count(), static_cast<std::size_t>(negotiated_tls_version()), negotiated_alpn().size()};
+  (void)imaps_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

@@ -52,4 +52,13 @@ void TlsWebSocketMockServer::FlushTransport() {
 /// @return Number of TLS handshakes completed by this peer.
 std::size_t TlsWebSocketMockServer::completed_handshake_count() const { return transport_.completed_handshake_count(); }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void TlsWebSocketMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  WebSocketMockServer::ObserveState();
+  const volatile std::size_t tls_websocket_observation = completed_handshake_count();
+  (void)tls_websocket_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

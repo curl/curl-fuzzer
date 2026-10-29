@@ -113,4 +113,13 @@ void ProxyTransportMockServer::ObserveIncomingData(const unsigned char* data, st
   client_transcript_.append(reinterpret_cast<const char*>(data), std::min(size, remaining));
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void ProxyTransportMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  MockServer::ObserveState();
+  const volatile std::size_t proxy_observation = client_transcript().size();
+  (void)proxy_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer

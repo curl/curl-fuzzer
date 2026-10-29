@@ -341,4 +341,13 @@ void ImapMockServer::QueueShutdownReply() {
   }
 }
 
+/// Retain protocol outcomes in coverage and introspector builds.
+void ImapMockServer::ObserveState() {
+#if defined(PROTO_FUZZER_OBSERVE_STATE)
+  PingpongMockServer::ObserveState();
+  const volatile std::size_t imap_observation[] = {control_transcript().size(), uploaded_data().size()};
+  (void)imap_observation;
+#endif
+}
+
 }  // namespace proto_fuzzer
