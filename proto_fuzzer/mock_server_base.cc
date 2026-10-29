@@ -14,6 +14,8 @@
 #include <curl/multi.h>
 #include <sys/select.h>
 
+#include <cstdio>
+
 #include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/mock_server.h"
@@ -215,6 +217,9 @@ CURLcode MockServerBase::DriveScenario(CURL* easy, const curl::fuzzer::proto::Sc
     HandleDetachedMulti(std::move(multi));
   }
   multi_socket_driver_ = nullptr;
+  if (socket_driver.watch_exhausted()) {
+    std::fputs("curl-fuzzer: socket watch capacity exhausted\n", stderr);
+  }
   resume_response_ = false;
   return transfer_result;
 }

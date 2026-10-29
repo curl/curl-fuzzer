@@ -51,7 +51,8 @@ int CurlEventsForPollResult(short events) {
 
 /// Construct detached callback state. Install() supplies the multi only after
 /// all watch storage has reached its final address.
-MultiSocketDriver::MultiSocketDriver() : multi_(nullptr), timeout_ms_(-1), timer_pending_(false), generation_(0) {}
+MultiSocketDriver::MultiSocketDriver()
+    : multi_(nullptr), timeout_ms_(-1), timer_pending_(false), watch_exhausted_(false), generation_(0) {}
 
 /// The owner deliberately destroys this after curl_multi_cleanup, so there is
 /// no callback deregistration or libcurl access left for the destructor.
@@ -207,7 +208,8 @@ int MultiSocketDriver::UpdateSocket(curl_socket_t socket, int what, void* socket
   if (watch == nullptr) {
     watch = FindFreeWatch();
     if (watch == nullptr) {
-      return 0;
+      watch_exhausted_ = true;
+      return -1;
     }
     watch->socket = socket;
     watch->active = true;
@@ -250,9 +252,9 @@ MultiSocketDriver::Watch* MultiSocketDriver::FindWatch(curl_socket_t socket) {
   return nullptr;
 }
 
-/// Find the first inactive stable slot for a newly observed fd. Exhaustion
-/// is harmless: curl keeps owning the socket and the deterministic idle
-/// budget ends the fuzz case.
+/// Find the first inactive stable slot for a newly observed fd. The caller
+/// reports exhaustion as a socket-callback error rather than losing readiness
+/// notifications and silently consuming the idle budget.
 MultiSocketDriver::Watch* MultiSocketDriver::FindFreeWatch() {
   for (Watch& watch : watches_) {
     if (!watch.active) {

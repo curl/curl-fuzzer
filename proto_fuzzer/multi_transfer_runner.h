@@ -35,6 +35,8 @@ struct MultiTransferRunStats {
   std::size_t state_probe_handles = 0;
   /// Peer sockets opened while serving the concurrent transfers.
   std::size_t opened_connections = 0;
+  /// Socket readiness could not be represented in the fixed watch table.
+  bool watch_exhausted = false;
 };
 
 MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenario& scenario);
