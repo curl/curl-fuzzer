@@ -98,24 +98,26 @@ jobs:
           path: fuzz-introspector
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: Install source frontend dependencies
         run: >-
-          python -m pip --disable-pip-version-check --no-input --no-cache-dir
-          install --progress-bar off --only-binary=:all: --no-deps
-          --group introspector
+          uv sync --locked --only-group introspector
+          --no-install-project --no-build
 
       - name: Generate focused source call graphs
         env:
           PYTHONPATH: '${{ github.workspace }}/fuzz-introspector/src'
-        run: python scripts/generate_introspector_calltree.py introspector-output
+        run: >-
+          uv run --locked --no-sync python
+          scripts/generate_introspector_calltree.py introspector-output
 
       - name: Check proto runner ancestry
         run: >-
-          python scripts/check_introspector_report.py
+          uv run --locked --no-sync python scripts/check_introspector_report.py
           introspector-output/
 
       - name: Upload diagnostic metadata

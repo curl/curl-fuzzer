@@ -92,14 +92,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: Install profiling command
-        run: >-
-          python -m pip --disable-pip-version-check --no-input --no-cache-dir
-          install --progress-bar off --no-deps .
+        run: uv sync --locked --no-dev
 
       - name: Install host tools
         uses: $/.github/actions/apt-install
@@ -112,7 +111,7 @@ jobs:
           perf --version
           perf record --quiet -o "$RUNNER_TEMP/perf-probe.data" \
             -e cpu-clock:u -F 99 --call-graph fp -- \
-            python3 -c 'sum(range(20000000))'
+            uv run --locked --no-sync python -c 'sum(range(20000000))'
           test -s "$RUNNER_TEMP/perf-probe.data"
           perf report --stdio --header-only \
             -i "$RUNNER_TEMP/perf-probe.data"
@@ -137,7 +136,8 @@ jobs:
           base_digest=${base_ref##*@sha256:}
           [[ "$base_digest" =~ ^[0-9a-f]{64}$ ]]
 
-          python3 "$OSS_FUZZ_DIR/infra/helper.py" build_image \
+          uv run --locked --no-sync python \
+            "$OSS_FUZZ_DIR/infra/helper.py" build_image \
             --architecture=x86_64 --cache --no-pull curl
           image=gcr.io/oss-fuzz/curl
           image_id=$(docker image inspect --format '{{.Id}}' "$image")
@@ -203,7 +203,8 @@ jobs:
 
       - name: Build profiling target
         run: |
-          python3 "$OSS_FUZZ_DIR/infra/helper.py" build_fuzzers \
+          uv run --locked --no-sync python \
+            "$OSS_FUZZ_DIR/infra/helper.py" build_fuzzers \
             --engine=libfuzzer --sanitizer=address --architecture=x86_64 \
             -e "CURL_FUZZ_TARGET=${PROFILE_TARGET}" \
             -e BUILD_DIR=/work/build \
@@ -232,7 +233,8 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
           ASAN_SYMBOLIZER_PATH: ${{ env.OSS_FUZZ_OUT }}/llvm-symbolizer
         run: |
-          profile_cpu=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
+          profile_cpu=$(uv run --locked --no-sync python -c \
+            'import os; print(min(os.sched_getaffinity(0)))')
           source scripts/fuzz_corpus_helpers.sh
           public_corpus_args=()
           if fuzz_public_corpus_epoch_ready \
@@ -243,7 +245,7 @@ jobs:
           else
             echo "warning: profiling without unmarked structured public corpus" >&2
           fi
-          profile_fuzzer \
+          uv run --locked --no-sync profile_fuzzer \
             --binary-dir "$OSS_FUZZ_OUT" \
             --target "$PROFILE_TARGET" \
             --corpus-root "$GITHUB_WORKSPACE/corpora" \

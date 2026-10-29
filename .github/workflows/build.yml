@@ -39,12 +39,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: Install schema generator dependencies
-        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
+        run: uv sync --locked --no-dev
 
       - name: Install Dependencies
         uses: $/.github/actions/apt-install
@@ -78,7 +79,7 @@ jobs:
           key: mainline-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sanitizer }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('.github/workflows/build.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'mainline.sh', 'pyproject.toml', 'uv.lock', 'src/curl_fuzzer_tools/check_python_protobuf.py', 'scripts/compile_target.sh', 'scripts/trim_cache.sh') }}
 
       - name: Compile mainline
-        run: ./mainline.sh
+        run: uv run --locked --no-sync ./mainline.sh
 
       # Keep installed libraries and protoc; remove curl checkout/build state,
       # generated files and objects so the next run still rebuilds current code.
@@ -104,12 +105,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: Install schema generator dependencies
-        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary .
+        run: uv sync --locked --no-dev
 
       - name: Install Dependencies
         uses: $/.github/actions/apt-install
@@ -121,7 +123,7 @@ jobs:
         env:
           # GMP 6.3.0's configure probes do not support GCC 15's C23 default.
           CFLAGS: -std=gnu17
-        run: ./scripts/compile_target.sh deps
+        run: uv run --locked --no-sync ./scripts/compile_target.sh deps
 
   PythonTests:
     name: 'Python tests'
@@ -131,9 +133,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.14'
+          cache-dependency-glob: uv.lock
 
       - name: Install protoc
         uses: $/.github/actions/apt-install
@@ -142,7 +145,7 @@ jobs:
           tools: protoc
 
       - name: Install test dependencies
-        run: pip --disable-pip-version-check --no-input --no-cache-dir install --progress-bar off --prefer-binary '.[python-tests]'
+        run: uv sync --locked --no-dev --extra python-tests
 
       - name: Run Python tests
-        run: pytest tests/test_*.py
+        run: uv run --locked --no-sync pytest tests/test_*.py
