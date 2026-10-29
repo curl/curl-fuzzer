@@ -77,7 +77,7 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr,
          "H2 cleartext test could not allocate an easy handle");
-  curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTP, scenario.trace_ids(),
       scenario.trace_config());
   const std::string url = "http://" + scenario.host_path();
@@ -115,7 +115,7 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
     // cache. Clean the caller-owned easy first, matching RunScenario.
     curl_easy_cleanup(easy);
   }
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
   return result;
 }
 

@@ -92,10 +92,9 @@ void EnableTraceIds() { (void)curl_global_trace("+LIB-IDS"); }
 /// @param scheme Protocol whose dedicated in-process mock will service it.
 /// @param trace_ids Enable verbose LIB-IDS tracing for this scenario.
 /// @param trace_config Optional curl_global_trace() configuration.
-/// @return Caller-owned CURLOPT_CONNECT_TO list, which must outlive the easy
-///         handle and be freed with curl_slist_free_all after curl_easy_cleanup.
-struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids,
-                                        const std::string& trace_config) {
+/// @return Owner of the CURLOPT_CONNECT_TO list, which must outlive easy cleanup.
+CurlSlistPtr ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids,
+                                  const std::string& trace_config) {
   EnableDebugHttpTransportMetadata();
 
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &SilentWriteCallback);
@@ -201,10 +200,10 @@ struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme 
   // verification failures.
   curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 0L);
 
-  // Force every name lookup to the fuzzer's in-process mock peer. The caller
-  // owns the returned slist and must free it after curl_easy_cleanup.
-  struct curl_slist* connect_to = curl_slist_append(nullptr, kConnectToOverride);
-  curl_easy_setopt(easy, CURLOPT_CONNECT_TO, connect_to);
+  // Force every name lookup to the fuzzer's in-process mock peer. The returned
+  // owner keeps the list alive through curl_easy_cleanup.
+  CurlSlistPtr connect_to(curl_slist_append(nullptr, kConnectToOverride));
+  curl_easy_setopt(easy, CURLOPT_CONNECT_TO, connect_to.get());
 
   // Short bounds: fuzzing should never sit waiting on real I/O. Response
   // volume is already bounded by libFuzzer's input-size limit, so do not rate

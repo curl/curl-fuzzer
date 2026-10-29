@@ -57,7 +57,7 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   H2TransferResult result;
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "H2 origin test could not allocate an easy handle");
-  curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTPS);
   const std::string url = "https://" + scenario.host_path();
   (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
@@ -98,7 +98,7 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   result.upkeep_result = runtime.upkeep_result();
 
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
   return result;
 }
 
@@ -298,7 +298,7 @@ std::string DriveProviderDefaultTlsReference() {
 
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "TLS group reference could not allocate a handle");
-  curl_slist *connect_to = proto_fuzzer::ApplyBaselineOptions(
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
       easy, curl::fuzzer::proto::SCHEME_HTTPS);
   const std::string url = "https://" + scenario.host_path();
   (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
@@ -311,7 +311,7 @@ std::string DriveProviderDefaultTlsReference() {
   const CURLcode code = server.DriveScenario(easy, scenario);
   const std::string group = server.negotiated_group();
   curl_easy_cleanup(easy);
-  curl_slist_free_all(connect_to);
+  connect_to.reset();
 
   Expect(code == CURLE_OK && response == "reference",
          "provider-default TLS reference transfer did not complete");

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "curl_fuzzer.pb.h"
+#include "proto_fuzzer/curl_raii.h"
 #include "proto_fuzzer/option_model.h"
 
 namespace proto_fuzzer {
@@ -42,8 +43,8 @@ class ScopedTraceReset final {
   ScopedTraceReset& operator=(ScopedTraceReset&&) = delete;
 };
 
-struct curl_slist* ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids = false,
-                                        const std::string& trace_config = {});
+CurlSlistPtr ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme, bool trace_ids = false,
+                                  const std::string& trace_config = {});
 
 CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option);
 

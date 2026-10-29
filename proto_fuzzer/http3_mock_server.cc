@@ -1549,7 +1549,8 @@ Http3MockServer::Http3MockServer() : Http3MockServer(curl::fuzzer::proto::TLS_CE
 /// Construct a peer with a bounded, parseable certificate-chain profile.
 /// @param certificate_chain Certificate material presented during QUIC TLS.
 Http3MockServer::Http3MockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain)
-    : MockServerBase(MultiDrivePolicy::kSocketAction), impl_(new Http3MockServerImpl(certificate_chain)) {}
+    : MockServerBase(MultiDrivePolicy::kSocketAction),
+      impl_(std::make_unique<Http3MockServerImpl>(certificate_chain)) {}
 
 Http3MockServer::~Http3MockServer() = default;
 
