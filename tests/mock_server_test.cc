@@ -2824,7 +2824,7 @@ void TestDohHttpsTransportErrorFollowsCompleteRequest() {
 /// where the internal HTTP request is emitted by the default verbose callback.
 void TestDohCustomStderrReachesInternalHandle() {
   const DohHttpsRrRunResult result = RunDohHttpsRrScenario(
-      false, curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+      false, curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
       curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
       curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR);
   Expect(result.code == CURLE_OK && result.doh_request_count != 0 &&
@@ -2838,7 +2838,7 @@ void TestDohCustomStderrReachesInternalHandle() {
 /// deliberately non-directory CAPATH and non-CRL bytes reject TLS setup.
 void TestDohTlsPathFixturesReachInternalHandle() {
   const DohHttpsRrRunResult result =
-      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
                             curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
                             curl::fuzzer::proto::DOH_OPTION_PROBE_TLS_PATHS);
   Expect(result.tls_path_fixture_ready,
@@ -2855,7 +2855,7 @@ void TestDohTlsPathFixturesReachInternalHandle() {
 /// relying on a fixed number of A, AAAA, or HTTPS probe connections.
 void TestDohSslCtxCallbackReachesInternalHandle() {
   const DohHttpsRrRunResult result =
-      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
                             curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
                             curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX);
   Expect(result.code == CURLE_OK && result.doh_request_count != 0,

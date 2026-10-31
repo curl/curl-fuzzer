@@ -1260,9 +1260,10 @@ enum DohTransportMode {
   DOH_TRANSPORT_HTTPS = 1;
 }
 
-// Closed parent-option probes for curl-created HTTPS DoH handles. These modes
-// own every retained pointer and pathname in the harness rather than accepting
-// mutation-controlled process resources.
+// Closed parent-option probes for curl-created HTTPS DoH handles. Every
+// non-default mode requires HTTPS. These modes own every retained pointer and
+// pathname in the harness rather than accepting mutation-controlled process
+// resources.
 enum DohOptionProbeMode {
   DOH_OPTION_PROBE_DEFAULT = 0;
   DOH_OPTION_PROBE_CUSTOM_STDERR = 1;

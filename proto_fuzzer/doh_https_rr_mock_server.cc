@@ -37,19 +37,6 @@ constexpr unsigned short kDnsQtypeHTTPS = 65;
 constexpr std::size_t kDnsHeaderSize = 12;
 constexpr std::size_t kDnsAnswerHeaderSize = 12;
 
-/// Return whether one closed parent-option probe requires an HTTPS DoH handle.
-bool OptionProbeNeedsHttps(curl::fuzzer::proto::DohOptionProbeMode mode) {
-  switch (mode) {
-    case curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR:
-    case curl::fuzzer::proto::DOH_OPTION_PROBE_TLS_PATHS:
-    case curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX:
-      return true;
-    case curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT:
-    default:
-      return false;
-  }
-}
-
 /// Detect the ECH modes that ask the TLS backend to obtain its configuration
 /// from an HTTPS resource record. A literal ECHConfigList already supplies the
 /// configuration, while GREASE deliberately does not wait for DNS.
@@ -292,8 +279,7 @@ DohHttpsRrMockServer::DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& 
       easy_(nullptr),
       listener_(-1),
       option_probe_mode_(scenario.doh().option_probe_mode()),
-      transport_mode_(OptionProbeNeedsHttps(option_probe_mode_) ? curl::fuzzer::proto::DOH_TRANSPORT_HTTPS
-                                                                : scenario.doh().transport_mode()),
+      transport_mode_(scenario.doh().transport_mode()),
       diagnostic_stream_(nullptr),
       tls_path_fixture_(nullptr),
       internal_ssl_ctx_callback_count_(0),
