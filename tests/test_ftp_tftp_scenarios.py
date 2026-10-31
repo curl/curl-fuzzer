@@ -177,11 +177,21 @@ def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
             'on_readable: "\\000"',
             "\\000\\004\\000\\001",
         ),
+        "tftp_wrq_wrong_ack_exhaustion.textproto": (
+            "upload: true",
+            "wrong-ack-exhaustion",
+            "\\000\\004\\000\\002",
+        ),
     }
     tftp_root = SCENARIO_ROOT / "tftp"
     for name, tokens in expected_tokens.items():
         scenario = (tftp_root / name).read_text(encoding="utf-8")
         assert all(token in scenario for token in tokens), name
+
+    wrong_ack = (tftp_root / "tftp_wrq_wrong_ack_exhaustion.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert wrong_ack.count('on_readable: "\\000\\004\\000\\002"') == 4
 
 
 def test_smtp_seeds_keep_envelope_and_data_order() -> None:
@@ -273,6 +283,20 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
     assert "250 smtp.test" in unsupported
     assert "250 STARTTLS" not in unsupported
     assert "214 smtp.test help" in unsupported
+
+    required_ehlo_denied = (
+        smtp_root / "smtp_starttls_required_ehlo_denied.textproto"
+    ).read_text(encoding="utf-8")
+    assert "smtp_probe_mode: SMTP_PROBE_STARTTLS_REQUIRE" in required_ehlo_denied
+    assert "500 EHLO unavailable" in required_ehlo_denied
+    assert "250 STARTTLS" not in required_ehlo_denied
+
+    required_unsupported = (
+        smtp_root / "smtp_starttls_required_unsupported.textproto"
+    ).read_text(encoding="utf-8")
+    assert "smtp_probe_mode: SMTP_PROBE_STARTTLS_REQUIRE" in required_unsupported
+    assert "250 smtp.test" in required_unsupported
+    assert "250 STARTTLS" not in required_unsupported
 
     utf8 = (smtp_root / "smtp_utf8_size_mail.textproto").read_text(
         encoding="utf-8"

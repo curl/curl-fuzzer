@@ -1,0 +1,15 @@
+# ACK0 starts the upload, then four wrong ACK2 packets exhaust the fixed
+# three-retry budget while curl is waiting for ACK1.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/wrong-ack-exhaustion"
+options { upload: true }
+options { infilesize_large: 1 }
+options { tftp_no_options: true }
+upload { data: "x" terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "\000\004\000\000"
+  on_readable: "\000\004\000\002"
+  on_readable: "\000\004\000\002"
+  on_readable: "\000\004\000\002"
+  on_readable: "\000\004\000\002"
+}
