@@ -123,12 +123,15 @@ def test_dead_connection_seed_prunes_a_reusable_redirect_socket() -> None:
     assert scenario.count("subsequent_connections {") == 1
 
 
-def test_sigv4_seeds_compute_s3_and_generic_payload_hashes() -> None:
-    """Do not let a supplied content hash bypass either signer path."""
+def test_sigv4_seeds_cover_computed_and_supplied_payload_hashes() -> None:
+    """Keep computed and explicitly supplied payload hashes reachable."""
     s3 = (HTTP_SCENARIOS / "http_auth_aws_sigv4.textproto").read_text(encoding="utf-8")
     service = (HTTP_SCENARIOS / "http_auth_aws_sigv4_service.textproto").read_text(
         encoding="utf-8"
     )
+    supplied = (
+        HTTP_SCENARIOS / "http_auth_aws_sigv4_content_sha256.textproto"
+    ).read_text(encoding="utf-8")
 
     assert "aws:amz:us-east-1:s3" in s3
     assert "postfields:" in s3
@@ -136,6 +139,9 @@ def test_sigv4_seeds_compute_s3_and_generic_payload_hashes() -> None:
     assert "aws:amz:us-east-1:execute-api" in service
     assert "%20" in service
     assert "X-Amz-Content-Sha256" not in service
+    assert "aws:amz:us-east-1:s3" in supplied
+    assert "X-Amz-Content-Sha256:   e3b0c442" in supplied
+    assert "postfields:" not in supplied
 
 
 def test_early_upgrade_abort_stays_in_the_timing_lane() -> None:

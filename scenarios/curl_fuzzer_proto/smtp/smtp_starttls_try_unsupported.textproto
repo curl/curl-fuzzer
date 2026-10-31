@@ -1,0 +1,12 @@
+# CURLUSESSL_TRY must continue in plaintext when a successful EHLO response
+# does not advertise STARTTLS. This differs from a server that advertises the
+# extension and subsequently rejects the upgrade.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls-unsupported.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_TRY
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250 smtp.test\r\n"
+  on_readable: "214 smtp.test help\r\n"
+  on_readable: "221 bye\r\n"
+}
