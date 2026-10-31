@@ -27,8 +27,18 @@ def test_resolver_lane_has_a_doh_httpsrr_seed() -> None:
     assert 'host_path: "tls.test/' in doh
     assert "doh {" in doh
     assert "DOH_RESPONSE_MODE_NORMAL" in doh
+    assert "transport_mode:" not in doh
     assert "http2_plan {" in doh
     assert "HTTP2_CLIENT_EVENT_HEADERS" in doh
+
+    for legacy_name in (
+        "doh_error.textproto",
+        "doh_http_error.textproto",
+        "doh_httpsrr_alpn.textproto",
+        "doh_httpsrr_alpn_trace.textproto",
+        "doh_httpsrr_ech_pending.textproto",
+    ):
+        assert "transport_mode:" not in (SCENARIO_DIR / legacy_name).read_text()
 
 
 def test_resolver_lane_has_a_pending_httpsrr_ech_seed() -> None:
@@ -41,6 +51,21 @@ def test_resolver_lane_has_a_pending_httpsrr_ech_seed() -> None:
     assert 'trace_config: "all"' in doh
     assert 'ech: "true"' in doh
     assert "http2_plan {" in doh
+
+
+def test_resolver_lane_has_https_doh_transport_seeds() -> None:
+    success = (SCENARIO_DIR / "doh_https_transport.textproto").read_text()
+    transport_error = (SCENARIO_DIR / "doh_https_transport_error.textproto").read_text()
+
+    for scenario in (success, transport_error):
+        assert "scheme: SCHEME_HTTPS" in scenario
+        assert "transport_mode: DOH_TRANSPORT_HTTPS" in scenario
+        assert 'host_path: "tls.test/' in scenario
+        assert 'trace_config: "+DOH"' in scenario
+        assert "http2_plan {" in scenario
+    assert "DOH_RESPONSE_MODE_NORMAL" in success
+    assert "HTTP2_CLIENT_EVENT_HEADERS" in success
+    assert "DOH_RESPONSE_MODE_TRANSPORT_ERROR" in transport_error
 
 
 def test_resolver_httpsrr_trace_seed_only_enables_per_input_tracing() -> None:

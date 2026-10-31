@@ -20,6 +20,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
+
+#include "proto_fuzzer/option_apply.h"
 
 namespace proto_fuzzer {
 
@@ -31,6 +34,24 @@ constexpr unsigned short kDnsQtypeAAAA = 28;
 constexpr unsigned short kDnsQtypeHTTPS = 65;
 constexpr std::size_t kDnsHeaderSize = 12;
 constexpr std::size_t kDnsAnswerHeaderSize = 12;
+
+/// Detect the ECH modes that ask the TLS backend to obtain its configuration
+/// from an HTTPS resource record. A literal ECHConfigList already supplies the
+/// configuration, while GREASE deliberately does not wait for DNS.
+bool EchNeedsPendingHttpsRr(const curl::fuzzer::proto::Scenario& scenario) {
+  const std::size_t option_count = RuntimeOptionCount(scenario);
+  for (std::size_t index = 0; index < option_count; ++index) {
+    const auto& option = scenario.options(static_cast<int>(index));
+    if (option.option_id() != curl::fuzzer::proto::CURLOPT_ECH) {
+      continue;
+    }
+    const std::string& value = option.string_value();
+    if (value == "true" || value == "hard" || value.rfind("pn:", 0) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// Save one proxy environment variable before the responder replaces it.
 /// @param name Environment variable name.
@@ -234,21 +255,36 @@ bool BuildDnsResponse(const std::string& query, std::string* response, bool* htt
 
 }  // namespace
 
+/// Retain decrypted HTTP request bytes from one accepted TLS connection.
+/// The transport may report several records in one drive turn, so overflow is
+/// sticky until the owning slot is closed.
+/// @param data First decrypted byte.
+/// @param size Number of decrypted bytes.
+void DohHttpsRrMockServer::DohConnection::ObserveIncomingData(const unsigned char* data, std::size_t size) {
+  if (request_overflow || data == nullptr || request.size() > kMaxRequestBytes ||
+      size > kMaxRequestBytes - request.size()) {
+    request_overflow = true;
+    return;
+  }
+  request.append(reinterpret_cast<const char*>(data), size);
+}
+
 /// Construct an idle responder. The listener and proxy bypass are installed
 /// by Install(), after the TLS carrier has prepared the outer peer.
-/// @param certificate_chain Certificate chain served by the outer TLS peer.
-/// @param response_mode HTTP/DNS terminal returned for each complete request.
-/// @param defer_httpsrr Whether to defer a valid HTTPS answer by one drive
-///        turn so ECH reaches the TLS backend while its record is pending.
-DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                                           curl::fuzzer::proto::DohResponseMode response_mode, bool defer_httpsrr)
-    : H2OriginMockServer(certificate_chain),
+/// @param scenario Source of the fixed TLS, DoH, and ECH configuration.
+DohHttpsRrMockServer::DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& scenario)
+    : H2OriginMockServer(scenario.tls_certificate_chain()),
       easy_(nullptr),
       listener_(-1),
+      transport_mode_(scenario.doh().transport_mode()),
+      doh_tls_transport_(
+          scenario.doh().transport_mode() == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS
+              ? std::make_unique<TlsMockTransport>(TlsApplicationProtocol::kHttp11, scenario.tls_certificate_chain())
+              : nullptr),
       doh_request_count_(0),
       httpsrr_answer_count_(0),
-      response_mode_(response_mode),
-      defer_httpsrr_(defer_httpsrr),
+      response_mode_(scenario.doh().response_mode()),
+      defer_httpsrr_(EchNeedsPendingHttpsRr(scenario)),
       setup_ok_(false),
       proxy_bypass_active_(false),
       lower_no_proxy_was_set_(false),
@@ -269,7 +305,13 @@ void DohHttpsRrMockServer::Install(CURL* easy) {
   H2OriginMockServer::Install(easy);
   easy_ = easy;
   setup_ok_ = false;
-  if (easy_ == nullptr || !StartListener()) {
+  if (easy_ == nullptr) {
+    return;
+  }
+  if (!ConfigureHttpsOptions()) {
+    return;
+  }
+  if (!StartListener()) {
     return;
   }
   if (curl_easy_setopt(easy_, CURLOPT_DOH_URL, doh_url_.c_str()) != CURLE_OK) {
@@ -291,6 +333,9 @@ void DohHttpsRrMockServer::Install(CURL* easy) {
 void DohHttpsRrMockServer::ConfigureRequestData(ScenarioRequestData* /*request_data*/) {
   setup_ok_ = false;
   if (easy_ == nullptr || doh_url_.empty() || !proxy_bypass_active_) {
+    return;
+  }
+  if (!ConfigureHttpsOptions()) {
     return;
   }
   if (curl_easy_setopt(easy_, CURLOPT_DOH_URL, doh_url_.c_str()) != CURLE_OK) {
@@ -322,8 +367,8 @@ void DohHttpsRrMockServer::ObserveActiveTransfer(CURL* easy) {
   ServiceDohConnections();
 }
 
-/// Bind one non-blocking plaintext HTTP listener on 127.0.0.1 and build the
-/// CURLOPT_DOH_URL value that points at it.
+/// Bind one non-blocking HTTP listener on 127.0.0.1 and build the
+/// CURLOPT_DOH_URL value that points at its selected plaintext or TLS peer.
 /// @return true when the listener is ready.
 bool DohHttpsRrMockServer::StartListener() {
   if (listener_ >= 0) {
@@ -355,8 +400,24 @@ bool DohHttpsRrMockServer::StartListener() {
   }
 
   listener_ = fd;
-  doh_url_ = std::string("http://127.0.0.1:") + std::to_string(static_cast<int>(ntohs(address.sin_port))) + kDohPath;
+  const char* scheme = transport_mode_ == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS ? "https" : "http";
+  doh_url_ =
+      std::string(scheme) + "://127.0.0.1:" + std::to_string(static_cast<int>(ntohs(address.sin_port))) + kDohPath;
   return true;
+}
+
+/// Install the parent options that curl copies onto each internal HTTPS DoH
+/// handle. Hostname checks are disabled only because the fixed listener URL
+/// uses a numeric loopback address; peer verification still uses the outer
+/// transport's checked-in CA blob. CERTINFO, NOSIGNAL, and the base class's
+/// X25519 setting deliberately exercise their internal-handle propagation.
+/// @return true when plaintext mode needs no setup or every option succeeded.
+bool DohHttpsRrMockServer::ConfigureHttpsOptions() {
+  return transport_mode_ != curl::fuzzer::proto::DOH_TRANSPORT_HTTPS ||
+         (curl_easy_setopt(easy_, CURLOPT_DOH_SSL_VERIFYHOST, 0L) == CURLE_OK &&
+          curl_easy_setopt(easy_, CURLOPT_DOH_SSL_VERIFYPEER, 1L) == CURLE_OK &&
+          curl_easy_setopt(easy_, CURLOPT_CERTINFO, 1L) == CURLE_OK &&
+          curl_easy_setopt(easy_, CURLOPT_NOSIGNAL, 1L) == CURLE_OK);
 }
 
 /// Close the listener and every accepted DoH connection.
@@ -405,6 +466,7 @@ void DohHttpsRrMockServer::EndProxyBypass() {
 /// Close one accepted connection and reset its buffers.
 /// @param connection Connection to release.
 void DohHttpsRrMockServer::CloseConnection(DohConnection* connection) {
+  connection->tls.reset();
   if (connection->fd >= 0) {
     close(connection->fd);
     connection->fd = -1;
@@ -414,6 +476,7 @@ void DohHttpsRrMockServer::CloseConnection(DohConnection* connection) {
   connection->response_offset = 0;
   connection->deferred_write_turns = 0;
   connection->writing = false;
+  connection->request_overflow = false;
 }
 
 /// Accept every pending DoH probe, up to the fixed connection budget.
@@ -432,7 +495,7 @@ void DohHttpsRrMockServer::AcceptConnections() {
     }
     DohConnection* slot = nullptr;
     for (DohConnection& connection : connections_) {
-      if (connection.fd < 0) {
+      if (!connection.active()) {
         slot = &connection;
         break;
       }
@@ -441,12 +504,26 @@ void DohHttpsRrMockServer::AcceptConnections() {
       close(fd);
       continue;
     }
-    slot->fd = fd;
     slot->request.clear();
     slot->response.clear();
     slot->response_offset = 0;
     slot->deferred_write_turns = 0;
     slot->writing = false;
+    slot->request_overflow = false;
+    if (transport_mode_ == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS) {
+      if (doh_tls_transport_ == nullptr) {
+        close(fd);
+        continue;
+      }
+      std::unique_ptr<MockConnection> tls = doh_tls_transport_->CreateAcceptedConnection(fd);
+      if (tls == nullptr || !tls->ok()) {
+        continue;
+      }
+      tls->SetIncomingDataObserver(slot);
+      slot->tls = std::move(tls);
+    } else {
+      slot->fd = fd;
+    }
   }
 }
 
@@ -456,41 +533,48 @@ void DohHttpsRrMockServer::ServiceDohConnections() {
   AcceptConnections();
 
   for (DohConnection& connection : connections_) {
-    if (connection.fd < 0) {
+    if (!connection.active()) {
       continue;
     }
 
     if (!connection.writing) {
-      for (;;) {
-        char buffer[1024];
-        const ssize_t received = recv(connection.fd, buffer, sizeof(buffer), 0);
-        if (received > 0) {
-          if (connection.request.size() + static_cast<std::size_t>(received) > kMaxRequestBytes) {
+      if (connection.tls != nullptr) {
+        (void)connection.tls->DrainIncoming();
+        if (connection.request_overflow) {
+          CloseConnection(&connection);
+        }
+      } else {
+        for (;;) {
+          char buffer[1024];
+          const ssize_t received = recv(connection.fd, buffer, sizeof(buffer), 0);
+          if (received > 0) {
+            if (connection.request.size() + static_cast<std::size_t>(received) > kMaxRequestBytes) {
+              CloseConnection(&connection);
+              break;
+            }
+            connection.request.append(buffer, static_cast<std::size_t>(received));
+            continue;
+          }
+          if (received == 0) {
             CloseConnection(&connection);
             break;
           }
-          connection.request.append(buffer, static_cast<std::size_t>(received));
-          continue;
-        }
-        if (received == 0) {
+          if (errno == EINTR) {
+            continue;
+          }
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            break;
+          }
           CloseConnection(&connection);
           break;
         }
-        if (errno == EINTR) {
-          continue;
-        }
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-          break;
-        }
-        CloseConnection(&connection);
-        break;
       }
-      if (connection.fd >= 0 && CompleteRequest(&connection)) {
+      if (connection.active() && CompleteRequest(&connection)) {
         connection.writing = true;
       }
     }
 
-    if (connection.fd < 0 || !connection.writing) {
+    if (!connection.active() || !connection.writing) {
       continue;
     }
 
@@ -500,6 +584,24 @@ void DohHttpsRrMockServer::ServiceDohConnections() {
     // without a clock, scheduler race, or external resolver.
     if (connection.deferred_write_turns != 0) {
       --connection.deferred_write_turns;
+      continue;
+    }
+
+    if (connection.tls != nullptr) {
+      if (connection.response_offset < connection.response.size()) {
+        if (!connection.tls->WriteAll(reinterpret_cast<const unsigned char*>(connection.response.data()),
+                                      connection.response.size())) {
+          CloseConnection(&connection);
+          continue;
+        }
+        connection.response_offset = connection.response.size();
+        connection.tls->ShutdownWrite();
+      } else {
+        (void)connection.tls->DrainIncoming();
+      }
+      // TLS writes may require exact retries on later drive turns. Retain the
+      // bounded slot until responder teardown rather than guessing completion
+      // from an OpenSSL progress count.
       continue;
     }
 
@@ -548,6 +650,12 @@ bool DohHttpsRrMockServer::CompleteRequest(DohConnection* connection) {
     }
   } else {
     content_length = connection->request.size() - header_end;
+  }
+
+  if (response_mode_ == curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR) {
+    ++doh_request_count_;
+    CloseConnection(connection);
+    return false;
   }
 
   const std::string body = connection->request.substr(header_end, content_length);

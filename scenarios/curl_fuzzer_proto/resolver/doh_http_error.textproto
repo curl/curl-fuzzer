@@ -1,5 +1,5 @@
 # Return a non-success status from the owned loopback DoH endpoint so curl
-# reports the transport result before attempting to decode DNS bytes.
+# reports the HTTP result before attempting to decode DNS bytes.
 scheme: SCHEME_HTTPS
 host_path: "tls.test/doh-http-error"
 doh {

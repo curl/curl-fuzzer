@@ -82,6 +82,22 @@ MockConnection::MockConnection() : server_fd_(-1), client_fd_(-1), drain_limit_(
   client_fd_ = fds[1];
 }
 
+/// Adopt one connected descriptor as this peer's server endpoint. This path
+/// lets real loopback listeners reuse the bounded transport machinery without
+/// manufacturing a socketpair whose client endpoint curl cannot inherit.
+/// @param adopted_server_fd Connected descriptor whose ownership transfers.
+MockConnection::MockConnection(int adopted_server_fd)
+    : server_fd_(adopted_server_fd), client_fd_(-1), drain_limit_(0), incoming_data_observer_(nullptr) {
+  if (server_fd_ < 0) {
+    return;
+  }
+  const int flags = fcntl(server_fd_, F_GETFL, 0);
+  if (!FdFitsInFdSet(server_fd_) || flags < 0 || fcntl(server_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
+    close(server_fd_);
+    server_fd_ = -1;
+  }
+}
+
 /// Close the server-side fd (and the client-side fd if it was never handed off via take_client_fd()).
 MockConnection::~MockConnection() {
   if (server_fd_ >= 0) {

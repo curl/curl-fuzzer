@@ -63,6 +63,8 @@ class TlsMockTransport {
 
   std::unique_ptr<MockConnection> CreateConnection();
 
+  std::unique_ptr<MockConnection> CreateAcceptedConnection(int accepted_fd);
+
   int negotiated_tls_version() const;
   std::size_t completed_handshake_count() const;
   std::size_t reused_session_count() const;

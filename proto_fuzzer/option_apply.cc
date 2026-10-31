@@ -111,8 +111,11 @@ CurlSlistPtr ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme
   }
   if (trace_ids || !trace_config.empty()) {
     // Keep trace coverage enabled during fuzzing without flooding the process
-    // log. The callback still executes curl_trc.c's formatting path.
+    // log. The callback still executes curl_trc.c's formatting path. A stable
+    // ignored userdata pointer also lets internal DoH handles exercise the
+    // public debug-data propagation path without adding per-input ownership.
     curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &SilentDebugCallback);
+    curl_easy_setopt(easy, CURLOPT_DEBUGDATA, easy);
     curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
   } else if (scheme == curl::fuzzer::proto::SCHEME_TELNET && !user_requested_verbose) {
     // printoption() and printsub() contain a substantial part of curl's TELNET

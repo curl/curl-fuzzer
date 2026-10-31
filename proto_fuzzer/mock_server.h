@@ -53,6 +53,8 @@ class MockConnection {
   void ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit);
 
  protected:
+  explicit MockConnection(int adopted_server_fd);
+
   void NotifyIncomingData(const unsigned char* data, std::size_t size);
 
  private:

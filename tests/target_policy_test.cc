@@ -2247,27 +2247,43 @@ void TestResolverPolicy() {
   doh.set_host_path("untrusted.invalid/doh");
   doh.mutable_doh()->set_response_mode(
       curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
+  doh.mutable_doh()->set_transport_mode(
+      curl::fuzzer::proto::DOH_TRANSPORT_HTTPS);
   doh.add_resolve_entries("example.test:443:127.0.0.1");
   doh.set_happy_eyeballs(true);
   doh.mutable_http2_plan();
   NormalizeScenarioForTarget(&doh, TargetProfile::kResolver);
   Expect(doh.scheme() == SCHEME_HTTPS,
-         "DoH resolver policy did not select its HTTPS transport");
+         "DoH resolver policy did not select its outer HTTPS scheme");
   Expect(doh.host_path() == "tls.test/doh",
          "DoH resolver policy did not select the TLS authority");
   Expect(doh.resolve_entries_size() == 0 && !doh.happy_eyeballs(),
          "DoH resolver policy retained contradictory address-resolution state");
   Expect(doh.has_http2_plan(),
          "DoH resolver policy discarded the selected ALPN h2 response plan");
+  Expect(doh.doh().transport_mode() == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
+         "DoH resolver policy discarded its HTTPS listener transport");
+
+  Scenario legacy_doh;
+  legacy_doh.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
+  NormalizeScenarioForTarget(&legacy_doh, TargetProfile::kResolver);
+  Expect(legacy_doh.doh().transport_mode() ==
+             curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+         "omitted DoH transport did not preserve the plaintext listener");
 
   Scenario invalid_doh;
   invalid_doh.mutable_doh()->set_response_mode(
       static_cast<curl::fuzzer::proto::DohResponseMode>(99));
+  invalid_doh.mutable_doh()->set_transport_mode(
+      static_cast<curl::fuzzer::proto::DohTransportMode>(99));
   NormalizeScenarioForTarget(&invalid_doh, TargetProfile::kResolver);
   Expect(invalid_doh.has_doh() &&
              invalid_doh.doh().response_mode() ==
-                 curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
-         "DoH resolver policy did not canonicalize an unknown response mode");
+                 curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL &&
+             invalid_doh.doh().transport_mode() ==
+                 curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+         "DoH resolver policy did not canonicalize unknown settings");
 
   Scenario threaded;
   threaded.set_host_path("untrusted.invalid/threaded");
@@ -2360,6 +2376,19 @@ void TestResolverPolicy() {
              doh_http_error.has_http2_plan() &&
              doh_http_error.http2_plan().actions_size() == 1,
          "DoH HTTP error policy did not retain the confined DoH transport");
+
+  Scenario doh_transport_error;
+  doh_transport_error.mutable_doh()->set_response_mode(
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR);
+  doh_transport_error.mutable_doh()->set_transport_mode(
+      curl::fuzzer::proto::DOH_TRANSPORT_HTTPS);
+  NormalizeScenarioForTarget(&doh_transport_error, TargetProfile::kResolver);
+  Expect(doh_transport_error.has_doh() &&
+             doh_transport_error.doh().response_mode() ==
+                 curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR &&
+             doh_transport_error.doh().transport_mode() ==
+                 curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
+         "DoH transport-error policy discarded its HTTPS terminal");
 
   Scenario global_lifecycle;
   global_lifecycle.set_host_path("untrusted.invalid/global");

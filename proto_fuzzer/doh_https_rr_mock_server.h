@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstddef>
+#include <memory>
 #include <string>
 
 #include "curl_fuzzer.pb.h"
@@ -24,8 +25,8 @@ namespace proto_fuzzer {
 
 /// @class proto_fuzzer::DohHttpsRrMockServer
 /// @brief Resolver-lane peer that answers curl's internal DoH queries from a
-///        loopback HTTP listener and completes the selected HTTPS/ALPN h2
-///        exchange through the in-process TLS transport.
+///        loopback HTTP or HTTPS listener and completes the selected outer
+///        HTTPS/ALPN h2 exchange through a separate in-process TLS transport.
 ///
 /// curl creates and drives the DoH easy handle itself, so the harness socket
 /// callbacks do not reach it. A real 127.0.0.1 listener is therefore the only
@@ -35,11 +36,7 @@ namespace proto_fuzzer {
 /// build supports HTTP/2.
 class DohHttpsRrMockServer : public H2OriginMockServer {
  public:
-  explicit DohHttpsRrMockServer(
-      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-      curl::fuzzer::proto::DohResponseMode response_mode = curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
-      bool defer_httpsrr = false);
+  explicit DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& scenario);
   ~DohHttpsRrMockServer() override;
 
   DohHttpsRrMockServer(const DohHttpsRrMockServer&) = delete;
@@ -58,22 +55,22 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   /// @return Ephemeral DoH listener URL, or an empty string when setup failed.
   const std::string& doh_url() const { return doh_url_; }
 
+  /// @return Number of TLS handshakes completed by the DoH listener itself.
+  std::size_t doh_tls_handshake_count() const {
+    return doh_tls_transport_ == nullptr ? 0 : doh_tls_transport_->completed_handshake_count();
+  }
+
+  /// @return ALPN selected by the most recent DoH TLS handshake.
+  std::string doh_tls_alpn() const {
+    return doh_tls_transport_ == nullptr ? std::string() : doh_tls_transport_->negotiated_alpn();
+  }
+
  protected:
   void ObserveActiveTransfer(CURL* easy) override;
 
   void RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::proto::Scenario& scenario) override;
 
  private:
-  /// One accepted DoH TCP connection and its buffered request/response state.
-  struct DohConnection {
-    int fd = -1;
-    std::string request;
-    std::string response;
-    std::size_t response_offset = 0;
-    std::size_t deferred_write_turns = 0;
-    bool writing = false;
-  };
-
   /// Bound accepted probes independently of curl's internal DoH concurrency.
   static constexpr std::size_t kMaxConnections = 8;
   /// Bound each HTTP request and DNS answer so a malformed probe cannot grow
@@ -81,8 +78,24 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   static constexpr std::size_t kMaxRequestBytes = 4096;
   static constexpr std::size_t kMaxResponseBytes = 4096;
 
+  /// One accepted DoH TCP connection and its buffered request/response state.
+  struct DohConnection final : public IncomingDataObserver {
+    bool active() const { return fd >= 0 || tls != nullptr; }
+    void ObserveIncomingData(const unsigned char* data, std::size_t size) override;
+
+    int fd = -1;
+    std::unique_ptr<MockConnection> tls;
+    std::string request;
+    std::string response;
+    std::size_t response_offset = 0;
+    std::size_t deferred_write_turns = 0;
+    bool writing = false;
+    bool request_overflow = false;
+  };
+
   virtual bool StartListener();
   void StopListener();
+  bool ConfigureHttpsOptions();
   bool BeginProxyBypass();
   void EndProxyBypass();
 
@@ -94,6 +107,13 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   CURL* easy_;
   int listener_;
   std::string doh_url_;
+
+  /// Fixed scheme used by the listener for every internal probe.
+  curl::fuzzer::proto::DohTransportMode transport_mode_;
+
+  /// Dedicated HTTP/1.1 TLS context for accepted DoH connections. The outer
+  /// origin keeps the separate HTTP/2 transport owned by the base class.
+  std::unique_ptr<TlsMockTransport> doh_tls_transport_;
 
   std::array<DohConnection, kMaxConnections> connections_;
   std::size_t doh_request_count_;

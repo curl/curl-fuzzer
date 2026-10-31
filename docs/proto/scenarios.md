@@ -255,11 +255,15 @@ Other peers intentionally give those fields narrower meanings:
   holds a pinned CID/name followed by the mutation-controlled gateway path,
   query, and fragment; the runner prepends the gateway authority.
 - The resolver lane's `doh` settings bind a loopback DoH responder and point
-  `CURLOPT_DOH_URL` at it. Normal mode answers address and HTTPS queries; its
-  HTTPS record carries `alpn=h2,h3`, so the outer HTTPS transfer completes
-  through the in-process TLS/ALPN h2 peer using `http2_plan`. Malformed-DNS
-  mode returns HTTP 200 with a one-byte DNS body, while HTTP-error mode returns
-  a non-success status before curl can decode DNS bytes.
+  `CURLOPT_DOH_URL` at it. `transport_mode` preserves the historical HTTP
+  endpoint by default or selects an HTTPS endpoint backed by a dedicated
+  trust-anchor-verified HTTP/1.1 TLS peer. Normal response mode answers address
+  and HTTPS queries; its HTTPS record carries `alpn=h2,h3`, so the separate
+  outer HTTPS transfer completes through the in-process TLS/ALPN h2 peer using
+  `http2_plan`. Malformed-DNS mode returns HTTP 200 with a one-byte DNS body,
+  HTTP-error mode returns a non-success status before curl can decode DNS
+  bytes, and transport-error mode closes only after receiving a complete DoH
+  request so curl records the internal transfer failure.
   `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records. A
   paired coverage seed repeats that exact exchange with `trace_config: "all"`;
   tracing is reset at the input boundary and does not become a resolver-lane

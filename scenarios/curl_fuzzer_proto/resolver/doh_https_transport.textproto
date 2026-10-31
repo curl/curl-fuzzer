@@ -1,0 +1,33 @@
+# Resolve an HTTPS origin through a trust-anchor-verified HTTPS DoH endpoint.
+# The internal DoH handles inherit the parent's CA blob and X25519 policy,
+# negotiate HTTP/1.1 on the dedicated loopback TLS peer, then return an HTTPS
+# resource record that selects h2 for the separate outer connection.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/doh-https-transport"
+doh {
+  response_mode: DOH_RESPONSE_MODE_NORMAL
+  transport_mode: DOH_TRANSPORT_HTTPS
+}
+trace_config: "+DOH"
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "OK"
+      end_stream: true
+    }
+  }
+}

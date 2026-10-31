@@ -1025,9 +1025,10 @@ message Scenario {
     }
   ];
   // Route the resolver lane through its in-process DoH responder. Presence
-  // selects the owned loopback endpoint; response_mode chooses whether each
-  // request receives a valid DNS answer, a malformed DNS body, or an HTTP
-  // error. The normal responder synthesizes HTTPS records carrying alpn=h2,h3
+  // selects the owned loopback endpoint; transport_mode keeps the historical
+  // HTTP listener or wraps it in verified TLS. response_mode chooses a valid
+  // DNS answer, malformed DNS body, HTTP error, or a post-request transport
+  // close. The normal responder synthesizes HTTPS records carrying alpn=h2,h3
   // so curl's HTTPS-connect filter can select an ALPN from DNS.
   DohSettings doh = 43 [
     (curl.fuzzer.schema.scenario_field) = {
@@ -1244,10 +1245,28 @@ enum DohResponseMode {
   DOH_RESPONSE_MODE_NORMAL = 0;
   DOH_RESPONSE_MODE_MALFORMED_DNS = 1;
   DOH_RESPONSE_MODE_HTTP_ERROR = 2;
+  // Close the connection after receiving a complete DoH request without an
+  // HTTP response, so curl records a transport result instead of HTTP/DNS.
+  DOH_RESPONSE_MODE_TRANSPORT_ERROR = 3;
+}
+
+enum DohTransportMode {
+  // Preserve the historical plaintext loopback endpoint for existing corpus.
+  DOH_TRANSPORT_HTTP = 0;
+  // Terminate verified TLS on the loopback endpoint before parsing HTTP/1.1.
+  DOH_TRANSPORT_HTTPS = 1;
 }
 
 message DohSettings {
   DohResponseMode response_mode = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_RESOLVER
+      }
+    }
+  ];
+  DohTransportMode transport_mode = 2 [
     (curl.fuzzer.schema.scenario_field) = {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY

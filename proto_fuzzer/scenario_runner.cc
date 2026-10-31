@@ -365,24 +365,6 @@ std::string ScenarioUrl(const curl::fuzzer::proto::Scenario& scenario, const cha
   return std::string(prefix) + "://" + scenario.host_path();
 }
 
-/// Detect the ECH modes that ask the TLS backend to obtain its configuration
-/// from an HTTPS resource record. A literal ECHConfigList already supplies the
-/// configuration, while GREASE deliberately does not wait for DNS.
-bool EchNeedsPendingHttpsRr(const curl::fuzzer::proto::Scenario& scenario) {
-  const std::size_t option_count = RuntimeOptionCount(scenario);
-  for (std::size_t index = 0; index < option_count; ++index) {
-    const auto& option = scenario.options(static_cast<int>(index));
-    if (option.option_id() != curl::fuzzer::proto::CURLOPT_ECH) {
-      continue;
-    }
-    const std::string& value = option.string_value();
-    if (value == "true" || value == "hard" || value.rfind("pn:", 0) == 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /// Pick the peer implementation authorized by both protocol and target mode.
 /// The compatibility target must keep its historical raw-wire interpretation
 /// of secure schemes, while dedicated TLS lanes expose decrypted application
@@ -449,8 +431,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     // queries; its TLS/ALPN h2 carrier then completes the outer HTTPS
     // transfer selected from the record.
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-    return std::make_unique<DohHttpsRrMockServer>(scenario.tls_certificate_chain(), scenario.doh().response_mode(),
-                                                  EchNeedsPendingHttpsRr(scenario));
+    return std::make_unique<DohHttpsRrMockServer>(scenario);
 #else
     // MemorySanitizer builds deliberately omit OpenSSL, so no verified TLS
     // peer exists for the HTTPS-RR lane. Keep the target available while
