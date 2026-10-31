@@ -2849,6 +2849,8 @@ void TestDohTlsPathFixturesReachInternalHandle() {
          "DoH TLS pathname probe escaped its bounded setup failure");
 }
 
+// GnuTLS deliberately does not advertise libcurl's SSL_CTX callback support.
+#ifndef CURL_FUZZER_EXPECT_GNUTLS
 /// The callback data identifies callbacks from internal DoH handles without
 /// relying on a fixed number of A, AAAA, or HTTPS probe connections.
 void TestDohSslCtxCallbackReachesInternalHandle() {
@@ -2861,6 +2863,7 @@ void TestDohSslCtxCallbackReachesInternalHandle() {
   Expect(result.internal_ssl_ctx_callback_count != 0,
          "SSL_CTX callback/data did not reach a curl-created DoH handle");
 }
+#endif
 
 /// ECH without an explicit config asks the TLS backend for the HTTPS record.
 /// The responder delays that record by one deterministic drive turn so the
@@ -3010,7 +3013,9 @@ int main() {
   TestDohHttpsTransportErrorFollowsCompleteRequest();
   TestDohCustomStderrReachesInternalHandle();
   TestDohTlsPathFixturesReachInternalHandle();
+#ifndef CURL_FUZZER_EXPECT_GNUTLS
   TestDohSslCtxCallbackReachesInternalHandle();
+#endif
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
   TestDohHttpsRrDelaysEchUntilRecordArrives();
 #endif
