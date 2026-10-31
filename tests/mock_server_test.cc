@@ -2632,7 +2632,11 @@ void TestIpfsGatewayPreservesNamespaceUnderDotSegments() {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
 struct DohHttpsRrRunResult {
   CURLcode code = CURLE_FAILED_INIT;
+  std::size_t doh_request_count = 0;
   std::size_t httpsrr_answer_count = 0;
+  std::size_t doh_tls_handshake_count = 0;
+  std::string doh_url;
+  std::string doh_tls_alpn;
   std::string trace;
   std::string negotiated_alpn;
 };
@@ -2640,20 +2644,30 @@ struct DohHttpsRrRunResult {
 /// Drive the resolver lane's complete DoH, TLS, and HTTP/2 exchange.
 /// @param request_ech Whether ECH should obtain its configuration from the
 ///        HTTPS record after the outer TLS filter has been constructed.
-DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
+/// @param transport_mode Plain HTTP or verified HTTPS for internal probes.
+/// @param response_mode Terminal returned after one complete DoH request.
+DohHttpsRrRunResult
+RunDohHttpsRrScenario(bool request_ech,
+                      curl::fuzzer::proto::DohTransportMode transport_mode =
+                          curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+                      curl::fuzzer::proto::DohResponseMode response_mode =
+                          curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL) {
   proto_fuzzer::ScopedTraceReset trace_reset;
 
   // Component trace levels default to NONE. The ordinary case observes only
   // HTTPS-connect's ALPN source; the ECH case also observes the nested SSL
   // filter whose pending-record branch is the regression target.
-  (void)curl_global_trace(request_ech ? "all" : "+HTTPS-CONNECT");
+  (void)curl_global_trace(
+      response_mode == curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR
+          ? "+DOH"
+          : (request_ech ? "all" : "+HTTPS-CONNECT"));
 
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
   scenario.set_host_path(request_ech ? "tls.test/doh-httpsrr-ech"
                                      : "tls.test/doh-httpsrr");
-  scenario.mutable_doh()->set_response_mode(
-      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
+  scenario.mutable_doh()->set_response_mode(response_mode);
+  scenario.mutable_doh()->set_transport_mode(transport_mode);
   if (request_ech) {
     auto *ech = scenario.add_options();
     ech->set_option_id(curl::fuzzer::proto::CURLOPT_ECH);
@@ -2693,8 +2707,8 @@ DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
   curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
 
   proto_fuzzer::DohHttpsRrMockServer server(
-      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL, request_ech);
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, response_mode,
+      request_ech, transport_mode);
   server.Install(easy);
   Expect(!server.doh_url().empty(),
          "DoH responder did not publish a loopback URL");
@@ -2708,7 +2722,11 @@ DohHttpsRrRunResult RunDohHttpsRrScenario(bool request_ech) {
     server.ConfigureRequestData(&request_data);
     result.code = server.DriveScenario(easy, scenario);
   }
+  result.doh_request_count = server.doh_request_count();
   result.httpsrr_answer_count = server.httpsrr_answer_count();
+  result.doh_tls_handshake_count = server.doh_tls_handshake_count();
+  result.doh_url = server.doh_url();
+  result.doh_tls_alpn = server.doh_tls_alpn();
   result.trace = trace.text;
   result.negotiated_alpn = server.negotiated_alpn();
 
@@ -2728,6 +2746,40 @@ void TestDohHttpsRrDrivesAlpnSelection() {
          "HTTPS-RR did not drive the filter's first ALPN selection");
   Expect(result.negotiated_alpn == "h2",
          "the selected ALPN did not reach the TLS peer's handshake");
+  Expect(result.doh_url.rfind("http://127.0.0.1:", 0) == 0 &&
+             result.doh_tls_handshake_count == 0,
+         "legacy DoH mode did not retain its plaintext listener");
+}
+
+/// The HTTPS transport must complete a separately observed HTTP/1.1 TLS
+/// handshake before its HTTPS-RR answer selects h2 for the outer transfer.
+void TestDohHttpsTransportCompletesVerifiedExchange() {
+  const DohHttpsRrRunResult result =
+      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTPS);
+  Expect(result.code == CURLE_OK && result.doh_request_count != 0 &&
+             result.httpsrr_answer_count != 0,
+         "HTTPS DoH transport did not complete the outer transfer");
+  Expect(result.doh_url.rfind("https://127.0.0.1:", 0) == 0 &&
+             result.doh_tls_handshake_count != 0 &&
+             result.doh_tls_alpn == "http/1.1",
+         "HTTPS DoH endpoint did not negotiate its owned HTTP/1.1 TLS peer");
+  Expect(result.negotiated_alpn == "h2",
+         "HTTPS DoH transport changed the outer origin's selected ALPN");
+}
+
+/// Closing only after the verified endpoint receives a complete request must
+/// reach curl's DoH transfer-result terminal, not its HTTP-status or decoder
+/// terminals.
+void TestDohHttpsTransportErrorFollowsCompleteRequest() {
+  const DohHttpsRrRunResult result = RunDohHttpsRrScenario(
+      false, curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR);
+  Expect(result.code == CURLE_COULDNT_RESOLVE_HOST,
+         "HTTPS DoH transport error did not fail name resolution");
+  Expect(
+      result.doh_request_count != 0 && result.doh_tls_handshake_count != 0 &&
+          result.httpsrr_answer_count == 0,
+      "HTTPS DoH transport error occurred before a complete verified request");
 }
 
 /// ECH without an explicit config asks the TLS backend for the HTTPS record.
@@ -2878,6 +2930,8 @@ int main() {
   TestTlsWebSocketCompletesStreamingExchange();
   TestTlsWebSocketFlushesFinalManualFrame();
   TestDohHttpsRrDrivesAlpnSelection();
+  TestDohHttpsTransportCompletesVerifiedExchange();
+  TestDohHttpsTransportErrorFollowsCompleteRequest();
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
   TestDohHttpsRrDelaysEchUntilRecordArrives();
 #endif

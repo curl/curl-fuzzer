@@ -283,18 +283,20 @@ class TlsMockConnection final : public MockConnection {
         shutdown_requested_(false),
         write_shutdown_(false),
         failed_(false) {
-    OpenSslErrorQueueGuard error_guard;
-    SSL_CTX* ssl_context = context_ == nullptr ? nullptr : context_->get();
-    ssl_ = ssl_context == nullptr ? nullptr : SSL_new(ssl_context);
-    if (ssl_ != nullptr) {
-      SSL_set_mode(ssl_, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
-      if (SSL_set_fd(ssl_, server_fd()) != 1) {
-        SSL_free(ssl_);
-        ssl_ = nullptr;
-      } else {
-        SSL_set_accept_state(ssl_);
-      }
-    }
+    InitializeSsl();
+  }
+
+  TlsMockConnection(TlsServerContext* context, int accepted_fd)
+      : MockConnection(accepted_fd),
+        ssl_(nullptr),
+        context_(context),
+        pending_offset_(0),
+        pending_write_end_(0),
+        handshake_complete_(false),
+        shutdown_requested_(false),
+        write_shutdown_(false),
+        failed_(false) {
+    InitializeSsl();
   }
 
   ~TlsMockConnection() override {
@@ -420,6 +422,23 @@ class TlsMockConnection final : public MockConnection {
   }
 
  private:
+  /// Bind a server-side SSL object to the already-owned transport endpoint.
+  void InitializeSsl() {
+    OpenSslErrorQueueGuard error_guard;
+    SSL_CTX* ssl_context = context_ == nullptr ? nullptr : context_->get();
+    ssl_ = ssl_context == nullptr ? nullptr : SSL_new(ssl_context);
+    if (ssl_ == nullptr) {
+      return;
+    }
+    SSL_set_mode(ssl_, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+    if (SSL_set_fd(ssl_, server_fd()) != 1) {
+      SSL_free(ssl_);
+      ssl_ = nullptr;
+      return;
+    }
+    SSL_set_accept_state(ssl_);
+  }
+
   /// Flush queued response bytes while preserving any OpenSSL retry boundary.
   /// @return plaintext bytes OpenSSL accepted during this call.
   std::size_t FlushPendingWrites() {
@@ -573,6 +592,15 @@ std::unique_ptr<MockConnection> TlsMockTransport::CreateConnection() {
     return std::make_unique<TlsHelloRequestConnection>();
   }
   return std::make_unique<TlsMockConnection>(context_.get());
+}
+
+/// Wrap one accepted loopback descriptor in this transport's OpenSSL server
+/// context. The special pre-handshake terminal profiles apply only to the
+/// socketpair fuzz lanes; a listener-backed peer always performs real TLS.
+/// @param accepted_fd Connected descriptor whose ownership transfers.
+/// @return TLS connection owning `accepted_fd`.
+std::unique_ptr<MockConnection> TlsMockTransport::CreateAcceptedConnection(int accepted_fd) {
+  return std::make_unique<TlsMockConnection>(context_.get(), accepted_fd);
 }
 
 /// @return Protocol version selected by the most recent handshake, or zero.

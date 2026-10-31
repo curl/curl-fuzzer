@@ -450,7 +450,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     // transfer selected from the record.
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
     return std::make_unique<DohHttpsRrMockServer>(scenario.tls_certificate_chain(), scenario.doh().response_mode(),
-                                                  EchNeedsPendingHttpsRr(scenario));
+                                                  EchNeedsPendingHttpsRr(scenario), scenario.doh().transport_mode());
 #else
     // MemorySanitizer builds deliberately omit OpenSSL, so no verified TLS
     // peer exists for the HTTPS-RR lane. Keep the target available while

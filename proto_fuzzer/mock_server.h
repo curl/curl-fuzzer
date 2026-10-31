@@ -53,6 +53,10 @@ class MockConnection {
   void ApplyBackpressure(int recv_buf_bytes, std::size_t drain_limit);
 
  protected:
+  /// Adopt one already-connected server descriptor. Ownership transfers even
+  /// when descriptor validation fails; no client endpoint is created.
+  explicit MockConnection(int adopted_server_fd);
+
   void NotifyIncomingData(const unsigned char* data, std::size_t size);
 
  private:

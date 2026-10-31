@@ -2126,9 +2126,18 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
         case curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL:
         case curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS:
         case curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR:
+        case curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR:
           break;
         default:
           scenario->mutable_doh()->set_response_mode(curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
+          break;
+      }
+      switch (scenario->doh().transport_mode()) {
+        case curl::fuzzer::proto::DOH_TRANSPORT_HTTP:
+        case curl::fuzzer::proto::DOH_TRANSPORT_HTTPS:
+          break;
+        default:
+          scenario->mutable_doh()->set_transport_mode(curl::fuzzer::proto::DOH_TRANSPORT_HTTP);
           break;
       }
     }
