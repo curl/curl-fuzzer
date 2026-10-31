@@ -1,0 +1,32 @@
+# Propagate a no-op SSL_CTX callback and its server-owned data pointer to
+# curl-created DoH handles without changing their verified TLS handshake.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/doh-https-ssl-ctx"
+doh {
+  response_mode: DOH_RESPONSE_MODE_NORMAL
+  transport_mode: DOH_TRANSPORT_HTTPS
+  option_probe_mode: DOH_OPTION_PROBE_SSL_CTX
+}
+trace_config: "+DOH"
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "OK"
+      end_stream: true
+    }
+  }
+}

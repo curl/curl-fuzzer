@@ -106,9 +106,12 @@ nonexistent pathname, but the open-socket callback still substitutes its
 anonymous socketpair. The DoH settings retain the historical HTTP listener or
 select a trust-anchor-verified HTTPS listener, independently of normal
 HTTPS-RR answers, one-byte malformed DNS messages, a non-success HTTP status,
-or a close after a complete request. A dedicated localhost seed balances the
-process-wide curl cleanup and allocator-preserving reinitialization lifecycle
-between inputs, after all per-transfer resolver workers have been joined.
+or a close after a complete request. Three closed HTTPS option probes own a
+custom diagnostic stream, bounded TLS pathnames, or SSL_CTX callback state
+long enough for curl-created DoH handles to inherit them. A dedicated
+localhost seed balances the process-wide curl cleanup and
+allocator-preserving reinitialization lifecycle between inputs, after all
+per-transfer resolver workers have been joined.
 
 The fixed SMTP, IMAP, POP3, FTP/FTPS, MQTT/MQTTS, and proxy-transport profiles
 retain `probe_multi_pollset`; deep HTTP retains it only for its CONNECT proxy

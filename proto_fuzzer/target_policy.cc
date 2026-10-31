@@ -2122,23 +2122,17 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
         break;
     }
     if (scenario->has_doh()) {
-      switch (scenario->doh().response_mode()) {
-        case curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL:
-        case curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS:
-        case curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR:
-        case curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR:
-          break;
-        default:
-          scenario->mutable_doh()->set_response_mode(curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
-          break;
+      if (!curl::fuzzer::proto::DohResponseMode_IsValid(scenario->doh().response_mode())) {
+        scenario->mutable_doh()->set_response_mode(curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
       }
-      switch (scenario->doh().transport_mode()) {
-        case curl::fuzzer::proto::DOH_TRANSPORT_HTTP:
-        case curl::fuzzer::proto::DOH_TRANSPORT_HTTPS:
-          break;
-        default:
-          scenario->mutable_doh()->set_transport_mode(curl::fuzzer::proto::DOH_TRANSPORT_HTTP);
-          break;
+      if (!curl::fuzzer::proto::DohTransportMode_IsValid(scenario->doh().transport_mode())) {
+        scenario->mutable_doh()->set_transport_mode(curl::fuzzer::proto::DOH_TRANSPORT_HTTP);
+      }
+      if (!curl::fuzzer::proto::DohOptionProbeMode_IsValid(scenario->doh().option_probe_mode())) {
+        scenario->mutable_doh()->set_option_probe_mode(curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT);
+      }
+      if (scenario->doh().option_probe_mode() != curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT) {
+        scenario->mutable_doh()->set_transport_mode(curl::fuzzer::proto::DOH_TRANSPORT_HTTPS);
       }
     }
     const bool fixed_resolver_mode = scenario->resolver_mode() != curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;

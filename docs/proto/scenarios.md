@@ -263,7 +263,12 @@ Other peers intentionally give those fields narrower meanings:
   `http2_plan`. Malformed-DNS mode returns HTTP 200 with a one-byte DNS body,
   HTTP-error mode returns a non-success status before curl can decode DNS
   bytes, and transport-error mode closes only after receiving a complete DoH
-  request so curl records the internal transfer failure.
+  request so curl records the internal transfer failure. Non-default
+  `option_probe_mode` values force HTTPS and install one closed, harness-owned
+  parent-option fixture: a non-global diagnostic stream, procfs-backed CAINFO,
+  CAPATH, and CRLFILE pathnames, or a no-op SSL_CTX callback and data pointer.
+  Separate modes keep the deliberately invalid pathname fixture from masking
+  the callback's successful end-to-end propagation.
   `CURLOPT_RESOLVE` is cleared because it cannot carry SVCB/HTTPS records. A
   paired coverage seed repeats that exact exchange with `trace_config: "all"`;
   tracing is reset at the input boundary and does not become a resolver-lane

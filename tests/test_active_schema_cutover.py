@@ -142,6 +142,15 @@ def test_active_schema_uses_doh_settings_cutover(tmp_path: Path) -> None:
         "DOH_TRANSPORT_HTTP": 0,
         "DOH_TRANSPORT_HTTPS": 1,
     }
+    option_probe_mode = next(
+        enum for enum in schema.enum_type if enum.name == "DohOptionProbeMode"
+    )
+    assert {value.name: value.number for value in option_probe_mode.value} == {
+        "DOH_OPTION_PROBE_DEFAULT": 0,
+        "DOH_OPTION_PROBE_CUSTOM_STDERR": 1,
+        "DOH_OPTION_PROBE_TLS_PATHS": 2,
+        "DOH_OPTION_PROBE_SSL_CTX": 3,
+    }
     doh_settings = next(
         message for message in schema.message_type if message.name == "DohSettings"
     )
@@ -155,6 +164,11 @@ def test_active_schema_uses_doh_settings_cutover(tmp_path: Path) -> None:
     )
     assert transport.number == 2
     assert transport.type_name == ".curl.fuzzer.proto.DohTransportMode"
+    option_probe = next(
+        field for field in doh_settings.field if field.name == "option_probe_mode"
+    )
+    assert option_probe.number == 3
+    assert option_probe.type_name == ".curl.fuzzer.proto.DohOptionProbeMode"
 
 
 def test_active_schema_matches_baselines_and_projects_all_profiles(
@@ -228,7 +242,14 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         # deltas here.
         if slug in {"compatibility", "resolver"}:
             expected_fields.discard("doh_https_rr")
-            expected_fields.update({"doh", "doh.response_mode", "doh.transport_mode"})
+            expected_fields.update(
+                {
+                    "doh",
+                    "doh.response_mode",
+                    "doh.transport_mode",
+                    "doh.option_probe_mode",
+                }
+            )
         if slug in {"compatibility", "fast_pop3"}:
             expected_fields.add("pop3_starttls_filter_allocation_failure")
         if slug in {"compatibility", "fast_ftp"}:

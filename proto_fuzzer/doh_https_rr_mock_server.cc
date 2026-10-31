@@ -22,7 +22,9 @@
 #include <string>
 #include <utility>
 
+#include "proto_fuzzer/bounded_anonymous_input_file.h"
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/tls_test_credentials.h"
 
 namespace proto_fuzzer {
 
@@ -276,9 +278,13 @@ DohHttpsRrMockServer::DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& 
     : H2OriginMockServer(scenario.tls_certificate_chain()),
       easy_(nullptr),
       listener_(-1),
+      option_probe_mode_(scenario.doh().option_probe_mode()),
       transport_mode_(scenario.doh().transport_mode()),
+      diagnostic_stream_(nullptr),
+      tls_path_fixture_(nullptr),
+      internal_ssl_ctx_callback_count_(0),
       doh_tls_transport_(
-          scenario.doh().transport_mode() == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS
+          transport_mode_ == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS
               ? std::make_unique<TlsMockTransport>(TlsApplicationProtocol::kHttp11, scenario.tls_certificate_chain())
               : nullptr),
       doh_request_count_(0),
@@ -288,13 +294,49 @@ DohHttpsRrMockServer::DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& 
       setup_ok_(false),
       proxy_bypass_active_(false),
       lower_no_proxy_was_set_(false),
-      upper_no_proxy_was_set_(false) {}
+      upper_no_proxy_was_set_(false) {
+  if (option_probe_mode_ == curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR) {
+    diagnostic_stream_ = std::tmpfile();
+  } else if (option_probe_mode_ == curl::fuzzer::proto::DOH_OPTION_PROBE_TLS_PATHS) {
+    tls_path_fixture_ = std::make_unique<BoundedAnonymousInputFile>(sizeof(tls_test_credentials::kCertificatePem) - 1);
+    (void)tls_path_fixture_->Write(reinterpret_cast<const std::uint8_t*>(tls_test_credentials::kCertificatePem),
+                                   sizeof(tls_test_credentials::kCertificatePem) - 1);
+  }
+}
 
 /// Release the loopback listener and restore the proxy environment before the
 /// base carrier tears down its TLS context.
 DohHttpsRrMockServer::~DohHttpsRrMockServer() {
   StopListener();
   EndProxyBypass();
+  if (diagnostic_stream_ != nullptr) {
+    std::fclose(diagnostic_stream_);
+  }
+}
+
+/// Read a bounded prefix without changing the stream position retained by
+/// libcurl. The internal DoH request line appears before the outer transfer can
+/// connect, so the prefix is sufficient to distinguish internal diagnostics.
+/// @return Captured diagnostic bytes, or an empty string when unavailable.
+std::string DohHttpsRrMockServer::custom_stderr_contents() {
+  if (diagnostic_stream_ == nullptr || std::fflush(diagnostic_stream_) != 0) {
+    return {};
+  }
+  const int fd = fileno(diagnostic_stream_);
+  if (fd < 0) {
+    return {};
+  }
+  std::array<char, kMaxDiagnosticBytes> buffer{};
+  ssize_t size;
+  do {
+    size = pread(fd, buffer.data(), buffer.size(), 0);
+  } while (size < 0 && errno == EINTR);
+  return size > 0 ? std::string(buffer.data(), static_cast<std::size_t>(size)) : std::string();
+}
+
+/// @return Whether the procfs-backed TLS pathname fixture was prepared.
+bool DohHttpsRrMockServer::tls_path_fixture_ready() const {
+  return tls_path_fixture_ != nullptr && tls_path_fixture_->path() != nullptr;
 }
 
 /// Bind the DoH listener, point CURLOPT_DOH_URL at it, and bypass ambient
@@ -413,11 +455,58 @@ bool DohHttpsRrMockServer::StartListener() {
 /// X25519 setting deliberately exercise their internal-handle propagation.
 /// @return true when plaintext mode needs no setup or every option succeeded.
 bool DohHttpsRrMockServer::ConfigureHttpsOptions() {
-  return transport_mode_ != curl::fuzzer::proto::DOH_TRANSPORT_HTTPS ||
-         (curl_easy_setopt(easy_, CURLOPT_DOH_SSL_VERIFYHOST, 0L) == CURLE_OK &&
-          curl_easy_setopt(easy_, CURLOPT_DOH_SSL_VERIFYPEER, 1L) == CURLE_OK &&
-          curl_easy_setopt(easy_, CURLOPT_CERTINFO, 1L) == CURLE_OK &&
-          curl_easy_setopt(easy_, CURLOPT_NOSIGNAL, 1L) == CURLE_OK);
+  if (transport_mode_ != curl::fuzzer::proto::DOH_TRANSPORT_HTTPS) {
+    return true;
+  }
+
+  bool configured = true;
+  configured = curl_easy_setopt(easy_, CURLOPT_DOH_SSL_VERIFYHOST, 0L) == CURLE_OK && configured;
+  configured = curl_easy_setopt(easy_, CURLOPT_DOH_SSL_VERIFYPEER, 1L) == CURLE_OK && configured;
+  configured = curl_easy_setopt(easy_, CURLOPT_CERTINFO, 1L) == CURLE_OK && configured;
+  configured = curl_easy_setopt(easy_, CURLOPT_NOSIGNAL, 1L) == CURLE_OK && configured;
+
+  switch (option_probe_mode_) {
+    case curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR:
+      if (diagnostic_stream_ == nullptr) {
+        return false;
+      }
+      configured = curl_easy_setopt(easy_, CURLOPT_STDERR, diagnostic_stream_) == CURLE_OK && configured;
+      break;
+    case curl::fuzzer::proto::DOH_OPTION_PROBE_TLS_PATHS: {
+      const char* path = tls_path_fixture_ == nullptr ? nullptr : tls_path_fixture_->path();
+      if (path == nullptr) {
+        return false;
+      }
+      configured = curl_easy_setopt(easy_, CURLOPT_CAINFO, path) == CURLE_OK && configured;
+      configured = curl_easy_setopt(easy_, CURLOPT_CAPATH, path) == CURLE_OK && configured;
+      configured = curl_easy_setopt(easy_, CURLOPT_CRLFILE, path) == CURLE_OK && configured;
+      break;
+    }
+    case curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX:
+      configured =
+          curl_easy_setopt(easy_, CURLOPT_SSL_CTX_FUNCTION, &DohHttpsRrMockServer::ObserveSslContext) == CURLE_OK &&
+          configured;
+      configured = curl_easy_setopt(easy_, CURLOPT_SSL_CTX_DATA, this) == CURLE_OK && configured;
+      break;
+    case curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT:
+    default:
+      break;
+  }
+  return configured;
+}
+
+/// Observe callback/data propagation without inspecting the backend context or
+/// re-entering libcurl from inside its TLS setup callback.
+/// @param easy Handle whose SSL context is being initialized.
+/// @param ssl_context Backend context; intentionally opaque to this probe.
+/// @param user_data Server pointer installed with CURLOPT_SSL_CTX_DATA.
+/// @return CURLE_OK so the handshake continues normally.
+CURLcode DohHttpsRrMockServer::ObserveSslContext(CURL* easy, void* /*ssl_context*/, void* user_data) {
+  auto* server = static_cast<DohHttpsRrMockServer*>(user_data);
+  if (server != nullptr && easy != server->easy_) {
+    ++server->internal_ssl_ctx_callback_count_;
+  }
+  return CURLE_OK;
 }
 
 /// Close the listener and every accepted DoH connection.

@@ -38,7 +38,9 @@ def test_resolver_lane_has_a_doh_httpsrr_seed() -> None:
         "doh_httpsrr_alpn_trace.textproto",
         "doh_httpsrr_ech_pending.textproto",
     ):
-        assert "transport_mode:" not in (SCENARIO_DIR / legacy_name).read_text()
+        legacy = (SCENARIO_DIR / legacy_name).read_text()
+        assert "transport_mode:" not in legacy
+        assert "option_probe_mode:" not in legacy
 
 
 def test_resolver_lane_has_a_pending_httpsrr_ech_seed() -> None:
@@ -66,6 +68,24 @@ def test_resolver_lane_has_https_doh_transport_seeds() -> None:
     assert "DOH_RESPONSE_MODE_NORMAL" in success
     assert "HTTP2_CLIENT_EVENT_HEADERS" in success
     assert "DOH_RESPONSE_MODE_TRANSPORT_ERROR" in transport_error
+    assert "option_probe_mode:" not in success
+    assert "option_probe_mode:" not in transport_error
+
+
+def test_resolver_lane_has_https_doh_option_probe_seeds() -> None:
+    probes = {
+        "doh_https_custom_stderr.textproto": "DOH_OPTION_PROBE_CUSTOM_STDERR",
+        "doh_https_tls_paths.textproto": "DOH_OPTION_PROBE_TLS_PATHS",
+        "doh_https_ssl_ctx.textproto": "DOH_OPTION_PROBE_SSL_CTX",
+    }
+    for filename, mode in probes.items():
+        scenario = (SCENARIO_DIR / filename).read_text()
+        assert "scheme: SCHEME_HTTPS" in scenario
+        assert "transport_mode: DOH_TRANSPORT_HTTPS" in scenario
+        assert "response_mode: DOH_RESPONSE_MODE_NORMAL" in scenario
+        assert f"option_probe_mode: {mode}" in scenario
+        assert 'host_path: "tls.test/' in scenario
+        assert "HTTP2_CLIENT_EVENT_HEADERS" in scenario
 
 
 def test_resolver_httpsrr_trace_seed_only_enables_per_input_tracing() -> None:

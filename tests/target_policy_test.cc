@@ -2264,6 +2264,18 @@ void TestResolverPolicy() {
   Expect(doh.doh().transport_mode() == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
          "DoH resolver policy discarded its HTTPS listener transport");
 
+  Scenario doh_option_probe;
+  doh_option_probe.mutable_doh()->set_transport_mode(
+      curl::fuzzer::proto::DOH_TRANSPORT_HTTP);
+  doh_option_probe.mutable_doh()->set_option_probe_mode(
+      curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX);
+  NormalizeScenarioForTarget(&doh_option_probe, TargetProfile::kResolver);
+  Expect(doh_option_probe.doh().option_probe_mode() ==
+                 curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX &&
+             doh_option_probe.doh().transport_mode() ==
+                 curl::fuzzer::proto::DOH_TRANSPORT_HTTPS,
+         "DoH option probe did not force its inherited HTTPS transport");
+
   Scenario legacy_doh;
   legacy_doh.mutable_doh()->set_response_mode(
       curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL);
@@ -2277,12 +2289,16 @@ void TestResolverPolicy() {
       static_cast<curl::fuzzer::proto::DohResponseMode>(99));
   invalid_doh.mutable_doh()->set_transport_mode(
       static_cast<curl::fuzzer::proto::DohTransportMode>(99));
+  invalid_doh.mutable_doh()->set_option_probe_mode(
+      static_cast<curl::fuzzer::proto::DohOptionProbeMode>(99));
   NormalizeScenarioForTarget(&invalid_doh, TargetProfile::kResolver);
   Expect(invalid_doh.has_doh() &&
              invalid_doh.doh().response_mode() ==
                  curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL &&
              invalid_doh.doh().transport_mode() ==
-                 curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+                 curl::fuzzer::proto::DOH_TRANSPORT_HTTP &&
+             invalid_doh.doh().option_probe_mode() ==
+                 curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT,
          "DoH resolver policy did not canonicalize unknown settings");
 
   Scenario threaded;

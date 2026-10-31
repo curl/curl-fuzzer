@@ -1,0 +1,33 @@
+# Copy owned CAINFO, CAPATH, and CRLFILE pathnames to curl-created DoH handles.
+# The CA file is valid; the bounded regular-file CAPATH and non-CRL bytes make
+# backend rejection deterministic without consulting ambient filesystem paths.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/doh-https-tls-paths"
+doh {
+  response_mode: DOH_RESPONSE_MODE_NORMAL
+  transport_mode: DOH_TRANSPORT_HTTPS
+  option_probe_mode: DOH_OPTION_PROBE_TLS_PATHS
+}
+trace_config: "+DOH"
+http2_plan {
+  actions {
+    wait {
+      event: HTTP2_CLIENT_EVENT_HEADERS
+      stream { request_index: 0 }
+      count: 1
+    }
+  }
+  actions {
+    headers {
+      stream { request_index: 0 }
+      status_code: 200
+    }
+  }
+  actions {
+    data {
+      stream { request_index: 0 }
+      data: "OK"
+      end_stream: true
+    }
+  }
+}
