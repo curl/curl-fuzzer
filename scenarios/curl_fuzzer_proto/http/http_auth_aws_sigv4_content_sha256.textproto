@@ -1,0 +1,16 @@
+# Supply the S3 payload hash with surrounding whitespace so SigV4 parses and
+# trims the provider-specific content-sha256 header instead of calculating a
+# hash from CURLOPT_POSTFIELDS.
+scheme: SCHEME_HTTP
+host_path: "s3.us-east-1.amazonaws.com/example-bucket/supplied-hash"
+request_headers: "X-Amz-Date: 20130524T000000Z"
+request_headers: "X-Amz-Content-Sha256:   e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855   "
+options {
+  userpwd: "AKIDEXAMPLE:wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
+}
+options {
+  aws_sigv4: "aws:amz:us-east-1:s3"
+}
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

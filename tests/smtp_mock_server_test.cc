@@ -264,6 +264,28 @@ void TestTryStartTlsDenialFallsBackToPlaintext() {
                    "optional SMTP STARTTLS fallback transcript was wrong");
 }
 
+void TestTryStartTlsWithoutCapabilityFallsBackToPlaintext() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_SMTP);
+  scenario.set_smtp_probe_mode(curl::fuzzer::proto::SMTP_PROBE_STARTTLS_TRY);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("220 smtp.test ESMTP fuzz peer\r\n");
+  connection->add_on_readable("250 smtp.test\r\n");
+  connection->add_on_readable("214 smtp.test help\r\n");
+  connection->add_on_readable("221 bye\r\n");
+
+  const SmtpRunResult result =
+      RunScenario(scenario, "smtp://smtp.test/starttls-unsupported.test");
+  Expect(result.code == CURLE_OK,
+         "optional SMTP without STARTTLS did not continue in plaintext");
+  ExpectTranscript(result,
+                   "EHLO starttls-unsupported.test\r\n"
+                   "HELP\r\n"
+                   "QUIT\r\n",
+                   "SMTP without a STARTTLS capability issued the wrong "
+                   "commands");
+}
+
 void TestRequiredStartTlsDenialFailsTransfer() {
   Scenario scenario =
       StartTlsScenario(curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE,
@@ -563,6 +585,7 @@ int main() {
   TestRecipientFailureCanReachRejectedPostBodyReply();
   TestRequiredStartTlsReachesBoundedHandshakeEof();
   TestTryStartTlsDenialFallsBackToPlaintext();
+  TestTryStartTlsWithoutCapabilityFallsBackToPlaintext();
   TestRequiredStartTlsDenialFailsTransfer();
   TestStartTlsResponseOverflowIsRejected();
   TestStartTlsArmsAdjacentFilterAllocationFailure();

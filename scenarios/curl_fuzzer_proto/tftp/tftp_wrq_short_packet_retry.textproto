@@ -1,0 +1,14 @@
+# A too-short reply synthesizes TFTP's timeout event while an upload is
+# waiting for ACK1. Curl must retransmit DATA1 before accepting the real ACK,
+# without depending on a wall-clock timeout.
+scheme: SCHEME_TFTP
+host_path: "tftp.test/upload-short-retry"
+options { upload: true }
+options { infilesize_large: 8 }
+options { tftp_no_options: true }
+upload { data: "abcdefgh" terminal: UPLOAD_TERMINAL_EOF }
+connection {
+  initial_response: "\000\004\000\000"
+  on_readable: "\000"
+  on_readable: "\000\004\000\001"
+}

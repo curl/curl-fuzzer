@@ -1089,6 +1089,27 @@ void TestAwsSigV4SeedsEmitVerifiedTranscripts() {
              "8a29b887a9b8a2b8a39f177be34081e1ef6fe71926caad2386ef92dfc33d7c61"
              "\r\n") != std::string::npos,
          "generic SigV4 transcript did not contain the verified signature");
+
+  const HttpSeedTranscript supplied =
+      CaptureHttpSeed("http_auth_aws_sigv4_content_sha256.textproto");
+  Expect(supplied.code == CURLE_OK && supplied.response_code == 200 &&
+             supplied.connection_count == 1,
+         "supplied-hash SigV4 seed did not complete exactly one request");
+  Expect(supplied.request.rfind(
+             "GET /example-bucket/supplied-hash HTTP/1.1\r\n", 0) == 0,
+         "supplied-hash SigV4 transcript changed its request target");
+  Expect(supplied.request.find(
+             "X-Amz-Content-Sha256:   "
+             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+             "   \r\n") != std::string::npos,
+         "supplied-hash SigV4 transcript changed the custom header");
+  Expect(supplied.request.find(
+             "SignedHeaders=host;x-amz-content-sha256;x-amz-date, "
+             "Signature="
+             "fb6226831986f5c5f3f3efd88373c5e5d134f28df60eaf3b889e7879517eaa66"
+             "\r\n") != std::string::npos,
+         "supplied-hash SigV4 transcript did not trim and sign the custom "
+         "header");
 }
 
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)

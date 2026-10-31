@@ -172,6 +172,11 @@ def test_tftp_seeds_preserve_datagram_boundaries_and_state_pairs() -> None:
             "\\000\\003\\000\\002z",
         ),
         "tftp_error_not_found.textproto": ("\\000\\005\\000\\001not found\\000",),
+        "tftp_wrq_short_packet_retry.textproto": (
+            "upload: true",
+            'on_readable: "\\000"',
+            "\\000\\004\\000\\001",
+        ),
     }
     tftp_root = SCENARIO_ROOT / "tftp"
     for name, tokens in expected_tokens.items():
@@ -260,6 +265,14 @@ def test_smtp_seeds_keep_envelope_and_data_order() -> None:
         assert f"smtp_probe_mode: {mode}" in seed
         assert "250 STARTTLS" in seed
         assert "STARTTLS" in seed
+
+    unsupported = (smtp_root / "smtp_starttls_try_unsupported.textproto").read_text(
+        encoding="utf-8"
+    )
+    assert "smtp_probe_mode: SMTP_PROBE_STARTTLS_TRY" in unsupported
+    assert "250 smtp.test" in unsupported
+    assert "250 STARTTLS" not in unsupported
+    assert "214 smtp.test help" in unsupported
 
     utf8 = (smtp_root / "smtp_utf8_size_mail.textproto").read_text(
         encoding="utf-8"

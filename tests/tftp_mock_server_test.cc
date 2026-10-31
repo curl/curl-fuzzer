@@ -176,6 +176,32 @@ void TestExactBlockUploadSendsTerminalPacket() {
          "TFTP exact-block upload omitted terminal DATA2");
 }
 
+void TestShortPacketRetriesUploadData() {
+  Scenario scenario;
+  auto *upload = scenario.add_options();
+  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload->set_bool_value(true);
+  auto *size = scenario.add_options();
+  size->set_option_id(curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE);
+  size->set_uint_value(8);
+  auto *no_options = scenario.add_options();
+  no_options->set_option_id(curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS);
+  no_options->set_bool_value(true);
+  scenario.mutable_upload()->set_data("abcdefgh");
+  scenario.mutable_connection()->set_initial_response(Packet(4, 0));
+  scenario.mutable_connection()->add_on_readable(std::string("\0", 1));
+  scenario.mutable_connection()->add_on_readable(Packet(4, 1));
+
+  const TftpRunResult result = RunScenario(scenario);
+  Expect(result.code == CURLE_OK,
+         "short-packet TFTP upload retry did not complete");
+  Expect(result.received.size() >= 3,
+         "TFTP peer did not capture WRQ and both DATA1 attempts");
+  const std::string data1 = Packet(3, 1, "abcdefgh");
+  Expect(result.received[1].bytes == data1 && result.received[2].bytes == data1,
+         "short TFTP reply did not retransmit the pending DATA1 packet");
+}
+
 } // namespace
 
 int main() {
@@ -185,6 +211,7 @@ int main() {
   TestOackDownloadUsesTransferId();
   TestNoOptionsRequestAndErrorMapping();
   TestExactBlockUploadSendsTerminalPacket();
+  TestShortPacketRetriesUploadData();
   curl_global_cleanup();
   return 0;
 }
