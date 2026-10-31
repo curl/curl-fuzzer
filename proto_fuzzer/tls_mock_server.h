@@ -63,8 +63,6 @@ class TlsMockTransport {
 
   std::unique_ptr<MockConnection> CreateConnection();
 
-  /// Wrap an accepted loopback socket in the same nonblocking TLS server used
-  /// by socketpair-backed protocol peers. Ownership transfers immediately.
   std::unique_ptr<MockConnection> CreateAcceptedConnection(int accepted_fd);
 
   int negotiated_tls_version() const;
