@@ -2140,6 +2140,19 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
           scenario->mutable_doh()->set_transport_mode(curl::fuzzer::proto::DOH_TRANSPORT_HTTP);
           break;
       }
+      switch (scenario->doh().option_probe_mode()) {
+        case curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT:
+        case curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR:
+        case curl::fuzzer::proto::DOH_OPTION_PROBE_TLS_PATHS:
+        case curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX:
+          break;
+        default:
+          scenario->mutable_doh()->set_option_probe_mode(curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT);
+          break;
+      }
+      if (scenario->doh().option_probe_mode() != curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT) {
+        scenario->mutable_doh()->set_transport_mode(curl::fuzzer::proto::DOH_TRANSPORT_HTTPS);
+      }
     }
     const bool fixed_resolver_mode = scenario->resolver_mode() != curl::fuzzer::proto::RESOLVER_MODE_DEFAULT;
     if (fixed_resolver_mode) {

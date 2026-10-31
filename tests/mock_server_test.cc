@@ -2663,6 +2663,9 @@ struct DohHttpsRrRunResult {
   std::string doh_tls_alpn;
   std::string trace;
   std::string negotiated_alpn;
+  std::string custom_stderr;
+  bool tls_path_fixture_ready = false;
+  std::size_t internal_ssl_ctx_callback_count = 0;
 };
 
 /// Drive the resolver lane's complete DoH, TLS, and HTTP/2 exchange.
@@ -2670,19 +2673,24 @@ struct DohHttpsRrRunResult {
 ///        HTTPS record after the outer TLS filter has been constructed.
 /// @param transport_mode Plain HTTP or verified HTTPS for internal probes.
 /// @param response_mode Terminal returned after one complete DoH request.
-DohHttpsRrRunResult
-RunDohHttpsRrScenario(bool request_ech,
-                      curl::fuzzer::proto::DohTransportMode transport_mode =
-                          curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
-                      curl::fuzzer::proto::DohResponseMode response_mode =
-                          curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL) {
+/// @param option_probe_mode Closed inherited-option fixture to install.
+DohHttpsRrRunResult RunDohHttpsRrScenario(
+    bool request_ech,
+    curl::fuzzer::proto::DohTransportMode transport_mode =
+        curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+    curl::fuzzer::proto::DohResponseMode response_mode =
+        curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
+    curl::fuzzer::proto::DohOptionProbeMode option_probe_mode =
+        curl::fuzzer::proto::DOH_OPTION_PROBE_DEFAULT) {
   proto_fuzzer::ScopedTraceReset trace_reset;
 
   // Component trace levels default to NONE. The ordinary case observes only
   // HTTPS-connect's ALPN source; the ECH case also observes the nested SSL
   // filter whose pending-record branch is the regression target.
   (void)curl_global_trace(
-      response_mode == curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR
+      response_mode == curl::fuzzer::proto::DOH_RESPONSE_MODE_TRANSPORT_ERROR ||
+              option_probe_mode ==
+                  curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR
           ? "+DOH"
           : (request_ech ? "all" : "+HTTPS-CONNECT"));
 
@@ -2692,6 +2700,7 @@ RunDohHttpsRrScenario(bool request_ech,
                                      : "tls.test/doh-httpsrr");
   scenario.mutable_doh()->set_response_mode(response_mode);
   scenario.mutable_doh()->set_transport_mode(transport_mode);
+  scenario.mutable_doh()->set_option_probe_mode(option_probe_mode);
   if (request_ech) {
     auto *ech = scenario.add_options();
     ech->set_option_id(curl::fuzzer::proto::CURLOPT_ECH);
@@ -2727,8 +2736,11 @@ RunDohHttpsRrScenario(bool request_ech,
 
   TraceCapture trace;
   curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
-  curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
-  curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
+  if (option_probe_mode !=
+      curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR) {
+    curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
+    curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
+  }
 
   proto_fuzzer::DohHttpsRrMockServer server(scenario);
   server.Install(easy);
@@ -2751,6 +2763,10 @@ RunDohHttpsRrScenario(bool request_ech,
   result.doh_tls_alpn = server.doh_tls_alpn();
   result.trace = trace.text;
   result.negotiated_alpn = server.negotiated_alpn();
+  result.custom_stderr = server.custom_stderr_contents();
+  result.tls_path_fixture_ready = server.tls_path_fixture_ready();
+  result.internal_ssl_ctx_callback_count =
+      server.internal_ssl_ctx_callback_count();
 
   curl_easy_cleanup(easy);
   connect_to.reset();
@@ -2802,6 +2818,48 @@ void TestDohHttpsTransportErrorFollowsCompleteRequest() {
       result.doh_request_count != 0 && result.doh_tls_handshake_count != 0 &&
           result.httpsrr_answer_count == 0,
       "HTTPS DoH transport error occurred before a complete verified request");
+}
+
+/// A non-global diagnostic stream must propagate to curl-created DoH handles,
+/// where the internal HTTP request is emitted by the default verbose callback.
+void TestDohCustomStderrReachesInternalHandle() {
+  const DohHttpsRrRunResult result = RunDohHttpsRrScenario(
+      false, curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+      curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
+      curl::fuzzer::proto::DOH_OPTION_PROBE_CUSTOM_STDERR);
+  Expect(result.code == CURLE_OK && result.doh_request_count != 0 &&
+             result.doh_tls_handshake_count != 0,
+         "custom-stderr DoH probe did not complete its HTTPS exchange");
+  Expect(result.custom_stderr.find("POST /dns-query") != std::string::npos,
+         "curl-created DoH handle did not use the inherited stderr stream");
+}
+
+/// Owned procfs paths reach every inherited TLS pathname setter before the
+/// deliberately non-directory CAPATH and non-CRL bytes reject TLS setup.
+void TestDohTlsPathFixturesReachInternalHandle() {
+  const DohHttpsRrRunResult result =
+      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+                            curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
+                            curl::fuzzer::proto::DOH_OPTION_PROBE_TLS_PATHS);
+  Expect(result.tls_path_fixture_ready,
+         "DoH TLS pathname fixture was not prepared");
+  Expect(result.code == CURLE_COULDNT_RESOLVE_HOST &&
+             result.doh_request_count == 0 &&
+             result.doh_tls_handshake_count == 0,
+         "DoH TLS pathname probe escaped its bounded setup failure");
+}
+
+/// The callback data identifies callbacks from internal DoH handles without
+/// relying on a fixed number of A, AAAA, or HTTPS probe connections.
+void TestDohSslCtxCallbackReachesInternalHandle() {
+  const DohHttpsRrRunResult result =
+      RunDohHttpsRrScenario(false, curl::fuzzer::proto::DOH_TRANSPORT_HTTP,
+                            curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
+                            curl::fuzzer::proto::DOH_OPTION_PROBE_SSL_CTX);
+  Expect(result.code == CURLE_OK && result.doh_request_count != 0,
+         "SSL_CTX DoH probe did not complete its HTTPS exchange");
+  Expect(result.internal_ssl_ctx_callback_count != 0,
+         "SSL_CTX callback/data did not reach a curl-created DoH handle");
 }
 
 /// ECH without an explicit config asks the TLS backend for the HTTPS record.
@@ -2950,6 +3008,9 @@ int main() {
   TestDohHttpsRrDrivesAlpnSelection();
   TestDohHttpsTransportCompletesVerifiedExchange();
   TestDohHttpsTransportErrorFollowsCompleteRequest();
+  TestDohCustomStderrReachesInternalHandle();
+  TestDohTlsPathFixturesReachInternalHandle();
+  TestDohSslCtxCallbackReachesInternalHandle();
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
   TestDohHttpsRrDelaysEchUntilRecordArrives();
 #endif

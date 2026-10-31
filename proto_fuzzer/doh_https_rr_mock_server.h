@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -22,6 +23,8 @@
 #include "proto_fuzzer/h2_origin_mock_server.h"
 
 namespace proto_fuzzer {
+
+class BoundedAnonymousInputFile;
 
 /// @class proto_fuzzer::DohHttpsRrMockServer
 /// @brief Resolver-lane peer that answers curl's internal DoH queries from a
@@ -65,6 +68,13 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
     return doh_tls_transport_ == nullptr ? std::string() : doh_tls_transport_->negotiated_alpn();
   }
 
+  std::string custom_stderr_contents();
+
+  bool tls_path_fixture_ready() const;
+
+  /// @return SSL context callbacks observed on curl-created internal handles.
+  std::size_t internal_ssl_ctx_callback_count() const { return internal_ssl_ctx_callback_count_; }
+
  protected:
   void ObserveActiveTransfer(CURL* easy) override;
 
@@ -77,6 +87,7 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   /// harness memory in proportion to the fuzz input.
   static constexpr std::size_t kMaxRequestBytes = 4096;
   static constexpr std::size_t kMaxResponseBytes = 4096;
+  static constexpr std::size_t kMaxDiagnosticBytes = 4096;
 
   /// One accepted DoH TCP connection and its buffered request/response state.
   struct DohConnection final : public IncomingDataObserver {
@@ -96,6 +107,7 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   virtual bool StartListener();
   void StopListener();
   bool ConfigureHttpsOptions();
+  static CURLcode ObserveSslContext(CURL* easy, void* ssl_context, void* user_data);
   bool BeginProxyBypass();
   void EndProxyBypass();
 
@@ -108,8 +120,20 @@ class DohHttpsRrMockServer : public H2OriginMockServer {
   int listener_;
   std::string doh_url_;
 
+  /// Closed parent-option probe copied onto curl-created HTTPS DoH handles.
+  curl::fuzzer::proto::DohOptionProbeMode option_probe_mode_;
+
   /// Fixed scheme used by the listener for every internal probe.
   curl::fuzzer::proto::DohTransportMode transport_mode_;
+
+  /// Non-global diagnostic stream retained by CURLOPT_STDERR.
+  std::FILE* diagnostic_stream_;
+
+  /// Procfs-backed certificate bytes reused as CAINFO, CAPATH, and CRLFILE.
+  std::unique_ptr<BoundedAnonymousInputFile> tls_path_fixture_;
+
+  /// Callback hits from internal DoH handles rather than the parent easy.
+  std::size_t internal_ssl_ctx_callback_count_;
 
   /// Dedicated HTTP/1.1 TLS context for accepted DoH connections. The outer
   /// origin keeps the separate HTTP/2 transport owned by the base class.
