@@ -1,0 +1,83 @@
+# ngtcp2 APIs whose packet-coalescing contract is enforced by the link shim.
+# Public write macros resolve to the *_versioned symbols in this list.
+set(NGTCP2_CONTRACT_WRAPPED_APIS
+    ngtcp2_conn_client_new_versioned
+    ngtcp2_conn_server_new_versioned
+    ngtcp2_conn_del
+    ngtcp2_conn_decode_and_set_0rtt_transport_params
+    ngtcp2_conn_encode_0rtt_transport_params
+    ngtcp2_conn_extend_max_offset
+    ngtcp2_conn_extend_max_stream_offset
+    ngtcp2_conn_get_ccerr
+    ngtcp2_conn_get_cwnd_left
+    ngtcp2_conn_get_expiry
+    ngtcp2_conn_get_expiry2
+    ngtcp2_conn_get_handshake_completed
+    ngtcp2_conn_get_max_data_left
+    ngtcp2_conn_get_max_tx_udp_payload_size
+    ngtcp2_conn_get_path_max_tx_udp_payload_size
+    ngtcp2_conn_get_remote_transport_params
+    ngtcp2_conn_get_send_quantum
+    ngtcp2_conn_get_stream_user_data
+    ngtcp2_conn_get_streams_uni_left
+    ngtcp2_conn_get_timestamp
+    ngtcp2_conn_get_tls_alert
+    ngtcp2_conn_get_tls_early_data_rejected2
+    ngtcp2_conn_handle_expiry
+    ngtcp2_conn_in_draining_period
+    ngtcp2_conn_open_bidi_stream
+    ngtcp2_conn_open_uni_stream
+    ngtcp2_conn_read_pkt_versioned
+    ngtcp2_conn_set_keep_alive_timeout
+    ngtcp2_conn_set_stream_user_data
+    ngtcp2_conn_set_tls_native_handle
+    ngtcp2_conn_shutdown_stream
+    ngtcp2_conn_shutdown_stream_read
+    ngtcp2_conn_shutdown_stream_write
+    ngtcp2_conn_update_pkt_tx_time
+    ngtcp2_conn_write_connection_close_versioned
+    ngtcp2_conn_write_datagram_versioned
+    ngtcp2_conn_write_pkt_versioned
+    ngtcp2_conn_write_stream_versioned
+    ngtcp2_conn_writev_datagram_versioned
+    ngtcp2_conn_writev_stream_versioned)
+
+# Current helper and callback entry points that do not represent an application
+# operation on a connection. Callback entries run within a wrapped ngtcp2 call.
+# Keep them explicit so a dependency or curl update cannot silently expand the
+# audited API surface.
+set(NGTCP2_CONTRACT_ALLOWED_APIS
+    ngtcp2_accept
+    ngtcp2_addr_init
+    ngtcp2_cid_init
+    ngtcp2_ccerr_default
+    ngtcp2_ccerr_set_application_error
+    ngtcp2_ccerr_set_liberr
+    ngtcp2_ccerr_set_tls_alert
+    ngtcp2_crypto_client_initial_cb
+    ngtcp2_crypto_decrypt_cb
+    ngtcp2_crypto_delete_crypto_aead_ctx_cb
+    ngtcp2_crypto_delete_crypto_cipher_ctx_cb
+    ngtcp2_crypto_encrypt_cb
+    ngtcp2_crypto_get_path_challenge_data2_cb
+    ngtcp2_crypto_get_path_challenge_data_cb
+    ngtcp2_crypto_hp_mask_cb
+    ngtcp2_crypto_ossl_configure_client_session
+    ngtcp2_crypto_ossl_configure_server_session
+    ngtcp2_crypto_ossl_ctx_del
+    ngtcp2_crypto_ossl_ctx_new
+    ngtcp2_crypto_ossl_ctx_set_ssl
+    ngtcp2_crypto_ossl_free
+    ngtcp2_crypto_ossl_init
+    ngtcp2_crypto_recv_client_initial_cb
+    ngtcp2_crypto_recv_crypto_data_cb
+    ngtcp2_crypto_recv_retry_cb
+    ngtcp2_crypto_update_key_cb
+    ngtcp2_crypto_version_negotiation_cb
+    ngtcp2_is_bidi_stream
+    ngtcp2_path_storage_init
+    ngtcp2_path_storage_zero
+    ngtcp2_settings_default_versioned
+    ngtcp2_strerror
+    ngtcp2_transport_params_default_versioned
+    ngtcp2_version)
