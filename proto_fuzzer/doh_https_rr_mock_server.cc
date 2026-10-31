@@ -22,6 +22,8 @@
 #include <string>
 #include <utility>
 
+#include "proto_fuzzer/option_apply.h"
+
 namespace proto_fuzzer {
 
 namespace {
@@ -32,6 +34,24 @@ constexpr unsigned short kDnsQtypeAAAA = 28;
 constexpr unsigned short kDnsQtypeHTTPS = 65;
 constexpr std::size_t kDnsHeaderSize = 12;
 constexpr std::size_t kDnsAnswerHeaderSize = 12;
+
+/// Detect the ECH modes that ask the TLS backend to obtain its configuration
+/// from an HTTPS resource record. A literal ECHConfigList already supplies the
+/// configuration, while GREASE deliberately does not wait for DNS.
+bool EchNeedsPendingHttpsRr(const curl::fuzzer::proto::Scenario& scenario) {
+  const std::size_t option_count = RuntimeOptionCount(scenario);
+  for (std::size_t index = 0; index < option_count; ++index) {
+    const auto& option = scenario.options(static_cast<int>(index));
+    if (option.option_id() != curl::fuzzer::proto::CURLOPT_ECH) {
+      continue;
+    }
+    const std::string& value = option.string_value();
+    if (value == "true" || value == "hard" || value.rfind("pn:", 0) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// Save one proxy environment variable before the responder replaces it.
 /// @param name Environment variable name.
@@ -251,25 +271,20 @@ void DohHttpsRrMockServer::DohConnection::ObserveIncomingData(const unsigned cha
 
 /// Construct an idle responder. The listener and proxy bypass are installed
 /// by Install(), after the TLS carrier has prepared the outer peer.
-/// @param certificate_chain Certificate chain served by the outer TLS peer.
-/// @param response_mode HTTP/DNS terminal returned for each complete request.
-/// @param defer_httpsrr Whether to defer a valid HTTPS answer by one drive
-///        turn so ECH reaches the TLS backend while its record is pending.
-/// @param transport_mode Plain HTTP or verified HTTPS for internal probes.
-DohHttpsRrMockServer::DohHttpsRrMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                                           curl::fuzzer::proto::DohResponseMode response_mode, bool defer_httpsrr,
-                                           curl::fuzzer::proto::DohTransportMode transport_mode)
-    : H2OriginMockServer(certificate_chain),
+/// @param scenario Source of the fixed TLS, DoH, and ECH configuration.
+DohHttpsRrMockServer::DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& scenario)
+    : H2OriginMockServer(scenario.tls_certificate_chain()),
       easy_(nullptr),
       listener_(-1),
-      transport_mode_(transport_mode),
-      doh_tls_transport_(transport_mode == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS
-                             ? std::make_unique<TlsMockTransport>(TlsApplicationProtocol::kHttp11, certificate_chain)
-                             : nullptr),
+      transport_mode_(scenario.doh().transport_mode()),
+      doh_tls_transport_(
+          scenario.doh().transport_mode() == curl::fuzzer::proto::DOH_TRANSPORT_HTTPS
+              ? std::make_unique<TlsMockTransport>(TlsApplicationProtocol::kHttp11, scenario.tls_certificate_chain())
+              : nullptr),
       doh_request_count_(0),
       httpsrr_answer_count_(0),
-      response_mode_(response_mode),
-      defer_httpsrr_(defer_httpsrr),
+      response_mode_(scenario.doh().response_mode()),
+      defer_httpsrr_(EchNeedsPendingHttpsRr(scenario)),
       setup_ok_(false),
       proxy_bypass_active_(false),
       lower_no_proxy_was_set_(false),

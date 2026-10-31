@@ -36,12 +36,7 @@ namespace proto_fuzzer {
 /// build supports HTTP/2.
 class DohHttpsRrMockServer : public H2OriginMockServer {
  public:
-  explicit DohHttpsRrMockServer(
-      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-      curl::fuzzer::proto::DohResponseMode response_mode = curl::fuzzer::proto::DOH_RESPONSE_MODE_NORMAL,
-      bool defer_httpsrr = false,
-      curl::fuzzer::proto::DohTransportMode transport_mode = curl::fuzzer::proto::DOH_TRANSPORT_HTTP);
+  explicit DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& scenario);
   ~DohHttpsRrMockServer() override;
 
   DohHttpsRrMockServer(const DohHttpsRrMockServer&) = delete;

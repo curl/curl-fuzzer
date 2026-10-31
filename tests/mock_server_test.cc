@@ -84,6 +84,9 @@ public:
 /// can prove the carrier never enters libcurl's native resolver fallback.
 class FailingDohHttpsRrMockServer final
     : public proto_fuzzer::DohHttpsRrMockServer {
+public:
+  using proto_fuzzer::DohHttpsRrMockServer::DohHttpsRrMockServer;
+
 protected:
   bool StartListener() override { return false; }
 };
@@ -2706,9 +2709,7 @@ RunDohHttpsRrScenario(bool request_ech,
   curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
   curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
 
-  proto_fuzzer::DohHttpsRrMockServer server(
-      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, response_mode,
-      request_ech, transport_mode);
+  proto_fuzzer::DohHttpsRrMockServer server(scenario);
   server.Install(easy);
   Expect(!server.doh_url().empty(),
          "DoH responder did not publish a loopback URL");
@@ -2817,9 +2818,7 @@ void TestDohMalformedAnswerReachesDecoder() {
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL, "https://tls.test/doh-error");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
 
-  proto_fuzzer::DohHttpsRrMockServer server(
-      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-      curl::fuzzer::proto::DOH_RESPONSE_MODE_MALFORMED_DNS);
+  proto_fuzzer::DohHttpsRrMockServer server(scenario);
   server.Install(easy.get());
   proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
   server.ConfigureRequestData(&request_data);
@@ -2852,9 +2851,7 @@ void TestDohHttpStatusErrorPrecedesDecoder() {
                          "https://tls.test/doh-http-error");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
 
-  proto_fuzzer::DohHttpsRrMockServer server(
-      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-      curl::fuzzer::proto::DOH_RESPONSE_MODE_HTTP_ERROR);
+  proto_fuzzer::DohHttpsRrMockServer server(scenario);
   server.Install(easy.get());
   proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
   server.ConfigureRequestData(&request_data);
@@ -2888,7 +2885,7 @@ void TestDohHttpsRrSetupFailureDoesNotDriveCurl() {
                          "https://localhost/doh-setup-failure");
   (void)curl_easy_setopt(easy.get(), CURLOPT_CONNECT_TO, nullptr);
 
-  FailingDohHttpsRrMockServer server;
+  FailingDohHttpsRrMockServer server(scenario);
   server.Install(easy.get());
   proto_fuzzer::ScenarioRequestData request_data(easy.get(), scenario, false);
   server.ConfigureRequestData(&request_data);
