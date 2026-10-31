@@ -1,0 +1,8 @@
+# Required STARTTLS must not fall back to HELO when EHLO itself is rejected.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls-required-ehlo-denied.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_REQUIRE
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "500 EHLO unavailable\r\n"
+}

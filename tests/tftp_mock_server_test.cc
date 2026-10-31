@@ -202,6 +202,38 @@ void TestShortPacketRetriesUploadData() {
          "short TFTP reply did not retransmit the pending DATA1 packet");
 }
 
+void TestWrongAckExhaustsUploadRetries() {
+  Scenario scenario;
+  auto *upload = scenario.add_options();
+  upload->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload->set_bool_value(true);
+  auto *size = scenario.add_options();
+  size->set_option_id(curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE);
+  size->set_uint_value(1);
+  auto *no_options = scenario.add_options();
+  no_options->set_option_id(curl::fuzzer::proto::CURLOPT_TFTP_NO_OPTIONS);
+  no_options->set_bool_value(true);
+  scenario.mutable_upload()->set_data("x");
+  scenario.mutable_connection()->set_initial_response(Packet(4, 0));
+  for (int retry = 0; retry < 4; ++retry) {
+    scenario.mutable_connection()->add_on_readable(Packet(4, 2));
+  }
+
+  const TftpRunResult result = RunScenario(scenario);
+  Expect(result.code == CURLE_SEND_ERROR,
+         "wrong TFTP ACKs did not exhaust the upload retry budget");
+  Expect(result.received.size() == 5,
+         "TFTP peer did not capture WRQ and four DATA1 attempts");
+  const std::string data1 = Packet(3, 1, "x");
+  for (std::size_t index = 1; index < result.received.size(); ++index) {
+    Expect(result.received[index].received_on ==
+               proto_fuzzer::TftpSocketRole::kTransfer,
+           "retried TFTP DATA1 used the request endpoint");
+    Expect(result.received[index].bytes == data1,
+           "wrong TFTP ACK changed the pending DATA1 packet");
+  }
+}
+
 } // namespace
 
 int main() {
@@ -212,6 +244,7 @@ int main() {
   TestNoOptionsRequestAndErrorMapping();
   TestExactBlockUploadSendsTerminalPacket();
   TestShortPacketRetriesUploadData();
+  TestWrongAckExhaustsUploadRetries();
   curl_global_cleanup();
   return 0;
 }

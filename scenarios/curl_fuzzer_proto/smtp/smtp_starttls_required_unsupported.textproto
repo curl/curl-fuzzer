@@ -1,0 +1,8 @@
+# Required STARTTLS fails when a successful EHLO omits the capability.
+scheme: SCHEME_SMTP
+host_path: "smtp.test/starttls-required-unsupported.test"
+smtp_probe_mode: SMTP_PROBE_STARTTLS_REQUIRE
+connection {
+  initial_response: "220 smtp.test ESMTP fuzz peer\r\n"
+  on_readable: "250 smtp.test\r\n"
+}

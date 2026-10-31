@@ -299,6 +299,50 @@ void TestRequiredStartTlsDenialFailsTransfer() {
          "required SMTP STARTTLS denial never issued STARTTLS");
 }
 
+void TestRequiredStartTlsDoesNotFallBackToHelo() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_SMTP);
+  scenario.set_smtp_probe_mode(
+      curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("220 smtp.test ESMTP fuzz peer\r\n");
+  connection->add_on_readable("500 EHLO unavailable\r\n");
+
+  const SmtpRunResult result = RunScenario(
+      scenario, "smtp://smtp.test/starttls-required-ehlo-denied.test");
+  Expect(result.code == CURLE_REMOTE_ACCESS_DENIED,
+         "required SMTP STARTTLS EHLO rejection returned the wrong error");
+  Expect(result.transcript.find(
+             "EHLO starttls-required-ehlo-denied.test\r\n") !=
+             std::string::npos,
+         "required SMTP STARTTLS never issued EHLO");
+  Expect(result.transcript.find("HELO ") == std::string::npos &&
+             result.transcript.find("STARTTLS\r\n") == std::string::npos,
+         "required SMTP STARTTLS incorrectly fell back after EHLO rejection");
+}
+
+void TestRequiredStartTlsWithoutCapabilityFailsTransfer() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_SMTP);
+  scenario.set_smtp_probe_mode(
+      curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE);
+  auto *connection = scenario.mutable_connection();
+  connection->set_initial_response("220 smtp.test ESMTP fuzz peer\r\n");
+  connection->add_on_readable("250 smtp.test\r\n");
+
+  const SmtpRunResult result = RunScenario(
+      scenario, "smtp://smtp.test/starttls-required-unsupported.test");
+  Expect(result.code == CURLE_USE_SSL_FAILED,
+         "required SMTP without STARTTLS returned the wrong error");
+  Expect(result.transcript.find(
+             "EHLO starttls-required-unsupported.test\r\n") !=
+             std::string::npos,
+         "required SMTP without STARTTLS never issued EHLO");
+  Expect(result.transcript.find("STARTTLS\r\n") == std::string::npos &&
+             result.transcript.find("HELP\r\n") == std::string::npos,
+         "required SMTP without STARTTLS continued in plaintext");
+}
+
 void TestStartTlsResponseOverflowIsRejected() {
   Scenario scenario =
       StartTlsScenario(curl::fuzzer::proto::SMTP_PROBE_STARTTLS_REQUIRE,
@@ -587,6 +631,8 @@ int main() {
   TestTryStartTlsDenialFallsBackToPlaintext();
   TestTryStartTlsWithoutCapabilityFallsBackToPlaintext();
   TestRequiredStartTlsDenialFailsTransfer();
+  TestRequiredStartTlsDoesNotFallBackToHelo();
+  TestRequiredStartTlsWithoutCapabilityFailsTransfer();
   TestStartTlsResponseOverflowIsRejected();
   TestStartTlsArmsAdjacentFilterAllocationFailure();
   TestSmtpUtf8AndSizeEnvelope();
