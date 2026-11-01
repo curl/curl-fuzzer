@@ -51,6 +51,16 @@ if(ENABLE_COVERAGE)
     message(STATUS "Coverage instrumentation: ENABLED for libcurl and fuzzers")
 endif()
 
+# Keep local coverage, OSS-Fuzz coverage, and Fuzz Introspector on one source
+# surface. This predicate is also used for deterministic observation probes
+# below, so an analysis report never describes code built with a different
+# set of analysis-only features.
+set(CURL_FUZZER_ANALYSIS_BUILD OFF)
+if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
+   "$ENV{SANITIZER}" STREQUAL "introspector")
+    set(CURL_FUZZER_ANALYSIS_BUILD ON)
+endif()
+
 # Install zlib
 #
 # renovate: datasource=github-tags depName=madler/zlib
@@ -534,6 +544,13 @@ set(CURL_COMMON_CMAKE_ARGS
     -DLDAP_LIBRARY=${OPENLDAP_STATIC_LIB_LDAP}
     -DLDAP_LBER_LIBRARY=${OPENLDAP_STATIC_LIB_LBER}
 )
+
+if(CURL_FUZZER_ANALYSIS_BUILD)
+    # curl's public C type-checking macros are compile-time diagnostics, not a
+    # runtime fuzzing surface. Internal curl_easy_setopt calls otherwise expand
+    # them into thousands of impossible coverage regions, especially in DoH.
+    list(APPEND CURL_COMMON_CMAKE_ARGS -DCURL_DISABLE_TYPECHECK=ON)
+endif()
 
 # Baseline CFLAGS passed to curl's own CMake. Always defines UNITTESTS so
 # the UNITTEST macro in curl_setup.h flips from `static` to empty, giving
@@ -1955,8 +1972,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             libprotobuf_mutator_external)
     endif()
 
-    if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
-       "$ENV{SANITIZER}" STREQUAL "introspector")
+    if(CURL_FUZZER_ANALYSIS_BUILD)
         target_compile_definitions(curl_fuzzer_proto_runtime PRIVATE
             PROTO_FUZZER_OBSERVE_STATE)
         target_compile_definitions(curl_fuzzer_proto_runner PRIVATE
@@ -2101,8 +2117,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     curl_add_proto_fuzzer(curl_fuzzer_proto_rtsp PROFILE fast_rtsp)
     curl_add_proto_fuzzer(curl_fuzzer_proto_ipfs PROFILE fast_ipfs)
     curl_add_proto_fuzzer(curl_fuzzer_proto_api PROFILE api)
-    if(ENABLE_COVERAGE OR "$ENV{SANITIZER}" STREQUAL "coverage" OR
-       "$ENV{SANITIZER}" STREQUAL "introspector")
+    if(CURL_FUZZER_ANALYSIS_BUILD)
         # Keep deterministic compatibility probes in the existing API lane.
         # They run once from its initialization hook (or first-callback
         # fallback), so no ordinary fuzz iteration pays their cost.

@@ -34,6 +34,31 @@ def test_cmake_coverage_uses_atomic_profile_updates() -> None:
     assert "-fprofile-update=atomic" in coverage_flags
 
 
+def test_analysis_builds_exclude_only_curls_compile_time_typechecks() -> None:
+    """Keep coverage and Introspector on the same runtime source surface."""
+    cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+    predicate = cmake.split("set(CURL_FUZZER_ANALYSIS_BUILD OFF)", maxsplit=1)[1].split(
+        "endif()", maxsplit=1
+    )[0]
+
+    assert "ENABLE_COVERAGE" in predicate
+    assert '"$ENV{SANITIZER}" STREQUAL "coverage"' in predicate
+    assert '"$ENV{SANITIZER}" STREQUAL "introspector"' in predicate
+    assert "set(CURL_FUZZER_ANALYSIS_BUILD ON)" in predicate
+
+    curl_analysis_args = cmake.split("if(CURL_FUZZER_ANALYSIS_BUILD)", maxsplit=1)[
+        1
+    ].split("endif()", maxsplit=1)[0]
+    assert "list(APPEND CURL_COMMON_CMAKE_ARGS" in curl_analysis_args
+    assert "-DCURL_DISABLE_TYPECHECK=ON" in curl_analysis_args
+    assert "CURL_DISABLE_VERBOSE_STRINGS" not in cmake
+
+    # Observation and deterministic API probes must use the same predicate as
+    # curl's analysis-only configuration rather than drifting independently.
+    assert cmake.count("if(ENABLE_COVERAGE OR") == 1
+    assert cmake.count("if(CURL_FUZZER_ANALYSIS_BUILD)") >= 3
+
+
 @pytest.fixture
 def coverage_fixture(
     tmp_path: Path,
