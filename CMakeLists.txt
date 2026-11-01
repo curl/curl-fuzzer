@@ -944,9 +944,11 @@ endif()
 # NGTCP2_WRITE_STREAM_FLAG_MORE and NGTCP2_WRITE_DATAGRAM_FLAG_MORE can start a
 # packet-coalescing transaction. Until ngtcp2 reaches the origin API's
 # documented completion condition, subsequent writes must retain the same
-# packet tuple and almost every other ngtcp2 API is forbidden.
-# Route connection calls through ELF link wrappers so violations identify both
-# the write that began coalescing and the forbidden operation.
+# packet tuple and almost every other ngtcp2 API is forbidden. A connection
+# error also leaves only terminal close handling, status inspection, and
+# teardown available.
+# Route connection calls through ELF link wrappers so violations identify the
+# write that established the restriction and the forbidden operation.
 add_library(ngtcp2_contract_checked INTERFACE)
 set(NGTCP2_CONTRACT_SHIM_ACTIVE FALSE)
 if(BUILD_HTTP3_VARIANT)
