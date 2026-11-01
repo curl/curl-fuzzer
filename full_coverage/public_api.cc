@@ -6,8 +6,11 @@
 
 #include "full_coverage/public_api.h"
 
+#include <array>
 #include <cstdarg>
 #include <cstdio>
+
+#include <unistd.h>
 
 #include <curl/curl.h>
 #include <curl/mprintf.h>
@@ -57,6 +60,92 @@ size_t DiscardFormData(void *, const char *, size_t length)
   return length;
 }
 
+/** Exercise public easy/header/share contracts that reject invalid state. */
+void ExerciseEasyContractErrors()
+{
+  constexpr unsigned int kAllHeaderOrigins =
+      CURLH_HEADER | CURLH_TRAILER | CURLH_CONNECT | CURLH_1XX |
+      CURLH_PSEUDO;
+  char byte = 0;
+  size_t transferred = 0;
+  long response_code = 0;
+  curl_header *header = nullptr;
+
+  // Null handles are documented API errors. Supplying otherwise valid output
+  // storage keeps these calls inside libcurl's guard paths without touching
+  // the network or relying on allocation failure.
+  (void)curl_easy_perform(nullptr);
+  (void)curl_easy_getinfo(nullptr, CURLINFO_RESPONSE_CODE, &response_code);
+  (void)curl_easy_setopt(nullptr, CURLOPT_URL, "https://api.test/");
+  (void)curl_easy_pause(nullptr, CURLPAUSE_CONT);
+  (void)curl_easy_send(nullptr, &byte, sizeof(byte), &transferred);
+  (void)curl_easy_recv(nullptr, &byte, sizeof(byte), &transferred);
+  (void)curl_easy_upkeep(nullptr);
+  (void)curl_easy_ssls_import(nullptr, nullptr, nullptr, 0, nullptr, 0);
+  (void)curl_easy_ssls_export(nullptr, nullptr, nullptr);
+  (void)curl_easy_header(nullptr, "Content-Type", 0, kAllHeaderOrigins, -1,
+                         &header);
+  (void)curl_easy_nextheader(nullptr, kAllHeaderOrigins, -1, nullptr);
+  (void)curl_easy_duphandle(nullptr);
+  curl_easy_reset(nullptr);
+  curl_easy_cleanup(nullptr);
+
+  CURL *easy = curl_easy_init();
+  if(!easy)
+    return;
+
+  // A fresh handle has no transfer connection, response headers, or TLS
+  // sessions. Cover each public validation result without starting a transfer.
+  (void)curl_easy_pause(easy, CURLPAUSE_ALL);
+  (void)curl_easy_send(easy, &byte, sizeof(byte), nullptr);
+  (void)curl_easy_send(easy, nullptr, sizeof(byte), &transferred);
+  (void)curl_easy_send(easy, &byte, sizeof(byte), &transferred);
+  (void)curl_easy_recv(easy, &byte, sizeof(byte), nullptr);
+  (void)curl_easy_recv(easy, nullptr, sizeof(byte), &transferred);
+  (void)curl_easy_recv(easy, &byte, sizeof(byte), &transferred);
+  (void)curl_easy_ssls_import(easy, nullptr, nullptr, 0, nullptr, 0);
+  (void)curl_easy_ssls_export(easy, nullptr, nullptr);
+
+  (void)curl_easy_header(easy, nullptr, 0, kAllHeaderOrigins, -1, &header);
+  (void)curl_easy_header(easy, "Content-Type", 0, kAllHeaderOrigins, -1,
+                         nullptr);
+  (void)curl_easy_header(easy, "Content-Type", 0, 0, -1, &header);
+  (void)curl_easy_header(easy, "Content-Type", 0, 1U << 31, -1, &header);
+  (void)curl_easy_header(easy, "Content-Type", 0, kAllHeaderOrigins, -2,
+                         &header);
+  (void)curl_easy_header(easy, "Content-Type", 0, kAllHeaderOrigins, -1,
+                         &header);
+  (void)curl_easy_nextheader(easy, kAllHeaderOrigins, 1, nullptr);
+  (void)curl_easy_nextheader(easy, kAllHeaderOrigins, -1, nullptr);
+
+  CURLSH *share = curl_share_init();
+  if(share) {
+    constexpr curl_lock_data kShareKinds[] = {
+        CURL_LOCK_DATA_DNS, CURL_LOCK_DATA_COOKIE, CURL_LOCK_DATA_HSTS,
+        CURL_LOCK_DATA_SSL_SESSION, CURL_LOCK_DATA_CONNECT,
+        CURL_LOCK_DATA_PSL,
+    };
+    (void)curl_share_setopt(share, static_cast<CURLSHoption>(99), nullptr);
+    (void)curl_share_setopt(share, CURLSHOPT_SHARE,
+                            static_cast<curl_lock_data>(99));
+    (void)curl_share_setopt(share, CURLSHOPT_UNSHARE,
+                            static_cast<curl_lock_data>(99));
+    for(curl_lock_data kind : kShareKinds)
+      (void)curl_share_setopt(share, CURLSHOPT_SHARE, kind);
+    for(curl_lock_data kind : kShareKinds)
+      (void)curl_share_setopt(share, CURLSHOPT_UNSHARE, kind);
+
+    if(curl_easy_setopt(easy, CURLOPT_SHARE, share) == CURLE_OK) {
+      (void)curl_share_setopt(share, CURLSHOPT_USERDATA, nullptr);
+      (void)curl_share_cleanup(share);
+      (void)curl_easy_setopt(easy, CURLOPT_SHARE, nullptr);
+    }
+    (void)curl_share_cleanup(share);
+  }
+
+  curl_easy_cleanup(easy);
+}
+
 /** Keep deprecated, still-supported form helpers reachable in profiling. */
 void ExerciseLegacyForms()
 {
@@ -96,6 +185,55 @@ void ExerciseLegacyForms()
   curl_formfree(nullptr);
 }
 
+/** Exercise duplicate membership and real extra-fd readiness without I/O. */
+void ExerciseMultiWaitApis()
+{
+  CURLM *multi = curl_multi_init();
+  CURL *easy = curl_easy_init();
+  if(!multi || !easy) {
+    curl_easy_cleanup(easy);
+    curl_multi_cleanup(multi);
+    return;
+  }
+
+  const bool attached = curl_multi_add_handle(multi, easy) == CURLM_OK;
+  if(attached)
+    (void)curl_multi_add_handle(multi, easy);
+
+  unsigned int fd_count = 0;
+  (void)curl_multi_waitfds(nullptr, nullptr, 0, &fd_count);
+  (void)curl_multi_waitfds(multi, nullptr, 1, &fd_count);
+  (void)curl_multi_waitfds(multi, nullptr, 0, nullptr);
+  (void)curl_multi_waitfds(multi, nullptr, 0, &fd_count);
+
+  int numfds = 0;
+  (void)curl_multi_wait(multi, nullptr, 0, -1, &numfds);
+
+  int fds[2] = {-1, -1};
+  if(pipe(fds) == 0) {
+    const char ready = 'x';
+    if(write(fds[1], &ready, sizeof(ready)) == 1) {
+      std::array<curl_waitfd, 2> waitfds = {{
+          {fds[0], CURL_WAIT_POLLIN | CURL_WAIT_POLLPRI, 0},
+          {fds[1], CURL_WAIT_POLLOUT, 0},
+      }};
+      (void)curl_multi_wait(multi, waitfds.data(),
+                            static_cast<unsigned int>(waitfds.size()), 0,
+                            &numfds);
+      (void)curl_multi_poll(multi, waitfds.data(),
+                            static_cast<unsigned int>(waitfds.size()), 0,
+                            &numfds);
+    }
+    close(fds[0]);
+    close(fds[1]);
+  }
+
+  if(attached)
+    (void)curl_multi_remove_handle(multi, easy);
+  curl_easy_cleanup(easy);
+  curl_multi_cleanup(multi);
+}
+
 }  // namespace
 
 void ExercisePublicApiCoverageWithInitializedCurl()
@@ -123,7 +261,9 @@ void ExercisePublicApiCoverageWithInitializedCurl()
   if(stream)
     std::fclose(stream);
 
+  ExerciseEasyContractErrors();
   ExerciseLegacyForms();
+  ExerciseMultiWaitApis();
 }
 
 void ExercisePublicApiCoverage()
