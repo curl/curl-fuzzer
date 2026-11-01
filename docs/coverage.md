@@ -38,6 +38,15 @@ and to write a fresh nonempty profile; it does not mean 100% source coverage.
 Failed, missing, or incomplete targets remain explicit while later targets
 continue to contribute partial coverage.
 
+Coverage and Fuzz Introspector builds configure curl with
+`CURL_DISABLE_TYPECHECK=ON`. curl's public C type-checking macros provide
+compile-time diagnostics, but internal `curl_easy_setopt` calls can expand
+them into thousands of regions whose type-error arms cannot execute. Removing
+that compiler-only surface makes region coverage describe runtime behavior.
+Runtime error strings and verbose tracing remain enabled and fuzzable. The
+same setting is applied to local coverage (`ENABLE_COVERAGE=ON` or
+`SANITIZER=coverage`) and Fuzz Introspector (`SANITIZER=introspector`) builds.
+
 Measure a local curl checkout with:
 
 ```shell
