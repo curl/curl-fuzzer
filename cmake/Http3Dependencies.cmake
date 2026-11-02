@@ -95,7 +95,7 @@ else()
 endif()
 
 # renovate: datasource=github-releases depName=ngtcp2/ngtcp2
-set(HTTP3_NGTCP2_VERSION 1.25.0)
+set(HTTP3_NGTCP2_VERSION 1.26.0)
 set(HTTP3_NGTCP2_INSTALL_DIR
     ${CMAKE_BINARY_DIR}/ngtcp2-${HTTP3_NGTCP2_VERSION}-install)
 set(HTTP3_NGTCP2_INCLUDE_DIR ${HTTP3_NGTCP2_INSTALL_DIR}/include)
