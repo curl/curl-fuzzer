@@ -22,6 +22,7 @@ STANDALONE_TARGETS = {
     "fuzz_bufq",
     "fuzz_doh",
     "fuzz_netrc",
+    "fuzz_private",
     "fuzz_url",
 }
 PROTO_TARGET_TRAITS = {

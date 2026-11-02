@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import subprocess
 import tempfile
 from pathlib import Path
+
+from coverage_test_support import (
+    export_document,
+    function_counts,
+    merge_profiles,
+    run_profiled_binary,
+)
 
 REQUIRED_FUNCTIONS = {
     "Curl_cond_timedwait",
@@ -41,38 +45,6 @@ def curl_relative_path(filename: object, source_root: Path) -> str | None:
         return None
 
 
-def export_document(args: argparse.Namespace, profdata: Path) -> dict[str, object]:
-    exported = subprocess.run(
-        [
-            str(args.llvm_cov),
-            "export",
-            str(args.binary),
-            f"-instr-profile={profdata}",
-            "--sources",
-            str(args.curl_source / "lib/vdns/asyn-thrdd.c"),
-            str(args.curl_source / "lib/thrdqueue.c"),
-            str(args.curl_source / "lib/curl_threads.c"),
-        ],
-        check=True,
-        text=True,
-        stdout=subprocess.PIPE,
-    )
-    document = json.loads(exported.stdout)
-    if not isinstance(document, dict):
-        raise SystemExit("llvm-cov export did not produce an object")
-    return document
-
-
-def function_counts(document: dict[str, object]) -> dict[str, int]:
-    return {
-        function["name"]: function["count"]
-        for datum in document.get("data", [])
-        for function in datum.get("functions", [])
-        if function.get("name") in REQUIRED_FUNCTIONS
-        and isinstance(function.get("count"), int)
-    }
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
@@ -86,34 +58,26 @@ def main() -> int:
         tmp = Path(raw_tmp)
         all_profiles: list[Path] = []
         per_run_counts: list[dict[str, int]] = []
+        sources = [
+            args.curl_source / "lib/vdns/asyn-thrdd.c",
+            args.curl_source / "lib/thrdqueue.c",
+            args.curl_source / "lib/curl_threads.c",
+        ]
         for run_index in range(REPEAT_RUNS):
-            environment = os.environ.copy()
-            environment["LLVM_PROFILE_FILE"] = str(
-                tmp / f"resolver-{run_index}-%m-%p.profraw"
+            profile_stem = f"resolver-{run_index}"
+            profiles = run_profiled_binary(
+                binary=args.binary,
+                arguments=[args.seed],
+                raw_directory=tmp,
+                profile_stem=profile_stem,
+                run_name=f"queued resolver regression run {run_index + 1}",
             )
-            subprocess.run(
-                [str(args.binary), str(args.seed)], check=True, env=environment
-            )
-
-            profiles = sorted(tmp.glob(f"resolver-{run_index}-*.profraw"))
-            if not profiles:
-                raise SystemExit(
-                    f"queued resolver regression run {run_index + 1} emitted no raw profile"
-                )
             all_profiles.extend(profiles)
             run_profdata = tmp / f"resolver-{run_index}.profdata"
-            subprocess.run(
-                [
-                    str(args.llvm_profdata),
-                    "merge",
-                    "-sparse",
-                    *map(str, profiles),
-                    "-o",
-                    str(run_profdata),
-                ],
-                check=True,
+            merge_profiles(args.llvm_profdata, profiles, run_profdata)
+            counts = function_counts(
+                export_document(args.llvm_cov, args.binary, run_profdata, sources)
             )
-            counts = function_counts(export_document(args, run_profdata))
             missing = sorted(
                 name for name in REQUIRED_FUNCTIONS if counts.get(name, 0) <= 0
             )
@@ -128,18 +92,8 @@ def main() -> int:
             per_run_counts.append(counts)
 
         profdata = tmp / "resolver-combined.profdata"
-        subprocess.run(
-            [
-                str(args.llvm_profdata),
-                "merge",
-                "-sparse",
-                *map(str, all_profiles),
-                "-o",
-                str(profdata),
-            ],
-            check=True,
-        )
-        document = export_document(args, profdata)
+        merge_profiles(args.llvm_profdata, all_profiles, profdata)
+        document = export_document(args.llvm_cov, args.binary, profdata, sources)
 
     observed_regions: set[tuple[str, str, int, int, int, int]] = set()
     covered_regions: set[tuple[str, str, int, int, int, int]] = set()
