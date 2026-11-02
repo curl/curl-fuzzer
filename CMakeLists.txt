@@ -1502,6 +1502,71 @@ target_link_libraries(fuzz_netrc PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(fuzz_netrc PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(fuzz_netrc ${FUZZ_DEPS})
 
+# Private helper fuzzer. Its first input byte selects a bounded operation
+# stream for ptrarray, dynhds, uint-spbset, memdebug, or cf-ip-happy. The
+# UNITTESTS symbols come from the curl build configured above; this C++ target
+# keeps ordinary private layouts and debug declarations from curl's headers.
+add_executable(fuzz_private fuzz_private.cc)
+target_compile_features(fuzz_private PRIVATE cxx_std_17)
+target_compile_options(fuzz_private PRIVATE ${COMMON_FLAGS})
+target_compile_definitions(fuzz_private PRIVATE
+    BUILDING_LIBCURL
+    DEBUGBUILD
+    HAVE_CONFIG_H)
+target_include_directories(fuzz_private BEFORE PRIVATE
+    ${CURL_PRIVATE_INCLUDE_DIRS})
+target_include_directories(fuzz_private PRIVATE
+    ${CMAKE_SOURCE_DIR}
+    ${CURL_INCLUDE_DIRS}
+    ${NGHTTP2_INSTALL_DIR}/include)
+target_link_libraries(fuzz_private PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(fuzz_private PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(fuzz_private ${FUZZ_DEPS})
+
+if(BUILD_TESTING)
+    add_executable(fuzz_private_test
+        tests/fuzz_private_test.cc
+        fuzz_private.cc)
+    target_compile_features(fuzz_private_test PRIVATE cxx_std_17)
+    target_compile_options(fuzz_private_test PRIVATE ${COMMON_FLAGS})
+    target_compile_definitions(fuzz_private_test PRIVATE
+        BUILDING_LIBCURL
+        DEBUGBUILD
+        HAVE_CONFIG_H)
+    target_include_directories(fuzz_private_test BEFORE PRIVATE
+        ${CURL_PRIVATE_INCLUDE_DIRS})
+    target_include_directories(fuzz_private_test PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CURL_INCLUDE_DIRS}
+        ${NGHTTP2_INSTALL_DIR}/include)
+    target_link_libraries(fuzz_private_test PRIVATE curl_client_default)
+    target_link_options(fuzz_private_test PRIVATE ${COVERAGE_LINK_FLAGS})
+    add_dependencies(fuzz_private_test ${FUZZ_DEPS})
+    add_test(NAME fuzz_private_test COMMAND fuzz_private_test)
+    set_tests_properties(fuzz_private_test PROPERTIES TIMEOUT 10)
+    add_dependencies(fuzzer_unit_tests fuzz_private_test)
+endif()
+
+if(BUILD_TESTING AND ENABLE_COVERAGE)
+    find_program(FUZZ_PRIVATE_COVERAGE_PYTHON NAMES python3 REQUIRED)
+    find_program(FUZZ_PRIVATE_COVERAGE_LLVM_PROFDATA
+        NAMES llvm-profdata REQUIRED)
+    find_program(FUZZ_PRIVATE_COVERAGE_LLVM_COV NAMES llvm-cov REQUIRED)
+    ExternalProject_Get_Property(curl_external SOURCE_DIR)
+    set(FUZZ_PRIVATE_COVERAGE_CURL_SOURCE_DIR ${SOURCE_DIR})
+    unset(SOURCE_DIR)
+    add_test(NAME fuzz_private_coverage_test
+        COMMAND ${FUZZ_PRIVATE_COVERAGE_PYTHON}
+            ${CMAKE_SOURCE_DIR}/tests/check_fuzz_private_coverage.py
+            --binary $<TARGET_FILE:fuzz_private>
+            --corpus ${CMAKE_SOURCE_DIR}/corpora/fuzz_private
+            --llvm-profdata ${FUZZ_PRIVATE_COVERAGE_LLVM_PROFDATA}
+            --llvm-cov ${FUZZ_PRIVATE_COVERAGE_LLVM_COV}
+            --curl-source ${FUZZ_PRIVATE_COVERAGE_CURL_SOURCE_DIR})
+    set_tests_properties(fuzz_private_coverage_test PROPERTIES TIMEOUT 30)
+    add_dependencies(fuzzer_unit_tests fuzz_private)
+endif()
+
 # Create a custom target for all fuzzers
 add_custom_target(fuzz
     DEPENDS
@@ -1509,6 +1574,7 @@ add_custom_target(fuzz
         fuzz_url
         fuzz_doh
         fuzz_netrc
+        fuzz_private
 )
 
 # -----------------------------------------------------------------------------
