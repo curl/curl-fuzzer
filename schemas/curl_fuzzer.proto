@@ -1104,6 +1104,18 @@ message Scenario {
       }
     }
   ];
+  // Public-key pin bytes exposed to the verified HTTPS lane through a bounded,
+  // harness-owned anonymous file. The runtime installs its /proc/self/fd path
+  // after scalar options, so this field is authoritative when both pin forms
+  // are present without allowing protobuf bytes to name a host file.
+  bytes pinned_public_key_file = 48 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

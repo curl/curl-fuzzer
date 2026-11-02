@@ -104,15 +104,18 @@ Other peers intentionally give those fields narrower meanings:
 - The dedicated HTTPS peer encrypts connection-script bytes as HTTP
   application data. Its optional `tls_client_credential_profile` selects only
   harness-owned malformed blobs or fixed `/dev/null` engine/provider probes;
-  protobuf bytes never become a filename, engine name, or provider name. The
-  separate `tls_handshake_profile` can replace the OpenSSL peer with a fixed
-  pre-handshake `close_notify` or empty HelloRequest record, covering curl's
-  terminal error translation and message classification without accepting
-  fuzz-selected TLS bytes; GnuTLS and mbedTLS clients treat those profiles as
-  the ordinary verified peer. The compatibility
-  target preserves its older behavior and treats HTTPS script bytes as raw TLS
-  records. These controls deliberately leave `Curl_ssl_cfilter_add` to a
-  protocol peer capable of an in-place STARTTLS upgrade. Process-lifecycle
+  protobuf bytes never become a filename, engine name, or provider name.
+  `pinned_public_key_file` instead exposes bounded protobuf bytes through a
+  session-owned anonymous descriptor and installs only its `/proc/self/fd`
+  path, allowing curl's filename-backed PEM pin parser to run without host-file
+  access. The separate `tls_handshake_profile` can replace the OpenSSL peer
+  with a fixed pre-handshake `close_notify` or empty HelloRequest record. It
+  covers curl's terminal error translation and message classification without
+  accepting fuzz-selected TLS bytes; GnuTLS and mbedTLS clients treat those
+  profiles as the ordinary verified peer. The compatibility target preserves
+  its older behavior and treats HTTPS script bytes as raw TLS records. These
+  controls deliberately leave `Curl_ssl_cfilter_add` to a protocol peer
+  capable of an in-place STARTTLS upgrade. Process-lifecycle
   probes for `ossl_cleanup`, `Curl_ssl_cleanup`, `Curl_ssl_version`, and
   `Curl_tls_keylog_close` belong in the one-shot API lane instead of a per-input
   HTTPS path.

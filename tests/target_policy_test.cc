@@ -184,6 +184,7 @@ void TestDeepHttpBoundsFileInputs() {
   scenario.set_hsts_file("must be removed by the shared budget");
   scenario.set_netrc_file("must also be removed by the shared budget");
   scenario.set_crl_file("TLS-only input");
+  scenario.set_pinned_public_key_file("TLS-only pin input");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kDeepHttp);
 
@@ -199,6 +200,8 @@ void TestDeepHttpBoundsFileInputs() {
          "deep HTTP policy exceeded the shared budget with netrc input");
   Expect(scenario.crl_file().empty(),
          "deep HTTP policy retained TLS-only CRL input");
+  Expect(scenario.pinned_public_key_file().empty(),
+         "deep HTTP policy retained TLS-only public-key pin input");
 
   Scenario fast;
   fast.set_cookie_file("cookie");
@@ -206,10 +209,11 @@ void TestDeepHttpBoundsFileInputs() {
   fast.set_hsts_file("hsts");
   fast.set_netrc_file("netrc");
   fast.set_crl_file("crl");
+  fast.set_pinned_public_key_file("pin");
   NormalizeScenarioForTarget(&fast, TargetProfile::kFastHttp);
   Expect(fast.cookie_file().empty() && fast.altsvc_file().empty() &&
              fast.hsts_file().empty() && fast.netrc_file().empty() &&
-             fast.crl_file().empty(),
+             fast.crl_file().empty() && fast.pinned_public_key_file().empty(),
          "fast HTTP policy retained deep filename-parser inputs");
 }
 
@@ -362,6 +366,7 @@ void TestFastHttpsPolicy() {
       curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
   scenario.set_cookie_file("HTTP-only input");
   scenario.set_crl_file("TLS CRL input");
+  scenario.set_pinned_public_key_file("TLS public-key input");
 
   NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttps);
 
@@ -380,6 +385,25 @@ void TestFastHttpsPolicy() {
          "fast HTTPS policy retained deep HTTP filename input");
   Expect(scenario.crl_file() == "TLS CRL input",
          "fast HTTPS policy discarded its CRL input");
+  Expect(scenario.pinned_public_key_file() == "TLS public-key input",
+         "fast HTTPS policy discarded its public-key pin input");
+}
+
+void TestFastHttpsBoundsFileInputs() {
+  Scenario scenario;
+  scenario.set_crl_file(
+      std::string(proto_fuzzer::scenario_limits::kMaxFileInputBytes + 1, 'c'));
+  scenario.set_pinned_public_key_file(
+      std::string(proto_fuzzer::scenario_limits::kMaxFileInputBytes + 1, 'p'));
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttps);
+
+  Expect(scenario.crl_file().size() ==
+             proto_fuzzer::scenario_limits::kMaxFileInputBytes,
+         "fast HTTPS policy did not cap its CRL input");
+  Expect(scenario.pinned_public_key_file().size() ==
+             proto_fuzzer::scenario_limits::kMaxFileInputBytes,
+         "fast HTTPS policy did not cap its public-key pin input");
 }
 
 void TestHttpsH2Policy() {
@@ -389,6 +413,7 @@ void TestHttpsH2Policy() {
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
   scenario.set_tls_group_profile(
       curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
+  scenario.set_pinned_public_key_file("HTTPS-only pin input");
   scenario.add_request_headers("X-H2: retained");
   scenario.mutable_connection()->add_on_readable("raw HTTP/2 frames");
   scenario.mutable_connection()->add_server_frames()->set_payload(
@@ -433,6 +458,8 @@ void TestHttpsH2Policy() {
          "HTTPS/H2 policy retained forward-proxy-only work");
   Expect(scenario.accept_h2_push(),
          "HTTPS/H2 policy discarded its accepted-push mode");
+  Expect(scenario.pinned_public_key_file().empty(),
+         "HTTPS/H2 policy retained an HTTP/1.1 TLS pin file");
 }
 
 void TestFastHttp2Policy() {
@@ -3296,6 +3323,7 @@ void TestCompatibilityProfileIsNoOp() {
       curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES);
   scenario.set_tls_group_profile(
       curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT);
+  scenario.set_pinned_public_key_file("compatibility pin bytes");
   scenario.mutable_http3_plan()
       ->add_actions()
       ->mutable_stream_write()
@@ -3848,6 +3876,7 @@ int main() {
   TestDeepHttpTransportPolicy();
   TestDeepHttpProxySocketOptionPolicy();
   TestFastHttpsPolicy();
+  TestFastHttpsBoundsFileInputs();
   TestHttpsH2Policy();
   TestFastHttp2Policy();
   TestFastHttp2ConnectFlushProbePolicy();

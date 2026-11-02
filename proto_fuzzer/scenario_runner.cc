@@ -711,6 +711,9 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
     transfer.ApplyInputFiles();
     // Repeat the option-count bound for compatibility and direct callers.
     (void)ApplyScenarioOptions(easy, scenario);
+    // A schema-native pin file is authoritative over the generic digest option.
+    // Its session-owned path remains valid until after easy cleanup.
+    transfer.ApplyPinnedPublicKeyFile();
     if (auto* rtsp = dynamic_cast<RtspMockServer*>(mock.get())) {
       rtsp->ConfigureClient(easy, scenario.rtsp_probe_mode());
     }
