@@ -7,16 +7,17 @@
 #include <curl/curl.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
-#if (defined(CURL_FUZZER_EXPECT_OPENSSL) || \
-     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)) && \
+#if (defined(CURL_FUZZER_EXPECT_OPENSSL) ||                                    \
+     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)) &&             \
     defined(CURL_FUZZER_EXPECT_GNUTLS)
 #error "A curl feature test must select exactly one expected TLS backend"
 #endif
-#if defined(CURL_FUZZER_EXPECT_MBEDTLS) && \
-    (defined(CURL_FUZZER_EXPECT_OPENSSL) || \
-     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) || \
+#if defined(CURL_FUZZER_EXPECT_MBEDTLS) &&                                     \
+    (defined(CURL_FUZZER_EXPECT_OPENSSL) ||                                    \
+     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) ||              \
      defined(CURL_FUZZER_EXPECT_GNUTLS))
 #error "A curl feature test must select exactly one expected TLS backend"
 #endif
@@ -35,18 +36,114 @@ bool HasNamedFeature(const curl_version_info_data *info, const char *expected) {
   return false;
 }
 
-#if defined(CURL_FUZZER_EXPECT_OPENSSL) || \
-    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) || \
-    defined(CURL_FUZZER_EXPECT_GNUTLS) || \
-    defined(CURL_FUZZER_EXPECT_MBEDTLS)
+#ifdef CURL_FUZZER_EXPECT_MULTI_SSL
+bool HasSslBackend(const curl_ssl_backend *const *available,
+                   curl_sslbackend expected) {
+  if (!available) {
+    return false;
+  }
+  for (; *available; ++available) {
+    if ((*available)->id == expected) {
+      return true;
+    }
+  }
+  return false;
+}
+
+class CurlGlobalCleanup final {
+public:
+  CurlGlobalCleanup() = default;
+  ~CurlGlobalCleanup() { curl_global_cleanup(); }
+
+  CurlGlobalCleanup(const CurlGlobalCleanup &) = delete;
+  CurlGlobalCleanup &operator=(const CurlGlobalCleanup &) = delete;
+};
+
+bool SelectAndCheckSslBackend(curl_sslbackend selected,
+                              curl_sslbackend rejected,
+                              const char *version_prefix) {
+  const CURLsslset selection = curl_global_sslset(selected, nullptr, nullptr);
+  if (selection != CURLSSLSET_OK) {
+    std::fprintf(stderr, "curl_global_sslset failed for backend %d: %d\n",
+                 static_cast<int>(selected), static_cast<int>(selection));
+    return false;
+  }
+  if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+    std::fprintf(stderr, "curl_global_init failed for backend %d\n",
+                 static_cast<int>(selected));
+    return false;
+  }
+  const curl_version_info_data *const info = curl_version_info(CURLVERSION_NOW);
+  const char *const version =
+      info && info->ssl_version ? std::strstr(info->ssl_version, version_prefix)
+                                : nullptr;
+  // MultiSSL lists every linked backend and parenthesizes inactive ones.
+  const bool version_matches =
+      version && (version == info->ssl_version || version[-1] != '(');
+  const CURLsslset rejected_result =
+      curl_global_sslset(rejected, nullptr, nullptr);
+  const bool selection_locked = rejected_result == CURLSSLSET_TOO_LATE;
+  if (!version_matches) {
+    std::fprintf(stderr, "backend %d reported unexpected version: %s\n",
+                 static_cast<int>(selected),
+                 info && info->ssl_version ? info->ssl_version : "<null>");
+  }
+  if (!selection_locked) {
+    std::fprintf(stderr, "backend %d accepted late switch with result %d\n",
+                 static_cast<int>(selected), static_cast<int>(rejected_result));
+  }
+  curl_global_cleanup();
+  return version_matches && selection_locked;
+}
+#endif
+
+#if defined(CURL_FUZZER_EXPECT_OPENSSL) ||                                     \
+    defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES) ||               \
+    defined(CURL_FUZZER_EXPECT_GNUTLS) || defined(CURL_FUZZER_EXPECT_MBEDTLS)
 bool HasPrefix(const char *value, const char *expected) {
   return value && std::strncmp(value, expected, std::strlen(expected)) == 0;
 }
 #endif
 
-}  // namespace
+} // namespace
 
 int main() {
+#ifdef CURL_FUZZER_EXPECT_MULTI_SSL
+  (void)unsetenv("CURL_SSL_BACKEND");
+  const curl_ssl_backend **available = nullptr;
+  if (curl_global_sslset(CURLSSLBACKEND_NONE, nullptr, &available) !=
+      CURLSSLSET_UNKNOWN_BACKEND) {
+    std::fputs("libcurl did not expose its available TLS backends\n", stderr);
+    return 1;
+  }
+  if (!HasSslBackend(available, CURLSSLBACKEND_MBEDTLS) ||
+      !HasSslBackend(available, CURLSSLBACKEND_OPENSSL)) {
+    std::fputs("libcurl was not built with mbedTLS and OpenSSL backends\n",
+               stderr);
+    return 1;
+  }
+  if (!SelectAndCheckSslBackend(CURLSSLBACKEND_MBEDTLS, CURLSSLBACKEND_OPENSSL,
+                                "mbedTLS/") ||
+      !SelectAndCheckSslBackend(CURLSSLBACKEND_OPENSSL, CURLSSLBACKEND_MBEDTLS,
+                                "OpenSSL/")) {
+    std::fputs("libcurl could not cycle through its MultiSSL backends\n",
+               stderr);
+    return 1;
+  }
+  available = nullptr;
+  if (curl_global_sslset(CURLSSLBACKEND_NONE, nullptr, &available) !=
+          CURLSSLSET_UNKNOWN_BACKEND ||
+      available == nullptr) {
+    std::fputs("libcurl did not reset MultiSSL after global cleanup\n", stderr);
+    return 1;
+  }
+  if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+    std::fputs("curl_global_init failed\n", stderr);
+    return 1;
+  }
+  CurlGlobalCleanup cleanup;
+#endif
+
   const curl_version_info_data *const info = curl_version_info(CURLVERSION_NOW);
   if (!info) {
     std::fputs("curl_version_info returned null\n", stderr);
@@ -64,7 +161,14 @@ int main() {
     std::fputs("libcurl was built with unexpected GSASL support\n", stderr);
     return 1;
   }
-#if defined(CURL_FUZZER_EXPECT_OPENSSL) || \
+#ifdef CURL_FUZZER_EXPECT_MULTI_SSL
+  if (!(info->features & CURL_VERSION_MULTI_SSL) ||
+      !HasNamedFeature(info, "MultiSSL")) {
+    std::fputs("libcurl was built without MultiSSL support\n", stderr);
+    return 1;
+  }
+#endif
+#if defined(CURL_FUZZER_EXPECT_OPENSSL) ||                                     \
     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasPrefix(info->ssl_version, "OpenSSL/")) {
     std::fputs("libcurl does not report OpenSSL as its TLS backend\n", stderr);
@@ -95,21 +199,21 @@ int main() {
     return 1;
   }
 #endif
-#if defined(CURL_FUZZER_EXPECT_HTTPSRR) || \
+#if defined(CURL_FUZZER_EXPECT_HTTPSRR) ||                                     \
     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "HTTPSRR")) {
     std::fputs("libcurl was built without HTTPS RR support\n", stderr);
     return 1;
   }
 #endif
-#if defined(CURL_FUZZER_EXPECT_ECH) || \
+#if defined(CURL_FUZZER_EXPECT_ECH) ||                                         \
     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "ECH")) {
     std::fputs("libcurl was built without ECH support\n", stderr);
     return 1;
   }
 #endif
-#if defined(CURL_FUZZER_EXPECT_HTTPSIG) || \
+#if defined(CURL_FUZZER_EXPECT_HTTPSIG) ||                                     \
     defined(CURL_FUZZER_EXPECT_OPENSSL_EXPERIMENTAL_FEATURES)
   if (!HasNamedFeature(info, "HTTPSIG")) {
     std::fputs("libcurl was built without HTTP Message Signatures support\n",

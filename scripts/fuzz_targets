@@ -12,7 +12,7 @@ fi
 # from i386 and MemorySanitizer builds until their static dependencies have
 # been validated for those configurations.
 if [ "${ARCHITECTURE:-}" != "i386" ] && [ "${SANITIZER:-}" != "memory" ]; then
-    FUZZ_TARGETS_LIST="${FUZZ_TARGETS_LIST} curl_fuzzer_proto_https_gnutls curl_fuzzer_proto_https_mbedtls curl_fuzzer_proto_http3"
+    FUZZ_TARGETS_LIST="${FUZZ_TARGETS_LIST} curl_fuzzer_proto_https_gnutls curl_fuzzer_proto_https_mbedtls curl_fuzzer_proto_multissl curl_fuzzer_proto_http3"
 fi
 
 # A caller may narrow an OSS-Fuzz build to one supported executable. Apply the

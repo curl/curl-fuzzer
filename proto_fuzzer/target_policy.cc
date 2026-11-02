@@ -172,6 +172,19 @@ void CanonicalizeTlsHandshakeProfile(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep per-input TLS backend selection inside the archive's closed set.
+void CanonicalizeMultiSslBackend(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->multi_ssl_backend()) {
+    case curl::fuzzer::proto::MULTI_SSL_BACKEND_DEFAULT:
+    case curl::fuzzer::proto::MULTI_SSL_BACKEND_MBEDTLS:
+    case curl::fuzzer::proto::MULTI_SSL_BACKEND_OPENSSL:
+      return;
+    default:
+      scenario->clear_multi_ssl_backend();
+      return;
+  }
+}
+
 /// Keep Gopher's harness-owned transport probe inside its closed enum. The
 /// fixed TLS hostname is long enough to reach the session-key size limit but
 /// remains below the structured target's 32 KiB input cap.
@@ -1802,6 +1815,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_file_source();
   }
 
+  if (profile == TargetProfile::kMultiSsl) {
+    CanonicalizeMultiSslBackend(scenario);
+  } else {
+    scenario->clear_multi_ssl_backend();
+  }
+
   // The nested selector belongs exclusively to the HTTPS CONNECT proxy lane.
   // Compatibility returned above and therefore preserves accumulated inputs;
   // every unrelated fixed lane drops work its peer cannot observe.
@@ -1871,8 +1890,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // Only the dedicated TLS and QUIC peers consume a certificate-chain
   // selector. Remove it before protocol-specific early returns so other fixed
   // targets do not spend mutations on inert TLS server state.
-  if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kHttpsH2 &&
-      profile != TargetProfile::kFastHttp3 && profile != TargetProfile::kFastSecureWebSocket) {
+  if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kMultiSsl &&
+      profile != TargetProfile::kHttpsH2 && profile != TargetProfile::kFastHttp3 &&
+      profile != TargetProfile::kFastSecureWebSocket) {
     scenario->clear_tls_certificate_chain();
   }
 
@@ -1985,7 +2005,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // CRLs and public-key pin files are useful only when the target completes a
   // real origin TLS setup. Keep malformed or oversized inputs from turning
   // every other lane into an early TLS-option failure.
-  if (profile != TargetProfile::kFastHttps) {
+  if (profile != TargetProfile::kFastHttps && profile != TargetProfile::kMultiSsl) {
     scenario->clear_crl_file();
     scenario->clear_pinned_public_key_file();
     scenario->clear_tls_client_credential_profile();
@@ -2402,6 +2422,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
       break;
     case TargetProfile::kFastHttps:
+    case TargetProfile::kMultiSsl:
       scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
       break;
     case TargetProfile::kHttpsH2:
@@ -2545,6 +2566,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     }
 
     case TargetProfile::kFastHttps:
+    case TargetProfile::kMultiSsl:
       ClearAllBackpressure(scenario);
       CanonicalizeTlsAuthority(scenario);
       CanonicalizeTlsCertificateChain(scenario);

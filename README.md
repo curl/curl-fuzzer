@@ -20,7 +20,8 @@ repository supplies the harnesses used by curl's
 The conditional list in [`scripts/fuzz_targets`](scripts/fuzz_targets) is the
 source of truth for targets packaged for OSS-Fuzz. The base structured targets
 are built for OSS-Fuzz's AddressSanitizer/i386 configuration. The GnuTLS,
-mbedTLS, and HTTP/3 variants are omitted from i386 and MemorySanitizer builds.
+mbedTLS, MultiSSL, and HTTP/3 variants are omitted from i386 and
+MemorySanitizer builds.
 
 ## Build and replay locally
 

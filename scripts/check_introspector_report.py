@@ -41,6 +41,7 @@ EXPECTED_PROTO_TARGETS = frozenset(
         "curl_fuzzer_proto_https_h2",
         "curl_fuzzer_proto_https_gnutls",
         "curl_fuzzer_proto_https_mbedtls",
+        "curl_fuzzer_proto_multissl",
         "curl_fuzzer_proto_multi",
         "curl_fuzzer_proto_telnet",
         "curl_fuzzer_proto_tftp",

@@ -425,6 +425,7 @@ def test_specialized_lanes_are_default_benchmark_targets() -> None:
         "curl_fuzzer_proto_https_h2",
         "curl_fuzzer_proto_https_gnutls",
         "curl_fuzzer_proto_https_mbedtls",
+        "curl_fuzzer_proto_multissl",
         "curl_fuzzer_proto_http3",
         "curl_fuzzer_proto_h2_proxy",
         "curl_fuzzer_proto_socks4",

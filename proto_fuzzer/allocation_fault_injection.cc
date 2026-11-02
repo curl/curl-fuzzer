@@ -134,13 +134,16 @@ bool InitializeCurl() noexcept {
   return callbacks_active;
 }
 
-/// Reinstall the same allocator callbacks after a deliberate, balanced
-/// curl_global_cleanup(). Call only when no curl handles or workers remain.
+/// Initialize one balanced curl epoch with the harness allocator callbacks.
+/// Call only while no curl global reference, handle, or worker remains.
 /// @return true when libcurl accepted the callbacks.
-bool ReinitializeCurl() noexcept {
+bool InitializeCurlForEpoch() noexcept {
   return curl_global_init_mem(CURL_GLOBAL_ALL, internal::Malloc, internal::Free, internal::Realloc, internal::Strdup,
                               internal::Calloc) == CURLE_OK;
 }
+
+/// Reinstall the same callbacks after a deliberate global cleanup.
+bool ReinitializeCurl() noexcept { return InitializeCurlForEpoch(); }
 
 /// Report whether InitializeCurl owns a successful global initialization.
 /// This is distinct from its return value: allocation callbacks can be

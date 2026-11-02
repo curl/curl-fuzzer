@@ -201,6 +201,13 @@ option (curl.fuzzer.schema.eligibility_registry) = {
     generated_root: "TimingScenario"
     empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
   }
+  profiles {
+    profile: TARGET_PROFILE_MULTI_SSL
+    cpp_target_profile: "kMultiSsl"
+    root_message: "curl.fuzzer.test.Scenario"
+    generated_root: "MultiSslScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
 };
 
 message SetOption {

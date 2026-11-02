@@ -82,6 +82,7 @@ struct Statistics {
 };
 
 bool InitializeCurl() noexcept;
+bool InitializeCurlForEpoch() noexcept;
 bool ReinitializeCurl() noexcept;
 bool CurlInitializationSucceeded() noexcept;
 bool ClaimCurlInitializationReference() noexcept;

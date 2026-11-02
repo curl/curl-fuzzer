@@ -13,7 +13,8 @@ the mutation surface, peer, semantic normalization, and work budget.
 | `curl_fuzzer_proto_http_deep` | Stateful HTTP coverage, including redirects, dead connection-pool pruning, authentication, MIME construction and redirected body rewinds, uploads, result APIs, bounded cookie, Alt-Svc, HSTS, and netrc files; harness-owned forward-proxy, HTTP CONNECT (including a bounded pending HAProxy-prefix pollset profile), and abstract Unix-domain transports; plus fixed no-proxy/environment-proxy parsing and owned-loopback interface/keepalive setup. |
 | `curl_fuzzer_proto_http2` | High-throughput HTTP/2 origin frames over plaintext prior knowledge, using the same structured and malformed frame grammar as the TLS lane. |
 | `curl_fuzzer_proto_https` | HTTP/1.1 through a real in-process TLS peer, including certificate, session, TLS result-state, bounded CRL and public-key-pin files, closed harness-owned client-credential profiles, and fixed OpenSSL close-notify and HelloRequest probes. |
-| `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a GnuTLS or mbedTLS curl client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
+| `curl_fuzzer_proto_https_gnutls` / `curl_fuzzer_proto_https_mbedtls` | The HTTPS profile with a single-backend GnuTLS or mbedTLS client; the local server side remains the harness TLS peer and both variants reuse the HTTPS generated seed corpus. |
+| `curl_fuzzer_proto_multissl` | HTTPS through a dedicated libcurl archive containing mbedTLS and OpenSSL. `multi_ssl_backend` selects the default, mbedTLS, or OpenSSL through `curl_global_sslset()` before a balanced per-input global initialization. This target has its own generated profile and corpus. |
 | `curl_fuzzer_proto_https_h2` | Structured and malformed HTTP/2 origin frames after a verified TLS/ALPN handshake, input-selectable X25519 or provider-default key exchange, plus push, live stream-weight, fatal-session, and upkeep probes. |
 | `curl_fuzzer_proto_http3` | Structured or raw HTTP/3/QPACK work after a real local QUIC/TLS handshake, or capsule traffic through a local HTTP/1.1 CONNECT-UDP proxy. |
 | `curl_fuzzer_proto_h2_proxy` | An HTTP/1.1 origin request through a fixed trust-anchor-verified HTTPS CONNECT proxy. `connection.proxy_protocol` selects the existing HTTP/2 frame peer or a bounded HTTP/1.1 CONNECT response profile; proxy authentication options remain owned by this lane. |
@@ -40,9 +41,9 @@ the mutation surface, peer, semantic normalization, and work budget.
 
 The exact target inventory and platform gates are maintained in
 `scripts/fuzz_targets`. The base structured targets are included in OSS-Fuzz's
-AddressSanitizer/i386 build. The GnuTLS, mbedTLS, and HTTP/3 variants are
-excluded from i386 and MemorySanitizer builds, and HTTP/3 is created only when
-its dependency variant is enabled.
+AddressSanitizer/i386 build. The GnuTLS, mbedTLS, MultiSSL, and HTTP/3 variants
+are excluded from i386 and MemorySanitizer builds, and HTTP/3 is created only
+when its dependency variant is enabled.
 MemorySanitizer omits OpenSSL and the TLS mock peer. The plaintext
 `curl_fuzzer_proto_http2` lane remains active in that build. In contrast,
 `curl_fuzzer_proto_https_h2` and `curl_fuzzer_proto_h2_proxy` return without
