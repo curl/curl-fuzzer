@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import subprocess
 import tempfile
 from pathlib import Path
+
+from coverage_test_support import (
+    export_document,
+    function_counts,
+    merge_profiles,
+    run_profiled_binary,
+)
 
 # Keep the expectation attached to the seed that supplies the input. Each seed
 # is paired with a selector-only negative control, so the check rejects target
@@ -71,89 +75,6 @@ def _short_function_name(name: object) -> str | None:
     return name.rsplit(":", maxsplit=1)[-1]
 
 
-def _export_document(
-    llvm_cov: Path, binary: Path, profdata: Path, source: Path
-) -> dict[str, object]:
-    exported = subprocess.run(
-        [
-            str(llvm_cov),
-            "export",
-            str(binary),
-            f"-instr-profile={profdata}",
-            "--sources",
-            str(source),
-        ],
-        check=True,
-        text=True,
-        stdout=subprocess.PIPE,
-    )
-    document = json.loads(exported.stdout)
-    if not isinstance(document, dict):
-        raise SystemExit("llvm-cov export did not produce an object")
-    return document
-
-
-def _function_counts(document: dict[str, object]) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for datum in document.get("data", []):
-        if not isinstance(datum, dict):
-            continue
-        for function in datum.get("functions", []):
-            if not isinstance(function, dict):
-                continue
-            name = _short_function_name(function.get("name"))
-            count = function.get("count")
-            if name is not None and isinstance(count, int):
-                counts[name] = max(counts.get(name, 0), count)
-    return counts
-
-
-def _run_seed(
-    *,
-    binary: Path,
-    seed: Path,
-    raw_directory: Path,
-    llvm_profdata: Path,
-) -> Path:
-    raw_directory.mkdir()
-    environment = os.environ.copy()
-    environment["LLVM_PROFILE_FILE"] = str(raw_directory / f"{seed.name}-%m-%p.profraw")
-    completed = subprocess.run(
-        [str(binary), str(seed)],
-        check=False,
-        env=environment,
-        text=True,
-        capture_output=True,
-        timeout=10,
-    )
-    if completed.returncode != 0:
-        details = "\n".join(
-            part for part in (completed.stdout, completed.stderr) if part
-        )
-        raise SystemExit(
-            f"{seed.name} exited with status {completed.returncode}"
-            + (f":\n{details}" if details else "")
-        )
-
-    profiles = sorted(raw_directory.glob(f"{seed.name}-*.profraw"))
-    if not profiles or any(profile.stat().st_size == 0 for profile in profiles):
-        raise SystemExit(f"{seed.name} emitted no nonempty raw coverage profile")
-
-    profdata = raw_directory / f"{seed.name}.profdata"
-    subprocess.run(
-        [
-            str(llvm_profdata),
-            "merge",
-            "-sparse",
-            *map(str, profiles),
-            "-o",
-            str(profdata),
-        ],
-        check=True,
-    )
-    return profdata
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
@@ -190,14 +111,23 @@ def main() -> int:
                 raise SystemExit(f"checked-in seed is empty: {seed}")
             selector_only = temporary / f"{seed_name}.selector-only"
             selector_only.write_bytes(seed_bytes[:1])
-            control_profdata = _run_seed(
+            control_directory = temporary / f"{seed_name}-control"
+            control_profiles = run_profiled_binary(
                 binary=args.binary,
-                seed=selector_only,
-                raw_directory=temporary / f"{seed_name}-control",
-                llvm_profdata=args.llvm_profdata,
+                arguments=[selector_only],
+                raw_directory=control_directory,
+                profile_stem=selector_only.name,
+                timeout=10,
+                capture_output=True,
             )
-            control_counts = _function_counts(
-                _export_document(args.llvm_cov, args.binary, control_profdata, source)
+            control_profdata = merge_profiles(
+                args.llvm_profdata,
+                control_profiles,
+                control_directory / f"{selector_only.name}.profdata",
+            )
+            control_counts = function_counts(
+                export_document(args.llvm_cov, args.binary, control_profdata, [source]),
+                name_normalizer=_short_function_name,
             )
             setup_functions = sorted(
                 name for name in required_functions if control_counts.get(name, 0) > 0
@@ -208,14 +138,23 @@ def main() -> int:
                     "fuzz operations: " + ", ".join(setup_functions)
                 )
 
-            profdata = _run_seed(
+            seed_directory = temporary / seed_name
+            profiles = run_profiled_binary(
                 binary=args.binary,
-                seed=seed,
-                raw_directory=temporary / seed_name,
-                llvm_profdata=args.llvm_profdata,
+                arguments=[seed],
+                raw_directory=seed_directory,
+                profile_stem=seed.name,
+                timeout=10,
+                capture_output=True,
             )
-            counts = _function_counts(
-                _export_document(args.llvm_cov, args.binary, profdata, source)
+            profdata = merge_profiles(
+                args.llvm_profdata,
+                profiles,
+                seed_directory / f"{seed.name}.profdata",
+            )
+            counts = function_counts(
+                export_document(args.llvm_cov, args.binary, profdata, [source]),
+                name_normalizer=_short_function_name,
             )
             missing_functions = sorted(
                 name for name in required_functions if counts.get(name, 0) <= 0
