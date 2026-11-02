@@ -236,7 +236,7 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         projection = projections[_profile_name(slug)]
         expected_fields = set(body["input_fields"])
         # The DoH settings cutover, semantic protocol probes, mail recv-buffer
-        # pressure, and FILE's harness-owned anonymous source are deliberate
+        # pressure, and harness-owned anonymous sources are deliberate
         # post-cutover changes.
         # Keep the historical fixture frozen and spell out only these reviewed
         # deltas here.
@@ -260,6 +260,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.add("mqtt_probe_mode")
         if slug in {"compatibility", "fast_smtp"}:
             expected_fields.add("smtp_probe_mode")
+        if slug in {"compatibility", "fast_https"}:
+            expected_fields.add("pinned_public_key_file")
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
         if slug in {"compatibility", "fast_rtsp"}:
@@ -374,6 +376,15 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert smtp_probe.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_SMTP",
+    }
+
+    pinned_public_key_file = model.fields[
+        "curl.fuzzer.proto.Scenario.pinned_public_key_file"
+    ]
+    assert pinned_public_key_file.number == 48
+    assert pinned_public_key_file.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_HTTPS",
     }
 
     h2_flush_probe = model.fields[

@@ -53,6 +53,8 @@ class TransferSession {
 
   void ApplyInputFiles();
 
+  void ApplyPinnedPublicKeyFile();
+
   void ConfigureAltSvcRouting(const std::string& host_path);
 
   ScenarioRequestData* InstallRequestData(const curl::fuzzer::proto::Scenario& scenario,

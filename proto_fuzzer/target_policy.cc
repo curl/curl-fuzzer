@@ -604,6 +604,7 @@ void BoundFileInputs(curl::fuzzer::proto::Scenario* scenario) {
   BoundFileInput(scenario->mutable_hsts_file(), &remaining_bytes);
   BoundFileInput(scenario->mutable_netrc_file(), &remaining_bytes);
   BoundFileInput(scenario->mutable_crl_file(), &remaining_bytes);
+  BoundFileInput(scenario->mutable_pinned_public_key_file(), &remaining_bytes);
 }
 
 /// Apply the metadata/header limits shared by both MIME part message types.
@@ -1981,11 +1982,12 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_netrc_file();
   }
 
-  // A CRL is useful only when the target completes a real origin TLS setup.
-  // Keep malformed or oversized CRLs from turning every other lane into an
-  // early TLS-option failure.
+  // CRLs and public-key pin files are useful only when the target completes a
+  // real origin TLS setup. Keep malformed or oversized inputs from turning
+  // every other lane into an early TLS-option failure.
   if (profile != TargetProfile::kFastHttps) {
     scenario->clear_crl_file();
+    scenario->clear_pinned_public_key_file();
     scenario->clear_tls_client_credential_profile();
     scenario->clear_tls_handshake_profile();
   }

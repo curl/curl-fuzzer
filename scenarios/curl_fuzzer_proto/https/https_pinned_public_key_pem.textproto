@@ -1,0 +1,15 @@
+# Feed the fixed TLS peer's SubjectPublicKeyInfo through curl's filename-backed
+# PEM decoder. The deliberately wrong digest proves that the harness-owned PEM
+# path is applied after, and takes precedence over, generic scalar options.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/pinned-pem"
+pinned_public_key_file: "-----BEGIN PUBLIC KEY-----\n"
+                        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEr/RA8idLSfFXwuj+q8c+vSOWCiBy\n"
+                        "iVUqTt9tN1RGNrxwa/4HuVet9SCkXKXqaDjjz6E9osU1U5vsLf5MV/Kfxg==\n"
+                        "-----END PUBLIC KEY-----\n"
+options {
+  pinnedpublickey: "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+}
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\npinned-pem"
+}

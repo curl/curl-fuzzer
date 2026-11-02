@@ -77,6 +77,13 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "sha256//ohF20oHrdt/MM3YpyIewiTdtTbgZwq3qatd40TjMtYg=",
             "pinned",
         ),
+        "https_pinned_public_key_pem.textproto": (
+            "pinned_public_key_file:",
+            "-----BEGIN PUBLIC KEY-----",
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEr/RA8idLSfFXwuj+q8c+vSOWCiBy",
+            "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            "pinned-pem",
+        ),
         "https_session_redirect.textproto": (
             "ssl_sessionid_cache: true",
             "sslversion: 393222",

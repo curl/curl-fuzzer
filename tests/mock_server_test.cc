@@ -1361,21 +1361,25 @@ Scenario MakeTlsScenario(const std::string &path, const std::string &body) {
 TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   proto_fuzzer::ScopedTraceReset trace_reset;
   TlsTransferResult result;
-  CURL *easy = curl_easy_init();
-  Expect(easy != nullptr, "TLS test could not allocate an easy handle");
-  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
-      easy, curl::fuzzer::proto::SCHEME_HTTPS, scenario.trace_ids(),
-      scenario.trace_config());
+  proto_fuzzer::TransferSession transfer;
+  Expect(transfer.PrepareInputFiles(
+             scenario, proto_fuzzer::ScenarioRunMode::kTlsCoverage),
+         "TLS test could not prepare its anonymous input files");
+  Expect(transfer.Initialize(), "TLS test could not allocate an easy handle");
+  CURL *easy = transfer.easy();
+  transfer.ApplyBaseline(scenario);
   const std::string url = "https://" + scenario.host_path();
   curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
 
   proto_fuzzer::TlsMockServer server(scenario.tls_certificate_chain(),
                                      scenario.tls_handshake_profile());
   server.Install(easy);
+  transfer.ApplyInputFiles();
   for (const auto &option : scenario.options()) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
            "TLS scenario option was rejected by curl");
   }
+  transfer.ApplyPinnedPublicKeyFile();
   Expect(proto_fuzzer::ApplyTlsClientCredentialProfile(
              easy, scenario.tls_client_credential_profile()) == CURLE_OK,
          "TLS client-credential profile was rejected during setup");
@@ -1422,8 +1426,7 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   result.ech_inner_name = server.ech_inner_name();
   result.ech_outer_name = server.ech_outer_name();
 
-  curl_easy_cleanup(easy);
-  connect_to.reset();
+  transfer.Close();
   return result;
 }
 
@@ -1550,6 +1553,32 @@ void TestTlsPublicKeyPins() {
          "curl delivered HTTP data after rejecting the peer's public key");
   Expect(mismatch_result.verify_result == 0,
          "ordinary certificate verification failed before the pin comparison");
+
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/https/https_pinned_public_key_pem.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the PEM public-key pin seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario pem;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastHttpsTraits>(text, &pem),
+         "could not parse the PEM public-key pin seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &pem, proto_fuzzer::generated::FastHttpsTraits::kProfile,
+      &proto_fuzzer::generated::FastHttpsTraits::PruneConditionalEligibility);
+  Expect(!pem.pinned_public_key_file().empty() && pem.options_size() == 1 &&
+             pem.options(0).option_id() ==
+                 curl::fuzzer::proto::CURLOPT_PINNEDPUBLICKEY &&
+             pem.options(0).string_value() ==
+                 "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+         "PEM public-key pin seed lost its competing pin inputs");
+
+  const TlsTransferResult pem_result = DriveTlsScenario(pem);
+  Expect(pem_result.code == CURLE_OK && pem_result.response == "pinned-pem",
+         "matching PEM public-key pin did not override the mismatched digest");
+  Expect(pem_result.verify_result == 0,
+         "ordinary certificate verification failed before the PEM pin check");
 }
 
 void TestTlsOpenSslCloseNotifyProfile() {

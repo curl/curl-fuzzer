@@ -68,6 +68,7 @@ struct TransferSession::ParserInputs {
   BoundedAnonymousInputFile hsts{scenario_limits::kMaxFileInputBytes};
   BoundedAnonymousInputFile netrc{scenario_limits::kMaxFileInputBytes + 1};
   BoundedAnonymousInputFile crl{scenario_limits::kMaxFileInputBytes};
+  BoundedAnonymousInputFile pinned_public_key{scenario_limits::kMaxFileInputBytes};
 };
 
 TransferSession::TransferSession() = default;
@@ -134,6 +135,7 @@ bool TransferSession::PrepareInputFiles(const curl::fuzzer::proto::Scenario& sce
     PrepareInputFile(scenario.netrc_file(), &remaining_bytes, &parser_inputs_->netrc, true);
   } else {
     PrepareInputFile(scenario.crl_file(), &remaining_bytes, &parser_inputs_->crl);
+    PrepareInputFile(scenario.pinned_public_key_file(), &remaining_bytes, &parser_inputs_->pinned_public_key);
   }
   return true;
 }
@@ -169,6 +171,18 @@ void TransferSession::ApplyInputFiles() {
   }
   if (const char* path = parser_inputs_->crl.path()) {
     (void)curl_easy_setopt(easy_.get(), CURLOPT_CRLFILE, path);
+  }
+}
+
+/// Install the prepared public-key pin path after generic scalar options.
+/// This field is the only protobuf-controlled route to curl's filename-backed
+/// pin parser; the path itself always names a descriptor owned by this session.
+void TransferSession::ApplyPinnedPublicKeyFile() {
+  if (!easy_ || !parser_inputs_) {
+    return;
+  }
+  if (const char* path = parser_inputs_->pinned_public_key.path()) {
+    (void)curl_easy_setopt(easy_.get(), CURLOPT_PINNEDPUBLICKEY, path);
   }
 }
 
