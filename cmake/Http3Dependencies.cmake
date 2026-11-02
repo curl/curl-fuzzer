@@ -47,7 +47,7 @@ set(HTTP3_OPENSSL_STATIC_LIBS
 set(HTTP3_OPENSSL_DEP openssl_external)
 
 # renovate: datasource=github-releases depName=ngtcp2/nghttp3
-set(HTTP3_NGHTTP3_VERSION 1.18.0)
+set(HTTP3_NGHTTP3_VERSION 1.19.0)
 set(HTTP3_NGHTTP3_INSTALL_DIR
     ${CMAKE_BINARY_DIR}/nghttp3-${HTTP3_NGHTTP3_VERSION}-install)
 set(HTTP3_NGHTTP3_INCLUDE_DIR ${HTTP3_NGHTTP3_INSTALL_DIR}/include)
