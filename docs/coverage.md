@@ -73,8 +73,16 @@ summary, and reuses a public-corpus cache whose key changes each ISO week.
 For controlled A/B performance and source-coverage comparisons, see
 [Benchmarking](benchmarking.md).
 
+`fuzz_url` preserves its whole-input URL parse, then uses input-derived URL
+parts, flags, and values to exercise typed set/get/clear operations,
+duplication, query appends, and absolute or relative URL updates.
+Its final five bytes select those state transitions; repeated component work
+uses at most 4 KiB of the preceding value while the initial parse remains whole.
+
 `curl_fuzzer_proto_api` supplements corpus replay with deterministic public
 compatibility API probes, such as formatting and deprecated form serialization.
+It also covers easy/header/share contract errors and multi-handle wait readiness
+through a bounded local pipe; none of these probes performs a network transfer.
 The probes execute once per process in coverage builds (`ENABLE_COVERAGE=ON`
 or `SANITIZER=coverage`) and Fuzz Introspector builds
 (`SANITIZER=introspector`). They reuse the proto runtime's global curl
