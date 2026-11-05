@@ -21,17 +21,27 @@ CurlGlobalLifecycle* registered_lifecycles = nullptr;
 
 }  // namespace
 
+/// Install process-wide settings needed by retained and per-input curl
+/// lifecycles. Repeated calls are harmless.
+void ConfigureCurlFuzzerProcess() noexcept {
+  static const bool configured = [] {
+    // Curl_tls_keylog_open() runs once during global initialization. Keep the
+    // default output bounded while allowing a reproducer to select another path.
+    (void)setenv("SSLKEYLOGFILE", "/dev/null", 0);
+
+    // Mock-peer teardown can race a write. Surface that as a socket error rather
+    // than allowing SIGPIPE to terminate the process.
+    std::signal(SIGPIPE, SIG_IGN);
+    return true;
+  }();
+  (void)configured;
+}
+
 /// Initialize curl and its allocation hooks for this process.
 /// @param cleanup Optional cleanup callback used by focused lifecycle tests.
 CurlGlobalLifecycle::CurlGlobalLifecycle(CleanupFunction cleanup) noexcept
     : cleanup_(cleanup != nullptr ? cleanup : &curl_global_cleanup) {
-  // Curl_tls_keylog_open() runs once during global initialization. Keep the
-  // default output bounded while allowing a reproducer to select another path.
-  (void)setenv("SSLKEYLOGFILE", "/dev/null", 0);
-
-  // Mock-peer teardown can race a write. Surface that as a socket error rather
-  // than allowing SIGPIPE to terminate the process.
-  std::signal(SIGPIPE, SIG_IGN);
+  ConfigureCurlFuzzerProcess();
 
   const bool callbacks_active = allocation_fault_injection::InitializeCurl();
   if (allocation_fault_injection::ClaimCurlInitializationReference()) {

@@ -188,6 +188,7 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
     assert influence["old_descriptor_sha256"] == OLD_DESCRIPTOR_SHA256
 
     expected_profiles = {_profile_name(profile) for profile in options["profiles"]}
+    expected_profiles.add("TARGET_PROFILE_MULTI_SSL")
     assert set(model.profiles) == expected_profiles
 
     kind_by_type = {
@@ -207,6 +208,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         assert field.number == tag
         assert kind_by_type[field.proto_type] == option["kind"]
         expected_profiles = {_profile_name(profile) for profile in option["profiles"]}
+        if "TARGET_PROFILE_FAST_HTTPS" in expected_profiles:
+            expected_profiles.add("TARGET_PROFILE_MULTI_SSL")
         if option["name"] == "CURLOPT_ECH":
             # The resolver's DoH HTTPS-RR lane deliberately extends the
             # pre-cutover baseline so TLS can observe a pending ECH record.
@@ -277,6 +280,15 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.discard("host_path")
             expected_fields.add("file_source")
         assert _projected_structured_paths(projection) == expected_fields
+
+    fast_https_fields = _projected_structured_paths(
+        projections["TARGET_PROFILE_FAST_HTTPS"]
+    )
+    multi_ssl_fields = _projected_structured_paths(
+        projections["TARGET_PROFILE_MULTI_SSL"]
+    )
+    assert multi_ssl_fields == fast_https_fields | {"multi_ssl_backend"}
+    assert "fail_allocations" in multi_ssl_fields
 
     profile_schemas = {
         name: contents
@@ -385,6 +397,15 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert pinned_public_key_file.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_HTTPS",
+        "TARGET_PROFILE_MULTI_SSL",
+    }
+
+    multi_ssl_backend = model.fields[
+        "curl.fuzzer.proto.Scenario.multi_ssl_backend"
+    ]
+    assert multi_ssl_backend.number == 49
+    assert multi_ssl_backend.eligibility.profiles == {
+        "TARGET_PROFILE_MULTI_SSL"
     }
 
     h2_flush_probe = model.fields[

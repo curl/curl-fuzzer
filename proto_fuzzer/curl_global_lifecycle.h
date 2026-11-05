@@ -12,6 +12,8 @@
 
 namespace proto_fuzzer {
 
+void ConfigureCurlFuzzerProcess() noexcept;
+
 /** Own the proto runtime's one curl global initialization. */
 class CurlGlobalLifecycle final {
  public:

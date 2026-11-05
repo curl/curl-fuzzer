@@ -78,8 +78,10 @@ Proto corpus inheritance is limited to binaries that use the exact same
 generated profile, currently the GnuTLS and mbedTLS HTTPS variants reusing the
 OpenSSL HTTPS profile. The typed-option cutover does not treat compatibility or
 other profile corpora as interchangeable merely because retained protobuf tags
-can parse. Cross-profile corpora are not reused, and pre-cutover public corpora
-must be benchmarked with the revision and target that produced them.
+can parse. The MultiSSL lane has a distinct backend selector and therefore does
+not inherit the HTTPS corpus. Cross-profile corpora are not reused, and
+pre-cutover public corpora must be benchmarked with the revision and target that
+produced them.
 
 Every run gets a fresh copy of one content-addressed snapshot. Repeat `N` uses
 the deterministic seed `--seed-base + N - 1`; baseline/candidate order

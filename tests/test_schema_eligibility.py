@@ -89,7 +89,7 @@ def test_loads_complete_registry_and_typed_metadata(tmp_path: Path) -> None:
     data = _compile_fixture(tmp_path)
     model = load_schema_model(data)
 
-    assert len(model.profiles) == 28
+    assert len(model.profiles) == 29
     blksize = model.fields["curl.fuzzer.test.SetOption.tftp_blksize"]
     assert blksize.native_name == "CURLOPT_TFTP_BLKSIZE"
     assert blksize.eligibility.profiles >= {

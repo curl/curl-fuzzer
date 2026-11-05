@@ -207,6 +207,13 @@ option (curl.fuzzer.schema.eligibility_registry) = {
     generated_root: "TimingScenario"
     empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
   }
+  profiles {
+    profile: TARGET_PROFILE_MULTI_SSL
+    cpp_target_profile: "kMultiSsl"
+    root_message: "curl.fuzzer.proto.Scenario"
+    generated_root: "MultiSslScenario"
+    empty_option_policy: EMPTY_OPTION_POLICY_DISCARD
+  }
 };
 
 
@@ -249,6 +256,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -282,6 +290,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -316,6 +325,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -360,6 +370,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -386,6 +397,7 @@ message Scenario {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -416,6 +428,7 @@ message Scenario {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_FTP
         profiles: TARGET_PROFILE_API
         profiles: TARGET_PROFILE_MULTI
@@ -443,6 +456,7 @@ message Scenario {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -510,6 +524,7 @@ message Scenario {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -537,6 +552,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -656,6 +672,7 @@ message Scenario {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
       }
     }
   ];
@@ -718,6 +735,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -758,6 +776,7 @@ message Scenario {
         profiles: TARGET_PROFILE_FAST_HTTP
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -928,6 +947,7 @@ message Scenario {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
       }
     }
   ];
@@ -973,6 +993,7 @@ message Scenario {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
       }
     }
   ];
@@ -1113,9 +1134,28 @@ message Scenario {
       eligibility {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
       }
     }
   ];
+  // Choose the TLS implementation before this testcase initializes libcurl.
+  // This selector belongs only to the dedicated MultiSSL lane.
+  MultiSslBackend multi_ssl_backend = 49 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_MULTI_SSL
+      }
+    }
+  ];
+}
+
+// TLS backends linked into the dedicated MultiSSL libcurl archive. The zero
+// value keeps an empty protobuf useful and queries curl_global_sslset() before
+// initialization while leaving the wrapper to choose its configured default.
+enum MultiSslBackend {
+  MULTI_SSL_BACKEND_DEFAULT = 0;
+  MULTI_SSL_BACKEND_MBEDTLS = 1;
+  MULTI_SSL_BACKEND_OPENSSL = 2;
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -2546,6 +2586,7 @@ message UploadScript {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2575,6 +2616,7 @@ message UploadScript {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2600,6 +2642,7 @@ message UploadScript {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2625,6 +2668,7 @@ message UploadScript {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2677,6 +2721,7 @@ message MimePost {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2704,6 +2749,7 @@ message MimePart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2723,6 +2769,7 @@ message MimePart {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2741,6 +2788,7 @@ message MimePart {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2759,6 +2807,7 @@ message MimePart {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2781,6 +2830,7 @@ message MimePart {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2800,6 +2850,7 @@ message MimePart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2818,6 +2869,7 @@ message MimePart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2836,6 +2888,7 @@ message MimePart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2854,6 +2907,7 @@ message MimePart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2877,6 +2931,7 @@ message MimeSubparts {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2901,6 +2956,7 @@ message MimeDataPart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2920,6 +2976,7 @@ message MimeDataPart {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2938,6 +2995,7 @@ message MimeDataPart {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2957,6 +3015,7 @@ message MimeDataPart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2975,6 +3034,7 @@ message MimeDataPart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -2993,6 +3053,7 @@ message MimeDataPart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3011,6 +3072,7 @@ message MimeDataPart {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3036,6 +3098,7 @@ message GeneratedBytes {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3054,6 +3117,7 @@ message GeneratedBytes {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_HTTPS_H2
         profiles: TARGET_PROFILE_FAST_HTTP2
         profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3144,6 +3208,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3168,6 +3233,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3197,6 +3263,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3217,6 +3284,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3238,6 +3306,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3270,6 +3339,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3286,6 +3356,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3302,6 +3373,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3322,6 +3394,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3342,6 +3415,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3362,6 +3436,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_MQTT
@@ -3380,6 +3455,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_TELNET
@@ -3404,6 +3480,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3443,6 +3520,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3467,6 +3545,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3489,6 +3568,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3510,6 +3590,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3536,6 +3617,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3561,6 +3643,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3581,6 +3664,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3601,6 +3685,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3718,6 +3803,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3742,6 +3828,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3763,6 +3850,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3786,6 +3874,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3808,6 +3897,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3832,6 +3922,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3848,6 +3939,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3864,6 +3956,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3880,6 +3973,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -3897,6 +3991,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3921,6 +4016,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3945,6 +4041,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_PROXY_TRANSPORT
           profiles: TARGET_PROFILE_RESOLVER
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
@@ -3970,6 +4067,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -3993,6 +4091,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4019,6 +4118,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4040,6 +4140,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4056,6 +4157,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4072,6 +4174,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SMTP
@@ -4092,6 +4195,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SMTP
@@ -4127,6 +4231,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4148,6 +4253,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4178,6 +4284,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4198,6 +4305,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4218,6 +4326,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4239,6 +4348,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4270,6 +4380,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4300,6 +4411,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4324,6 +4436,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4340,6 +4453,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4361,6 +4475,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4383,6 +4498,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4403,6 +4519,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4423,6 +4540,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4444,6 +4562,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4470,6 +4589,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4492,6 +4612,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4516,6 +4637,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4595,6 +4717,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SMTP
@@ -4615,6 +4738,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SMTP
@@ -4635,6 +4759,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4651,6 +4776,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4667,6 +4793,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4683,6 +4810,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4699,6 +4827,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4715,6 +4844,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4731,6 +4861,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4747,6 +4878,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4763,6 +4895,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4779,6 +4912,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4813,6 +4947,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4835,6 +4970,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4857,6 +4993,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -4885,6 +5022,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4908,6 +5046,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4928,6 +5067,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4955,6 +5095,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -4981,6 +5122,7 @@ message SetOption {
           profiles: TARGET_PROFILE_FAST_HTTP
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -5005,6 +5147,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -5034,6 +5177,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -5072,6 +5216,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_FAST_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
           profiles: TARGET_PROFILE_FAST_GOPHER
@@ -5088,6 +5233,7 @@ message SetOption {
           profiles: TARGET_PROFILE_COMPATIBILITY
           profiles: TARGET_PROFILE_DEEP_HTTP
           profiles: TARGET_PROFILE_FAST_HTTPS
+          profiles: TARGET_PROFILE_MULTI_SSL
           profiles: TARGET_PROFILE_HTTPS_H2
           profiles: TARGET_PROFILE_FAST_HTTP2
           profiles: TARGET_PROFILE_FAST_HTTP3
@@ -5127,6 +5273,7 @@ message Connection {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_FTP
         profiles: TARGET_PROFILE_API
         profiles: TARGET_PROFILE_MULTI
@@ -5170,6 +5317,7 @@ message Connection {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_FTP
         profiles: TARGET_PROFILE_API
         profiles: TARGET_PROFILE_MULTI
@@ -5219,6 +5367,7 @@ message Connection {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_API
         profiles: TARGET_PROFILE_MULTI
         profiles: TARGET_PROFILE_TIMING
@@ -5265,6 +5414,7 @@ message Connection {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_API
         profiles: TARGET_PROFILE_MULTI
         profiles: TARGET_PROFILE_TIMING
@@ -5316,6 +5466,7 @@ message WsManualProbes {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5333,6 +5484,7 @@ message WsManualProbes {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5351,6 +5503,7 @@ message WsManualProbes {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5409,6 +5562,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5426,6 +5580,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5441,6 +5596,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5456,6 +5612,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5472,6 +5629,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5488,6 +5646,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5503,6 +5662,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5520,6 +5680,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET
@@ -5538,6 +5699,7 @@ message WebSocketFrame {
         profiles: TARGET_PROFILE_COMPATIBILITY
         profiles: TARGET_PROFILE_DEEP_HTTP
         profiles: TARGET_PROFILE_FAST_HTTPS
+        profiles: TARGET_PROFILE_MULTI_SSL
         profiles: TARGET_PROFILE_FAST_HTTP3
         profiles: TARGET_PROFILE_FAST_WEBSOCKET
         profiles: TARGET_PROFILE_FAST_SECURE_WEBSOCKET

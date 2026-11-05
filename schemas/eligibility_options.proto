@@ -43,6 +43,7 @@ enum TargetProfile {
   TARGET_PROFILE_API = 26;
   TARGET_PROFILE_MULTI = 27;
   TARGET_PROFILE_TIMING = 28;
+  TARGET_PROFILE_MULTI_SSL = 29;
 }
 
 // Empty SetOption entries are representable because SetOption is a oneof.

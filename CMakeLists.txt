@@ -454,6 +454,7 @@ set(GNUTLS_CACHE_INSTALL_DIRS "")
 set(BUILD_MBEDTLS_VARIANT FALSE)
 set(MBEDTLS_EXTERNAL_DEP "")
 set(MBEDTLS_CACHE_INSTALL_DIRS "")
+set(BUILD_MULTISSL_VARIANT FALSE)
 set(BUILD_HTTP3_VARIANT FALSE)
 set(HTTP3_EXTERNAL_DEP "")
 set(HTTP3_CACHE_INSTALL_DIRS "")
@@ -463,6 +464,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" AND
     include(${CMAKE_SOURCE_DIR}/cmake/GnuTLSDependencies.cmake)
     set(BUILD_MBEDTLS_VARIANT TRUE)
     include(${CMAKE_SOURCE_DIR}/cmake/MbedTLSDependencies.cmake)
+    set(BUILD_MULTISSL_VARIANT TRUE)
     set(BUILD_HTTP3_VARIANT TRUE)
     include(${CMAKE_SOURCE_DIR}/cmake/Http3Dependencies.cmake)
 endif()
@@ -491,6 +493,7 @@ add_custom_target(deps
 set(CURL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-install)
 set(CURL_GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-gnutls-install)
 set(CURL_MBEDTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-mbedtls-install)
+set(CURL_MULTISSL_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-multissl-install)
 set(CURL_HTTP3_INSTALL_DIR ${CMAKE_BINARY_DIR}/curl-http3-install)
 
 set(CURL_COMMON_CMAKE_ARGS
@@ -614,6 +617,22 @@ if(BUILD_MBEDTLS_VARIANT)
     )
 endif()
 
+if(BUILD_MULTISSL_VARIANT)
+    set(CURL_MULTISSL_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${CURL_MULTISSL_INSTALL_DIR}
+        ${CURL_COMMON_CMAKE_ARGS}
+        ${CURL_TLS_SESSION_EXPORT_CMAKE_ARGS}
+        "-DCMAKE_C_FLAGS=${_CURL_BASE_C_FLAGS}"
+        "-DCMAKE_CXX_FLAGS=${_CURL_BASE_CXX_FLAGS}"
+        ${MBEDTLS_CURL_CMAKE_ARGS}
+        -DCURL_USE_OPENSSL=ON
+        -DOPENSSL_ROOT_DIR=${OPENSSL_INSTALL_DIR}
+        -DCURL_DEFAULT_SSL_BACKEND=mbedtls
+        -DCURL_DISABLE_HTTPSIG=ON
+        -DUSE_ECH=OFF
+    )
+endif()
+
 if(BUILD_GNUTLS_VARIANT)
     set(CURL_GNUTLS_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${CURL_GNUTLS_INSTALL_DIR}
@@ -711,7 +730,8 @@ curl_add_external_variant(curl_external ${CURL_INSTALL_DIR}
     SOURCE_ARGS ${CURL_DEFAULT_SOURCE_ARGS}
     DEPENDS ${CURL_DEPS})
 
-if(BUILD_GNUTLS_VARIANT OR BUILD_MBEDTLS_VARIANT OR BUILD_HTTP3_VARIANT)
+if(BUILD_GNUTLS_VARIANT OR BUILD_MBEDTLS_VARIANT OR
+   BUILD_MULTISSL_VARIANT OR BUILD_HTTP3_VARIANT)
     if(NOT "$ENV{CURL_SOURCE_DIR}" STREQUAL "")
         set(CURL_TLS_VARIANT_SOURCE_ARGS
             SOURCE_DIR $ENV{CURL_SOURCE_DIR}
@@ -771,6 +791,20 @@ if(BUILD_MBEDTLS_VARIANT)
         DEPENDS ${CURL_MBEDTLS_DEPS})
 endif()
 
+if(BUILD_MULTISSL_VARIANT)
+    set(CURL_MULTISSL_DEPS
+        ${CURL_COMMON_DEPS}
+        libidn2_external
+        ${MBEDTLS_EXTERNAL_DEP}
+        ${OPENSSL_DEP}
+        ${CURL_TLS_VARIANT_SOURCE_DEP})
+    curl_add_external_variant(curl_multissl_external
+        ${CURL_MULTISSL_INSTALL_DIR}
+        CMAKE_ARGS ${CURL_MULTISSL_CMAKE_ARGS}
+        SOURCE_ARGS ${CURL_TLS_VARIANT_SOURCE_ARGS}
+        DEPENDS ${CURL_MULTISSL_DEPS})
+endif()
+
 # Direct parser fuzzers intentionally use a small number of curl-private
 # UNITTESTS entrypoints. Obtain the ExternalProject's real source and generated
 # config directories instead of duplicating private C layouts in C++.
@@ -784,6 +818,8 @@ set(CURL_GNUTLS_STATIC_LIB
     ${CURL_GNUTLS_INSTALL_DIR}/lib/libcurl.a)
 set(CURL_MBEDTLS_STATIC_LIB
     ${CURL_MBEDTLS_INSTALL_DIR}/lib/libcurl.a)
+set(CURL_MULTISSL_STATIC_LIB
+    ${CURL_MULTISSL_INSTALL_DIR}/lib/libcurl.a)
 set(CURL_HTTP3_STATIC_LIB
     ${CURL_HTTP3_INSTALL_DIR}/lib/libcurl.a)
 
@@ -802,6 +838,10 @@ set(CURL_GNUTLS_INCLUDE_DIRS
 set(CURL_MBEDTLS_INCLUDE_DIRS
     ${CURL_MBEDTLS_INSTALL_DIR}/include
     ${CURL_MBEDTLS_INSTALL_DIR}/utfuzzer
+)
+set(CURL_MULTISSL_INCLUDE_DIRS
+    ${CURL_MULTISSL_INSTALL_DIR}/include
+    ${CURL_MULTISSL_INSTALL_DIR}/utfuzzer
 )
 set(CURL_HTTP3_INCLUDE_DIRS
     ${CURL_HTTP3_INSTALL_DIR}/include
@@ -1024,6 +1064,36 @@ if(BUILD_MBEDTLS_VARIANT)
         curl_mbedtls_external openssl_external)
 endif()
 
+if(BUILD_MULTISSL_VARIANT)
+    add_library(curl_client_multissl INTERFACE)
+    target_include_directories(curl_client_multissl INTERFACE
+        ${CURL_MULTISSL_INCLUDE_DIRS})
+    target_link_libraries(curl_client_multissl INTERFACE
+        ${CURL_MULTISSL_STATIC_LIB}
+        nghttp2_contract_checked
+        openssl_contract_checked
+        curl_fuzzer::mbedtls_dependencies
+        ${OPENSSL_STATIC_LIB}
+        ${ZLIB_STATIC_LIB}
+        zstd_contract_checked
+        ${ZSTD_STATIC_LIB}
+        ${BROTLI_STATIC_LIBS}
+        ${LIBIDN2_STATIC_LIB}
+        ${OPENLDAP_STATIC_LIB_LDAP}
+        ${OPENLDAP_STATIC_LIB_LBER}
+        pthread
+        m)
+    add_dependencies(curl_client_multissl
+        curl_multissl_external ${CURL_MULTISSL_DEPS})
+
+    add_library(curl_proto_client_multissl INTERFACE)
+    target_link_libraries(curl_proto_client_multissl INTERFACE
+        curl_tls_mock_openssl
+        curl_client_multissl)
+    add_dependencies(curl_proto_client_multissl
+        curl_multissl_external openssl_external)
+endif()
+
 if(BUILD_GNUTLS_VARIANT)
     add_library(curl_client_gnutls INTERFACE)
     target_include_directories(curl_client_gnutls INTERFACE
@@ -1092,6 +1162,14 @@ if(OPENSSL_CONTRACT_SHIM_ACTIVE)
         curl_client_default)
     set(OPENSSL_CONTRACT_DEP openssl_contract_surface_check)
 
+    if(BUILD_MULTISSL_VARIANT)
+        add_openssl_contract_surface_check(
+            openssl_contract_surface_check_multissl
+            ${CURL_MULTISSL_STATIC_LIB}
+            curl_multissl_external
+            curl_client_multissl)
+    endif()
+
     if(BUILD_HTTP3_VARIANT)
         add_openssl_contract_surface_check(
             openssl_contract_surface_check_http3
@@ -1155,6 +1233,13 @@ if(ZSTD_CONTRACT_SHIM_ACTIVE)
             curl_mbedtls_external
             curl_client_mbedtls)
     endif()
+    if(BUILD_MULTISSL_VARIANT)
+        add_zstd_contract_surface_check(
+            zstd_contract_surface_check_multissl
+            ${CURL_MULTISSL_STATIC_LIB}
+            curl_multissl_external
+            curl_client_multissl)
+    endif()
     if(BUILD_GNUTLS_VARIANT)
         add_zstd_contract_surface_check(
             zstd_contract_surface_check_gnutls
@@ -1214,6 +1299,13 @@ if(NGHTTP2_CONTRACT_SHIM_ACTIVE)
             ${CURL_MBEDTLS_STATIC_LIB}
             curl_mbedtls_external
             curl_client_mbedtls)
+    endif()
+    if(BUILD_MULTISSL_VARIANT)
+        add_nghttp2_contract_surface_check(
+            nghttp2_contract_surface_check_multissl
+            ${CURL_MULTISSL_STATIC_LIB}
+            curl_multissl_external
+            curl_client_multissl)
     endif()
     if(BUILD_HTTP3_VARIANT)
         add_nghttp2_contract_surface_check(
@@ -1286,6 +1378,26 @@ if(BUILD_TESTING)
         add_test(NAME curl_mbedtls_features_test
             COMMAND curl_mbedtls_features_test)
         add_dependencies(fuzzer_unit_tests curl_mbedtls_features_test)
+    endif()
+
+    if(BUILD_MULTISSL_VARIANT)
+        add_executable(curl_multissl_features_test tests/curl_features_test.cc)
+        target_compile_features(curl_multissl_features_test PRIVATE cxx_std_11)
+        target_compile_options(curl_multissl_features_test PRIVATE
+            ${COMMON_FLAGS})
+        target_compile_definitions(curl_multissl_features_test PRIVATE
+            CURL_FUZZER_EXPECT_MBEDTLS
+            CURL_FUZZER_EXPECT_MULTI_SSL
+            CURL_FUZZER_EXPECT_HTTPSRR)
+        target_link_libraries(curl_multissl_features_test PRIVATE
+            curl_client_multissl)
+        target_link_options(curl_multissl_features_test PRIVATE
+            ${COVERAGE_LINK_FLAGS})
+        add_dependencies(curl_multissl_features_test
+            curl_multissl_external ${CURL_MULTISSL_DEPS})
+        add_test(NAME curl_multissl_features_test
+            COMMAND curl_multissl_features_test)
+        add_dependencies(fuzzer_unit_tests curl_multissl_features_test)
     endif()
 
     if(BUILD_HTTP3_VARIANT)
@@ -1779,7 +1891,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         fast_ipfs
         api
         multi
-        timing)
+        timing
+        multi_ssl)
 
     function(curl_generate_proto_profile _slug)
         set(_root ${PROTO_FUZZER_PROFILE_DIR}/${_slug})
@@ -1984,6 +2097,17 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         lpm_link_rsp
     )
 
+    add_library(curl_fuzzer_proto_global_bootstrap OBJECT
+        proto_fuzzer/global_bootstrap.cc)
+    target_compile_features(curl_fuzzer_proto_global_bootstrap PRIVATE
+        cxx_std_17)
+    target_compile_options(curl_fuzzer_proto_global_bootstrap PRIVATE
+        ${COMMON_FLAGS})
+    target_include_directories(curl_fuzzer_proto_global_bootstrap PRIVATE
+        ${CURL_INCLUDE_DIRS}
+        ${CMAKE_SOURCE_DIR})
+    add_dependencies(curl_fuzzer_proto_global_bootstrap ${FUZZ_DEPS})
+
     # Scenario orchestration is compiled separately from the protocol
     # implementation objects. The HTTP/3 lane can then select code that knows
     # about its QUIC peer without pulling nghttp3/OpenSSL server references into
@@ -2053,7 +2177,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     # entrypoint binds its TargetProfile in ordinary C++, keeping build-system
     # wiring independent of mutation and execution behaviour.
     function(curl_add_proto_fuzzer _name)
-        cmake_parse_arguments(PROTO "" "PROFILE;CLIENT;RUNNER"
+        cmake_parse_arguments(PROTO "NO_GLOBAL_BOOTSTRAP" "PROFILE;CLIENT;RUNNER"
             "INCLUDE_DIRS;DEPENDS" ${ARGN})
         if(PROTO_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR
@@ -2071,6 +2195,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         set(_curl_runner curl_fuzzer_proto_runner)
         set(_curl_target_deps ${FUZZ_DEPS})
         set(_curl_include_dirs ${CURL_INCLUDE_DIRS})
+        set(_curl_global_bootstrap_objects
+            $<TARGET_OBJECTS:curl_fuzzer_proto_global_bootstrap>)
+        set(_curl_global_bootstrap_deps
+            curl_fuzzer_proto_global_bootstrap)
+        if(PROTO_NO_GLOBAL_BOOTSTRAP)
+            set(_curl_global_bootstrap_objects)
+            set(_curl_global_bootstrap_deps)
+        endif()
         if(PROTO_CLIENT)
             set(_curl_client ${PROTO_CLIENT})
         endif()
@@ -2088,6 +2220,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
+            ${_curl_global_bootstrap_objects}
             $<TARGET_OBJECTS:${_curl_runner}>
             $<TARGET_OBJECTS:curl_fuzzer_profile_${PROTO_PROFILE}>
         )
@@ -2121,6 +2254,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         add_dependencies(${_name}
             ${_curl_target_deps}
             curl_fuzzer_proto_runtime
+            ${_curl_global_bootstrap_deps}
             ${_curl_runner}
             curl_fuzzer_profile_${PROTO_PROFILE}
             curl_fuzzer_profile_${PROTO_PROFILE}_generated
@@ -2156,6 +2290,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             CLIENT curl_proto_client_mbedtls
             INCLUDE_DIRS ${CURL_MBEDTLS_INCLUDE_DIRS}
             DEPENDS curl_mbedtls_external ${CURL_MBEDTLS_DEPS})
+    endif()
+    if(BUILD_MULTISSL_VARIANT)
+        curl_add_proto_fuzzer(curl_fuzzer_proto_multissl
+            PROFILE multi_ssl
+            CLIENT curl_proto_client_multissl
+            INCLUDE_DIRS ${CURL_MULTISSL_INCLUDE_DIRS}
+            DEPENDS curl_multissl_external ${CURL_MULTISSL_DEPS}
+            NO_GLOBAL_BOOTSTRAP)
     endif()
     if(BUILD_HTTP3_VARIANT)
         curl_add_proto_fuzzer(curl_fuzzer_proto_http3
@@ -2213,6 +2355,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
          ${SCENARIO_SRC_DIR}/http_deep/*.textproto)
     file(GLOB HTTPS_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/https/*.textproto)
+    file(GLOB MULTISSL_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
+         ${SCENARIO_SRC_DIR}/multissl/*.textproto)
     file(GLOB HTTPS_H2_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
          ${SCENARIO_SRC_DIR}/https_h2/*.textproto)
     file(GLOB HTTP3_SCENARIO_TEXTPROTOS CONFIGURE_DEPENDS
@@ -2439,6 +2583,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         curl_fuzzer_proto_https
         ${HTTP_COVERAGE_SCENARIO_TEXTPROTOS}
         ${HTTPS_SCENARIO_TEXTPROTOS})
+    add_proto_fuzzer_corpus(curl_fuzzer_proto_multissl_corpus
+        curl_fuzzer_proto_multissl
+        ${HTTPS_SCENARIO_TEXTPROTOS}
+        ${MULTISSL_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_https_h2_corpus
         curl_fuzzer_proto_https_h2 ${HTTPS_H2_SCENARIO_TEXTPROTOS})
     add_proto_fuzzer_corpus(curl_fuzzer_proto_http3_corpus
@@ -2502,6 +2650,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     if(BUILD_MBEDTLS_VARIANT)
         add_dependencies(curl_fuzzer_proto_https_mbedtls
             curl_fuzzer_proto_https_corpus)
+    endif()
+    if(BUILD_MULTISSL_VARIANT)
+        add_dependencies(curl_fuzzer_proto_multissl
+            curl_fuzzer_proto_multissl_corpus)
     endif()
     if(BUILD_HTTP3_VARIANT)
         add_dependencies(curl_fuzzer_proto_http3
@@ -3547,6 +3699,9 @@ if(BUILD_MBEDTLS_VARIANT)
     list(APPEND CACHE_INSTALL_DIRS
         ${MBEDTLS_CACHE_INSTALL_DIRS}
         ${CURL_MBEDTLS_INSTALL_DIR})
+endif()
+if(BUILD_MULTISSL_VARIANT)
+    list(APPEND CACHE_INSTALL_DIRS ${CURL_MULTISSL_INSTALL_DIR})
 endif()
 if(BUILD_HTTP3_VARIANT)
     list(APPEND CACHE_INSTALL_DIRS

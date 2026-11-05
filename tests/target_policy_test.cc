@@ -406,6 +406,43 @@ void TestFastHttpsBoundsFileInputs() {
          "fast HTTPS policy did not cap its public-key pin input");
 }
 
+void TestMultiSslPolicy() {
+  Scenario scenario;
+  scenario.set_host_path("input.invalid/multissl");
+  scenario.set_multi_ssl_backend(
+      curl::fuzzer::proto::MULTI_SSL_BACKEND_OPENSSL);
+  scenario.set_pinned_public_key_file("pin");
+  scenario.add_fail_allocations(7);
+
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kMultiSsl);
+
+  Expect(scenario.scheme() == SCHEME_HTTPS &&
+             scenario.host_path() == "tls.test/multissl",
+         "MultiSSL policy did not retain the verified HTTPS shape");
+  Expect(scenario.multi_ssl_backend() ==
+             curl::fuzzer::proto::MULTI_SSL_BACKEND_OPENSSL,
+         "MultiSSL policy discarded an explicit backend");
+  Expect(scenario.pinned_public_key_file() == "pin" &&
+             scenario.fail_allocations_size() == 1,
+         "MultiSSL policy discarded TLS or transfer-failure input");
+
+  Scenario unknown;
+  unknown.set_multi_ssl_backend(
+      static_cast<curl::fuzzer::proto::MultiSslBackend>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kMultiSsl);
+  Expect(unknown.multi_ssl_backend() ==
+             curl::fuzzer::proto::MULTI_SSL_BACKEND_DEFAULT,
+         "MultiSSL policy retained an unknown backend");
+
+  Scenario ordinary_https;
+  ordinary_https.set_multi_ssl_backend(
+      curl::fuzzer::proto::MULTI_SSL_BACKEND_MBEDTLS);
+  NormalizeScenarioForTarget(&ordinary_https, TargetProfile::kFastHttps);
+  Expect(ordinary_https.multi_ssl_backend() ==
+             curl::fuzzer::proto::MULTI_SSL_BACKEND_DEFAULT,
+         "ordinary HTTPS retained inert MultiSSL selection");
+}
+
 void TestHttpsH2Policy() {
   Scenario scenario = ScenarioWithBackpressure(SCHEME_WSS, 4096, 17);
   scenario.set_host_path("mutated.invalid:8443/path?query#fragment");
@@ -522,6 +559,7 @@ void TestFastHttp2ConnectFlushProbePolicy() {
 void TestTlsPoliciesRejectUnknownCertificateChain() {
   constexpr TargetProfile kTlsPolicies[] = {
       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp3,
       TargetProfile::kFastSecureWebSocket,
@@ -613,7 +651,8 @@ void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
 void TestOtherPoliciesDiscardTlsGroupProfiles() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,       TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,      TargetProfile::kFastHttp2,
+      TargetProfile::kFastHttps,      TargetProfile::kMultiSsl,
+      TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,      TargetProfile::kH2Proxy,
       TargetProfile::kProxyTransport, TargetProfile::kResolver,
       TargetProfile::kFastWebSocket,  TargetProfile::kFastSecureWebSocket,
@@ -833,7 +872,8 @@ void TestFastHttp3PolicyBoundsOrderedActions() {
 void TestNonHttp3PoliciesDiscardPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
-      TargetProfile::kFastHttps,     TargetProfile::kHttpsH2,
+      TargetProfile::kFastHttps,     TargetProfile::kMultiSsl,
+      TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,     TargetProfile::kH2Proxy,
       TargetProfile::kFastWebSocket, TargetProfile::kFastSecureWebSocket,
       TargetProfile::kFastTelnet,    TargetProfile::kFastFtp,
@@ -3007,6 +3047,7 @@ void TestProtocolPoliciesDiscardApiPlans() {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
@@ -3117,6 +3158,7 @@ void TestOtherPoliciesDiscardMultiPlans() {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
@@ -3251,6 +3293,8 @@ void TestProfileRunModes() {
          "multi profile does not authorize concurrent transfers");
   Expect(RunModeFor(TargetProfile::kFastHttps) == ScenarioRunMode::kTlsCoverage,
          "fast HTTPS profile does not authorize the real TLS peer");
+  Expect(RunModeFor(TargetProfile::kMultiSsl) == ScenarioRunMode::kTlsCoverage,
+         "MultiSSL profile does not authorize the real TLS peer");
   Expect(RunModeFor(TargetProfile::kFastSecureWebSocket) ==
              ScenarioRunMode::kTlsWebSocketCoverage,
          "secure WebSocket profile does not authorize its TLS peer");
@@ -3351,6 +3395,7 @@ void TestOnlySupportedPoliciesRetainPollsetProbe() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,
       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
@@ -3407,6 +3452,7 @@ void TestAllocationFailurePlansAreCanonicalized() {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kHttpsH2,
       TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,
@@ -3467,6 +3513,7 @@ void TestNonH2OriginPoliciesDiscardAcceptedPushMode() {
       TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,
       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kFastHttp3,
       TargetProfile::kH2Proxy,
       TargetProfile::kFastWebSocket,
@@ -3776,6 +3823,7 @@ void TestNormalizationPipelineIsIdempotent() {
   constexpr TargetProfile kProfiles[] = {
       TargetProfile::kCompatibility,  TargetProfile::kFastHttp,
       TargetProfile::kDeepHttp,       TargetProfile::kFastHttps,
+      TargetProfile::kMultiSsl,
       TargetProfile::kHttpsH2,        TargetProfile::kFastHttp2,
       TargetProfile::kFastHttp3,      TargetProfile::kH2Proxy,
       TargetProfile::kProxyTransport, TargetProfile::kResolver,
@@ -3877,6 +3925,7 @@ int main() {
   TestDeepHttpProxySocketOptionPolicy();
   TestFastHttpsPolicy();
   TestFastHttpsBoundsFileInputs();
+  TestMultiSslPolicy();
   TestHttpsH2Policy();
   TestFastHttp2Policy();
   TestFastHttp2ConnectFlushProbePolicy();

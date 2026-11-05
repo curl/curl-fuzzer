@@ -66,6 +66,6 @@ normalization, work limits, curl object lifetimes, and local transport safety.
 
 [`scripts/fuzz_targets`](https://github.com/curl/curl-fuzzer/blob/master/scripts/fuzz_targets)
 is the canonical packaged target list. The base structured suite is included
-in OSS-Fuzz's AddressSanitizer/i386 build. The GnuTLS, Mbed TLS, and HTTP/3
-variants are omitted from i386 and MemorySanitizer builds because their
+in OSS-Fuzz's AddressSanitizer/i386 build. The GnuTLS, Mbed TLS, MultiSSL, and
+HTTP/3 variants are omitted from i386 and MemorySanitizer builds because their
 complete dependency stacks have not been validated for those configurations.

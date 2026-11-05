@@ -78,6 +78,8 @@ enum class TargetProfile {
   kMulti,
   /// Isolate deterministic backpressure and timed-wait behavior.
   kTiming,
+  /// Select one linked TLS backend per input through curl_global_sslset().
+  kMultiSsl,
 };
 
 /// Selects one of the complete, valid RunScenario behaviours. Keeping this
@@ -157,6 +159,7 @@ constexpr ScenarioRunMode RunModeFor(TargetProfile profile) {
       return ScenarioRunMode::kMultiTransfer;
 
     case TargetProfile::kFastHttps:
+    case TargetProfile::kMultiSsl:
       return ScenarioRunMode::kTlsCoverage;
 
     case TargetProfile::kFastSecureWebSocket:

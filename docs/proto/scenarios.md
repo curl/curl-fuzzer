@@ -6,7 +6,9 @@ not check generated `.scenario` files into `corpora/`; CMake writes those
 derived binary files to `build/generated_corpora/<corpus-name>/`. The corpus
 name normally matches the target. The GnuTLS and mbedTLS HTTPS variants reuse
 `build/generated_corpora/curl_fuzzer_proto_https/`; the canonical mapping is
-in `scripts/fuzz_corpus_helpers.sh`.
+in `scripts/fuzz_corpus_helpers.sh`. The MultiSSL target uses its distinct
+`curl_fuzzer_proto_multissl` corpus because its generated profile also carries
+the backend selector.
 
 ## A minimal scenario
 
@@ -119,6 +121,10 @@ Other peers intentionally give those fields narrower meanings:
   probes for `ossl_cleanup`, `Curl_ssl_cleanup`, `Curl_ssl_version`, and
   `Curl_tls_keylog_close` belong in the one-shot API lane instead of a per-input
   HTTPS path.
+- MultiSSL scenarios use `multi_ssl_backend` to leave the wrapper on its
+  configured default or select mbedTLS or OpenSSL explicitly. Selection runs
+  before global initialization, and the target cleans up that global epoch
+  after the complete transfer so the next input may choose independently.
 - TELNET preloads a bounded response before entering curl's blocking protocol
   loop.
 - FTP treats the primary connection as command-aligned control replies and

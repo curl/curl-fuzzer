@@ -1,0 +1,8 @@
+# Select mbedTLS explicitly through curl_global_sslset before global init.
+multi_ssl_backend: MULTI_SSL_BACKEND_MBEDTLS
+host_path: "tls.test/multissl-mbedtls"
+options { ssl_verifypeer: true }
+options { ssl_verifyhost: 2 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmbedtls"
+}

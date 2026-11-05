@@ -13,6 +13,8 @@
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
+#include <optional>
 
 #include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/curl_global_lifecycle.h"
@@ -45,9 +47,64 @@ extern "C" std::size_t LLVMFuzzerCustomCrossOver(const std::uint8_t* data1, std:
 
 namespace {
 
-// libFuzzer reuses one process, so the static object initializes curl once and
-// releases its global resolver/TLS state only after the engine has stopped.
-proto_fuzzer::CurlGlobalLifecycle kGlobalBootstrap;
+bool multi_ssl_epoch_active = false;
+
+/// Own one backend-selected libcurl global epoch for a MultiSSL input.
+class MultiSslInputLifecycle final {
+ public:
+  explicit MultiSslInputLifecycle(curl::fuzzer::proto::MultiSslBackend backend) noexcept {
+    if (multi_ssl_epoch_active) {
+      // A standalone-runner timeout may bypass C++ destructors with a
+      // siglongjmp. Reusing that epoch could race leaked handles or workers.
+      std::abort();
+    }
+
+    proto_fuzzer::ConfigureCurlFuzzerProcess();
+    CURLsslset selected = CURLSSLSET_UNKNOWN_BACKEND;
+    CURLsslset expected = CURLSSLSET_OK;
+    switch (backend) {
+      case curl::fuzzer::proto::MULTI_SSL_BACKEND_DEFAULT: {
+        const curl_ssl_backend** available = nullptr;
+        selected = curl_global_sslset(CURLSSLBACKEND_NONE, nullptr, &available);
+        expected = CURLSSLSET_UNKNOWN_BACKEND;
+        if (available == nullptr) {
+          std::abort();
+        }
+        break;
+      }
+      case curl::fuzzer::proto::MULTI_SSL_BACKEND_MBEDTLS:
+        selected = curl_global_sslset(CURLSSLBACKEND_MBEDTLS, nullptr, nullptr);
+        break;
+      case curl::fuzzer::proto::MULTI_SSL_BACKEND_OPENSSL:
+        selected = curl_global_sslset(CURLSSLBACKEND_OPENSSL, nullptr, nullptr);
+        break;
+      default:
+        std::abort();
+    }
+    if (selected != expected || !proto_fuzzer::allocation_fault_injection::InitializeCurlForEpoch()) {
+      std::abort();
+    }
+    initialized_ = true;
+    multi_ssl_epoch_active = true;
+  }
+
+  ~MultiSslInputLifecycle() {
+    if (!initialized_) {
+      return;
+    }
+    proto_fuzzer::allocation_fault_injection::Reset();
+    curl_global_cleanup();
+    multi_ssl_epoch_active = false;
+  }
+
+  MultiSslInputLifecycle(const MultiSslInputLifecycle&) = delete;
+  MultiSslInputLifecycle& operator=(const MultiSslInputLifecycle&) = delete;
+  MultiSslInputLifecycle(MultiSslInputLifecycle&&) = delete;
+  MultiSslInputLifecycle& operator=(MultiSslInputLifecycle&&) = delete;
+
+ private:
+  bool initialized_ = false;
+};
 
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
 /// Exercise this executable's public mutation ABI once. Corpus replay calls
@@ -135,6 +192,10 @@ int ProtoFuzzerTestOneInput(const std::uint8_t* data, std::size_t size, const Pr
   }
 
   NormalizeScenarioForExecution(&scenario);
+  std::optional<MultiSslInputLifecycle> multi_ssl_lifecycle;
+  if (traits.profile == TargetProfile::kMultiSsl) {
+    multi_ssl_lifecycle.emplace(scenario.multi_ssl_backend());
+  }
   allocation_fault_injection::Configure(scenario.fail_allocations().data(),
                                         static_cast<std::size_t>(scenario.fail_allocations_size()));
   allocation_fault_injection::Arm();

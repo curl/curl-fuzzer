@@ -34,6 +34,7 @@ PROTO_TARGET_TRAITS = {
     "curl_fuzzer_proto_https_h2": ("https_h2", "HttpsH2Traits"),
     "curl_fuzzer_proto_https_gnutls": ("fast_https", "FastHttpsTraits"),
     "curl_fuzzer_proto_https_mbedtls": ("fast_https", "FastHttpsTraits"),
+    "curl_fuzzer_proto_multissl": ("multi_ssl", "MultiSslTraits"),
     "curl_fuzzer_proto_http3": ("fast_http3", "FastHttp3Traits"),
     "curl_fuzzer_proto_h2_proxy": ("h2_proxy", "H2ProxyTraits"),
     "curl_fuzzer_proto_socks4": ("proxy_transport", "ProxyTransportTraits"),
@@ -63,6 +64,7 @@ PROTO_TARGET_TRAITS = {
 OPTIONAL_PROTO_TARGETS = {
     "curl_fuzzer_proto_https_gnutls",
     "curl_fuzzer_proto_https_mbedtls",
+    "curl_fuzzer_proto_multissl",
     "curl_fuzzer_proto_http3",
 }
 BASE_PROTO_TARGETS = set(PROTO_TARGET_TRAITS) - OPTIONAL_PROTO_TARGETS
@@ -226,3 +228,41 @@ def test_proto_entrypoints_bind_generated_traits_in_source() -> None:
     assert "RunModeFor(traits.profile)" in dispatcher
     assert "PROTO_FUZZER_TARGET_" not in shared_main
     assert "PROTO_FUZZER_TARGET_" not in cmake
+
+
+def test_multissl_target_owns_one_global_epoch_per_input() -> None:
+    """Backend selection must precede init without changing ordinary targets."""
+    shared_main = (REPO_ROOT / "proto_fuzzer" / "fuzzer_main.cc").read_text(
+        encoding="utf-8"
+    )
+    bootstrap = (
+        REPO_ROOT / "proto_fuzzer" / "global_bootstrap.cc"
+    ).read_text(encoding="utf-8")
+    cmake = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert "kGlobalBootstrap" not in shared_main
+    assert bootstrap.count("CurlGlobalLifecycle kGlobalBootstrap") == 1
+    lifecycle_start = shared_main.index("class MultiSslInputLifecycle")
+    lifecycle_end = shared_main.index(
+        "#if defined(PROTO_FUZZER_OBSERVE_STATE)", lifecycle_start
+    )
+    lifecycle_source = shared_main[lifecycle_start:lifecycle_end]
+    assert lifecycle_source.count("curl_global_sslset(") == 3
+    assert lifecycle_source.count("InitializeCurlForEpoch()") == 1
+    assert lifecycle_source.count("curl_global_cleanup()") == 1
+
+    dispatcher = shared_main[shared_main.index("int ProtoFuzzerTestOneInput(") :]
+    normalize = dispatcher.index("NormalizeScenarioForExecution(&scenario)")
+    lifecycle = dispatcher.index("multi_ssl_lifecycle.emplace(")
+    configure = dispatcher.index("allocation_fault_injection::Configure(")
+    run = dispatcher.index("proto_fuzzer::RunScenario(")
+    reset = dispatcher.index("allocation_fault_injection::Reset()", run)
+    assert normalize < lifecycle < configure < run < reset
+
+    target_start = cmake.index(
+        "curl_add_proto_fuzzer(curl_fuzzer_proto_multissl"
+    )
+    target_end = cmake.index("endif()", target_start)
+    target_definition = cmake[target_start:target_end]
+    assert "PROFILE multi_ssl" in target_definition
+    assert "NO_GLOBAL_BOOTSTRAP" in target_definition

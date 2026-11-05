@@ -55,7 +55,7 @@ def test_generate_calltrees_isolates_every_proto_entrypoint(tmp_path: Path) -> N
         )
     )
     assert module.ENTRYPOINT_PATHS == expected_entrypoints
-    assert len(module.ENTRYPOINT_PATHS) == 30
+    assert len(module.ENTRYPOINT_PATHS) == 31
     assert calltrees == tuple(
         (tmp_path / "result" / f"fuzzerLogFile-{Path(source).stem}.data").resolve()
         for source in expected_entrypoints
