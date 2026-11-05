@@ -344,10 +344,9 @@ void TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch() {
          "FTP opt-in did not probe a live protocol pollset");
 }
 
-void TestWildcardUnixTotalCrLfIsRejected() {
-  const std::string path =
-      std::string(PROTO_FUZZER_SCENARIO_DIR) +
-      "/ftp/ftp_wildcard_unix_total_crlf_rejected.textproto";
+void TestWildcardUnixTotalCrLfRetrievesMatch() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/ftp/ftp_wildcard_unix_total_crlf.textproto";
   std::ifstream input(path);
   Expect(input.is_open(), "could not read the FTP total-header seed");
   const std::string text((std::istreambuf_iterator<char>(input)),
@@ -359,13 +358,24 @@ void TestWildcardUnixTotalCrLfIsRejected() {
 
   const std::string url = "ftp://" + scenario.host_path();
   const FtpRunResult result = RunScenario(scenario, url.c_str());
-  Expect(result.code == CURLE_FTP_BAD_FILE_LIST,
-         "CRLF UNIX total header did not reach its parser terminal");
-  Expect(result.transcript.find("LIST\r\n") != std::string::npos &&
-             result.transcript.find("RETR ") == std::string::npos,
-         "CRLF UNIX total header escaped the listing phase");
-  Expect(result.data_connections == 1,
-         "CRLF UNIX total header opened an unexpected data connection");
+  Expect(result.code == CURLE_OK,
+         "CRLF UNIX total header prevented wildcard retrieval");
+  Expect(result.body == "match",
+         "CRLF UNIX total listing retrieved the wrong body");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "CWD pub\r\n"
+                   "EPSV\r\n"
+                   "TYPE A\r\n"
+                   "LIST\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "RETR match.txt\r\n",
+                   "UNIX total header did not resume parsing the next entry");
+  Expect(result.data_connections == 2,
+         "CRLF UNIX total listing opened the wrong data connections");
 }
 
 void TestWildcardWindowsListingRetrievesMatch() {
@@ -491,7 +501,7 @@ int main() {
   TestUploadIsDrainedWithoutLosingControlChannel();
   TestCustomListingCommandReceivesPassiveData();
   TestWildcardUnixSymlinkIsSkippedBeforeRegularMatch();
-  TestWildcardUnixTotalCrLfIsRejected();
+  TestWildcardUnixTotalCrLfRetrievesMatch();
   TestWildcardWindowsListingRetrievesMatch();
   TestExplicitEmptyCompletionExposesControlEof();
   TestActiveDownload(true);

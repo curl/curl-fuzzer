@@ -108,10 +108,11 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "link.txt -> match.txt",
             'initial_response: "match"',
         ),
-        "ftp_wildcard_unix_total_crlf_rejected.textproto": (
+        "ftp_wildcard_unix_total_crlf.textproto": (
             "wildcardmatch: true",
-            "total 5\\r\\n",
-            "226 listing complete",
+            "total 5\\r\\n-rw-r--r--",
+            'initial_response: "match"',
+            "226 file complete",
         ),
         "ftp_wildcard_windows_list.textproto": (
             "wildcardmatch: true",
