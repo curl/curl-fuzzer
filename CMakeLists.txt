@@ -401,7 +401,7 @@ else()
 endif()
 
 # Install OpenLDAP
-set(OPENLDAP_VERSION 2.6.13)
+set(OPENLDAP_VERSION 2.7.2)
 set(OPENLDAP_URL https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz
                  https://mirror.lyrahosting.com/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz)
 set(OPENLDAP_BUILD_NAME openldap-${OPENLDAP_VERSION})
