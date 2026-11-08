@@ -42,6 +42,7 @@ set(OPENSSL_CONTRACT_ALLOWED_APIS
     SSL_get_shutdown
     SSL_get_verify_result
     SSL_get_version
+    SSL_session_reused
     SSL_set0_rbio
     SSL_set0_wbio
     SSL_set1_ech_config_list
