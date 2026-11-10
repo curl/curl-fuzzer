@@ -1,0 +1,12 @@
+C*.example.test|foo.example.test
+*.example.test|bar.foo.example.test
+*.example.test|example
+*.example.test|192.168.0.1
+*.example.test|.example.test
+*.test|foo.test
+*.test|*.test
+*|a
+plain.example.test|plain.example.test.
+aa.aa.aa|aa.aa.bb
+|hostname
+pattern|

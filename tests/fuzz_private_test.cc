@@ -16,6 +16,7 @@ int main() {
       "U+0000+1000N0000",
       "MS0A0D0R0",
       "H0PQS",
+      "C*.example.test|foo.example.test\n*.example.test|192.0.2.1\n",
   };
 
   // A second pass makes stale per-input state observable.

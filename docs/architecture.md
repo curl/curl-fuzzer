@@ -26,11 +26,12 @@ transfer harness and exercise a narrow parser or data structure.
 
 `fuzz_private` remains input-driven despite sharing one executable across
 several small surfaces. Its first byte selects `ptrarray`, `dynhds`,
-`uint-spbset`, `memdebug`, or `cf-ip-happy`; the remaining bytes select bounded
-operations, arguments, and ordering. Each lane releases all per-input state
-before the input returns. In particular, the memdebug lane never enables global
-logging or allocation limits, and the Happy Eyeballs lane never opens a remote
-connection.
+`uint-spbset`, `hostcheck`, `memdebug`, or `cf-ip-happy`; the remaining bytes
+select bounded operations, arguments, and ordering. Each lane releases all
+per-input state before the input returns. In particular, the hostcheck lane
+compares only bounded in-memory certificate patterns and hostnames, the
+memdebug lane never enables global logging or allocation limits, and the Happy
+Eyeballs lane never opens a remote connection.
 
 ## Build-time generation
 

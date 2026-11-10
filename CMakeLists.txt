@@ -1503,9 +1503,10 @@ target_link_options(fuzz_netrc PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(fuzz_netrc ${FUZZ_DEPS})
 
 # Private helper fuzzer. Its first input byte selects a bounded operation
-# stream for ptrarray, dynhds, uint-spbset, memdebug, or cf-ip-happy. The
-# UNITTESTS symbols come from the curl build configured above; this C++ target
-# keeps ordinary private layouts and debug declarations from curl's headers.
+# stream for ptrarray, dynhds, uint-spbset, hostcheck, memdebug, or
+# cf-ip-happy. The UNITTESTS symbols come from the curl build configured above;
+# this C++ target keeps ordinary private layouts and debug declarations from
+# curl's headers.
 add_executable(fuzz_private fuzz_private.cc)
 target_compile_features(fuzz_private PRIVATE cxx_std_17)
 target_compile_options(fuzz_private PRIVATE ${COMMON_FLAGS})
