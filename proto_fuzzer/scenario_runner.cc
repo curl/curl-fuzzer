@@ -732,7 +732,7 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
       return false;
     }
     if (mode == ScenarioRunMode::kTlsCoverage) {
-      (void)ApplyTlsClientCredentialProfile(easy, scenario.tls_client_credential_profile());
+      (void)transfer.ApplyTlsClientCredentialProfile(scenario.tls_client_credential_profile());
     }
     return true;
   };

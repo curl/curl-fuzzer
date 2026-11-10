@@ -110,6 +110,10 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL",
             "unreachable",
         ),
+        "https_tls_client_pem.textproto": (
+            "TLS_CLIENT_CREDENTIAL_VALID_PEM",
+            "client-pem",
+        ),
         "https_tls_openssl_close_notify.textproto": (
             "TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY",
             'trace_config: "all"',

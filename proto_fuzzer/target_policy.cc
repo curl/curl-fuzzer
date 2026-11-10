@@ -152,6 +152,7 @@ void CanonicalizeTlsClientCredentialProfile(curl::fuzzer::proto::Scenario* scena
     case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL:
     case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL:
     case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL:
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_VALID_PEM:
       return;
     default:
       scenario->clear_tls_client_credential_profile();

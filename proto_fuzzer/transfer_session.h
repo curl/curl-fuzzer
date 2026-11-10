@@ -55,6 +55,8 @@ class TransferSession {
 
   void ApplyPinnedPublicKeyFile();
 
+  CURLcode ApplyTlsClientCredentialProfile(curl::fuzzer::proto::TlsClientCredentialProfile profile);
+
   void ConfigureAltSvcRouting(const std::string& host_path);
 
   ScenarioRequestData* InstallRequestData(const curl::fuzzer::proto::Scenario& scenario,

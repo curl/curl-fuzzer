@@ -548,6 +548,14 @@ void TestTlsClientCredentialProfilePolicy() {
              curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12,
          "HTTPS policy discarded a bounded client-credential profile");
 
+  Scenario valid;
+  valid.set_tls_client_credential_profile(
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_VALID_PEM);
+  NormalizeScenarioForTarget(&valid, TargetProfile::kFastHttps);
+  Expect(valid.tls_client_credential_profile() ==
+             curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_VALID_PEM,
+         "HTTPS policy discarded the valid PEM client credential");
+
   Scenario unknown;
   unknown.set_tls_client_credential_profile(
       static_cast<curl::fuzzer::proto::TlsClientCredentialProfile>(99));
