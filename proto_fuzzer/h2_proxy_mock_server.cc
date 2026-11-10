@@ -20,13 +20,14 @@ namespace proto_fuzzer {
 /// Select the closed proxy protocol profile before any connection opens. ALPN
 /// is the gate that chooses curl's H2 proxy filter or HTTP/1 CONNECT parser.
 /// HTTP/1 has no direct-forwarding mode, so it always uses a tunnel.
-/// @param mode Origin request shape for an HTTP/2 proxy.
-/// @param protocol Fixed proxy application protocol for this server.
-H2ProxyMockServer::H2ProxyMockServer(H2ProxyMode mode, curl::fuzzer::proto::ProxyProtocol protocol)
-    : TlsMockServer(protocol == curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1 ? TlsApplicationProtocol::kHttp11
-                                                                          : TlsApplicationProtocol::kHttp2),
-      mode_(protocol == curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1 ? H2ProxyMode::kTunnel : mode),
-      protocol_(protocol) {}
+/// @param scenario Source of the correlated proxy mode and protocol.
+H2ProxyMockServer::H2ProxyMockServer(const curl::fuzzer::proto::Scenario& scenario)
+    : mode_(scenario.connection().proxy_protocol() == curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1
+                ? H2ProxyMode::kTunnel
+                : (scenario.h2_forward_proxy() ? H2ProxyMode::kForward : H2ProxyMode::kTunnel)),
+      protocol_(scenario.connection().proxy_protocol()) {
+  Init(scenario, PeerRole::kProxy);
+}
 
 /// Install the socket transport and force one verified HTTPS proxy. Tunnel
 /// mode keeps the plaintext HTTP origin inside CONNECT; the HTTP/2-only

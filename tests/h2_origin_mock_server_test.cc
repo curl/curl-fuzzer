@@ -64,8 +64,7 @@ H2TransferResult DriveH2Scenario(const Scenario &scenario) {
   (void)curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   (void)curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
 
-  proto_fuzzer::H2OriginMockServer server(scenario.tls_certificate_chain(),
-                                          scenario.tls_group_profile());
+  proto_fuzzer::H2OriginMockServer server(scenario);
   server.Install(easy);
   for (const auto &option : scenario.options()) {
     Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
@@ -306,7 +305,7 @@ std::string DriveProviderDefaultTlsReference() {
   (void)curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   (void)curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
 
-  proto_fuzzer::TlsMockServer server;
+  proto_fuzzer::TlsMockServer server(scenario);
   server.Install(easy);
   const CURLcode code = server.DriveScenario(easy, scenario);
   const std::string group = server.negotiated_group();

@@ -90,6 +90,13 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "Connection: close",
             "subsequent_connections {",
         ),
+        "https_tls13_early_data.textproto": (
+            "ssl_sessionid_cache: true",
+            "sslversion: 458759",
+            "ssl_options: 64",
+            "Connection: close",
+            "subsequent_connections {",
+        ),
         "https_tls_cert_status.textproto": (
             "ssl_verifystatus: true",
             "status-probe",

@@ -1134,6 +1134,7 @@ struct TlsTransferResult {
   std::size_t handshake_count = 0;
   std::size_t reused_session_count = 0;
   std::size_t write_retry_count = 0;
+  curl_off_t early_data_sent = 0;
   int ech_status = -1;
   std::string ech_inner_name;
   std::string ech_outer_name;
@@ -1371,8 +1372,7 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   const std::string url = "https://" + scenario.host_path();
   curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
 
-  proto_fuzzer::TlsMockServer server(scenario.tls_certificate_chain(),
-                                     scenario.tls_handshake_profile());
+  proto_fuzzer::TlsMockServer server(scenario);
   server.Install(easy);
   transfer.ApplyInputFiles();
   for (const auto &option : scenario.options()) {
@@ -1399,6 +1399,8 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   struct curl_certinfo *certificate_info = nullptr;
   (void)curl_easy_getinfo(easy, CURLINFO_SSL_VERIFYRESULT,
                           &result.verify_result);
+  (void)curl_easy_getinfo(easy, CURLINFO_EARLYDATA_SENT_T,
+                          &result.early_data_sent);
   if (curl_easy_getinfo(easy, CURLINFO_CERTINFO, &certificate_info) ==
           CURLE_OK &&
       certificate_info != nullptr) {
@@ -1727,6 +1729,67 @@ void TestTlsRedirectReusesSession() {
          "TLS redirect's second connection did not resume its session");
 }
 
+void TestTlsEarlyDataPolicyUsesBoundedLastOption() {
+  Scenario suffix;
+  for (std::size_t i = 0; i < proto_fuzzer::scenario_limits::kMaxOptions; ++i) {
+    AddBoolOption(&suffix, curl::fuzzer::proto::CURLOPT_HTTPGET, true);
+  }
+  AddUintOption(&suffix, curl::fuzzer::proto::CURLOPT_SSL_OPTIONS,
+                CURLSSLOPT_EARLYDATA);
+  Expect(proto_fuzzer::EarlyDataPolicyForScenario(suffix) ==
+             proto_fuzzer::TlsEarlyDataPolicy::kDisabled,
+         "option suffix enabled TLS early data on the peer");
+
+  Scenario overridden;
+  AddUintOption(&overridden, curl::fuzzer::proto::CURLOPT_SSL_OPTIONS,
+                CURLSSLOPT_EARLYDATA);
+  AddUintOption(&overridden, curl::fuzzer::proto::CURLOPT_SSL_OPTIONS, 0);
+  Expect(proto_fuzzer::EarlyDataPolicyForScenario(overridden) ==
+             proto_fuzzer::TlsEarlyDataPolicy::kDisabled,
+         "earlier SSL_OPTIONS value overrode the final retained value");
+
+  overridden.mutable_options(1)->set_uint_value(CURLSSLOPT_EARLYDATA);
+  Expect(proto_fuzzer::EarlyDataPolicyForScenario(overridden) ==
+             proto_fuzzer::TlsEarlyDataPolicy::kAdvertiseAndReject,
+         "final CURLSSLOPT_EARLYDATA did not enable the peer policy");
+}
+
+void TestTls13EarlyDataIsRejectedAndReplayed() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
+  scenario.set_host_path("tls.test/early-data");
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_FOLLOWLOCATION, 1);
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_MAXREDIRS, 2);
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_SESSIONID_CACHE,
+                true);
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSLVERSION,
+                CURL_SSLVERSION_TLSv1_3 | CURL_SSLVERSION_MAX_TLSv1_3);
+  AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_OPTIONS,
+                CURLSSLOPT_EARLYDATA);
+  scenario.mutable_connection()->set_initial_response(
+      "HTTP/1.1 302 Found\r\nLocation: https://tls.test/final\r\nConnection: "
+      "close\r\nContent-Length: 0\r\n\r\n");
+  scenario.add_subsequent_connections()->set_initial_response(
+      "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nearly");
+
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK && result.response == "early",
+         "rejected TLS early data was not replayed after the handshake");
+  Expect(result.negotiated_version == TLS1_3_VERSION,
+         "early-data scenario did not retain TLS 1.3");
+  Expect(result.handshake_count == 2,
+         "early-data scenario did not complete exactly two handshakes");
+#ifdef CURL_FUZZER_EXPECT_MBEDTLS
+  Expect(result.early_data_sent == 0,
+         "mbedTLS unexpectedly reported TLS early-data bytes");
+#else
+  Expect(result.reused_session_count == 1,
+         "early-data connection did not resume the advertised session");
+  Expect(result.early_data_sent < 0,
+         "curl did not report the server-rejected early-data request");
+#endif
+}
+
 void TestTlsWriteRetryKeepsItsOriginalBoundary() {
   constexpr std::size_t kInitialBodySize = 1024 * 1024;
   constexpr std::size_t kChunkCount =
@@ -1802,7 +1865,7 @@ void TestH2ProxyCarriesAnHttpOriginResponse() {
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response);
 
-  proto_fuzzer::H2ProxyMockServer server;
+  proto_fuzzer::H2ProxyMockServer server(scenario);
   server.Install(easy);
   const CURLcode code = server.DriveScenario(easy, scenario);
 
@@ -1849,7 +1912,7 @@ void TestH2ForwardProxyConvertsAbsoluteFormRequest() {
   (void)curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureOutgoingHeaders);
   (void)curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &outgoing);
 
-  proto_fuzzer::H2ProxyMockServer server(proto_fuzzer::H2ProxyMode::kForward);
+  proto_fuzzer::H2ProxyMockServer server(scenario);
   server.Install(easy);
   Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 0,
          "H2 forward-proxy seed unexpectedly applied scalar options");
@@ -1900,9 +1963,7 @@ void TestHttp1ProxyConsumesChunkedAuthenticationResponse() {
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h1-proxy");
 
-  proto_fuzzer::H2ProxyMockServer server(
-      proto_fuzzer::H2ProxyMode::kTunnel,
-      curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  proto_fuzzer::H2ProxyMockServer server(scenario);
   server.Install(easy);
   const CURLcode code = server.DriveScenario(easy, scenario);
   long connect_code = 0;
@@ -1946,9 +2007,7 @@ void TestHttp1ProxyAddsPreemptiveAuthorizationHeader() {
       easy, curl::fuzzer::proto::SCHEME_HTTP);
   curl_easy_setopt(easy, CURLOPT_URL, "http://origin.test/h1-proxy-auth");
 
-  proto_fuzzer::H2ProxyMockServer server(
-      proto_fuzzer::H2ProxyMode::kTunnel,
-      curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1);
+  proto_fuzzer::H2ProxyMockServer server(scenario);
   server.Install(easy);
   Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 2,
          "authenticated proxy test did not apply both proxy options");
@@ -3079,6 +3138,8 @@ int main() {
   TestTlsCertificateStatusRequestIsBackendChecked();
 #endif
   TestTlsRedirectReusesSession();
+  TestTlsEarlyDataPolicyUsesBoundedLastOption();
+  TestTls13EarlyDataIsRejectedAndReplayed();
   TestTlsWriteRetryKeepsItsOriginalBoundary();
 #if defined(CURL_FUZZER_HAS_ECH) && !defined(OPENSSL_NO_ECH)
   TestTlsEchCompletesEncryptedClientHello();

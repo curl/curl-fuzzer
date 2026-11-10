@@ -15,11 +15,14 @@
 #include <openssl/ssl.h>
 #include <sys/socket.h>
 
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/tls_test_credential_cache.h"
 #include "proto_fuzzer/tls_test_credentials.h"
 
@@ -30,6 +33,7 @@ namespace {
 constexpr std::size_t kMaxSessionExportAttempts = 8;
 constexpr std::size_t kMaxSessionHashSize = 128;
 constexpr std::size_t kMaxSessionDataSize = 16 * 1024;
+constexpr std::uint32_t kMaxEarlyDataSize = 16 * 1024;
 
 /// The TLS carrier always uses OpenSSL on its server side, but the HTTPS seed
 /// corpus is also replayed by curl clients built with GnuTLS and mbedTLS.
@@ -108,6 +112,24 @@ int SelectAlpn(SSL* /*ssl*/, const unsigned char** selected, unsigned char* sele
 
 }  // namespace
 
+/// Derive the correlated peer policy from the same bounded option prefix curl
+/// receives. Later duplicate options replace earlier values, matching
+/// sequential curl_easy_setopt calls.
+/// @param scenario Structured input whose retained option prefix is inspected.
+/// @return Server policy matching the effective SSL_OPTIONS value.
+TlsEarlyDataPolicy EarlyDataPolicyForScenario(const curl::fuzzer::proto::Scenario& scenario) {
+  std::uint64_t ssl_options = 0;
+  const std::size_t option_count = RuntimeOptionCount(scenario);
+  for (std::size_t index = 0; index < option_count; ++index) {
+    const auto& option = scenario.options(static_cast<int>(index));
+    if (option.option_id() == curl::fuzzer::proto::CURLOPT_SSL_OPTIONS) {
+      ssl_options = DecodeIntegralOptionValue(option);
+    }
+  }
+  return (ssl_options & static_cast<std::uint64_t>(CURLSSLOPT_EARLYDATA)) != 0 ? TlsEarlyDataPolicy::kAdvertiseAndReject
+                                                                               : TlsEarlyDataPolicy::kDisabled;
+}
+
 /// Own the certificate, key, session cache, ALPN policy, and observations
 /// shared by every bounded connection in one Scenario. Keeping both session
 /// state and its measurements here makes redirects related while preventing
@@ -118,10 +140,11 @@ class TlsServerContext {
   // Skip this implementation-only constructor to preserve the enclosing scope.
   /// @cond
   TlsServerContext(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                   TlsGroupPolicy group_policy)
+                   TlsGroupPolicy group_policy, TlsEarlyDataPolicy early_data_policy)
       : context_(nullptr),
         protocol_(protocol),
         group_policy_(group_policy),
+        early_data_policy_(early_data_policy),
         negotiated_tls_version_(0),
         completed_handshake_count_(0),
         reused_session_count_(0),
@@ -133,8 +156,8 @@ class TlsServerContext {
 #endif
     OpenSslErrorQueueGuard error_guard;
     context_ = SSL_CTX_new(TLS_server_method());
-    if (context_ == nullptr || !ApplyGroupPolicy() || !InstallCachedTlsTestCredentials(context_, certificate_chain) ||
-        !LoadEchConfig()) {
+    if (context_ == nullptr || !ApplyGroupPolicy() || !ApplyEarlyDataPolicy() ||
+        !InstallCachedTlsTestCredentials(context_, certificate_chain) || !LoadEchConfig()) {
       SSL_CTX_free(context_);
       context_ = nullptr;
       return;
@@ -230,6 +253,20 @@ class TlsServerContext {
     return false;
   }
 
+  /// Advertise a bounded TLS 1.3 allowance without consuming early data. The
+  /// ordinary SSL_accept path rejects it, so curl must replay the request
+  /// after completing the resumed handshake.
+  /// @return true when OpenSSL accepted the selected policy.
+  bool ApplyEarlyDataPolicy() {
+    switch (early_data_policy_) {
+      case TlsEarlyDataPolicy::kDisabled:
+        return true;
+      case TlsEarlyDataPolicy::kAdvertiseAndReject:
+        return SSL_CTX_set_max_early_data(context_, kMaxEarlyDataSize) == 1;
+    }
+    return false;
+  }
+
   /// Load a fixed test-only ECH private key and matching public config. This
   /// makes a successful encrypted ClientHello deterministic without DNS or
   /// filesystem state; builds configured without ECH retain the TLS mock.
@@ -255,6 +292,7 @@ class TlsServerContext {
   SSL_CTX* context_;
   TlsApplicationProtocol protocol_;
   const TlsGroupPolicy group_policy_;
+  const TlsEarlyDataPolicy early_data_policy_;
   std::string negotiated_alpn_;
   std::string negotiated_group_;
   int negotiated_tls_version_;
@@ -558,16 +596,18 @@ class TlsHelloRequestConnection final : public MockConnection {
 /// @param certificate_chain Certificate-chain profile presented to curl.
 /// @param group_policy Immutable server key-exchange group policy.
 /// @param handshake_profile Closed peer-side handshake terminal.
+/// @param early_data_policy Fixed server-side TLS 1.3 early-data behavior.
 TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
                                    curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
                                    TlsGroupPolicy group_policy,
-                                   curl::fuzzer::proto::TlsHandshakeProfile handshake_profile)
+                                   curl::fuzzer::proto::TlsHandshakeProfile handshake_profile,
+                                   TlsEarlyDataPolicy early_data_policy)
     : group_policy_(group_policy),
       openssl_close_notify_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY &&
                             CurlClientUsesOpenSsl()),
       openssl_hello_request_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST &&
                              CurlClientUsesOpenSsl()),
-      context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy)) {}
+      context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy, early_data_policy)) {}
 
 TlsMockTransport::~TlsMockTransport() = default;
 
@@ -649,31 +689,48 @@ std::string TlsMockTransport::ech_outer_name() const {
   return context_ == nullptr ? std::string() : context_->ech_outer_name();
 }
 
-/// Build one reusable in-process server context per fuzz iteration.
-TlsMockServer::TlsMockServer() : TlsMockServer(curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC) {}
+/// Build one reusable in-process server context from the complete Scenario.
+/// @param scenario Bounded scenario configuring both sides of the transfer.
+TlsMockServer::TlsMockServer(const curl::fuzzer::proto::Scenario& scenario) { Init(scenario, PeerRole::kHttp11); }
 
-/// Select one bounded certificate-chain profile for an HTTP/1.1 TLS peer.
-/// @param certificate_chain Peer certificate chain presented to curl.
-/// @param handshake_profile Closed peer-side handshake terminal.
-TlsMockServer::TlsMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                             curl::fuzzer::proto::TlsHandshakeProfile handshake_profile)
-    : TlsMockServer(TlsApplicationProtocol::kHttp11, certificate_chain, TlsGroupPolicy::kProviderDefault,
-                    handshake_profile) {}
+/// Initialize the transport policy for this server's fixed role. Keeping the
+/// Scenario intact here prevents call sites and delegating constructors from
+/// growing parallel parameter lists as correlated TLS controls are added.
+/// @param scenario Bounded scenario configuring both sides of the transfer.
+/// @param role Fixed application protocol role implemented by this peer.
+void TlsMockServer::Init(const curl::fuzzer::proto::Scenario& scenario, PeerRole role) {
+  assert(transport_ == nullptr);
 
-/// Construct the shared TLS transport for a protocol-specific derived peer
-/// with one fixed ALPN outcome.
-/// @param protocol Fixed application protocol the server must negotiate.
-/// @param certificate_chain Peer certificate chain presented to curl.
-/// @param group_policy Immutable server key-exchange group policy.
-/// @param handshake_profile Closed peer-side handshake terminal.
-TlsMockServer::TlsMockServer(TlsApplicationProtocol protocol,
-                             curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                             TlsGroupPolicy group_policy, curl::fuzzer::proto::TlsHandshakeProfile handshake_profile)
-    : transport_(protocol, certificate_chain, group_policy, handshake_profile),
-      saw_live_tls_session_(false),
-      session_export_attempt_count_(0),
-      exported_session_count_(0),
-      imported_session_count_(0) {}
+  TlsApplicationProtocol protocol = TlsApplicationProtocol::kHttp11;
+  auto certificate_chain = scenario.tls_certificate_chain();
+  TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault;
+  auto handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT;
+  TlsEarlyDataPolicy early_data_policy = TlsEarlyDataPolicy::kDisabled;
+
+  switch (role) {
+    case PeerRole::kHttp11:
+      if (scenario.scheme() == curl::fuzzer::proto::SCHEME_HTTPS) {
+        handshake_profile = scenario.tls_handshake_profile();
+        early_data_policy = EarlyDataPolicyForScenario(scenario);
+      }
+      break;
+    case PeerRole::kHttp2Origin:
+      protocol = TlsApplicationProtocol::kHttp2;
+      group_policy = scenario.tls_group_profile() == curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT
+                         ? TlsGroupPolicy::kProviderDefault
+                         : TlsGroupPolicy::kX25519;
+      break;
+    case PeerRole::kProxy:
+      protocol = scenario.connection().proxy_protocol() == curl::fuzzer::proto::PROXY_PROTOCOL_HTTP1
+                     ? TlsApplicationProtocol::kHttp11
+                     : TlsApplicationProtocol::kHttp2;
+      certificate_chain = curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC;
+      break;
+  }
+
+  transport_ = std::make_unique<TlsMockTransport>(protocol, certificate_chain, group_policy, handshake_profile,
+                                                  early_data_policy);
+}
 
 /// Release SSL objects before their owning server context. OpenSSL reference
 /// counting makes the reverse order legal, but making the ownership order
@@ -687,7 +744,7 @@ TlsMockServer::~TlsMockServer() { ResetConnections(); }
 /// @param easy Easy handle that will connect to this TLS peer.
 void TlsMockServer::Install(CURL* easy) {
   MockServer::Install(easy);
-  transport_.Install(easy);
+  transport_->Install(easy);
 }
 
 /// @return true once curl exposed a live TLS backend session during drive.
@@ -703,40 +760,40 @@ std::size_t TlsMockServer::imported_session_count() const { return imported_sess
 
 /// @return protocol version selected by the most recent completed handshake,
 /// or zero when no connection completed TLS negotiation.
-int TlsMockServer::negotiated_tls_version() const { return transport_.negotiated_tls_version(); }
+int TlsMockServer::negotiated_tls_version() const { return transport_->negotiated_tls_version(); }
 
 /// @return number of connections that completed TLS negotiation.
-std::size_t TlsMockServer::completed_handshake_count() const { return transport_.completed_handshake_count(); }
+std::size_t TlsMockServer::completed_handshake_count() const { return transport_->completed_handshake_count(); }
 
 /// @return number of completed connections that resumed an earlier session.
-std::size_t TlsMockServer::reused_session_count() const { return transport_.reused_session_count(); }
+std::size_t TlsMockServer::reused_session_count() const { return transport_->reused_session_count(); }
 
 /// @return number of application writes OpenSSL required an exact retry for.
-std::size_t TlsMockServer::write_retry_count() const { return transport_.write_retry_count(); }
+std::size_t TlsMockServer::write_retry_count() const { return transport_->write_retry_count(); }
 
 /// @return ALPN protocol selected by the most recent completed handshake.
-std::string TlsMockServer::negotiated_alpn() const { return transport_.negotiated_alpn(); }
+std::string TlsMockServer::negotiated_alpn() const { return transport_->negotiated_alpn(); }
 
 /// @return Immutable key-exchange group policy selected at construction.
-TlsGroupPolicy TlsMockServer::group_policy() const { return transport_.group_policy(); }
+TlsGroupPolicy TlsMockServer::group_policy() const { return transport_->group_policy(); }
 
 /// @return Key-exchange group from the most recent completed handshake.
-std::string TlsMockServer::negotiated_group() const { return transport_.negotiated_group(); }
+std::string TlsMockServer::negotiated_group() const { return transport_->negotiated_group(); }
 
 /// @return OpenSSL's ECH status for the most recent completed handshake.
 /// Builds without ECH return a negative sentinel.
-int TlsMockServer::ech_status() const { return transport_.ech_status(); }
+int TlsMockServer::ech_status() const { return transport_->ech_status(); }
 
 /// @return encrypted inner SNI recovered by the ECH-capable server.
-std::string TlsMockServer::ech_inner_name() const { return transport_.ech_inner_name(); }
+std::string TlsMockServer::ech_inner_name() const { return transport_->ech_inner_name(); }
 
 /// @return public outer SNI visible before ECH decryption.
-std::string TlsMockServer::ech_outer_name() const { return transport_.ech_outer_name(); }
+std::string TlsMockServer::ech_outer_name() const { return transport_->ech_outer_name(); }
 
 /// Wrap one socketpair server endpoint in an OpenSSL acceptor consumed by
 /// MockServer.
 /// @return a failed connection when context setup was unavailable.
-std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() { return transport_.CreateConnection(); }
+std::unique_ptr<MockConnection> TlsMockServer::CreateConnection() { return transport_->CreateConnection(); }
 
 /// Query while the connection filters are attached. Result-info probes stop
 /// after the first live result, and session export has its own fixed attempt
@@ -760,7 +817,7 @@ void TlsMockServer::ObserveActiveTransfer(CURL* easy) {
   // A TLS 1.3 ticket may arrive after the peer first completes its handshake.
   // Retry only a small fixed number of outer-loop observations, and stop
   // permanently once one copied ticket has made one import attempt.
-  const bool completed_live_handshake = transport_.completed_handshake_count() != 0;
+  const bool completed_live_handshake = transport_->completed_handshake_count() != 0;
 #if defined(PROTO_FUZZER_OBSERVE_STATE)
   // Read the owned peer observations once after a real handshake. Signed
   // status values retain their unavailable sentinels; string results are
