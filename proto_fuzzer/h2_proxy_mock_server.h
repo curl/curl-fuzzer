@@ -29,8 +29,7 @@ enum class H2ProxyMode {
 /// curl/nghttp2's success and error paths.
 class H2ProxyMockServer final : public TlsMockServer, private IncomingDataObserver {
  public:
-  explicit H2ProxyMockServer(H2ProxyMode mode = H2ProxyMode::kTunnel,
-                             curl::fuzzer::proto::ProxyProtocol protocol = curl::fuzzer::proto::PROXY_PROTOCOL_HTTP2);
+  explicit H2ProxyMockServer(const curl::fuzzer::proto::Scenario& scenario);
   ~H2ProxyMockServer() override = default;
 
   H2ProxyMockServer(const H2ProxyMockServer&) = delete;

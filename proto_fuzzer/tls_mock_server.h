@@ -38,6 +38,18 @@ enum class TlsGroupPolicy {
   kX25519,
 };
 
+/// TLS 1.3 early-data behavior fixed when a TLS peer is constructed. Keeping
+/// this explicit prevents unrelated secure protocol lanes from advertising
+/// 0-RTT merely because their shared carrier supports it.
+enum class TlsEarlyDataPolicy {
+  /// Do not advertise early-data support in session tickets.
+  kDisabled,
+  /// Advertise a bounded allowance, then reject 0-RTT during SSL_accept.
+  kAdvertiseAndReject,
+};
+
+TlsEarlyDataPolicy EarlyDataPolicyForScenario(const curl::fuzzer::proto::Scenario& scenario);
+
 /// Owns the OpenSSL server context without exposing OpenSSL types through the
 /// public mock-server headers used by sanitizer builds that disable TLS.
 class TlsServerContext;
@@ -53,7 +65,8 @@ class TlsMockTransport {
       curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
           curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
       TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault,
-      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT);
+      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT,
+      TlsEarlyDataPolicy early_data_policy = TlsEarlyDataPolicy::kDisabled);
   ~TlsMockTransport();
 
   TlsMockTransport(const TlsMockTransport&) = delete;
@@ -88,11 +101,7 @@ class TlsMockTransport {
 /// deterministic outer loop that services plaintext socketpairs.
 class TlsMockServer : public MockServer {
  public:
-  TlsMockServer();
-
-  explicit TlsMockServer(
-      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT);
+  explicit TlsMockServer(const curl::fuzzer::proto::Scenario& scenario);
   ~TlsMockServer() override;
 
   TlsMockServer(const TlsMockServer&) = delete;
@@ -125,12 +134,22 @@ class TlsMockServer : public MockServer {
   std::string ech_outer_name() const;
 
  protected:
-  explicit TlsMockServer(
-      TlsApplicationProtocol protocol,
-      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain =
-          curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
-      TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault,
-      curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT);
+  /// Fixed transport role selected by a derived peer before it initializes
+  /// from the complete Scenario.
+  enum class PeerRole {
+    /// Direct HTTP/1.1 or Gopher-over-TLS peer.
+    kHttp11,
+    /// Direct HTTP/2 origin peer.
+    kHttp2Origin,
+    /// HTTPS proxy using the Scenario's fixed proxy protocol.
+    kProxy,
+  };
+
+  /// Defer transport setup for a derived peer that will call Init in its
+  /// constructor body.
+  TlsMockServer() = default;
+
+  void Init(const curl::fuzzer::proto::Scenario& scenario, PeerRole role);
 
   TlsGroupPolicy group_policy() const;
 
@@ -139,11 +158,11 @@ class TlsMockServer : public MockServer {
   void ObserveActiveTransfer(CURL* easy) override;
 
  private:
-  TlsMockTransport transport_;
-  bool saw_live_tls_session_;
-  std::size_t session_export_attempt_count_;
-  std::size_t exported_session_count_;
-  std::size_t imported_session_count_;
+  std::unique_ptr<TlsMockTransport> transport_;
+  bool saw_live_tls_session_ = false;
+  std::size_t session_export_attempt_count_ = 0;
+  std::size_t exported_session_count_ = 0;
+  std::size_t imported_session_count_ = 0;
 };
 
 }  // namespace proto_fuzzer

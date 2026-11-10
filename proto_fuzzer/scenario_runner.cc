@@ -385,9 +385,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   if (mode == ScenarioRunMode::kH2ProxyCoverage) {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-    return std::make_unique<H2ProxyMockServer>(
-        scenario.h2_forward_proxy() ? H2ProxyMode::kForward : H2ProxyMode::kTunnel,
-        scenario.connection().proxy_protocol());
+    return std::make_unique<H2ProxyMockServer>(scenario);
 #else
     // MemorySanitizer builds deliberately omit OpenSSL. Keep the target
     // binary available to OSS-Fuzz, but do not pretend a plaintext mock can
@@ -402,7 +400,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
 
   if (mode == ScenarioRunMode::kTlsHttp2Coverage) {
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
-    return std::make_unique<H2OriginMockServer>(scenario.tls_certificate_chain(), scenario.tls_group_profile());
+    return std::make_unique<H2OriginMockServer>(scenario);
 #else
     // This target remains buildable under MemorySanitizer, whose curl build
     // omits the OpenSSL server dependency required for TLS/ALPN h2.
@@ -456,7 +454,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     case curl::fuzzer::proto::SCHEME_HTTPS:
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
       if (mode == ScenarioRunMode::kTlsCoverage) {
-        return std::make_unique<TlsMockServer>(scenario.tls_certificate_chain(), scenario.tls_handshake_profile());
+        return std::make_unique<TlsMockServer>(scenario);
       }
 #else
       (void)mode;
@@ -468,7 +466,7 @@ std::unique_ptr<MockServerBase> MakeMockServerForScenario(const curl::fuzzer::pr
     case curl::fuzzer::proto::SCHEME_GOPHERS:
 #if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
       if (mode == ScenarioRunMode::kGopherCoverage) {
-        return std::make_unique<TlsMockServer>(scenario.tls_certificate_chain());
+        return std::make_unique<TlsMockServer>(scenario);
       }
       return nullptr;
 #else

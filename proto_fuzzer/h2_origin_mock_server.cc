@@ -13,23 +13,11 @@
 
 namespace proto_fuzzer {
 
-namespace {
-
-/// Map the schema selector to the transport's immutable constructor policy.
-/// Unknown values retain the inexpensive zero-value behavior.
-TlsGroupPolicy GroupPolicyFor(curl::fuzzer::proto::TlsGroupProfile profile) {
-  return profile == curl::fuzzer::proto::TLS_GROUP_PROVIDER_DEFAULT ? TlsGroupPolicy::kProviderDefault
-                                                                    : TlsGroupPolicy::kX25519;
+/// Construct an HTTP/2 TLS peer from the complete Scenario.
+/// @param scenario Source of the correlated certificate and group policy.
+H2OriginMockServer::H2OriginMockServer(const curl::fuzzer::proto::Scenario& scenario) {
+  Init(scenario, PeerRole::kHttp2Origin);
 }
-
-}  // namespace
-
-/// Construct an HTTP/2 TLS peer with the selected certificate chain.
-/// @param certificate_chain Fixed certificate-chain profile to present.
-/// @param group_profile Key-exchange group profile shared by both endpoints.
-H2OriginMockServer::H2OriginMockServer(curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                                       curl::fuzzer::proto::TlsGroupProfile group_profile)
-    : TlsMockServer(TlsApplicationProtocol::kHttp2, certificate_chain, GroupPolicyFor(group_profile)) {}
 
 H2OriginMockServer::~H2OriginMockServer() {
   // The multi borrows runtime_ for push callbacks, and connections borrow its

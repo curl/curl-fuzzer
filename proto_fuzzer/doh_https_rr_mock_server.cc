@@ -275,7 +275,7 @@ void DohHttpsRrMockServer::DohConnection::ObserveIncomingData(const unsigned cha
 /// by Install(), after the TLS carrier has prepared the outer peer.
 /// @param scenario Source of the fixed TLS, DoH, and ECH configuration.
 DohHttpsRrMockServer::DohHttpsRrMockServer(const curl::fuzzer::proto::Scenario& scenario)
-    : H2OriginMockServer(scenario.tls_certificate_chain()),
+    : H2OriginMockServer(scenario),
       easy_(nullptr),
       listener_(-1),
       option_probe_mode_(scenario.doh().option_probe_mode()),
