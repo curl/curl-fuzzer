@@ -261,7 +261,9 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         if slug in {"compatibility", "fast_smtp"}:
             expected_fields.add("smtp_probe_mode")
         if slug in {"compatibility", "fast_https"}:
-            expected_fields.add("pinned_public_key_file")
+            expected_fields.update(
+                {"pinned_public_key_file", "tls_ocsp_staple_profile"}
+            )
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
         if slug in {"compatibility", "fast_rtsp"}:
@@ -383,6 +385,15 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     ]
     assert pinned_public_key_file.number == 48
     assert pinned_public_key_file.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_HTTPS",
+    }
+
+    ocsp_staple = model.fields[
+        "curl.fuzzer.proto.Scenario.tls_ocsp_staple_profile"
+    ]
+    assert ocsp_staple.number == 49
+    assert ocsp_staple.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
         "TARGET_PROFILE_FAST_HTTPS",
     }

@@ -101,6 +101,70 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "ssl_verifystatus: true",
             "status-probe",
         ),
+        "https_tls_ocsp_good.textproto": (
+            "TLS_OCSP_STAPLE_GOOD",
+            "ssl_verifystatus: true",
+            "ocsp-good",
+        ),
+        "https_tls_ocsp_revoked.textproto": (
+            "TLS_OCSP_STAPLE_REVOKED",
+            "ssl_verifystatus: true",
+            "unreachable",
+        ),
+        "https_tls_ocsp_revoked_no_peer.textproto": (
+            "TLS_OCSP_STAPLE_REVOKED",
+            "ssl_verifystatus: true",
+            "ssl_verifypeer: false",
+            "unreachable",
+        ),
+        "https_tls_ocsp_unknown.textproto": (
+            "TLS_OCSP_STAPLE_UNKNOWN",
+            "ssl_verifystatus: true",
+            "unreachable",
+        ),
+        "https_tls_ocsp_unknown_no_peer.textproto": (
+            "TLS_OCSP_STAPLE_UNKNOWN",
+            "ssl_verifystatus: true",
+            "ssl_verifypeer: false",
+            "unreachable",
+        ),
+        "https_tls_ocsp_try_later.textproto": (
+            "TLS_OCSP_STAPLE_TRY_LATER",
+            "ssl_verifystatus: true",
+            "unreachable",
+        ),
+        "https_tls_ocsp_try_later_no_peer.textproto": (
+            "TLS_OCSP_STAPLE_TRY_LATER",
+            "ssl_verifystatus: true",
+            "ssl_verifypeer: false",
+            "unreachable",
+        ),
+        "https_tls_ocsp_empty_successful.textproto": (
+            "TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL",
+            "ssl_verifystatus: true",
+            "unreachable",
+        ),
+        "https_tls_ocsp_empty_successful_no_peer.textproto": (
+            "TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL",
+            "ssl_verifystatus: true",
+            "ssl_verifypeer: false",
+            "unreachable",
+        ),
+        "https_tls_ocsp_sha256_cert_id.textproto": (
+            "TLS_OCSP_STAPLE_SHA256_CERT_ID",
+            "ssl_verifystatus: true",
+            "ocsp-sha256",
+        ),
+        "https_tls_ocsp_expired.textproto": (
+            "TLS_OCSP_STAPLE_EXPIRED",
+            "ssl_verifystatus: true",
+            "unreachable",
+        ),
+        "https_tls_ocsp_bad_signature.textproto": (
+            "TLS_OCSP_STAPLE_BAD_SIGNATURE",
+            "ssl_verifystatus: true",
+            "unreachable",
+        ),
         "https_tls_client_engine.textproto": (
             "TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL",
             "unreachable",

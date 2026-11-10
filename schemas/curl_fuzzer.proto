@@ -1116,6 +1116,20 @@ message Scenario {
       }
     }
   ];
+  // Select one harness-owned OCSP response stapled by the verified HTTPS
+  // peer. Every nonzero profile carries fixed, bounded DER generated from the
+  // checked-in test certificate and key; protobuf bytes never become an OCSP
+  // response. Pairing this field with CURLOPT_SSL_VERIFYSTATUS reaches both
+  // successful validation and specific rejection paths. Other fixed targets
+  // clear the field, and zero preserves the historical missing-staple peer.
+  TlsOcspStapleProfile tls_ocsp_staple_profile = 49 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1154,6 +1168,21 @@ enum TlsHandshakeProfile {
   TLS_HANDSHAKE_DEFAULT = 0;
   TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY = 1;
   TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST = 2;
+}
+
+// Safe OCSP staples emitted by the in-process OpenSSL server. Signed profiles
+// are generated once per process with fresh timestamps, then copied into each
+// requesting TLS connection. No protobuf-controlled bytes reach OpenSSL.
+enum TlsOcspStapleProfile {
+  TLS_OCSP_STAPLE_NONE = 0;
+  TLS_OCSP_STAPLE_GOOD = 1;
+  TLS_OCSP_STAPLE_REVOKED = 2;
+  TLS_OCSP_STAPLE_UNKNOWN = 3;
+  TLS_OCSP_STAPLE_TRY_LATER = 4;
+  TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL = 5;
+  TLS_OCSP_STAPLE_SHA256_CERT_ID = 6;
+  TLS_OCSP_STAPLE_EXPIRED = 7;
+  TLS_OCSP_STAPLE_BAD_SIGNATURE = 8;
 }
 
 // Bounded, harness-owned probes for Gopher's synchronous selector write and

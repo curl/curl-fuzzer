@@ -10,8 +10,10 @@
 #include "proto_fuzzer/tls_mock_server.h"
 
 #include <openssl/bio.h>
+#include <openssl/crypto.h>
 #include <openssl/ech.h>
 #include <openssl/err.h>
+#include <openssl/ocsp.h>
 #include <openssl/ssl.h>
 #include <sys/socket.h>
 
@@ -110,6 +112,153 @@ int SelectAlpn(SSL* /*ssl*/, const unsigned char** selected, unsigned char* sele
   return SSL_TLSEXT_ERR_OK;
 }
 
+using OcspBasicResponsePtr = std::unique_ptr<OCSP_BASICRESP, decltype(&OCSP_BASICRESP_free)>;
+using OcspCertIdPtr = std::unique_ptr<OCSP_CERTID, decltype(&OCSP_CERTID_free)>;
+using OcspResponsePtr = std::unique_ptr<OCSP_RESPONSE, decltype(&OCSP_RESPONSE_free)>;
+using Asn1TimePtr = std::unique_ptr<ASN1_TIME, decltype(&ASN1_TIME_free)>;
+
+/// Encode one owned OpenSSL response for the status callback.
+/// @param response Parsed response whose ownership stays with the caller.
+/// @return DER bytes, or an empty vector when encoding failed.
+std::vector<unsigned char> EncodeOcspResponse(OCSP_RESPONSE* response) {
+  if (response == nullptr) {
+    return {};
+  }
+  const int encoded_size = i2d_OCSP_RESPONSE(response, nullptr);
+  if (encoded_size <= 0) {
+    return {};
+  }
+  std::vector<unsigned char> encoded(static_cast<std::size_t>(encoded_size));
+  unsigned char* output = encoded.data();
+  if (i2d_OCSP_RESPONSE(response, &output) != encoded_size) {
+    return {};
+  }
+  return encoded;
+}
+
+/// Build a response carrying only its top-level OCSP status.
+std::vector<unsigned char> BuildTopLevelOcspResponse(int response_status) {
+  OcspResponsePtr response(OCSP_response_create(response_status, nullptr), &OCSP_RESPONSE_free);
+  return EncodeOcspResponse(response.get());
+}
+
+/// Build and sign one single-certificate OCSP response.
+std::vector<unsigned char> BuildSignedOcspResponse(X509* certificate, X509* issuer, EVP_PKEY* issuer_private_key,
+                                                   int certificate_status, bool sha256_certificate_id, bool expired,
+                                                   bool bad_signature) {
+  OcspBasicResponsePtr basic(OCSP_BASICRESP_new(), &OCSP_BASICRESP_free);
+  const EVP_MD* certificate_id_digest = sha256_certificate_id ? EVP_sha256() : EVP_sha1();
+  OcspCertIdPtr certificate_id(OCSP_cert_to_id(certificate_id_digest, certificate, issuer), &OCSP_CERTID_free);
+  const long this_update_offset = expired ? -2L * 24L * 60L * 60L : -60L;
+  const long next_update_offset = expired ? -24L * 60L * 60L : 24L * 60L * 60L;
+  Asn1TimePtr this_update(X509_gmtime_adj(nullptr, this_update_offset), &ASN1_TIME_free);
+  Asn1TimePtr next_update(X509_gmtime_adj(nullptr, next_update_offset), &ASN1_TIME_free);
+  Asn1TimePtr revocation_time(
+      certificate_status == V_OCSP_CERTSTATUS_REVOKED ? X509_gmtime_adj(nullptr, -60L * 60L) : nullptr,
+      &ASN1_TIME_free);
+  if (basic == nullptr || certificate_id == nullptr || this_update == nullptr || next_update == nullptr ||
+      (certificate_status == V_OCSP_CERTSTATUS_REVOKED && revocation_time == nullptr)) {
+    return {};
+  }
+
+  const int revocation_reason = certificate_status == V_OCSP_CERTSTATUS_REVOKED ? OCSP_REVOKED_STATUS_KEYCOMPROMISE : 0;
+  if (OCSP_basic_add1_status(basic.get(), certificate_id.get(), certificate_status, revocation_reason,
+                             revocation_time.get(), this_update.get(), next_update.get()) == nullptr ||
+      OCSP_basic_sign(basic.get(), issuer, issuer_private_key, EVP_sha256(), nullptr, OCSP_NOCERTS | OCSP_RESPID_KEY) !=
+          1) {
+    return {};
+  }
+
+  OcspResponsePtr response(OCSP_response_create(OCSP_RESPONSE_STATUS_SUCCESSFUL, basic.get()), &OCSP_RESPONSE_free);
+  std::vector<unsigned char> encoded = EncodeOcspResponse(response.get());
+  // OCSP_NOCERTS leaves the signature as the final DER value. Changing one
+  // payload byte preserves the ASN.1 shape while making verification fail.
+  if (bad_signature && !encoded.empty()) {
+    encoded.back() ^= 1U;
+  }
+  return encoded;
+}
+
+/// Generate each signed profile once. Per-connection callbacks copy only the
+/// selected DER, avoiding asymmetric signing work in the fuzzing hot path.
+class TlsOcspResponseCache {
+ public:
+  TlsOcspResponseCache(X509* certificate, X509* issuer, EVP_PKEY* issuer_private_key)
+      : good_(BuildSignedOcspResponse(certificate, issuer, issuer_private_key, V_OCSP_CERTSTATUS_GOOD, false, false,
+                                      false)),
+        revoked_(BuildSignedOcspResponse(certificate, issuer, issuer_private_key, V_OCSP_CERTSTATUS_REVOKED, false,
+                                         false, false)),
+        unknown_(BuildSignedOcspResponse(certificate, issuer, issuer_private_key, V_OCSP_CERTSTATUS_UNKNOWN, false,
+                                         false, false)),
+        try_later_(BuildTopLevelOcspResponse(OCSP_RESPONSE_STATUS_TRYLATER)),
+        empty_successful_(BuildTopLevelOcspResponse(OCSP_RESPONSE_STATUS_SUCCESSFUL)),
+        sha256_certificate_id_(BuildSignedOcspResponse(certificate, issuer, issuer_private_key, V_OCSP_CERTSTATUS_GOOD,
+                                                       true, false, false)),
+        expired_(BuildSignedOcspResponse(certificate, issuer, issuer_private_key, V_OCSP_CERTSTATUS_GOOD, false, true,
+                                         false)),
+        bad_signature_(BuildSignedOcspResponse(certificate, issuer, issuer_private_key, V_OCSP_CERTSTATUS_GOOD, false,
+                                               false, true)) {}
+
+  const std::vector<unsigned char>& Get(curl::fuzzer::proto::TlsOcspStapleProfile profile) const {
+    switch (profile) {
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_GOOD:
+        return good_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_REVOKED:
+        return revoked_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_UNKNOWN:
+        return unknown_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_TRY_LATER:
+        return try_later_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL:
+        return empty_successful_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_SHA256_CERT_ID:
+        return sha256_certificate_id_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_EXPIRED:
+        return expired_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_BAD_SIGNATURE:
+        return bad_signature_;
+      case curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE:
+      default:
+        return none_;
+    }
+  }
+
+ private:
+  const std::vector<unsigned char> none_;
+  const std::vector<unsigned char> good_;
+  const std::vector<unsigned char> revoked_;
+  const std::vector<unsigned char> unknown_;
+  const std::vector<unsigned char> try_later_;
+  const std::vector<unsigned char> empty_successful_;
+  const std::vector<unsigned char> sha256_certificate_id_;
+  const std::vector<unsigned char> expired_;
+  const std::vector<unsigned char> bad_signature_;
+};
+
+const std::vector<unsigned char>& CachedOcspResponse(curl::fuzzer::proto::TlsOcspStapleProfile profile,
+                                                     X509* certificate, X509* issuer, EVP_PKEY* issuer_private_key) {
+  static const TlsOcspResponseCache cache(certificate, issuer, issuer_private_key);
+  return cache.Get(profile);
+}
+
+/// @return whether the selected value owns a generated stapled response.
+bool IsKnownOcspStapleProfile(curl::fuzzer::proto::TlsOcspStapleProfile profile) {
+  switch (profile) {
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_GOOD:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_REVOKED:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_UNKNOWN:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_TRY_LATER:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_SHA256_CERT_ID:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_EXPIRED:
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_BAD_SIGNATURE:
+      return true;
+    case curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE:
+    default:
+      return false;
+  }
+}
+
 }  // namespace
 
 /// Derive the correlated peer policy from the same bounded option prefix curl
@@ -140,11 +289,13 @@ class TlsServerContext {
   // Skip this implementation-only constructor to preserve the enclosing scope.
   /// @cond
   TlsServerContext(TlsApplicationProtocol protocol, curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
-                   TlsGroupPolicy group_policy, TlsEarlyDataPolicy early_data_policy)
+                   TlsGroupPolicy group_policy, TlsEarlyDataPolicy early_data_policy,
+                   curl::fuzzer::proto::TlsOcspStapleProfile ocsp_staple_profile)
       : context_(nullptr),
         protocol_(protocol),
         group_policy_(group_policy),
         early_data_policy_(early_data_policy),
+        ocsp_response_(nullptr),
         negotiated_tls_version_(0),
         completed_handshake_count_(0),
         reused_session_count_(0),
@@ -156,8 +307,10 @@ class TlsServerContext {
 #endif
     OpenSslErrorQueueGuard error_guard;
     context_ = SSL_CTX_new(TLS_server_method());
+    const bool use_issuer_signed_leaf = IsKnownOcspStapleProfile(ocsp_staple_profile);
     if (context_ == nullptr || !ApplyGroupPolicy() || !ApplyEarlyDataPolicy() ||
-        !InstallCachedTlsTestCredentials(context_, certificate_chain) || !LoadEchConfig()) {
+        !InstallCachedTlsTestCredentials(context_, certificate_chain, use_issuer_signed_leaf) ||
+        !ApplyOcspStapleProfile(ocsp_staple_profile) || !LoadEchConfig()) {
       SSL_CTX_free(context_);
       context_ = nullptr;
       return;
@@ -267,6 +420,43 @@ class TlsServerContext {
     return false;
   }
 
+  /// Install a context callback that copies one cached DER response into each
+  /// SSL object whose client requested certificate status.
+  bool ApplyOcspStapleProfile(curl::fuzzer::proto::TlsOcspStapleProfile profile) {
+    if (!IsKnownOcspStapleProfile(profile)) {
+      return true;
+    }
+    X509* certificate = SSL_CTX_get0_certificate(context_);
+    X509* issuer = CachedTlsTestIssuerCertificate();
+    EVP_PKEY* issuer_private_key = CachedTlsTestIssuerPrivateKey();
+    const std::vector<unsigned char>& response = CachedOcspResponse(profile, certificate, issuer, issuer_private_key);
+    if (response.empty()) {
+      return false;
+    }
+    ocsp_response_ = &response;
+    return SSL_CTX_set_tlsext_status_cb(context_, &ServeOcspStaple) == 1 &&
+           SSL_CTX_set_tlsext_status_arg(context_, this) == 1;
+  }
+
+  /// Copy the immutable process-cached response into one connection. OpenSSL
+  /// takes ownership only after SSL_set_tlsext_status_ocsp_resp succeeds.
+  static int ServeOcspStaple(SSL* ssl, void* user_data) {
+    auto* server = static_cast<TlsServerContext*>(user_data);
+    if (ssl == nullptr || server == nullptr || server->ocsp_response_ == nullptr) {
+      return SSL_TLSEXT_ERR_NOACK;
+    }
+    const std::vector<unsigned char>& response = *server->ocsp_response_;
+    auto* copy = static_cast<unsigned char*>(OPENSSL_memdup(response.data(), response.size()));
+    if (copy == nullptr) {
+      return SSL_TLSEXT_ERR_ALERT_FATAL;
+    }
+    if (SSL_set_tlsext_status_ocsp_resp(ssl, copy, response.size()) != 1) {
+      OPENSSL_free(copy);
+      return SSL_TLSEXT_ERR_ALERT_FATAL;
+    }
+    return SSL_TLSEXT_ERR_OK;
+  }
+
   /// Load a fixed test-only ECH private key and matching public config. This
   /// makes a successful encrypted ClientHello deterministic without DNS or
   /// filesystem state; builds configured without ECH retain the TLS mock.
@@ -293,6 +483,7 @@ class TlsServerContext {
   TlsApplicationProtocol protocol_;
   const TlsGroupPolicy group_policy_;
   const TlsEarlyDataPolicy early_data_policy_;
+  const std::vector<unsigned char>* ocsp_response_;
   std::string negotiated_alpn_;
   std::string negotiated_group_;
   int negotiated_tls_version_;
@@ -597,17 +788,20 @@ class TlsHelloRequestConnection final : public MockConnection {
 /// @param group_policy Immutable server key-exchange group policy.
 /// @param handshake_profile Closed peer-side handshake terminal.
 /// @param early_data_policy Fixed server-side TLS 1.3 early-data behavior.
+/// @param ocsp_staple_profile Fixed server-side stapled OCSP response.
 TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
                                    curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
                                    TlsGroupPolicy group_policy,
                                    curl::fuzzer::proto::TlsHandshakeProfile handshake_profile,
-                                   TlsEarlyDataPolicy early_data_policy)
+                                   TlsEarlyDataPolicy early_data_policy,
+                                   curl::fuzzer::proto::TlsOcspStapleProfile ocsp_staple_profile)
     : group_policy_(group_policy),
       openssl_close_notify_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY &&
                             CurlClientUsesOpenSsl()),
       openssl_hello_request_(handshake_profile == curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST &&
                              CurlClientUsesOpenSsl()),
-      context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy, early_data_policy)) {}
+      context_(std::make_unique<TlsServerContext>(protocol, certificate_chain, group_policy, early_data_policy,
+                                                  ocsp_staple_profile)) {}
 
 TlsMockTransport::~TlsMockTransport() = default;
 
@@ -706,12 +900,14 @@ void TlsMockServer::Init(const curl::fuzzer::proto::Scenario& scenario, PeerRole
   TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault;
   auto handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT;
   TlsEarlyDataPolicy early_data_policy = TlsEarlyDataPolicy::kDisabled;
+  auto ocsp_staple_profile = curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE;
 
   switch (role) {
     case PeerRole::kHttp11:
       if (scenario.scheme() == curl::fuzzer::proto::SCHEME_HTTPS) {
         handshake_profile = scenario.tls_handshake_profile();
         early_data_policy = EarlyDataPolicyForScenario(scenario);
+        ocsp_staple_profile = scenario.tls_ocsp_staple_profile();
       }
       break;
     case PeerRole::kHttp2Origin:
@@ -729,7 +925,7 @@ void TlsMockServer::Init(const curl::fuzzer::proto::Scenario& scenario, PeerRole
   }
 
   transport_ = std::make_unique<TlsMockTransport>(protocol, certificate_chain, group_policy, handshake_profile,
-                                                  early_data_policy);
+                                                  early_data_policy, ocsp_staple_profile);
 }
 
 /// Release SSL objects before their owning server context. OpenSSL reference

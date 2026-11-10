@@ -66,7 +66,8 @@ class TlsMockTransport {
           curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
       TlsGroupPolicy group_policy = TlsGroupPolicy::kProviderDefault,
       curl::fuzzer::proto::TlsHandshakeProfile handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT,
-      TlsEarlyDataPolicy early_data_policy = TlsEarlyDataPolicy::kDisabled);
+      TlsEarlyDataPolicy early_data_policy = TlsEarlyDataPolicy::kDisabled,
+      curl::fuzzer::proto::TlsOcspStapleProfile ocsp_staple_profile = curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE);
   ~TlsMockTransport();
 
   TlsMockTransport(const TlsMockTransport&) = delete;

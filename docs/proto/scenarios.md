@@ -110,7 +110,11 @@ Other peers intentionally give those fields narrower meanings:
   `pinned_public_key_file` instead exposes bounded protobuf bytes through a
   session-owned anonymous descriptor and installs only its `/proc/self/fd`
   path, allowing curl's filename-backed PEM pin parser to run without host-file
-  access. The separate `tls_handshake_profile` can replace the OpenSSL peer
+  access. `tls_ocsp_staple_profile` selects a fixed response generated from the
+  checked-in certificate and key. Together with `CURLOPT_SSL_VERIFYSTATUS`, it
+  covers good, revoked, unknown, try-later, empty, expired, SHA-256 CertID, and
+  malformed-signature status handling without accepting mutated DER. The
+  separate `tls_handshake_profile` can replace the OpenSSL peer
   with a fixed pre-handshake `close_notify` or empty HelloRequest record. It
   covers curl's terminal error translation and message classification without
   accepting fuzz-selected TLS bytes; GnuTLS and mbedTLS clients treat those

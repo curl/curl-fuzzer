@@ -48,6 +48,31 @@ VSpO3203VEY2vHBr/ge5V631IKRcpepoOOPPoT2ixTVTm+wt/kxX8p/G
 -----END PRIVATE KEY-----
 )PEM";
 
+/// P-256 server leaf issued by kCertificatePem. OpenSSL does not staple OCSP
+/// responses for a self-signed server certificate, so OCSP scenarios use this
+/// leaf while retaining kCertificatePem as their trust anchor and issuer.
+inline constexpr char kOcspLeafCertificatePem[] = R"PEM(-----BEGIN CERTIFICATE-----
+MIIBjTCCATKgAwIBAgIBAjAKBggqhkjOPQQDAjATMREwDwYDVQQDEwh0bHMudGVz
+dDAgFw0yNjExMTAyMTA2NDlaGA8yMTI2MTAxNzIxMDY0OVowEzERMA8GA1UEAwwI
+dGxzLnRlc3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASQW6SgL4zULucu3LMr
+xutTxTQ5bc8UPf05oWAvToUcB/QqgWDmUI6au7qZ//SJz9ELtCQ0/W4mMotuvWl+
+Wdh4o3UwczAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAK
+BggrBgEFBQcDATAdBgNVHQ4EFgQUn0lvXBcK4lRxdDHjcn5mtfg2aBswHwYDVR0j
+BBgwFoAUCzr0FuuypDsSWP4F78m6sw1/eREwCgYIKoZIzj0EAwIDSQAwRgIhANPm
+9eekbWDJA62fMJGXM9528MJkHg7NWi5l7sHA+MEKAiEA9hJxqdS+kxfKmZ/WnEb3
+9PbWlWDPBQOQjP1JwKh0wwQ=
+-----END CERTIFICATE-----
+)PEM";
+
+/// Matching unencrypted private key for kOcspLeafCertificatePem. This is a
+/// local test fixture, not a secret.
+inline constexpr char kOcspLeafPrivateKeyPem[] = R"PEM(-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgJ2uJAx/lUfqaer+i
+qhShCe2nKVXHQZJX9PaY8JZN/fihRANCAASQW6SgL4zULucu3LMrxutTxTQ5bc8U
+Pf05oWAvToUcB/QqgWDmUI6au7qZ//SJz9ELtCQ0/W4mMotuvWl+Wdh4
+-----END PRIVATE KEY-----
+)PEM";
+
 /// Auxiliary certificates signed by kPrivateKeyPem. The all-key-types chain
 /// sends them after the ordinary EC leaf: they are peer-controlled untrusted
 /// entries rather than issuers, so OpenSSL can verify the directly trusted

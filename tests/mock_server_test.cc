@@ -1386,10 +1386,16 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
   TraceCapture trace;
+  if (scenario.tls_ocsp_staple_profile() !=
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE) {
+    curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+  }
   if (scenario.tls_handshake_profile() ==
           curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_CLOSE_NOTIFY ||
       scenario.tls_handshake_profile() ==
-          curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST) {
+          curl::fuzzer::proto::TLS_HANDSHAKE_OPENSSL_HELLO_REQUEST ||
+      scenario.tls_ocsp_staple_profile() !=
+          curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE) {
     curl_easy_setopt(easy, CURLOPT_DEBUGFUNCTION, &CaptureTrace);
     curl_easy_setopt(easy, CURLOPT_DEBUGDATA, &trace);
   }
@@ -1680,15 +1686,101 @@ void TestTlsClientCredentialProfilesFailInsideOwnedInputs() {
            "client credential failure reached encrypted application data");
   }
 }
+#endif
 
-void TestTlsCertificateStatusRequestIsBackendChecked() {
+#if !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+void TestTlsCertificateStatusRequestRejectsMissingStaple() {
   Scenario scenario = MakeTlsScenario("cert-status", "status-probe");
   AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS, true);
   const TlsTransferResult result = DriveTlsScenario(scenario);
   Expect(result.code == CURLE_SSL_INVALIDCERTSTATUS,
-         "missing stapled status did not reach OpenSSL status validation");
+         "missing stapled status did not reach backend status validation");
   Expect(result.response.empty(),
          "curl delivered HTTP data after rejecting missing certificate status");
+}
+
+void TestTlsGoodOcspStapleCompletesTransfer() {
+  constexpr curl::fuzzer::proto::TlsCertificateChainProfile kChains[] = {
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+      curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
+  };
+  for (const auto chain : kChains) {
+    Scenario scenario = MakeTlsScenario("ocsp-good", "ocsp-good");
+    scenario.set_tls_certificate_chain(chain);
+    scenario.set_tls_ocsp_staple_profile(
+        curl::fuzzer::proto::TLS_OCSP_STAPLE_GOOD);
+    AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS,
+                  true);
+    const TlsTransferResult result = DriveTlsScenario(scenario);
+    Expect(result.code == CURLE_OK && result.response == "ocsp-good",
+           "valid stapled OCSP status did not complete the HTTPS transfer");
+    Expect(result.verify_result == 0 && result.handshake_count == 1,
+           "valid stapled OCSP status did not retain verified TLS");
+  }
+}
+
+void TestTlsSha256OcspCertIdProfile() {
+  Scenario scenario = MakeTlsScenario("ocsp-sha256-cert-id", "ocsp-sha256");
+  scenario.set_tls_ocsp_staple_profile(
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_SHA256_CERT_ID);
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS, true);
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+  Expect(result.code == CURLE_OK && result.response == "ocsp-sha256" &&
+             result.verify_result == 0 && result.handshake_count == 1,
+         "GnuTLS did not accept the valid SHA-256 OCSP CertID");
+#else
+  Expect(result.code == CURLE_SSL_INVALIDCERTSTATUS && result.response.empty(),
+         "OpenSSL did not reject the non-SHA-1 OCSP CertID lookup");
+  Expect(result.trace.find("Could not find certificate ID") !=
+             std::string::npos,
+         "SHA-256 CertID staple was not delivered to OpenSSL curl");
+#endif
+}
+
+void TestTlsInvalidOcspStapleProfilesAreRejected() {
+  constexpr curl::fuzzer::proto::TlsOcspStapleProfile kProfiles[] = {
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_REVOKED,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_UNKNOWN,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_TRY_LATER,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_EXPIRED,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_BAD_SIGNATURE,
+  };
+  for (const auto profile : kProfiles) {
+    Scenario scenario = MakeTlsScenario("ocsp-invalid", "unreachable");
+    scenario.set_tls_ocsp_staple_profile(profile);
+    AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS,
+                  true);
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+    // GnuTLS otherwise rejects these semantic statuses during its earlier
+    // peer-chain verification. Disabling that separate check reaches curl's
+    // dedicated gtls_verify_ocsp_status parser and status switch. Signature
+    // and time failures still need peer verification enabled.
+    if (profile == curl::fuzzer::proto::TLS_OCSP_STAPLE_REVOKED ||
+        profile == curl::fuzzer::proto::TLS_OCSP_STAPLE_UNKNOWN ||
+        profile == curl::fuzzer::proto::TLS_OCSP_STAPLE_TRY_LATER ||
+        profile == curl::fuzzer::proto::TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL) {
+      AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYPEER,
+                    false);
+    }
+#endif
+    const TlsTransferResult result = DriveTlsScenario(scenario);
+#ifdef CURL_FUZZER_EXPECT_GNUTLS
+    if (profile == curl::fuzzer::proto::TLS_OCSP_STAPLE_EXPIRED) {
+      Expect(result.code == CURLE_PEER_FAILED_VERIFICATION,
+             "expired GnuTLS staple escaped peer verification");
+    } else {
+      Expect(result.code == CURLE_SSL_INVALIDCERTSTATUS,
+             "invalid stapled OCSP profile escaped certificate-status failure");
+    }
+#else
+    Expect(result.code == CURLE_SSL_INVALIDCERTSTATUS,
+           "invalid stapled OCSP profile escaped certificate-status failure");
+#endif
+    Expect(result.response.empty(),
+           "invalid stapled OCSP profile reached HTTP application data");
+  }
 }
 #endif
 
@@ -3135,7 +3227,12 @@ int main() {
   TestTlsClientCredentialPemCompletesVerifiedTransfer();
 #if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
   TestTlsClientCredentialProfilesFailInsideOwnedInputs();
-  TestTlsCertificateStatusRequestIsBackendChecked();
+#endif
+#if !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  TestTlsCertificateStatusRequestRejectsMissingStaple();
+  TestTlsGoodOcspStapleCompletesTransfer();
+  TestTlsSha256OcspCertIdProfile();
+  TestTlsInvalidOcspStapleProfilesAreRejected();
 #endif
   TestTlsRedirectReusesSession();
   TestTlsEarlyDataPolicyUsesBoundedLastOption();

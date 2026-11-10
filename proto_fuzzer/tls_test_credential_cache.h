@@ -17,7 +17,12 @@
 namespace proto_fuzzer {
 
 bool InstallCachedTlsTestCredentials(SSL_CTX* context,
-                                     curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain);
+                                     curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                                     bool use_issuer_signed_leaf);
+
+X509* CachedTlsTestIssuerCertificate();
+
+EVP_PKEY* CachedTlsTestIssuerPrivateKey();
 
 }  // namespace proto_fuzzer
 
