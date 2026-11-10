@@ -920,9 +920,9 @@ message Scenario {
   ];
   // Select one bounded, harness-owned client-credential setup in the verified
   // HTTPS lane. The profile never exposes a mutated filename, provider, or
-  // engine name: malformed blobs are compiled into the harness and the only
-  // file-backed probes use the fixed /dev/null path. Other fixed targets clear
-  // this field, and zero preserves the ordinary no-client-certificate path.
+  // engine name: credential contents are compiled into the harness, and any
+  // backend-required file is session-owned. Other fixed targets clear this
+  // field, and zero preserves the ordinary no-client-certificate path.
   TlsClientCredentialProfile tls_client_credential_profile = 35 [
     (curl.fuzzer.schema.scenario_field) = {
       eligibility {
@@ -1134,15 +1134,17 @@ enum TlsGroupProfile {
   TLS_GROUP_PROVIDER_DEFAULT = 1;
 }
 
-// Safe client-side credential configurations for OpenSSL option coverage.
-// These profiles deliberately exercise setup and rejection paths rather than
-// accepting arbitrary filesystem or provider identifiers from protobuf data.
+// Safe client-side credential configurations for TLS backend option coverage.
+// These profiles exercise successful credential loading and bounded rejection
+// paths without accepting arbitrary filesystem or provider identifiers from
+// protobuf data.
 enum TlsClientCredentialProfile {
   TLS_CLIENT_CREDENTIAL_NONE = 0;
   TLS_CLIENT_CREDENTIAL_MALFORMED_PKCS12 = 1;
   TLS_CLIENT_CREDENTIAL_ENGINE_DEV_NULL = 2;
   TLS_CLIENT_CREDENTIAL_DEFAULT_PROVIDER_DEV_NULL = 3;
   TLS_CLIENT_CREDENTIAL_UNLOADED_PROVIDER_DEV_NULL = 4;
+  TLS_CLIENT_CREDENTIAL_VALID_PEM = 5;
 }
 
 // Safe peer-side handshake terminals for OpenSSL error translation and

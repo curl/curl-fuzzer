@@ -16,9 +16,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 
 #include "proto_fuzzer/allocation_fault_injection.h"
 #include "proto_fuzzer/scenario_limits.h"
+#include "proto_fuzzer/tls_test_credentials.h"
 
 namespace proto_fuzzer {
 
@@ -40,6 +42,7 @@ constexpr char kConnectToOverride[] = "::127.0.1.127:";
 constexpr char kDevNull[] = "/dev/null";
 constexpr char kDefaultProvider[] = "default";
 constexpr char kEngineCertificateType[] = "ENG";
+constexpr char kPemCertificateType[] = "PEM";
 constexpr char kPkcs12CertificateType[] = "P12";
 constexpr char kProviderCertificateType[] = "PROV";
 constexpr unsigned char kMalformedPkcs12[] = {0x30, 0x00};
@@ -239,12 +242,23 @@ CurlSlistPtr ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme
   return connect_to;
 }
 
+/// Report whether the active TLS backend needs filename-backed credentials.
+/// @return True for a backend that does not implement certificate blobs.
+bool TlsClientCredentialFilesRequired() {
+  const curl_version_info_data* version = curl_version_info(CURLVERSION_NOW);
+  return version != nullptr && version->ssl_version != nullptr &&
+         std::string_view(version->ssl_version).rfind("GnuTLS/", 0) == 0;
+}
+
 /// Apply one closed, harness-owned TLS client-credential configuration.
 /// No protobuf bytes become a path, provider, or engine identifier.
 /// @param easy Handle receiving the fixed credential options.
 /// @param profile Safe credential setup selected by the HTTPS lane.
+/// @param certificate_path Session-owned certificate path for file-only backends.
+/// @param private_key_path Session-owned private-key path for file-only backends.
 /// @return The first curl_easy_setopt error, or CURLE_OK.
-CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile) {
+CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile,
+                                         const char* certificate_path, const char* private_key_path) {
   if (easy == nullptr) {
     return CURLE_BAD_FUNCTION_ARGUMENT;
   }
@@ -291,6 +305,33 @@ CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsCli
         return result;
       }
       return set_string(CURLOPT_SSLCERT, kDevNull);
+    }
+
+    case curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_VALID_PEM: {
+      CURLcode result = set_string(CURLOPT_SSLCERTTYPE, kPemCertificateType);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      result = set_string(CURLOPT_SSLKEYTYPE, kPemCertificateType);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      if (TlsClientCredentialFilesRequired()) {
+        if (certificate_path == nullptr || private_key_path == nullptr) {
+          return CURLE_BAD_FUNCTION_ARGUMENT;
+        }
+        result = set_string(CURLOPT_SSLCERT, certificate_path);
+        return result == CURLE_OK ? set_string(CURLOPT_SSLKEY, private_key_path) : result;
+      }
+      const curl_blob certificate = {const_cast<char*>(tls_test_credentials::kCertificatePem),
+                                     sizeof(tls_test_credentials::kCertificatePem) - 1, CURL_BLOB_COPY};
+      result = curl_easy_setopt(easy, CURLOPT_SSLCERT_BLOB, &certificate);
+      if (result != CURLE_OK) {
+        return result;
+      }
+      const curl_blob private_key = {const_cast<char*>(tls_test_credentials::kPrivateKeyPem),
+                                     sizeof(tls_test_credentials::kPrivateKeyPem) - 1, CURL_BLOB_COPY};
+      return curl_easy_setopt(easy, CURLOPT_SSLKEY_BLOB, &private_key);
     }
 
     default:

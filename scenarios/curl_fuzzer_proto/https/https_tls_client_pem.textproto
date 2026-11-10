@@ -1,0 +1,12 @@
+# Load the fixed tls.test certificate and matching private key through curl's
+# client-credential options. OpenSSL and mbedTLS consume copied blobs; GnuTLS
+# consumes session-owned anonymous paths because its backend does not implement
+# curl's certificate-blob options. The server does not require mutual TLS, but
+# every client backend parses and installs both credentials before completing
+# the ordinary verified handshake.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/client-pem"
+tls_client_credential_profile: TLS_CLIENT_CREDENTIAL_VALID_PEM
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nclient-pem"
+}

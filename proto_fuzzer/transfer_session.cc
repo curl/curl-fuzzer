@@ -19,6 +19,7 @@
 #include "proto_fuzzer/option_apply.h"
 #include "proto_fuzzer/request_data.h"
 #include "proto_fuzzer/scenario_limits.h"
+#include "proto_fuzzer/tls_test_credentials.h"
 
 namespace proto_fuzzer {
 namespace {
@@ -69,6 +70,8 @@ struct TransferSession::ParserInputs {
   BoundedAnonymousInputFile netrc{scenario_limits::kMaxFileInputBytes + 1};
   BoundedAnonymousInputFile crl{scenario_limits::kMaxFileInputBytes};
   BoundedAnonymousInputFile pinned_public_key{scenario_limits::kMaxFileInputBytes};
+  BoundedAnonymousInputFile client_certificate{sizeof(tls_test_credentials::kCertificatePem) - 1};
+  BoundedAnonymousInputFile client_private_key{sizeof(tls_test_credentials::kPrivateKeyPem) - 1};
 };
 
 TransferSession::TransferSession() = default;
@@ -136,6 +139,18 @@ bool TransferSession::PrepareInputFiles(const curl::fuzzer::proto::Scenario& sce
   } else {
     PrepareInputFile(scenario.crl_file(), &remaining_bytes, &parser_inputs_->crl);
     PrepareInputFile(scenario.pinned_public_key_file(), &remaining_bytes, &parser_inputs_->pinned_public_key);
+    if (scenario.tls_client_credential_profile() == curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_VALID_PEM &&
+        TlsClientCredentialFilesRequired()) {
+      const bool certificate_ready = parser_inputs_->client_certificate.Write(
+          reinterpret_cast<const std::uint8_t*>(tls_test_credentials::kCertificatePem),
+          sizeof(tls_test_credentials::kCertificatePem) - 1);
+      const bool key_ready = parser_inputs_->client_private_key.Write(
+          reinterpret_cast<const std::uint8_t*>(tls_test_credentials::kPrivateKeyPem),
+          sizeof(tls_test_credentials::kPrivateKeyPem) - 1);
+      if (!certificate_ready || !key_ready) {
+        return false;
+      }
+    }
   }
   return true;
 }
@@ -184,6 +199,19 @@ void TransferSession::ApplyPinnedPublicKeyFile() {
   if (const char* path = parser_inputs_->pinned_public_key.path()) {
     (void)curl_easy_setopt(easy_.get(), CURLOPT_PINNEDPUBLICKEY, path);
   }
+}
+
+/// Apply one closed client-credential profile with session-owned file paths
+/// available to backends that do not implement curl's certificate blob options.
+/// @param profile Fixed credential setup selected by the HTTPS lane.
+/// @return The first curl option error, or CURLE_OK.
+CURLcode TransferSession::ApplyTlsClientCredentialProfile(curl::fuzzer::proto::TlsClientCredentialProfile profile) {
+  if (!easy_) {
+    return CURLE_BAD_FUNCTION_ARGUMENT;
+  }
+  const char* certificate_path = parser_inputs_ ? parser_inputs_->client_certificate.path() : nullptr;
+  const char* private_key_path = parser_inputs_ ? parser_inputs_->client_private_key.path() : nullptr;
+  return proto_fuzzer::ApplyTlsClientCredentialProfile(easy_.get(), profile, certificate_path, private_key_path);
 }
 
 /// Enable isolated Alt-Svc routing for the canonical deep-HTTP authority.

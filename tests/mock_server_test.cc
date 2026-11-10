@@ -1380,8 +1380,8 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
            "TLS scenario option was rejected by curl");
   }
   transfer.ApplyPinnedPublicKeyFile();
-  Expect(proto_fuzzer::ApplyTlsClientCredentialProfile(
-             easy, scenario.tls_client_credential_profile()) == CURLE_OK,
+  Expect(transfer.ApplyTlsClientCredentialProfile(
+             scenario.tls_client_credential_profile()) == CURLE_OK,
          "TLS client-credential profile was rejected during setup");
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, &result.response);
@@ -1647,6 +1647,17 @@ void TestTlsOpenSslHelloRequestProfile() {
   Expect(result.response.empty() && result.handshake_count == 0,
          "HelloRequest terminal reached encrypted application data");
 #endif
+}
+
+void TestTlsClientCredentialPemCompletesVerifiedTransfer() {
+  Scenario scenario = MakeTlsScenario("client-pem", "client-pem");
+  scenario.set_tls_client_credential_profile(
+      curl::fuzzer::proto::TLS_CLIENT_CREDENTIAL_VALID_PEM);
+  const TlsTransferResult result = DriveTlsScenario(scenario);
+  Expect(result.code == CURLE_OK && result.response == "client-pem",
+         "valid PEM client credential did not complete the TLS transfer");
+  Expect(result.verify_result == 0 && result.handshake_count == 1,
+         "valid PEM client credential did not retain verified TLS");
 }
 
 #if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
@@ -3062,6 +3073,7 @@ int main() {
   TestTlsPublicKeyPins();
   TestTlsOpenSslCloseNotifyProfile();
   TestTlsOpenSslHelloRequestProfile();
+  TestTlsClientCredentialPemCompletesVerifiedTransfer();
 #if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
   TestTlsClientCredentialProfilesFailInsideOwnedInputs();
   TestTlsCertificateStatusRequestIsBackendChecked();

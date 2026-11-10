@@ -48,7 +48,11 @@ CurlSlistPtr ApplyBaselineOptions(CURL* easy, curl::fuzzer::proto::Scheme scheme
 
 CURLcode ApplySetOption(CURL* easy, const curl::fuzzer::proto::SetOption& option);
 
-CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile);
+bool TlsClientCredentialFilesRequired();
+
+CURLcode ApplyTlsClientCredentialProfile(CURL* easy, curl::fuzzer::proto::TlsClientCredentialProfile profile,
+                                         const char* certificate_path = nullptr,
+                                         const char* private_key_path = nullptr);
 
 std::size_t RuntimeOptionCount(const curl::fuzzer::proto::Scenario& scenario);
 

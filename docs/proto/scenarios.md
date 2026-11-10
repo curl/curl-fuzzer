@@ -103,8 +103,10 @@ Other peers intentionally give those fields narrower meanings:
   by the manual-drive tail.
 - The dedicated HTTPS peer encrypts connection-script bytes as HTTP
   application data. Its optional `tls_client_credential_profile` selects only
-  harness-owned malformed blobs or fixed `/dev/null` engine/provider probes;
-  protobuf bytes never become a filename, engine name, or provider name.
+  harness-owned certificate/key inputs, malformed blobs, or fixed `/dev/null`
+  engine/provider probes. GnuTLS receives fixed credentials through
+  session-owned anonymous files; protobuf bytes never become credential
+  contents, a filename, engine name, or provider name.
   `pinned_public_key_file` instead exposes bounded protobuf bytes through a
   session-owned anonymous descriptor and installs only its `/proc/self/fd`
   path, allowing curl's filename-backed PEM pin parser to run without host-file
