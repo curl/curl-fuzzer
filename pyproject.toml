@@ -122,7 +122,7 @@ line-ending = "auto"
 
 [tool.uv]
 # renovate: datasource=github-releases depName=astral-sh/uv
-required-version = "==0.13.6"
+required-version = "==0.13.7"
 
 [[tool.uv.index]]
 name = "pypi"
