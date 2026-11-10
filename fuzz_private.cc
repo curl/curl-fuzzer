@@ -39,7 +39,9 @@ extern "C" {
 #include "ptrarray.h"
 #include "uint-spbset.h"
 #include "urldata.h"
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
 #include "vtls/hostcheck.h"
+#endif
 
 void ptrarray_clear(struct ptrarray *pa);
 uint32_t ptrarray_count(struct ptrarray *pa);
@@ -66,9 +68,11 @@ namespace {
 constexpr std::size_t kMaxOperations = 256;
 constexpr std::size_t kMaxPointers = 256;
 constexpr std::size_t kMaxHeaderFieldLength = 31;
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
 constexpr std::size_t kMaxHostcheckInputBytes = 4096;
 constexpr std::size_t kMaxHostcheckNameLength = 255;
 constexpr std::size_t kMaxHostcheckRecords = 32;
+#endif
 
 class InputCursor {
  public:
@@ -271,6 +275,7 @@ void FuzzSparseBitset(InputCursor input) {
   Curl_uint32_spbset_destroy(&values);
 }
 
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
 // Interpret newline-delimited `certificate-pattern|hostname` records. Keep the
 // hostname NUL-terminated for Curl_host_is_ipnum, but copy the pattern into an
 // exact-sized allocation so hostcheck cannot rely on a courtesy terminator.
@@ -308,6 +313,7 @@ void FuzzHostcheck(InputCursor input) {
     record_start = record_end + 1;
   }
 }
+#endif
 
 #ifdef _WIN32
 constexpr const char *kNullDevice = "NUL";
@@ -518,9 +524,11 @@ int TestOneInput(const std::uint8_t *data, std::size_t size) {
     case 'H':
       FuzzHappyEyeballs(input);
       break;
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
     case 'C':
       FuzzHostcheck(input);
       break;
+#endif
     default:
       break;
   }
