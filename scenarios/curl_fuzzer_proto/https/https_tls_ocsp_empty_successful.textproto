@@ -1,0 +1,7 @@
+scheme: SCHEME_HTTPS
+host_path: "tls.test/ocsp-empty-successful"
+tls_ocsp_staple_profile: TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL
+options { ssl_verifystatus: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nunreachable"
+}

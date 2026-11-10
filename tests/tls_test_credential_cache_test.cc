@@ -5,6 +5,7 @@
  */
 
 #include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 
 #include <memory>
 
@@ -33,15 +34,15 @@ void TestCachedCredentialsInstallInIndependentContexts() {
 
   Expect(proto_fuzzer::InstallCachedTlsTestCredentials(
              default_context.get(),
-             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC),
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, false),
          "cached default TLS credentials could not be installed");
   Expect(proto_fuzzer::InstallCachedTlsTestCredentials(
              first_chain_context.get(),
-             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES),
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES, false),
          "cached alternate TLS chain could not be installed");
   Expect(proto_fuzzer::InstallCachedTlsTestCredentials(
              second_chain_context.get(),
-             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES),
+             curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES, false),
          "cached alternate TLS chain could not be reused");
 
   Expect(default_context.get() != first_chain_context.get() &&
@@ -110,7 +111,8 @@ void TestCachedCredentialsOutliveContexts() {
   Expect(first != nullptr &&
              proto_fuzzer::InstallCachedTlsTestCredentials(
                  first.get(),
-                 curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES),
+                 curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES,
+                 false),
          "first lifetime test context could not install cached credentials");
   X509 *leaf = SSL_CTX_get0_certificate(first.get());
   EVP_PKEY *key = SSL_CTX_get0_privatekey(first.get());
@@ -127,7 +129,7 @@ void TestCachedCredentialsOutliveContexts() {
       second != nullptr &&
           proto_fuzzer::InstallCachedTlsTestCredentials(
               second.get(),
-              curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES),
+              curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_ALL_KEY_TYPES, false),
       "cached credentials did not survive destruction of an earlier context");
   STACK_OF(X509) *second_chain = nullptr;
   Expect(SSL_CTX_get0_certificate(second.get()) == leaf &&
@@ -145,8 +147,49 @@ void TestCachedCredentialsOutliveContexts() {
 /// Reject installation when no destination context can own references.
 void TestNullContextIsRejected() {
   Expect(!proto_fuzzer::InstallCachedTlsTestCredentials(
-             nullptr, curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC),
+             nullptr, curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+             false),
          "credential cache accepted a null TLS context");
+}
+
+/// Verify that OCSP contexts use a non-self-signed leaf, send its issuer, and
+/// expose the same cached issuer objects used for response generation.
+void TestIssuerSignedOcspLeaf() {
+  SslContextPtr first = MakeContext();
+  SslContextPtr second = MakeContext();
+  Expect(first != nullptr && second != nullptr,
+         "OCSP credential test could not allocate TLS contexts");
+  Expect(proto_fuzzer::InstallCachedTlsTestCredentials(
+             first.get(), curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC,
+             true) &&
+             proto_fuzzer::InstallCachedTlsTestCredentials(
+                 second.get(),
+                 curl::fuzzer::proto::TLS_CERTIFICATE_CHAIN_DEFAULT_EC, true),
+         "issuer-signed OCSP credentials could not be installed");
+
+  X509 *leaf = SSL_CTX_get0_certificate(first.get());
+  X509 *issuer = proto_fuzzer::CachedTlsTestIssuerCertificate();
+  EVP_PKEY *issuer_key = proto_fuzzer::CachedTlsTestIssuerPrivateKey();
+  Expect(leaf != nullptr && issuer != nullptr && issuer_key != nullptr &&
+             leaf != issuer && X509_self_signed(leaf, 0) == 0 &&
+             X509_get_ext_by_NID(leaf, NID_subject_alt_name, -1) < 0 &&
+             X509_check_issued(issuer, leaf) == X509_V_OK &&
+             X509_verify(leaf, X509_get0_pubkey(issuer)) == 1 &&
+             X509_check_private_key(issuer, issuer_key) == 1,
+         "OCSP leaf was not issued by the cached test issuer");
+  Expect(SSL_CTX_get0_certificate(second.get()) == leaf,
+         "OCSP contexts did not share the cached issuer-signed leaf");
+
+  STACK_OF(X509) *first_chain = nullptr;
+  STACK_OF(X509) *second_chain = nullptr;
+  Expect(SSL_CTX_get_extra_chain_certs_only(first.get(), &first_chain) == 1 &&
+             SSL_CTX_get_extra_chain_certs_only(second.get(), &second_chain) ==
+                 1 &&
+             first_chain != nullptr && second_chain != nullptr &&
+             sk_X509_num(first_chain) == 1 && sk_X509_num(second_chain) == 1 &&
+             sk_X509_value(first_chain, 0) == issuer &&
+             sk_X509_value(second_chain, 0) == issuer,
+         "OCSP contexts did not send their shared cached issuer");
 }
 
 } // namespace
@@ -157,5 +200,6 @@ int main() {
   TestNullContextIsRejected();
   TestCachedCredentialsInstallInIndependentContexts();
   TestCachedCredentialsOutliveContexts();
+  TestIssuerSignedOcspLeaf();
   return 0;
 }

@@ -92,6 +92,38 @@ class PrimaryCredentials {
   EVP_PKEY* key_;
 };
 
+/// Own the parsed issuer-signed leaf and its matching private key retained by
+/// the process cache.
+class OcspLeafCredentials {
+ public:
+  /// Decode the fixed OCSP leaf certificate and its private key once.
+  OcspLeafCredentials()
+      : certificate_(ParseCertificate(tls_test_credentials::kOcspLeafCertificatePem)),
+        key_(ParsePrivateKey(tls_test_credentials::kOcspLeafPrivateKeyPem)) {}
+
+  /// Release the cache-owned certificate and key references.
+  ~OcspLeafCredentials() {
+    X509_free(certificate_);
+    EVP_PKEY_free(key_);
+  }
+
+  /// Keep ownership of the cached references process-unique.
+  OcspLeafCredentials(const OcspLeafCredentials&) = delete;
+  /// Prevent replacing the process cache's owning references.
+  OcspLeafCredentials& operator=(const OcspLeafCredentials&) = delete;
+
+  /// @return true when both fixed PEM values decoded successfully.
+  bool valid() const { return certificate_ != nullptr && key_ != nullptr; }
+  /// @return the cache-owned leaf certificate.
+  X509* certificate() const { return certificate_; }
+  /// @return the cache-owned private key.
+  EVP_PKEY* key() const { return key_; }
+
+ private:
+  X509* certificate_;
+  EVP_PKEY* key_;
+};
+
 /// Own the optional parsed certificates used by the all-key-types profile.
 class AuxiliaryCertificates {
  public:
@@ -134,6 +166,13 @@ const PrimaryCredentials& CachedPrimaryCredentials() {
   return credentials;
 }
 
+/// Lazily avoid parsing the issuer-signed leaf for non-OCSP scenarios.
+/// @return the process-lifetime OCSP leaf certificate and private key cache.
+const OcspLeafCredentials& CachedOcspLeafCredentials() {
+  static const OcspLeafCredentials credentials;
+  return credentials;
+}
+
 /// Lazily avoid parsing auxiliary certificates for the default profile.
 /// @return the process-lifetime auxiliary certificate cache.
 const AuxiliaryCertificates& CachedAuxiliaryCertificates() {
@@ -150,16 +189,36 @@ const AuxiliaryCertificates& CachedAuxiliaryCertificates() {
 /// No session, connection, callback, or observation state is shared.
 /// @param context Fresh server context that will own the installed references.
 /// @param certificate_chain Checked-in auxiliary certificate profile to use.
+/// @param use_issuer_signed_leaf Whether to install the dedicated OCSP leaf and
+/// add the ordinary self-signed certificate as its issuer.
 /// @return true when the leaf, key, and selected chain were installed.
 bool InstallCachedTlsTestCredentials(SSL_CTX* context,
-                                     curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain) {
+                                     curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
+                                     bool use_issuer_signed_leaf) {
   if (context == nullptr) {
     return false;
   }
 
   const PrimaryCredentials& primary = CachedPrimaryCredentials();
-  if (!primary.valid() || SSL_CTX_use_certificate(context, primary.certificate()) != 1 ||
-      SSL_CTX_use_PrivateKey(context, primary.key()) != 1 || SSL_CTX_check_private_key(context) != 1) {
+  X509* certificate = primary.certificate();
+  EVP_PKEY* key = primary.key();
+  if (!primary.valid()) {
+    return false;
+  }
+  if (use_issuer_signed_leaf) {
+    const OcspLeafCredentials& ocsp_leaf = CachedOcspLeafCredentials();
+    if (!ocsp_leaf.valid()) {
+      return false;
+    }
+    certificate = ocsp_leaf.certificate();
+    key = ocsp_leaf.key();
+  }
+  if (SSL_CTX_use_certificate(context, certificate) != 1 || SSL_CTX_use_PrivateKey(context, key) != 1 ||
+      SSL_CTX_check_private_key(context) != 1) {
+    return false;
+  }
+
+  if (use_issuer_signed_leaf && !AddCachedExtraChainCertificate(context, primary.certificate())) {
     return false;
   }
 
@@ -171,6 +230,16 @@ bool InstallCachedTlsTestCredentials(SSL_CTX* context,
   return auxiliary.valid() && AddCachedExtraChainCertificate(context, auxiliary.rsa()) &&
          AddCachedExtraChainCertificate(context, auxiliary.dsa()) &&
          AddCachedExtraChainCertificate(context, auxiliary.dh());
+}
+
+X509* CachedTlsTestIssuerCertificate() {
+  const PrimaryCredentials& primary = CachedPrimaryCredentials();
+  return primary.valid() ? primary.certificate() : nullptr;
+}
+
+EVP_PKEY* CachedTlsTestIssuerPrivateKey() {
+  const PrimaryCredentials& primary = CachedPrimaryCredentials();
+  return primary.valid() ? primary.key() : nullptr;
 }
 
 }  // namespace proto_fuzzer

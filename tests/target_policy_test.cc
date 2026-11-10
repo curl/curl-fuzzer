@@ -607,6 +607,42 @@ void TestTlsHandshakeProfilePolicy() {
          "non-HTTPS policy retained a TLS handshake terminal");
 }
 
+void TestTlsOcspStapleProfilePolicy() {
+  constexpr curl::fuzzer::proto::TlsOcspStapleProfile kProfiles[] = {
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_GOOD,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_REVOKED,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_UNKNOWN,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_TRY_LATER,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_EMPTY_SUCCESSFUL,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_SHA256_CERT_ID,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_EXPIRED,
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_BAD_SIGNATURE,
+  };
+  for (const auto profile : kProfiles) {
+    Scenario https;
+    https.set_tls_ocsp_staple_profile(profile);
+    NormalizeScenarioForTarget(&https, TargetProfile::kFastHttps);
+    Expect(https.tls_ocsp_staple_profile() == profile,
+           "HTTPS policy discarded a bounded OCSP staple profile");
+  }
+
+  Scenario unknown;
+  unknown.set_tls_ocsp_staple_profile(
+      static_cast<curl::fuzzer::proto::TlsOcspStapleProfile>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastHttps);
+  Expect(unknown.tls_ocsp_staple_profile() ==
+             curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE,
+         "HTTPS policy retained an unknown OCSP staple profile");
+
+  Scenario plaintext;
+  plaintext.set_tls_ocsp_staple_profile(
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_GOOD);
+  NormalizeScenarioForTarget(&plaintext, TargetProfile::kDeepHttp);
+  Expect(plaintext.tls_ocsp_staple_profile() ==
+             curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE,
+         "non-HTTPS policy retained OCSP response generation");
+}
+
 void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
   Scenario scenario;
   scenario.set_tls_group_profile(
@@ -3891,6 +3927,7 @@ int main() {
   TestTlsPoliciesRejectUnknownCertificateChain();
   TestTlsClientCredentialProfilePolicy();
   TestTlsHandshakeProfilePolicy();
+  TestTlsOcspStapleProfilePolicy();
   TestHttpsH2PolicyRejectsUnknownTlsGroupProfile();
   TestOtherPoliciesDiscardTlsGroupProfiles();
   TestFastHttp3PolicyMaterializesUsefulPlan();

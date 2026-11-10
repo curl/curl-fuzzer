@@ -1,0 +1,7 @@
+scheme: SCHEME_HTTPS
+host_path: "tls.test/ocsp-sha256-cert-id"
+tls_ocsp_staple_profile: TLS_OCSP_STAPLE_SHA256_CERT_ID
+options { ssl_verifystatus: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nocsp-sha256"
+}
