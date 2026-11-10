@@ -232,11 +232,15 @@ bool InstallCachedTlsTestCredentials(SSL_CTX* context,
          AddCachedExtraChainCertificate(context, auxiliary.dh());
 }
 
+/// @return the process-lifetime issuer certificate borrowed by OCSP response
+/// generation, or nullptr when its checked-in PEM could not be decoded.
 X509* CachedTlsTestIssuerCertificate() {
   const PrimaryCredentials& primary = CachedPrimaryCredentials();
   return primary.valid() ? primary.certificate() : nullptr;
 }
 
+/// @return the process-lifetime issuer private key borrowed by OCSP response
+/// generation, or nullptr when its checked-in PEM could not be decoded.
 EVP_PKEY* CachedTlsTestIssuerPrivateKey() {
   const PrimaryCredentials& primary = CachedPrimaryCredentials();
   return primary.valid() ? primary.key() : nullptr;

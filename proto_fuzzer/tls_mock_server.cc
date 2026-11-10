@@ -788,6 +788,7 @@ class TlsHelloRequestConnection final : public MockConnection {
 /// @param group_policy Immutable server key-exchange group policy.
 /// @param handshake_profile Closed peer-side handshake terminal.
 /// @param early_data_policy Fixed server-side TLS 1.3 early-data behavior.
+/// @param ocsp_staple_profile Fixed server-side stapled OCSP response.
 TlsMockTransport::TlsMockTransport(TlsApplicationProtocol protocol,
                                    curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
                                    TlsGroupPolicy group_policy,

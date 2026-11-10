@@ -20,12 +20,8 @@ bool InstallCachedTlsTestCredentials(SSL_CTX* context,
                                      curl::fuzzer::proto::TlsCertificateChainProfile certificate_chain,
                                      bool use_issuer_signed_leaf);
 
-/// @return the process-lifetime issuer certificate borrowed by OCSP response
-/// generation, or nullptr when its checked-in PEM could not be decoded.
 X509* CachedTlsTestIssuerCertificate();
 
-/// @return the process-lifetime issuer private key borrowed by OCSP response
-/// generation, or nullptr when its checked-in PEM could not be decoded.
 EVP_PKEY* CachedTlsTestIssuerPrivateKey();
 
 }  // namespace proto_fuzzer
