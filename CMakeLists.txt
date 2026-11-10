@@ -64,7 +64,7 @@ endif()
 # Install zlib
 #
 # renovate: datasource=github-tags depName=madler/zlib
-set(ZLIB_VERSION 1.3.2)
+set(ZLIB_VERSION 1.4)
 set(ZLIB_URL https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.xz
              https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_BUILD_NAME zlib-${ZLIB_VERSION})
