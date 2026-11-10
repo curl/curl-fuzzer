@@ -4,16 +4,19 @@
  * SPDX-License-Identifier: curl
  */
 
-// Input-driven fuzzing for small curl-private containers, debug wrappers, and
-// the callback surface of an unconnected Happy Eyeballs filter. The first byte
-// selects a lane; every action after it comes from the input. All per-input
-// allocations, descriptors, peers, and filters are released before return.
+// Input-driven fuzzing for small curl-private containers, hostname matching,
+// debug wrappers, and the callback surface of an unconnected Happy Eyeballs
+// filter. The first byte selects a lane; every action after it comes from the
+// input. All per-input allocations, descriptors, peers, and filters are
+// released before return.
 
 #include "fuzz_private.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -36,6 +39,9 @@ extern "C" {
 #include "ptrarray.h"
 #include "uint-spbset.h"
 #include "urldata.h"
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
+#include "vtls/hostcheck.h"
+#endif
 
 void ptrarray_clear(struct ptrarray *pa);
 uint32_t ptrarray_count(struct ptrarray *pa);
@@ -62,6 +68,11 @@ namespace {
 constexpr std::size_t kMaxOperations = 256;
 constexpr std::size_t kMaxPointers = 256;
 constexpr std::size_t kMaxHeaderFieldLength = 31;
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
+constexpr std::size_t kMaxHostcheckInputBytes = 4096;
+constexpr std::size_t kMaxHostcheckNameLength = 255;
+constexpr std::size_t kMaxHostcheckRecords = 32;
+#endif
 
 class InputCursor {
  public:
@@ -263,6 +274,46 @@ void FuzzSparseBitset(InputCursor input) {
 
   Curl_uint32_spbset_destroy(&values);
 }
+
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
+// Interpret newline-delimited `certificate-pattern|hostname` records. Keep the
+// hostname NUL-terminated for Curl_host_is_ipnum, but copy the pattern into an
+// exact-sized allocation so hostcheck cannot rely on a courtesy terminator.
+// Invalid records are ignored rather than reinterpreted.
+void FuzzHostcheck(InputCursor input) {
+  const std::string records =
+      input.TakeBytes(std::min(input.remaining(), kMaxHostcheckInputBytes));
+  std::size_t record_start = 0;
+  for (std::size_t operation = 0;
+       operation < kMaxHostcheckRecords && record_start <= records.size();
+       ++operation) {
+    const std::size_t record_end = records.find('\n', record_start);
+    const std::size_t bounded_end =
+        record_end == std::string::npos ? records.size() : record_end;
+    const std::size_t separator = records.find('|', record_start);
+    if (separator < bounded_end) {
+      const std::size_t pattern_length =
+          std::min(separator - record_start, kMaxHostcheckNameLength);
+      const std::size_t hostname_start = separator + 1;
+      const std::size_t hostname_length =
+          std::min(bounded_end - hostname_start, kMaxHostcheckNameLength);
+      std::unique_ptr<char[]> pattern;
+      if (pattern_length != 0) {
+        pattern = std::make_unique<char[]>(pattern_length);
+        std::copy_n(records.data() + record_start, pattern_length,
+                    pattern.get());
+      }
+      const std::string hostname =
+          records.substr(hostname_start, hostname_length);
+      (void)Curl_cert_hostcheck(pattern.get(), pattern_length, hostname.c_str(),
+                                hostname.size());
+    }
+    if (record_end == std::string::npos)
+      break;
+    record_start = record_end + 1;
+  }
+}
+#endif
 
 #ifdef _WIN32
 constexpr const char *kNullDevice = "NUL";
@@ -473,6 +524,11 @@ int TestOneInput(const std::uint8_t *data, std::size_t size) {
     case 'H':
       FuzzHappyEyeballs(input);
       break;
+#if defined(USE_OPENSSL) || defined(USE_SCHANNEL)
+    case 'C':
+      FuzzHostcheck(input);
+      break;
+#endif
     default:
       break;
   }

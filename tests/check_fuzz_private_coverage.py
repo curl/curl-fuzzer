@@ -65,7 +65,17 @@ REQUIRED_FUNCTIONS_BY_SEED = {
             "cf_ip_happy_data_pending",
         },
     ),
+    "hostcheck_patterns": (
+        "lib/vtls/hostcheck.c",
+        {
+            "pmatch",
+            "hostmatch",
+            "Curl_cert_hostcheck",
+        },
+    ),
 }
+
+COMPLETE_REGION_SEEDS = {"hostcheck_patterns"}
 
 
 def _short_function_name(name: object) -> str | None:
@@ -73,6 +83,32 @@ def _short_function_name(name: object) -> str | None:
     if not isinstance(name, str):
         return None
     return name.rsplit(":", maxsplit=1)[-1]
+
+
+def _uncovered_region_count(document: dict[str, object]) -> int | None:
+    """Return the first exported file's uncovered-region count."""
+    data = document.get("data")
+    if not isinstance(data, list):
+        return None
+    for datum in data:
+        if not isinstance(datum, dict):
+            continue
+        files = datum.get("files")
+        if not isinstance(files, list):
+            continue
+        for file_coverage in files:
+            if not isinstance(file_coverage, dict):
+                continue
+            summary = file_coverage.get("summary")
+            if not isinstance(summary, dict):
+                continue
+            regions = summary.get("regions")
+            if not isinstance(regions, dict):
+                continue
+            uncovered = regions.get("notcovered")
+            if isinstance(uncovered, int) and not isinstance(uncovered, bool):
+                return uncovered
+    return None
 
 
 def main() -> int:
@@ -152,8 +188,9 @@ def main() -> int:
                 profiles,
                 seed_directory / f"{seed.name}.profdata",
             )
+            coverage = export_document(args.llvm_cov, args.binary, profdata, [source])
             counts = function_counts(
-                export_document(args.llvm_cov, args.binary, profdata, [source]),
+                coverage,
                 name_normalizer=_short_function_name,
             )
             missing_functions = sorted(
@@ -168,6 +205,13 @@ def main() -> int:
                     f"{seed_name} did not cover required functions in "
                     f"{relative_source}: {rendered}"
                 )
+            if seed_name in COMPLETE_REGION_SEEDS:
+                uncovered_regions = _uncovered_region_count(coverage)
+                if uncovered_regions != 0:
+                    raise SystemExit(
+                        f"{seed_name} left {relative_source} with "
+                        f"{uncovered_regions!r} uncovered regions"
+                    )
 
             summaries.append(
                 f"{seed_name}:{relative_source}={len(required_functions)} functions"
