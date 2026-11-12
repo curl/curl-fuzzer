@@ -32,7 +32,7 @@ Repository = "https://github.com/curl/curl-fuzzer"
 
 [project.optional-dependencies]
 browser-tests = [
-    "playwright>=1.64,<1.65",
+    "playwright>=1.65,<1.66",
     "pytest_playwright>=0.10,<0.11",
     "pytest>=9,<10",
 ]
@@ -64,7 +64,7 @@ build-backend = "setuptools.build_meta"
 dev = [
     "jinja2>=3.1.0,<4.0.0",
     "mypy==2.4.1",
-    "ruff==0.17.3",
+    "ruff==0.17.4",
 ]
 
 # Dependencies of the Fuzz Introspector source frontend checked out by
@@ -72,7 +72,7 @@ dev = [
 # listed here so dependency updates are managed in this repository.
 introspector = [
     "PyYAML>=6.0.3,<7",
-    "tree-sitter==0.26.0",
+    "tree-sitter==0.26.1",
     "tree-sitter-cpp==0.23.4",
     "tree-sitter-go==0.25.0",
     "tree-sitter-java==0.23.5",
