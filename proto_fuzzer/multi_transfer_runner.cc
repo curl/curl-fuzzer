@@ -40,6 +40,7 @@ struct TransferState {
 
 constexpr int kMaxDriveIterations = 512;
 constexpr int kMaxIdleIterations = 8;
+constexpr curl_off_t kMaxDecodedResponseBytes = 1024 * 1024;
 constexpr curl_off_t kStateProbeReceiveRate = 1;
 constexpr long kStateProbeTimeoutMs = 20;
 
@@ -108,6 +109,9 @@ class MultiTransferDriver {
         TransferState& transfer = transfers_[index];
         if (transfer.session.easy() == message->easy_handle) {
           ++stats_.completion_messages;
+          if (message->data.result == CURLE_FILESIZE_EXCEEDED) {
+            ++stats_.response_limit_completions;
+          }
           break;
         }
       }
@@ -278,6 +282,10 @@ MultiTransferRunStats RunMultiTransferScenario(const curl::fuzzer::proto::Scenar
     (void)curl_easy_setopt(transfer.session.easy(), CURLOPT_URL, url.c_str());
     mock.Install(transfer.session.easy());
     (void)ApplyScenarioOptions(transfer.session.easy(), scenario);
+    // Apply this after the mutation-controlled options. A small compressed
+    // response can otherwise expand into unbounded decoder work on every
+    // concurrent handle, and an input MAXFILESIZE value could remove the cap.
+    (void)curl_easy_setopt(transfer.session.easy(), CURLOPT_MAXFILESIZE_LARGE, kMaxDecodedResponseBytes);
     if (ApplyStateProbeOptions(transfer.session.easy(), plan.state_probe_profile(), progress_sink.get())) {
       ++stats.state_probe_handles;
     }

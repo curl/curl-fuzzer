@@ -119,6 +119,22 @@ def test_base_proto_targets_are_packaged_for_i386_asan() -> None:
     )
 
 
+def test_packaged_proto_targets_have_bounded_input_options() -> None:
+    """Keep every structured target on the shared 32 KiB input limit."""
+    proto_targets = {
+        target
+        for target in _packaged_targets()
+        if target.startswith("curl_fuzzer_proto")
+    }
+
+    for target in sorted(proto_targets):
+        options = REPO_ROOT / "ossconfig" / f"{target}.options"
+        assert options.is_file(), f"{target} lacks an OSS-Fuzz options file"
+        option_lines = options.read_text(encoding="utf-8").splitlines()
+        assert "[libfuzzer]" in option_lines
+        assert "max_len = 32768" in option_lines
+
+
 def _checked_in_cpp_sources() -> list[Path]:
     sources = list(REPO_ROOT.glob("*.cc"))
     sources.extend((REPO_ROOT / "fuzzer_entrypoints").glob("*.cc"))
