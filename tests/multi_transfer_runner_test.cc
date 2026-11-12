@@ -26,6 +26,17 @@ void AddCompleteResponse(curl::fuzzer::proto::Connection *connection,
       std::string(1, body));
 }
 
+void AddBrotliExpansionResponse(curl::fuzzer::proto::Connection *connection) {
+  // This malformed ten-byte stream expands past 13 MiB before Brotli reports
+  // its format error. Keep it small so this test also protects the workload
+  // bound that prevents compressed fuzz inputs from amplifying CPU work.
+  constexpr char kCompressed[] = "\x08\x04\xe8\x0c\xd4\x44\x55\x30\x12\x03";
+  connection->set_initial_response(
+      std::string("HTTP/1.1 200 OK\r\nContent-Encoding: br\r\n"
+                  "Connection: close\r\n\r\n") +
+      std::string(kCompressed, sizeof(kCompressed) - 1));
+}
+
 void TestCompletesConcurrentHandles() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
@@ -144,6 +155,30 @@ void TestAppliesClosedStateProbeToEveryHandle() {
          "multi runner did not apply the complete closed state probe");
 }
 
+void TestBoundsDecodedResponseWorkAfterInputOptions() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("multi.test/decoded-response-limit");
+  auto *accept_encoding = scenario.add_options();
+  accept_encoding->set_option_id(curl::fuzzer::proto::CURLOPT_ACCEPT_ENCODING);
+  accept_encoding->set_string_value("");
+  auto *maxfilesize = scenario.add_options();
+  maxfilesize->set_option_id(curl::fuzzer::proto::CURLOPT_MAXFILESIZE_LARGE);
+  maxfilesize->set_uint_value(64 * 1024 * 1024);
+  AddBrotliExpansionResponse(scenario.mutable_connection());
+  AddBrotliExpansionResponse(scenario.add_subsequent_connections());
+  auto *plan = scenario.mutable_multi_plan();
+  plan->set_transfer_count(2);
+  plan->set_max_host_connections(2);
+  plan->set_max_total_connections(2);
+
+  const proto_fuzzer::MultiTransferRunStats stats =
+      proto_fuzzer::RunMultiTransferScenario(scenario);
+  Expect(stats.completion_messages == 2 &&
+             stats.response_limit_completions == 2,
+         "input options removed the multi runner decoded-response limit");
+}
+
 } // namespace
 
 int main() {
@@ -152,5 +187,6 @@ int main() {
   TestQueuesAndReusesOneConnection();
   TestConsumesBoundedActions();
   TestAppliesClosedStateProbeToEveryHandle();
+  TestBoundsDecodedResponseWorkAfterInputOptions();
   return 0;
 }
