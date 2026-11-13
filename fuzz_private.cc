@@ -231,7 +231,7 @@ void FuzzDynamicHeaders(InputCursor input) {
     assert(Curl_dynhds_count(&headers) <= max_entries);
   }
 
-  Curl_dynhds_free(&headers);
+  Curl_dynhds_cleanup(&headers);
 }
 
 void FuzzSparseBitset(InputCursor input) {
