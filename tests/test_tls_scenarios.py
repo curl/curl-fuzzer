@@ -90,6 +90,23 @@ def test_tls_seeds_retain_version_pin_and_session_correlations() -> None:
             "Connection: close",
             "subsequent_connections {",
         ),
+        "https_tls12_fresh_session_hash.textproto": (
+            "TLS_SESSION_CACHE_FRESH_SALTED_HASH",
+            "ssl_sessionid_cache: true",
+            "sslversion: 393222",
+            "fresh-session-hash",
+        ),
+        "https_tls13_fresh_session_key.textproto": (
+            "TLS_SESSION_CACHE_FRESH_SESSION_KEY",
+            "ssl_sessionid_cache: true",
+            "sslversion: 458759",
+            "fresh-session-key",
+        ),
+        "https_fresh_session_bad_hash.textproto": (
+            "TLS_SESSION_CACHE_MALFORMED_SALTED_HASH",
+            "ssl_sessionid_cache: true",
+            "fresh-session-bad-hash",
+        ),
         "https_tls13_early_data.textproto": (
             "ssl_sessionid_cache: true",
             "sslversion: 458759",

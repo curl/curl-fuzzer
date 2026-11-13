@@ -1,0 +1,10 @@
+# Export one TLS 1.2 session, destroy its easy handle, then import the opaque
+# salted hash into a new shared cache before the second transfer.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/fresh-session-hash"
+tls_session_cache_profile: TLS_SESSION_CACHE_FRESH_SALTED_HASH
+options { ssl_sessionid_cache: true }
+options { sslversion: 393222 }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nreplay"
+}

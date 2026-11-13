@@ -269,7 +269,11 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.add("smtp_probe_mode")
         if slug in {"compatibility", "fast_https"}:
             expected_fields.update(
-                {"pinned_public_key_file", "tls_ocsp_staple_profile"}
+                {
+                    "pinned_public_key_file",
+                    "tls_ocsp_staple_profile",
+                    "tls_session_cache_profile",
+                }
             )
         if slug in {"compatibility", "deep_http", "fast_https"}:
             expected_fields.update(
@@ -433,6 +437,15 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
             "TARGET_PROFILE_COMPATIBILITY",
             "TARGET_PROFILE_FAST_FTP",
         }
+
+    tls_session_cache = model.fields[
+        "curl.fuzzer.proto.Scenario.tls_session_cache_profile"
+    ]
+    assert tls_session_cache.number == 54
+    assert tls_session_cache.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_HTTPS",
+    }
 
     h2_flush_probe = model.fields[
         "curl.fuzzer.proto.Scenario.http2_connect_flush_probe"

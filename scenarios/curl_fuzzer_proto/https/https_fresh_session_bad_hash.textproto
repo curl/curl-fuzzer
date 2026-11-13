@@ -1,0 +1,9 @@
+# Truncate the exported salted hash before import. Curl rejects the archive,
+# then the second transfer completes with a full handshake.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/fresh-session-bad-hash"
+tls_session_cache_profile: TLS_SESSION_CACHE_MALFORMED_SALTED_HASH
+options { ssl_sessionid_cache: true }
+connection {
+  initial_response: "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nreplay"
+}

@@ -57,6 +57,7 @@
 #include "proto_fuzzer/pop3s_mock_server.h"
 #include "proto_fuzzer/smtps_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
+#include "proto_fuzzer/tls_session_replay.h"
 #include "proto_fuzzer/tls_websocket_mock_server.h"
 #endif
 #if defined(PROTO_FUZZER_HAS_HTTP3_MOCK_SERVER)
@@ -808,6 +809,19 @@ int RunScenario(const curl::fuzzer::proto::Scenario& scenario, ScenarioRunMode m
   } else {
     transfer_result = mock->DriveScenario(easy, scenario);
   }
+
+#if defined(PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
+  if (mode == ScenarioRunMode::kTlsCoverage &&
+      scenario.tls_session_cache_profile() != curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT) {
+    ProbeTransferResults(easy);
+    transfer.Close();
+    auto* tls_server = dynamic_cast<TlsMockServer*>(mock.get());
+    if (tls_server != nullptr) {
+      (void)ReplayTlsSession(scenario, url, tls_server);
+    }
+    return 0;
+  }
+#endif
   if (api_plan != nullptr && api_plan->repeat_mime_post() && transfer_result == CURLE_OK) {
     // Re-enter the public transfer setup with the same easy handle, MIME root,
     // and callback cursor. A completed first body leaves a non-rewindable
