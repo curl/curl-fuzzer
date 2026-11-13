@@ -438,6 +438,8 @@ void FuzzHappyEyeballs(InputCursor input) {
   struct Curl_peer *origin = nullptr;
   struct Curl_peer *alternative = nullptr;
   struct Curl_peer *tunnel = nullptr;
+  struct connectdata connection = {};
+  struct Curl_cfchain chain = {};
   struct Curl_cfilter anchor = {};
   const struct Curl_scheme *scheme = Curl_get_scheme("http");
   const std::uint8_t flags = input.TakeByte() & 7U;
@@ -457,6 +459,8 @@ void FuzzHappyEyeballs(InputCursor input) {
   const std::uint8_t transport =
       (flags & 1U) && !tunnel ? TRNSPRT_UDP : TRNSPRT_TCP;
   if (!result) {
+    Curl_cfchain_init(&chain, &connection, true);
+    anchor.chain = &chain;
     result = Curl_cf_ip_happy_insert_after(
         &anchor, data, origin, alternative ? alternative : origin, transport,
         tunnel, TRNSPRT_TCP);

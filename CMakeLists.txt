@@ -1524,6 +1524,18 @@ target_link_libraries(fuzz_private PRIVATE ${COMMON_LINK_LIBS})
 target_link_options(fuzz_private PRIVATE ${COMMON_LINK_OPTIONS})
 add_dependencies(fuzz_private ${FUZZ_DEPS})
 
+# Numeric easy-option fuzzer. Fixed-size records select runtime catalog entries
+# and exercise value boundaries without starting a transfer.
+add_executable(fuzz_setopt fuzz_setopt.cc)
+target_compile_features(fuzz_setopt PRIVATE cxx_std_17)
+target_compile_options(fuzz_setopt PRIVATE ${COMMON_FLAGS})
+target_include_directories(fuzz_setopt PRIVATE
+    ${CMAKE_SOURCE_DIR}
+    ${CURL_INCLUDE_DIRS})
+target_link_libraries(fuzz_setopt PRIVATE ${COMMON_LINK_LIBS})
+target_link_options(fuzz_setopt PRIVATE ${COMMON_LINK_OPTIONS})
+add_dependencies(fuzz_setopt ${FUZZ_DEPS})
+
 if(BUILD_TESTING)
     add_executable(fuzz_private_test
         tests/fuzz_private_test.cc
@@ -1546,6 +1558,23 @@ if(BUILD_TESTING)
     add_test(NAME fuzz_private_test COMMAND fuzz_private_test)
     set_tests_properties(fuzz_private_test PROPERTIES TIMEOUT 10)
     add_dependencies(fuzzer_unit_tests fuzz_private_test)
+
+    add_executable(fuzz_setopt_test
+        tests/fuzz_setopt_test.cc
+        fuzz_setopt.cc)
+    target_compile_features(fuzz_setopt_test PRIVATE cxx_std_17)
+    target_compile_options(fuzz_setopt_test PRIVATE ${COMMON_FLAGS})
+    target_include_directories(fuzz_setopt_test PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CURL_INCLUDE_DIRS})
+    target_compile_definitions(fuzz_setopt_test PRIVATE
+        FUZZ_SETOPT_CORPUS_DIR="${CMAKE_SOURCE_DIR}/corpora/fuzz_setopt")
+    target_link_libraries(fuzz_setopt_test PRIVATE curl_client_default)
+    target_link_options(fuzz_setopt_test PRIVATE ${COVERAGE_LINK_FLAGS})
+    add_dependencies(fuzz_setopt_test ${FUZZ_DEPS})
+    add_test(NAME fuzz_setopt_test COMMAND fuzz_setopt_test)
+    set_tests_properties(fuzz_setopt_test PROPERTIES TIMEOUT 10)
+    add_dependencies(fuzzer_unit_tests fuzz_setopt_test)
 endif()
 
 if(BUILD_TESTING AND ENABLE_COVERAGE)
@@ -1576,6 +1605,7 @@ add_custom_target(fuzz
         fuzz_doh
         fuzz_netrc
         fuzz_private
+        fuzz_setopt
 )
 
 # -----------------------------------------------------------------------------

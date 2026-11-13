@@ -23,6 +23,7 @@ STANDALONE_TARGETS = {
     "fuzz_doh",
     "fuzz_netrc",
     "fuzz_private",
+    "fuzz_setopt",
     "fuzz_url",
 }
 PROTO_TARGET_TRAITS = {
@@ -133,6 +134,35 @@ def test_packaged_proto_targets_have_bounded_input_options() -> None:
         option_lines = options.read_text(encoding="utf-8").splitlines()
         assert "[libfuzzer]" in option_lines
         assert "max_len = 32768" in option_lines
+
+
+def test_setopt_has_one_input_limit_for_64_records() -> None:
+    """Keep OSS-Fuzz aligned with the fixed 11-byte setopt record format."""
+    options = REPO_ROOT / "ossconfig" / "fuzz_setopt.options"
+
+    assert options.read_text(encoding="utf-8").splitlines() == [
+        "[libfuzzer]",
+        "max_len = 704",
+    ]
+
+
+def test_setopt_seeds_cover_current_ordinals_and_value_modes() -> None:
+    """Keep the initial corpus complete for the current numeric catalog."""
+    records = []
+    for seed in sorted((REPO_ROOT / "corpora" / "fuzz_setopt").iterdir()):
+        contents = seed.read_bytes()
+        seed_records = [
+            contents[offset : offset + 11]
+            for offset in range(0, len(contents) - 10, 11)
+        ]
+        assert len(contents) <= 704
+        assert len(seed_records) <= 64
+        records.extend(seed_records)
+
+    selectors = {(record[0] | record[1] << 8) % 141 for record in records}
+    assert len(records) == 141
+    assert selectors == set(range(141))
+    assert {record[2] & 7 for record in records} == set(range(8))
 
 
 def _checked_in_cpp_sources() -> list[Path]:

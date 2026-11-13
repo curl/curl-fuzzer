@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-FUZZ_TARGETS_LIST="fuzz_url fuzz_bufq fuzz_doh fuzz_netrc fuzz_private"
+FUZZ_TARGETS_LIST="fuzz_url fuzz_bufq fuzz_doh fuzz_netrc fuzz_private fuzz_setopt"
 
 # OSS-Fuzz supports i386 with AddressSanitizer. The base structured suite uses
 # the same OpenSSL dependency stack that is already available in that build.

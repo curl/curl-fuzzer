@@ -5,8 +5,6 @@ name: Documentation and decoder tests
     branches:
       - master
   pull_request:
-    branches:
-      - master
   workflow_dispatch:
 
 concurrency:
