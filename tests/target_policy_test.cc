@@ -2541,6 +2541,77 @@ void TestNonTelnetPolicySelectsUploadBudgetBeforeBounding() {
          "input TELNET scheme incorrectly selected TELNET's upload budget");
 }
 
+void TestHttpUploadTrailerPolicy() {
+  Scenario deep;
+  auto *trailers = deep.mutable_http_upload_trailers();
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxHttpUploadTrailers + 3;
+       ++index) {
+    trailers->add_lines(std::string(
+        proto_fuzzer::scenario_limits::kMaxHttpUploadTrailerBytes + 9, 't'));
+  }
+  trailers->set_result(
+      static_cast<curl::fuzzer::proto::HttpUploadTrailerResult>(99));
+  NormalizeScenarioForTarget(&deep, TargetProfile::kDeepHttp);
+  Expect(
+      deep.has_http_upload_trailers() &&
+          static_cast<std::size_t>(deep.http_upload_trailers().lines_size()) ==
+              proto_fuzzer::scenario_limits::kMaxHttpUploadTrailers,
+      "deep HTTP policy did not retain the bounded request trailers");
+  Expect(deep.http_upload_trailers().lines(0).size() ==
+                 proto_fuzzer::scenario_limits::kMaxHttpUploadTrailerBytes &&
+             deep.http_upload_trailers().result() ==
+                 curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_SUCCESS,
+         "deep HTTP policy did not bound trailer bytes or fold the result");
+
+  Scenario https;
+  https.mutable_http_upload_trailers()->add_lines("X-TLS: retained");
+  NormalizeScenarioForTarget(&https, TargetProfile::kFastHttps);
+  Expect(https.has_http_upload_trailers(),
+         "HTTPS policy removed HTTP/1.1 request trailers");
+
+  Scenario deep_proxy;
+  deep_proxy.mutable_http_upload_trailers()->add_lines("X-Proxy: removed");
+  deep_proxy.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY);
+  NormalizeScenarioForTarget(&deep_proxy, TargetProfile::kDeepHttp);
+  Expect(!deep_proxy.has_http_upload_trailers(),
+         "deep HTTP proxy route retained origin request trailers");
+
+  Scenario deep_proxy_option;
+  deep_proxy_option.mutable_http_upload_trailers()->add_lines(
+      "X-Proxy-Option: removed");
+  deep_proxy_option.set_proxy_socket_option_mode(
+      curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY);
+  NormalizeScenarioForTarget(&deep_proxy_option, TargetProfile::kDeepHttp);
+  Expect(!deep_proxy_option.has_http_upload_trailers(),
+         "deep HTTP proxy-option route retained origin request trailers");
+
+  Scenario deep_unix;
+  deep_unix.mutable_http_upload_trailers()->add_lines("X-Unix: retained");
+  deep_unix.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_UNIX_SOCKET);
+  NormalizeScenarioForTarget(&deep_unix, TargetProfile::kDeepHttp);
+  Expect(deep_unix.has_http_upload_trailers(),
+         "deep HTTP Unix-socket route removed HTTP/1.1 request trailers");
+
+  auto expect_removed = [](TargetProfile profile) {
+    Scenario scenario;
+    scenario.mutable_http_upload_trailers()->add_lines("X-Inert: true");
+    NormalizeScenarioForTarget(&scenario, profile);
+    Expect(!scenario.has_http_upload_trailers(),
+           "a non-HTTP/1.1 policy retained request trailers");
+  };
+  expect_removed(TargetProfile::kFastHttp2);
+  expect_removed(TargetProfile::kFastHttp3);
+  expect_removed(TargetProfile::kH2Proxy);
+  expect_removed(TargetProfile::kProxyTransport);
+  expect_removed(TargetProfile::kFastWebSocket);
+  expect_removed(TargetProfile::kFastFtp);
+  expect_removed(TargetProfile::kApi);
+  expect_removed(TargetProfile::kMulti);
+}
+
 void TestFastTelnetResponseBudgets() {
   Scenario byte_budget;
   byte_budget.mutable_connection()->set_initial_response(std::string(
@@ -3971,6 +4042,7 @@ int main() {
   TestResolverPolicy();
   TestPauseTerminalIsTelnetOnly();
   TestNonTelnetPolicySelectsUploadBudgetBeforeBounding();
+  TestHttpUploadTrailerPolicy();
   TestFastTelnetResponseBudgets();
   TestTimingPolicyMapsSecureSchemesToPlaintext();
   TestTimingPolicySuppliesBackpressureForZeroConfig();

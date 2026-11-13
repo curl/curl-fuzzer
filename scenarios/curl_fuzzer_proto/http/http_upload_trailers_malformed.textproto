@@ -1,0 +1,18 @@
+# Malformed callback lines reach curl's request-trailer validation without
+# permitting an unbounded header list or external transport.
+scheme: SCHEME_HTTP
+host_path: "upload.test/trailers/malformed"
+options { upload: true }
+request_headers: "Expect:"
+upload {
+  data: "malformed-trailer-body"
+  terminal: UPLOAD_TERMINAL_EOF
+}
+http_upload_trailers {
+  lines: "missing-colon"
+  lines: ": missing-name"
+  result: HTTP_UPLOAD_TRAILER_SUCCESS
+}
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

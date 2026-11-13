@@ -599,6 +599,22 @@ void BoundHeaderValues(RepeatedBytes* headers, std::size_t limit) {
   BoundStringValues(headers, limit, scenario_limits::kMaxMetadataBytes);
 }
 
+/// Retain only the request-trailer prefix that the callback can return. Fold
+/// unknown enum values onto success so malformed integers do not disable all
+/// trailer parsing work.
+void BoundHttpUploadTrailers(curl::fuzzer::proto::HttpUploadTrailers* trailers) {
+  BoundStringValues(trailers->mutable_lines(), scenario_limits::kMaxHttpUploadTrailers,
+                    scenario_limits::kMaxHttpUploadTrailerBytes);
+  switch (trailers->result()) {
+    case curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_SUCCESS:
+    case curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_ABORT:
+      break;
+    default:
+      trailers->clear_result();
+      break;
+  }
+}
+
 /// Keep one response script identical to the prefix MockServer and
 /// WebSocketMockServer can deliver. Raw chunks take precedence over structured
 /// frames, matching both runtime serializers.
@@ -1272,6 +1288,9 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
         telnet ? scenario_limits::kMaxTelnetUploadReadSize : scenario_limits::kMaxUploadReadSize;
     BoundUploadShape(scenario->mutable_upload(), data_limit, read_step_limit, read_size_limit);
   }
+  if (scenario->has_http_upload_trailers()) {
+    BoundHttpUploadTrailers(scenario->mutable_http_upload_trailers());
+  }
 
   BoundConnectionShape(scenario->mutable_connection());
   TrimRepeated(scenario->mutable_subsequent_connections(), scenario_limits::kMaxConnections - 1);
@@ -1319,6 +1338,16 @@ void CanonicalizeDeepHttpSelectors(curl::fuzzer::proto::Scenario* scenario) {
       scenario->clear_proxy_socket_option_mode();
       break;
   }
+}
+
+/// Return whether a normalized Deep HTTP selector belongs to one of the proxy
+/// routes that must not retain origin upload trailers.
+bool UsesDeepHttpProxyRoute(const curl::fuzzer::proto::Scenario& scenario) {
+  if (scenario.proxy_socket_option_mode() != curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT) {
+    return true;
+  }
+  return scenario.http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY ||
+         scenario.http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY;
 }
 
 /// Decode an integral oneof locally before the generated option canonicalizer
@@ -1821,6 +1850,13 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   // the full runtime Scenario before any generic bounds inspect the field.
   if (profile != TargetProfile::kFastFile) {
     scenario->clear_file_source();
+  }
+
+  // Request trailers belong only to HTTP/1.1 upload lanes. The compatibility
+  // target returned above and retains its append-only wire field, while every
+  // HTTP/2, HTTP/3, proxy, WebSocket, and non-HTTP fixed lane drops it.
+  if (profile != TargetProfile::kDeepHttp && profile != TargetProfile::kFastHttps) {
+    scenario->clear_http_upload_trailers();
   }
 
   // The nested selector belongs exclusively to the HTTPS CONNECT proxy lane.
@@ -2487,6 +2523,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
   }
   if (profile == TargetProfile::kDeepHttp) {
     CanonicalizeDeepHttpSelectors(scenario);
+    if (UsesDeepHttpProxyRoute(*scenario)) {
+      scenario->clear_http_upload_trailers();
+    }
   }
   if (profile == TargetProfile::kApi && scenario->has_api_plan()) {
     CanonicalizeApiDriveMode(scenario->mutable_api_plan());

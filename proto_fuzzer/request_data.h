@@ -5,8 +5,8 @@
  */
 
 /// @file
-/// @brief Owns pointer-valued HTTP headers, TELNET options, MIME state, and
-///        upload callback state derived from a Scenario.
+/// @brief Owns pointer-valued request lists, MIME state, and callback state
+///        derived from a Scenario.
 
 #ifndef PROTO_FUZZER_REQUEST_DATA_H_
 #define PROTO_FUZZER_REQUEST_DATA_H_
@@ -16,6 +16,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "curl_fuzzer.pb.h"
@@ -81,6 +82,32 @@ class UploadScriptState {
   bool scripted_;
 };
 
+/// Owned state behind CURLOPT_TRAILERFUNCTION. Each callback invocation builds
+/// a new curl_slist because libcurl takes ownership of the returned list.
+class HttpUploadTrailerState {
+ public:
+  explicit HttpUploadTrailerState(const curl::fuzzer::proto::Scenario& scenario);
+
+  int BuildList(curl_slist** trailers);
+
+  bool enabled() const;
+
+  std::size_t line_count() const;
+
+  std::size_t callback_count() const;
+
+ private:
+  friend class ScenarioRequestData;
+
+  static int TrailerCallback(curl_slist** trailers, void* userdata);
+
+  std::array<std::string, scenario_limits::kMaxHttpUploadTrailers> lines_;
+  std::size_t line_count_;
+  std::size_t callback_count_;
+  curl::fuzzer::proto::HttpUploadTrailerResult result_;
+  bool enabled_;
+};
+
 /// Counts the resources that survived allocation and runtime budgets. Tests
 /// use these numbers to keep the anti-complexity limits from regressing while
 /// the fuzzer itself deliberately ignores individual setup failures.
@@ -94,6 +121,8 @@ struct RequestBuildStats {
   std::size_t telnet_options = 0;
   /// Number of SMTP recipients retained in the CURLOPT_MAIL_RCPT list.
   std::size_t mail_rcpt = 0;
+  /// Number of request trailer lines retained by the callback state.
+  std::size_t http_upload_trailers = 0;
   /// Number of top-level and nested curl_mimepart objects constructed.
   std::size_t mime_parts = 0;
   /// Number of top-level parts backed by Scenario.upload callbacks.
@@ -128,7 +157,11 @@ class ScenarioRequestData {
 
   const UploadScriptState& upload_state() const;
 
+  const HttpUploadTrailerState& http_upload_trailer_state() const;
+
   bool upload_callbacks_installed() const;
+
+  bool http_upload_trailer_callback_installed() const;
 
   bool resolve_entries_ready() const;
 
@@ -141,10 +174,12 @@ class ScenarioRequestData {
   CurlSlistPtr telnet_options_;
   CurlSlistPtr mail_rcpt_;
   UploadScriptState upload_state_;
-  // Declared after upload_state_ so the MIME root releases its retained
+  HttpUploadTrailerState http_upload_trailer_state_;
+  // Declared after the callback states so the MIME root releases its retained
   // callback userdata before the cursor is destroyed.
   CurlMimePtr mime_post_;
   bool upload_callbacks_installed_;
+  bool http_upload_trailer_callback_installed_;
   bool resolve_entries_ready_;
   RequestBuildStats stats_;
 };

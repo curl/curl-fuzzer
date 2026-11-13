@@ -17,6 +17,7 @@
 #include <string>
 
 #include "proto_fuzzer/option_apply.h"
+#include "proto_fuzzer/option_model.h"
 #include "proto_fuzzer/scenario_limits.h"
 
 namespace proto_fuzzer {
@@ -59,6 +60,39 @@ bool NeedsUploadCallbacks(const curl::fuzzer::proto::Scenario& scenario) {
     }
   }
   return false;
+}
+
+/// Return whether a Deep HTTP selector routes the transfer through proxy
+/// handling. Non-default proxy/socket modes own their own route even when the
+/// selected value ultimately bypasses a configured proxy.
+bool UsesHttpProxyRoute(const curl::fuzzer::proto::Scenario& scenario) {
+  if (scenario.proxy_socket_option_mode() != curl::fuzzer::proto::PROXY_SOCKET_OPTION_DEFAULT) {
+    return true;
+  }
+  return scenario.http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY ||
+         scenario.http_transport_mode() == curl::fuzzer::proto::HTTP_TRANSPORT_CONNECT_PROXY;
+}
+
+/// Determine whether the effective HTTP version can invoke the HTTP/1.1
+/// trailer callback. The last retained CURLOPT_HTTP_VERSION wins, matching
+/// ApplyScenarioOptions. HTTP's 2TLS mode remains HTTP/1.1 without TLS.
+bool SupportsHttpUploadTrailers(const curl::fuzzer::proto::Scenario& scenario) {
+  if ((scenario.scheme() != curl::fuzzer::proto::SCHEME_HTTP &&
+       scenario.scheme() != curl::fuzzer::proto::SCHEME_HTTPS) ||
+      UsesHttpProxyRoute(scenario)) {
+    return false;
+  }
+
+  std::uint64_t version = CURL_HTTP_VERSION_NONE;
+  const std::size_t option_count = RuntimeOptionCount(scenario);
+  for (std::size_t index = 0; index < option_count; ++index) {
+    const auto& option = scenario.options(static_cast<int>(index));
+    if (option.option_id() == curl::fuzzer::proto::CURLOPT_HTTP_VERSION) {
+      version = DecodeIntegralOptionValue(option);
+    }
+  }
+  return version == CURL_HTTP_VERSION_NONE || version == CURL_HTTP_VERSION_1_1 ||
+         (scenario.scheme() == curl::fuzzer::proto::SCHEME_HTTP && version == CURL_HTTP_VERSION_2TLS);
 }
 
 /// Translate the mutation-friendly enum to curl's spelling. Restricting this
@@ -470,6 +504,80 @@ void UploadScriptState::SetBeforeReadCallback(BeforeReadCallback callback, void*
   before_read_userdata_ = userdata;
 }
 
+/// Copy the bounded trailer prefix into callback-owned state. The callback is
+/// enabled only for HTTP schemes, which prevents compatibility inputs from
+/// attaching an HTTP callback to another protocol.
+/// @param scenario Complete scenario that owns the selected trailer message.
+HttpUploadTrailerState::HttpUploadTrailerState(const curl::fuzzer::proto::Scenario& scenario)
+    : line_count_(0),
+      callback_count_(0),
+      result_(curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_SUCCESS),
+      enabled_(scenario.has_http_upload_trailers() && SupportsHttpUploadTrailers(scenario)) {
+  if (!enabled_) {
+    return;
+  }
+
+  const auto& source = scenario.http_upload_trailers();
+  if (source.result() == curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_ABORT) {
+    result_ = source.result();
+  }
+  line_count_ = std::min<std::size_t>(scenario_limits::kMaxHttpUploadTrailers, source.lines_size());
+  for (std::size_t index = 0; index < line_count_; ++index) {
+    const std::string& line = source.lines(static_cast<int>(index));
+    lines_[index].assign(line.data(), std::min(line.size(), scenario_limits::kMaxHttpUploadTrailerBytes));
+  }
+}
+
+/// Build one fresh trailer list for libcurl. The caller takes ownership on a
+/// successful return. Allocation failure aborts the callback and frees any
+/// partial list because libcurl owns lists only after success.
+/// @param trailers Destination for the newly allocated list.
+/// @return CURL_TRAILERFUNC_OK or CURL_TRAILERFUNC_ABORT.
+int HttpUploadTrailerState::BuildList(curl_slist** trailers) {
+  ++callback_count_;
+  if (trailers == nullptr) {
+    return CURL_TRAILERFUNC_ABORT;
+  }
+  *trailers = nullptr;
+  if (!enabled_) {
+    return CURL_TRAILERFUNC_OK;
+  }
+  if (result_ == curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_ABORT) {
+    return CURL_TRAILERFUNC_ABORT;
+  }
+
+  for (std::size_t index = 0; index < line_count_; ++index) {
+    curl_slist* appended = curl_slist_append(*trailers, lines_[index].c_str());
+    if (appended == nullptr) {
+      curl_slist_free_all(*trailers);
+      *trailers = nullptr;
+      return CURL_TRAILERFUNC_ABORT;
+    }
+    *trailers = appended;
+  }
+  return CURL_TRAILERFUNC_OK;
+}
+
+/// C-compatible callback retained by libcurl for the complete transfer.
+int HttpUploadTrailerState::TrailerCallback(curl_slist** trailers, void* userdata) {
+  if (userdata == nullptr) {
+    if (trailers != nullptr) {
+      *trailers = nullptr;
+    }
+    return CURL_TRAILERFUNC_ABORT;
+  }
+  return static_cast<HttpUploadTrailerState*>(userdata)->BuildList(trailers);
+}
+
+/// @return True when a present trailer message belongs to an HTTP scheme.
+bool HttpUploadTrailerState::enabled() const { return enabled_; }
+
+/// @return Number of bounded trailer lines copied from the scenario.
+std::size_t HttpUploadTrailerState::line_count() const { return line_count_; }
+
+/// @return Number of callback list-build attempts.
+std::size_t HttpUploadTrailerState::callback_count() const { return callback_count_; }
+
 /// Construct and apply the protocol-specific pointer-valued fields in `scenario`
 /// to `easy`. Setup errors are deliberately non-fatal: malformed or partially
 /// allocated scenarios should still exercise whatever curl state was built.
@@ -488,8 +596,10 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
       telnet_options_(nullptr),
       mail_rcpt_(nullptr),
       upload_state_(scenario),
+      http_upload_trailer_state_(scenario),
       mime_post_(nullptr),
       upload_callbacks_installed_(false),
+      http_upload_trailer_callback_installed_(false),
       resolve_entries_ready_(!apply_resolve_entries) {
   if (easy_ == nullptr) {
     return;
@@ -552,6 +662,18 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
     (void)curl_easy_setopt(easy_, CURLOPT_SEEKDATA, &upload_state_);
   }
 
+  if (http_upload_trailer_state_.enabled()) {
+    stats_.http_upload_trailers = http_upload_trailer_state_.line_count();
+    const CURLcode function_result =
+        curl_easy_setopt(easy_, CURLOPT_TRAILERFUNCTION, &HttpUploadTrailerState::TrailerCallback);
+    const CURLcode data_result = curl_easy_setopt(easy_, CURLOPT_TRAILERDATA, &http_upload_trailer_state_);
+    http_upload_trailer_callback_installed_ = function_result == CURLE_OK && data_result == CURLE_OK;
+    if (!http_upload_trailer_callback_installed_) {
+      (void)curl_easy_setopt(easy_, CURLOPT_TRAILERFUNCTION, nullptr);
+      (void)curl_easy_setopt(easy_, CURLOPT_TRAILERDATA, nullptr);
+    }
+  }
+
   if (telnet_options_ != nullptr) {
     (void)curl_easy_setopt(easy_, CURLOPT_TELNETOPTIONS, telnet_options_.get());
   }
@@ -581,6 +703,10 @@ ScenarioRequestData::~ScenarioRequestData() {
       (void)curl_easy_setopt(easy_, CURLOPT_SEEKDATA, nullptr);
       (void)curl_easy_setopt(easy_, CURLOPT_READFUNCTION, nullptr);
       (void)curl_easy_setopt(easy_, CURLOPT_READDATA, nullptr);
+    }
+    if (http_upload_trailer_callback_installed_) {
+      (void)curl_easy_setopt(easy_, CURLOPT_TRAILERFUNCTION, nullptr);
+      (void)curl_easy_setopt(easy_, CURLOPT_TRAILERDATA, nullptr);
     }
     if (mime_post_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_MIMEPOST, nullptr);
@@ -614,11 +740,22 @@ const RequestBuildStats& ScenarioRequestData::stats() const { return stats_; }
 /// @return Immutable upload state.
 const UploadScriptState& ScenarioRequestData::upload_state() const { return upload_state_; }
 
+/// Return the owned request-trailer callback state for focused tests.
+/// @return Immutable trailer state.
+const HttpUploadTrailerState& ScenarioRequestData::http_upload_trailer_state() const {
+  return http_upload_trailer_state_;
+}
+
 /// Return whether this scenario needed raw upload callbacks. Exposing the
 /// decision lets ownership tests ensure ordinary requests avoid redundant
 /// setopt/teardown work without exposing either userdata pointer.
 /// @return True when read and seek callbacks were attached to the handle.
 bool ScenarioRequestData::upload_callbacks_installed() const { return upload_callbacks_installed_; }
+
+/// @return True when request-trailer callbacks were attached to the handle.
+bool ScenarioRequestData::http_upload_trailer_callback_installed() const {
+  return http_upload_trailer_callback_installed_;
+}
 
 /// Return whether resolver-only slist construction installed its mandatory
 /// final loopback mapping. Ordinary lanes always report true.

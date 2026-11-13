@@ -155,6 +155,60 @@ private:
   std::string request_;
 };
 
+void TestHttpUploadTrailerSeedWritesFinalChunk() {
+  const std::string path = std::string(PROTO_FUZZER_SCENARIO_DIR) +
+                           "/http/http_upload_trailers_valid.textproto";
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the HTTP trailer seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::DeepHttpTraits>(text, &scenario),
+         "could not parse the HTTP trailer seed");
+  proto_fuzzer::NormalizeScenarioForTarget(
+      &scenario, proto_fuzzer::generated::DeepHttpTraits::kProfile,
+      &proto_fuzzer::generated::DeepHttpTraits::PruneConditionalEligibility);
+  Expect(scenario.has_http_upload_trailers(),
+         "deep HTTP projection removed request trailers");
+
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr,
+         "HTTP trailer test could not allocate an easy handle");
+  proto_fuzzer::CurlSlistPtr connect_to = proto_fuzzer::ApplyBaselineOptions(
+      easy, curl::fuzzer::proto::SCHEME_HTTP);
+  const std::string url = "http://" + scenario.host_path();
+  Expect(curl_easy_setopt(easy, CURLOPT_URL, url.c_str()) == CURLE_OK,
+         "HTTP trailer test could not set its URL");
+  Expect(proto_fuzzer::ApplyScenarioOptions(easy, scenario) == 1,
+         "HTTP trailer seed did not apply its upload option");
+
+  RequestCapturingServer server;
+  server.Install(easy);
+  CURLcode result = CURLE_FAILED_INIT;
+  {
+    proto_fuzzer::ScenarioRequestData request_data(easy, scenario);
+    Expect(request_data.http_upload_trailer_callback_installed(),
+           "HTTP trailer seed did not install its callback");
+    result = server.DriveScenario(easy, scenario);
+    Expect(request_data.http_upload_trailer_state().callback_count() == 1,
+           "HTTP trailer seed did not invoke its callback exactly once");
+  }
+
+  Expect(result == CURLE_OK,
+         "HTTP trailer seed did not complete its local transfer");
+  Expect(server.request().find("Transfer-Encoding: chunked\r\n") !=
+             std::string::npos,
+         "HTTP trailer seed did not select chunked request framing");
+  Expect(server.request().find("0\r\nX-Fuzz-Trailer: complete\r\n"
+                               "X-Fuzz-Sequence: second\r\n\r\n") !=
+             std::string::npos,
+         "HTTP trailer seed did not serialize its final trailer block");
+
+  curl_easy_cleanup(easy);
+  connect_to.reset();
+}
+
 /// Retain one parser-fault outcome and the allocation counters observed at the
 /// adjacent checkpoint and Location header callbacks.
 struct ParserFaultRun {
@@ -3182,6 +3236,7 @@ int main() {
   TestFtpAuthTlsArmsAdjacentFilterFailure();
   TestCopyPostFieldsSuppressesAllocationFailures();
   TestStreamSocketDispositionIsExplicit();
+  TestHttpUploadTrailerSeedWritesFinalChunk();
   TestRequestHeadersDetachBeforeHandleReuse();
   TestFollowOnScriptsAndOldConnectionLifetime();
   TestConnectionBudgetIncludesPrimarySocket();
