@@ -1143,6 +1143,38 @@ message Scenario {
       }
     }
   ];
+  // FTP commands sent after login and before curl changes directories. A
+  // leading `*` lets a command fail without aborting the transfer, matching
+  // libcurl's public CURLOPT_QUOTE contract. Runtime and target policy share
+  // one bounded command budget across all three FTP quote lists.
+  repeated bytes ftp_quote = 51 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_FTP
+      }
+    }
+  ];
+  // FTP commands sent after curl selects the transfer type and immediately
+  // before the transfer command.
+  repeated bytes ftp_prequote = 52 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_FTP
+      }
+    }
+  ];
+  // FTP commands sent after a successful transfer. ScenarioRequestData owns
+  // the retained curl_slist until the easy handle finishes cleanup.
+  repeated bytes ftp_postquote = 53 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_FTP
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero

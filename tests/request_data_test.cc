@@ -230,6 +230,41 @@ void TestTelnetOptionConstructionBudgetsAndOwnership() {
   curl_easy_cleanup(easy);
 }
 
+void TestFtpQuoteListsShareRuntimeBudget() {
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for FTP quote lists");
+
+  Scenario ftp;
+  ftp.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+  for (std::size_t index = 0; index < 10; ++index) {
+    ftp.add_ftp_quote(std::string(
+        proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes + 17, 'q'));
+    ftp.add_ftp_prequote("PRE " + std::to_string(index));
+    ftp.add_ftp_postquote("POST " + std::to_string(index));
+  }
+  {
+    ScenarioRequestData request_data(easy, ftp);
+    const auto &stats = request_data.stats();
+    Expect(stats.ftp_quote == 10 && stats.ftp_prequote == 6 &&
+               stats.ftp_postquote == 0,
+           "FTP quote lists did not share their runtime command budget");
+    Expect(stats.ftp_quote + stats.ftp_prequote + stats.ftp_postquote ==
+               proto_fuzzer::scenario_limits::kMaxFtpQuoteCommands,
+           "FTP quote runtime exceeded its total command budget");
+  }
+
+  Scenario http;
+  http.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  http.add_ftp_quote("SITE must-not-be-applied");
+  {
+    ScenarioRequestData request_data(easy, http);
+    Expect(request_data.stats().ftp_quote == 0,
+           "non-FTP scenario built a protocol-inert quote list");
+  }
+
+  curl_easy_cleanup(easy);
+}
+
 void TestScriptedReadSequenceCapsAndAbort() {
   curl::fuzzer::proto::Scenario scenario;
   auto *upload = scenario.mutable_upload();
@@ -835,6 +870,7 @@ int main() {
   TestPauseTerminalIsTelnetOnly();
   TestTelnetUploadUsesWorkAndWriteCaps();
   TestTelnetOptionConstructionBudgetsAndOwnership();
+  TestFtpQuoteListsShareRuntimeBudget();
   TestScriptedReadSequenceCapsAndAbort();
   TestScriptedUploadBorrowsScenarioStorage();
   TestScriptedSeekOutcomes();

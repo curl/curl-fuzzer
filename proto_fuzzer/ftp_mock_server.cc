@@ -42,6 +42,7 @@ FtpMockServer::FtpMockServer()
       pending_active_channel_(kMaxDataChannels),
       control_reply_count_(0),
       next_control_reply_(0),
+      prequeued_control_replies_(0),
       active_pollset_probe_count_(0),
       control_opened_(false) {}
 
@@ -140,6 +141,7 @@ void FtpMockServer::ResetForScenario(const curl::fuzzer::proto::Scenario& scenar
   control_reply_count_ = std::min<std::size_t>(scenario_limits::kMaxResponseChunks,
                                                static_cast<std::size_t>(scenario.connection().on_readable_size()));
   next_control_reply_ = 0;
+  prequeued_control_replies_ = 0;
   pending_control_bytes_.clear();
   control_transcript_.clear();
   uploaded_data_.clear();
@@ -574,10 +576,12 @@ void FtpMockServer::QueueTransferCompletion() {
   if (response != nullptr && !response->empty()) {
     (void)WriteControlBytes(*response);
     if (FirstReplyCode(*response) >= 0) {
+      QueuePostQuoteReplies();
       return;
     }
     if (TailNeedsOnlyNewline(*response)) {
       (void)WriteControlBytes("\r\n");
+      QueuePostQuoteReplies();
       return;
     }
     if (response->back() != '\n') {
@@ -588,6 +592,49 @@ void FtpMockServer::QueueTransferCompletion() {
   // This line is a liveness guard, not a forced successful outcome: any
   // complete fuzzed final response above remains the reply curl consumes.
   (void)WriteControlBytes("226 mock transfer complete\r\n");
+  QueuePostQuoteReplies();
+}
+
+/// Preload responses for the blocking POSTQUOTE loop. curl reads each reply
+/// synchronously after the final transfer response, before the mock's outer
+/// loop can drain the matching command. The commands remain observable on the
+/// next service turn; prequeued_control_replies_ prevents double consumption.
+void FtpMockServer::QueuePostQuoteReplies() {
+  if (scenario_ == nullptr) {
+    return;
+  }
+
+  std::size_t remaining = scenario_limits::kMaxFtpQuoteCommands;
+  const std::size_t quote_count = std::min<std::size_t>(remaining, scenario_->ftp_quote_size());
+  remaining -= quote_count;
+  const std::size_t prequote_count = std::min<std::size_t>(remaining, scenario_->ftp_prequote_size());
+  remaining -= prequote_count;
+  const std::size_t postquote_count = std::min<std::size_t>(remaining, scenario_->ftp_postquote_size());
+
+  for (std::size_t index = 0; index < postquote_count; ++index) {
+    const std::string* response = NextControlReply();
+    ++prequeued_control_replies_;
+    if (response != nullptr && response->empty()) {
+      if (control_connection_ != nullptr) {
+        control_connection_->ShutdownWrite();
+      }
+      return;
+    }
+    if (response != nullptr && !response->empty()) {
+      (void)WriteControlBytes(*response);
+      if (FirstReplyCode(*response) >= 0) {
+        continue;
+      }
+      if (TailNeedsOnlyNewline(*response)) {
+        (void)WriteControlBytes("\r\n");
+        continue;
+      }
+      if (response->back() != '\n') {
+        (void)WriteControlBytes("\r\n");
+      }
+    }
+    (void)WriteControlBytes("200 mock postquote complete\r\n");
+  }
 }
 
 /// Send every runtime-visible data fragment once RETR/LIST has been accepted,
@@ -655,6 +702,10 @@ void FtpMockServer::StartNextTransfer(TransferDirection direction) {
 /// would be too late to escape curl's blocking completion read.
 /// @param command One newline-terminated command from curl.
 void FtpMockServer::HandleControlCommand(std::string_view command) {
+  if (prequeued_control_replies_ != 0) {
+    --prequeued_control_replies_;
+    return;
+  }
   const std::string* response = NextControlReply();
   if (response == nullptr) {
     return;

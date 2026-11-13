@@ -123,6 +123,12 @@ struct RequestBuildStats {
   std::size_t mail_rcpt = 0;
   /// Number of request trailer lines retained by the callback state.
   std::size_t http_upload_trailers = 0;
+  /// Number of commands retained in the CURLOPT_QUOTE list.
+  std::size_t ftp_quote = 0;
+  /// Number of commands retained in the CURLOPT_PREQUOTE list.
+  std::size_t ftp_prequote = 0;
+  /// Number of commands retained in the CURLOPT_POSTQUOTE list.
+  std::size_t ftp_postquote = 0;
   /// Number of top-level and nested curl_mimepart objects constructed.
   std::size_t mime_parts = 0;
   /// Number of top-level parts backed by Scenario.upload callbacks.
@@ -133,8 +139,8 @@ struct RequestBuildStats {
   std::size_t generated_mime_bytes = 0;
 };
 
-/// Builds HTTP headers or TELNET options, MIME state, and upload callbacks
-/// whose storage or userdata libcurl retains by pointer. Keeping them in one
+/// Builds protocol request lists, MIME state, and upload callbacks whose
+/// storage or userdata libcurl retains by pointer. Keeping them in one
 /// scope makes their lifetime visibly encompass the complete multi-handle
 /// drive rather than relying on setopt copying data that its API explicitly
 /// does not copy.
@@ -173,6 +179,9 @@ class ScenarioRequestData {
   CurlSlistPtr resolve_entries_;
   CurlSlistPtr telnet_options_;
   CurlSlistPtr mail_rcpt_;
+  CurlSlistPtr ftp_quote_;
+  CurlSlistPtr ftp_prequote_;
+  CurlSlistPtr ftp_postquote_;
   UploadScriptState upload_state_;
   HttpUploadTrailerState http_upload_trailer_state_;
   // Declared after the callback states so the MIME root releases its retained

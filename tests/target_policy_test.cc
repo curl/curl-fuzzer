@@ -1083,6 +1083,12 @@ void TestFastFtpPolicy() {
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
   scenario.mutable_upload()->set_data("upload sentinel");
+  for (std::size_t index = 0; index < 10; ++index) {
+    scenario.add_ftp_quote(std::string(
+        proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes + 19, 'q'));
+    scenario.add_ftp_prequote("PRE " + std::to_string(index));
+    scenario.add_ftp_postquote("POST " + std::to_string(index));
+  }
   scenario.mutable_connection()->add_on_readable("control reply");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   for (std::size_t index = 0;
@@ -1129,6 +1135,12 @@ void TestFastFtpPolicy() {
   Expect(!scenario.subsequent_connections(0).has_backpressure() &&
              scenario.subsequent_connections(0).server_frames_size() == 0,
          "fast FTP policy retained ignored data-channel controls");
+  Expect(scenario.ftp_quote_size() == 10 && scenario.ftp_prequote_size() == 6 &&
+             scenario.ftp_postquote_size() == 0,
+         "fast FTP policy exceeded the shared quote-command budget");
+  Expect(scenario.ftp_quote(0).size() ==
+             proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes,
+         "fast FTP policy retained an oversized quote command");
   const auto &normalized_create_dirs = RequireOption(
       scenario, curl::fuzzer::proto::CURLOPT_FTP_CREATE_MISSING_DIRS,
       "fast FTP policy lost its create-directory selector");
@@ -1169,6 +1181,9 @@ void TestFastFtpsPolicy() {
   scenario.mutable_mime_post()->add_parts()->set_data("mime");
   scenario.add_telnet_options("TTYPE=ignored");
   scenario.mutable_api_plan()->set_duplicate_easy(true);
+  scenario.add_ftp_quote("SITE secure quote");
+  scenario.add_ftp_prequote("SITE secure prequote");
+  scenario.add_ftp_postquote("SITE secure postquote");
   scenario.mutable_connection()->add_on_readable("control reply");
   scenario.mutable_connection()->add_server_frames()->set_payload("frame");
   scenario.add_subsequent_connections()->set_initial_response("data");
@@ -1190,6 +1205,9 @@ void TestFastFtpsPolicy() {
              !scenario.connection().has_backpressure() &&
              scenario.connection().server_frames_size() == 0,
          "fast FTP lane changed the FTPS control script");
+  Expect(scenario.ftp_quote_size() == 1 && scenario.ftp_prequote_size() == 1 &&
+             scenario.ftp_postquote_size() == 1,
+         "fast FTP lane removed FTPS quote commands");
 }
 
 void TestNonFtpPoliciesClearFtpsScheme() {
@@ -1203,11 +1221,16 @@ void TestNonFtpPoliciesClearFtpsScheme() {
     Scenario scenario;
     scenario.set_host_path("tls.test/secure.bin");
     scenario.set_scheme(SCHEME_FTPS);
+    scenario.add_ftp_quote("SITE must be removed");
+    scenario.add_ftp_prequote("SITE must be removed");
+    scenario.add_ftp_postquote("SITE must be removed");
 
     NormalizeScenarioForTarget(&scenario, profile);
 
-    Expect(scenario.scheme() != SCHEME_FTPS,
-           "a non-FTP policy retained the FTPS scheme");
+    Expect(scenario.scheme() != SCHEME_FTPS && scenario.ftp_quote().empty() &&
+               scenario.ftp_prequote().empty() &&
+               scenario.ftp_postquote().empty(),
+           "a non-FTP policy retained FTPS request state");
   }
 
   Scenario compatibility;
@@ -3444,6 +3467,9 @@ void TestCompatibilityProfileIsNoOp() {
       ->mutable_stream_write()
       ->set_data("compatibility H3 bytes");
   scenario.add_request_headers("X-Compatibility: retained");
+  scenario.add_ftp_quote("SITE compatibility quote");
+  scenario.add_ftp_prequote("SITE compatibility prequote");
+  scenario.add_ftp_postquote("SITE compatibility postquote");
   auto *mismatched = scenario.add_options();
   mismatched->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
   mismatched->set_uint_value(7);

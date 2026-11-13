@@ -99,6 +99,20 @@ void AddLoginAndPwdReplies(Scenario *scenario) {
   connection->add_on_readable("257 \"/\" is current directory\r\n");
 }
 
+Scenario LoadFtpSeed(const char *name) {
+  const std::string path =
+      std::string(PROTO_FUZZER_SCENARIO_DIR) + "/ftp/" + name;
+  std::ifstream input(path);
+  Expect(input.is_open(), "could not read the FTP quote seed");
+  const std::string text((std::istreambuf_iterator<char>(input)),
+                         std::istreambuf_iterator<char>());
+  Scenario scenario;
+  Expect(test_support::ParseAndLowerProjectedScenario<
+             proto_fuzzer::generated::FastFtpTraits>(text, &scenario),
+         "could not parse the FTP quote seed");
+  return scenario;
+}
+
 void TestEpsvDownloadAndFinalReply() {
   Scenario scenario;
   AddLoginAndPwdReplies(&scenario);
@@ -486,6 +500,113 @@ void TestEprtFailureFallsBackToPort() {
          "EPRT rejection did not lead to a PORT retry");
 }
 
+void TestQuoteSeedSucceedsBeforePathSetup() {
+  const Scenario scenario = LoadFtpSeed("ftp_quote_success.textproto");
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/file.bin");
+  Expect(result.code == CURLE_OK && result.body == "body",
+         "successful FTP quote seed did not complete");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "SITE CHMOD 644 file.bin\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "SIZE file.bin\r\n"
+                   "RETR file.bin\r\n",
+                   "FTP quote did not run before passive and transfer setup");
+}
+
+void TestQuoteSeedReportsOrdinaryFailure() {
+  const Scenario scenario = LoadFtpSeed("ftp_quote_failure.textproto");
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/file.bin");
+  Expect(result.code == CURLE_QUOTE_ERROR,
+         "rejected ordinary FTP quote did not report CURLE_QUOTE_ERROR");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "SITE REQUIRED\r\n",
+                   "rejected FTP quote did not stop before path setup");
+}
+
+void TestQuoteSeedAllowsStarredFailure() {
+  const Scenario scenario = LoadFtpSeed("ftp_quote_allowed_failure.textproto");
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/file.bin");
+  Expect(result.code == CURLE_OK && result.body == "body",
+         "starred FTP quote failure stopped the transfer");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "SITE OPTIONAL\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "SIZE file.bin\r\n"
+                   "RETR file.bin\r\n",
+                   "starred FTP quote did not preserve the transfer order");
+}
+
+void TestPrequoteSeedRunsBeforeTransferCommand() {
+  const Scenario scenario = LoadFtpSeed("ftp_prequote_order.textproto");
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/file.bin");
+  Expect(result.code == CURLE_OK && result.body == "body",
+         "FTP PREQUOTE seed did not complete");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "SITE PREPARE file.bin\r\n"
+                   "SIZE file.bin\r\n"
+                   "RETR file.bin\r\n",
+                   "FTP PREQUOTE did not run between TYPE and SIZE");
+}
+
+void TestPostquoteSeedRunsAfterTransferCommand() {
+  const Scenario scenario = LoadFtpSeed("ftp_postquote_order.textproto");
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/file.bin");
+  Expect(result.code == CURLE_OK && result.body == "body",
+         "FTP POSTQUOTE seed did not complete");
+  ExpectTranscript(result,
+                   "USER anonymous\r\n"
+                   "PASS ftp@example.com\r\n"
+                   "PWD\r\n"
+                   "EPSV\r\n"
+                   "TYPE I\r\n"
+                   "SIZE file.bin\r\n"
+                   "RETR file.bin\r\n"
+                   "SITE CLEANUP file.bin\r\n",
+                   "FTP POSTQUOTE did not run after the transfer command");
+}
+
+void TestCompatibilityQuoteCommandUsesRuntimeByteCap() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+  scenario.add_ftp_quote(std::string(
+      proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes + 17, 'Q'));
+  auto *control = scenario.mutable_connection();
+  control->set_initial_response("220 ready\r\n");
+  control->add_on_readable("331 password\r\n");
+  control->add_on_readable("230 logged in\r\n");
+  control->add_on_readable("257 \"/\"\r\n");
+  control->add_on_readable("550 quote rejected\r\n");
+
+  const FtpRunResult result = RunScenario(scenario, "ftp://ftp.test/file.bin");
+  Expect(result.code == CURLE_QUOTE_ERROR,
+         "bounded compatibility quote did not reach curl");
+  const std::string expected =
+      "USER anonymous\r\n"
+      "PASS ftp@example.com\r\n"
+      "PWD\r\n" +
+      std::string(proto_fuzzer::scenario_limits::kMaxFtpQuoteCommandBytes,
+                  'Q') +
+      "\r\n";
+  ExpectTranscript(result, expected,
+                   "compatibility quote exceeded its runtime byte cap");
+}
+
 } // namespace
 
 int main() {
@@ -507,6 +628,12 @@ int main() {
   TestActiveDownload(true);
   TestActiveDownload(false);
   TestEprtFailureFallsBackToPort();
+  TestQuoteSeedSucceedsBeforePathSetup();
+  TestQuoteSeedReportsOrdinaryFailure();
+  TestQuoteSeedAllowsStarredFailure();
+  TestPrequoteSeedRunsBeforeTransferCommand();
+  TestPostquoteSeedRunsAfterTransferCommand();
+  TestCompatibilityQuoteCommandUsesRuntimeByteCap();
   curl_global_cleanup();
   return 0;
 }

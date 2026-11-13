@@ -142,6 +142,8 @@ class FtpMockServer : public MockServerBase, public IncomingDataObserver {
 
   void QueueTransferCompletion();
 
+  void QueuePostQuoteReplies();
+
   const std::string* NextControlReply();
 
   bool WriteControlBytes(std::string_view bytes);
@@ -194,6 +196,10 @@ class FtpMockServer : public MockServerBase, public IncomingDataObserver {
   std::size_t control_reply_count_;
   /// Cursor advanced once per command, plus once per accepted transfer final.
   std::size_t next_control_reply_;
+  /// Number of POSTQUOTE replies queued before curl enters its blocking read.
+  /// The later command drain uses this count without consuming the script a
+  /// second time.
+  std::size_t prequeued_control_replies_;
   /// Partial command bytes retained until curl supplies a newline.
   std::string pending_control_bytes_;
   /// Bounded test-facing record of complete commands sent by curl.

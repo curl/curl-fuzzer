@@ -129,6 +129,27 @@ def test_ftp_seeds_retain_control_and_data_correlations() -> None:
             "229 Entering Extended Passive Mode",
             'initial_response: "ascii"',
         ),
+        "ftp_quote_success.textproto": (
+            'ftp_quote: "SITE CHMOD 644 file.bin"',
+            "200 quote accepted",
+        ),
+        "ftp_quote_failure.textproto": (
+            'ftp_quote: "SITE REQUIRED"',
+            "550 quote rejected",
+        ),
+        "ftp_quote_allowed_failure.textproto": (
+            'ftp_quote: "*SITE OPTIONAL"',
+            "550 optional quote rejected",
+            'initial_response: "body"',
+        ),
+        "ftp_prequote_order.textproto": (
+            'ftp_prequote: "SITE PREPARE file.bin"',
+            "200 prepared",
+        ),
+        "ftp_postquote_order.textproto": (
+            'ftp_postquote: "SITE CLEANUP file.bin"',
+            "200 cleanup complete",
+        ),
     }
     ftp_root = SCENARIO_ROOT / "ftp"
     for name, tokens in expected_tokens.items():

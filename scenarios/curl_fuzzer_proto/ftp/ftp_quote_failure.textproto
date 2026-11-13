@@ -1,0 +1,11 @@
+# A rejected ordinary quote terminates before path and data setup.
+scheme: SCHEME_FTP
+host_path: "ftp.test/file.bin"
+ftp_quote: "SITE REQUIRED"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "550 quote rejected\r\n"
+}
