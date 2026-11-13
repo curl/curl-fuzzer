@@ -54,6 +54,7 @@
 #include "proto_fuzzer/doh_https_rr_mock_server.h"
 #include "proto_fuzzer/h2_proxy_mock_server.h"
 #include "proto_fuzzer/tls_mock_server.h"
+#include "proto_fuzzer/tls_session_replay.h"
 #include "proto_fuzzer/tls_test_credentials.h"
 #include "proto_fuzzer/tls_websocket_mock_server.h"
 #endif
@@ -443,7 +444,8 @@ void TestCopyPostFieldsSuppressesAllocationFailures() {
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
          "COPYPOSTFIELDS suppression test could not allocate easy");
-  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
+  connect_to =
+      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   (void)curl_easy_setopt(easy.get(), CURLOPT_URL,
                          "http://copy.test/suppressed");
 
@@ -837,7 +839,8 @@ void TestH2cUpgradeTransitionsToHttp2() {
   proto_fuzzer::CurlSlistPtr connect_to;
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "h2c upgrade test could not allocate an easy handle");
-  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
+  connect_to =
+      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "h2c upgrade test could not set its seed URL");
@@ -898,7 +901,8 @@ HttpSeedTranscript CaptureHttpSeed(const char *name) {
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
          "HTTP transcript test could not allocate an easy handle");
-  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
+  connect_to =
+      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "HTTP transcript test could not set its seed URL");
@@ -946,7 +950,8 @@ void TestCallbackMimeSeedFailsSecondSameEasyRewind() {
   proto_fuzzer::CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr,
          "callback MIME reuse test could not allocate an easy handle");
-  connect_to = proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
+  connect_to =
+      proto_fuzzer::ApplyBaselineOptions(easy.get(), scenario.scheme());
   const std::string url = "http://" + scenario.host_path();
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "callback MIME reuse test could not set its seed URL");
@@ -1490,6 +1495,144 @@ TlsTransferResult DriveTlsScenario(const Scenario &scenario) {
 
   transfer.Close();
   return result;
+}
+
+struct FreshTlsSessionResult {
+  CURLcode first_result = CURLE_FAILED_INIT;
+  CURLcode import_result = CURLE_FAILED_INIT;
+  CURLcode second_result = CURLE_FAILED_INIT;
+  std::string first_response;
+  std::size_t exported_session_count = 0;
+  std::size_t imported_session_count = 0;
+  std::size_t handshake_count = 0;
+  std::size_t reused_session_count = 0;
+  bool archive_complete = false;
+};
+
+/// Configure the first transfer through the same retained-option owner as the
+/// production runner.
+CURLcode DriveTlsReplayTransfer(proto_fuzzer::TransferSession *transfer,
+                                proto_fuzzer::TlsMockServer *server,
+                                const Scenario &scenario,
+                                std::string *response) {
+  Expect(transfer->PrepareInputFiles(
+             scenario, proto_fuzzer::ScenarioRunMode::kTlsCoverage),
+         "fresh-cache test could not prepare input files");
+  Expect(transfer->Initialize(),
+         "fresh-cache test could not allocate an easy handle");
+  CURL *easy = transfer->easy();
+  transfer->ApplyBaseline(scenario);
+  const std::string url = "https://" + scenario.host_path();
+  (void)curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
+  server->Install(easy);
+  transfer->ApplyInputFiles();
+  for (const auto &option : scenario.options()) {
+    Expect(proto_fuzzer::ApplySetOption(easy, option) == CURLE_OK,
+           "fresh-cache TLS option was rejected");
+  }
+  transfer->ApplyPinnedPublicKeyFile();
+  Expect(transfer->ApplyTlsClientCredentialProfile(
+             scenario.tls_client_credential_profile()) == CURLE_OK,
+         "fresh-cache client credential was rejected");
+  (void)curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, &CollectResponse);
+  (void)curl_easy_setopt(easy, CURLOPT_WRITEDATA, response);
+  auto *request_data = transfer->InstallRequestData(scenario);
+  Expect(request_data != nullptr,
+         "fresh-cache request data could not be installed");
+  server->ConfigureRequestData(request_data);
+  return server->DriveScenario(easy, scenario);
+}
+
+FreshTlsSessionResult DriveFreshTlsSessionScenario(
+    curl::fuzzer::proto::TlsSessionCacheProfile profile,
+    std::uint64_t ssl_version) {
+  Scenario scenario = MakeTlsScenario("fresh-session", "replay");
+  scenario.set_tls_session_cache_profile(profile);
+  AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_SESSIONID_CACHE,
+                true);
+  if (ssl_version != 0) {
+    AddUintOption(&scenario, curl::fuzzer::proto::CURLOPT_SSLVERSION,
+                  ssl_version);
+  }
+
+  FreshTlsSessionResult result;
+  proto_fuzzer::TlsMockServer server(scenario);
+  {
+    proto_fuzzer::TransferSession first;
+    result.first_result = DriveTlsReplayTransfer(&first, &server, scenario,
+                                                 &result.first_response);
+  }
+
+  const std::string url = "https://" + scenario.host_path();
+  const proto_fuzzer::TlsSessionReplayResult replay =
+      proto_fuzzer::ReplayTlsSession(scenario, url, &server);
+  result.import_result = replay.import_result;
+  result.second_result = replay.transfer_result;
+
+  const auto &archive = server.session_archive();
+  result.archive_complete =
+      !archive.empty() && !archive.session_key().empty() &&
+      !archive.salted_hash().empty() && !archive.session_data().empty();
+  const volatile curl_off_t valid_until = archive.valid_until();
+  const volatile int ietf_tls_id = archive.ietf_tls_id();
+  const volatile std::size_t metadata_sizes[] = {archive.alpn().size(),
+                                                 archive.early_data_max()};
+  (void)valid_until;
+  (void)ietf_tls_id;
+  (void)metadata_sizes;
+  result.exported_session_count = server.exported_session_count();
+  result.imported_session_count = server.imported_session_count();
+  result.handshake_count = server.completed_handshake_count();
+  result.reused_session_count = server.reused_session_count();
+  return result;
+}
+
+void TestFreshTlsSessionCacheReplay() {
+  const FreshTlsSessionResult tls12 = DriveFreshTlsSessionScenario(
+      curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SALTED_HASH,
+      CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+  Expect(tls12.first_result == CURLE_OK && tls12.second_result == CURLE_OK &&
+             tls12.first_response == "replay",
+         "fresh TLS 1.2 cache did not complete both transfers");
+  Expect(tls12.import_result == CURLE_OK, "salted-hash replay import failed");
+  Expect(tls12.exported_session_count == 1,
+         "salted-hash replay did not export one session");
+  Expect(tls12.imported_session_count == 1,
+         "salted-hash replay did not import one session");
+  Expect(tls12.archive_complete,
+         "salted-hash replay did not retain complete metadata");
+  Expect(tls12.handshake_count == 2,
+         "fresh TLS 1.2 cache did not complete two handshakes");
+#if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  Expect(tls12.reused_session_count == 1,
+         "OpenSSL did not reuse the fresh TLS 1.2 session");
+#endif
+
+  const FreshTlsSessionResult tls13 = DriveFreshTlsSessionScenario(
+      curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SESSION_KEY,
+      CURL_SSLVERSION_TLSv1_3 | CURL_SSLVERSION_MAX_TLSv1_3);
+  Expect(tls13.first_result == CURLE_OK && tls13.second_result == CURLE_OK &&
+             tls13.handshake_count == 2,
+         "session-key replay did not complete two TLS 1.3 transfers");
+#if !defined(CURL_FUZZER_EXPECT_GNUTLS) && !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+  Expect(tls13.import_result == CURLE_OK && tls13.exported_session_count == 1 &&
+             tls13.imported_session_count == 1,
+         "OpenSSL session-key replay did not move one TLS 1.3 session");
+  Expect(tls13.reused_session_count == 1,
+         "OpenSSL did not reuse the fresh TLS 1.3 session");
+#endif
+
+  const FreshTlsSessionResult malformed = DriveFreshTlsSessionScenario(
+      curl::fuzzer::proto::TLS_SESSION_CACHE_MALFORMED_SALTED_HASH,
+      CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+  Expect(malformed.first_result == CURLE_OK &&
+             malformed.second_result == CURLE_OK &&
+             malformed.import_result == CURLE_BAD_FUNCTION_ARGUMENT &&
+             malformed.exported_session_count == 1 &&
+             malformed.imported_session_count == 0 &&
+             malformed.handshake_count == 2 &&
+             malformed.reused_session_count == 0,
+         "malformed salted hash did not fail before a full second handshake");
 }
 
 bool HasCertificateInfoPrefix(const TlsTransferResult &result,
@@ -3290,6 +3433,7 @@ int main() {
   TestTlsInvalidOcspStapleProfilesAreRejected();
 #endif
   TestTlsRedirectReusesSession();
+  TestFreshTlsSessionCacheReplay();
   TestTlsEarlyDataPolicyUsesBoundedLastOption();
   TestTls13EarlyDataIsRejectedAndReplayed();
   TestTlsWriteRetryKeepsItsOriginalBoundary();

@@ -33,8 +33,6 @@ namespace proto_fuzzer {
 namespace {
 
 constexpr std::size_t kMaxSessionExportAttempts = 8;
-constexpr std::size_t kMaxSessionHashSize = 128;
-constexpr std::size_t kMaxSessionDataSize = 16 * 1024;
 constexpr std::uint32_t kMaxEarlyDataSize = 16 * 1024;
 
 /// The TLS carrier always uses OpenSSL on its server side, but the HTTPS seed
@@ -45,31 +43,6 @@ bool CurlClientUsesOpenSsl() {
   constexpr char kOpenSslPrefix[] = "OpenSSL/";
   return version != nullptr && version->ssl_version != nullptr &&
          std::strncmp(version->ssl_version, kOpenSslPrefix, sizeof(kOpenSslPrefix) - 1) == 0;
-}
-
-/// Own the only export retained by one probe. curl owns every pointer passed
-/// to the callback, so both binary fields must be copied before it returns.
-struct ExportedSession {
-  std::vector<unsigned char> salted_hash;
-  std::vector<unsigned char> session_data;
-};
-
-/// Retain at most one bounded ticket while allowing curl to finish its cache
-/// walk. Importing here would recurse into the already-locked session cache.
-CURLcode CaptureExportedSession(CURL* /*easy*/, void* user_data, const char* /*session_key*/,
-                                const unsigned char* salted_hash, std::size_t salted_hash_size,
-                                const unsigned char* session_data, std::size_t session_data_size,
-                                curl_off_t /*valid_until*/, int /*ietf_tls_id*/, const char* /*alpn*/,
-                                std::size_t /*early_data_max*/) {
-  auto* exported = static_cast<ExportedSession*>(user_data);
-  if (!exported->session_data.empty() || salted_hash == nullptr || salted_hash_size == 0 ||
-      salted_hash_size > kMaxSessionHashSize || session_data == nullptr || session_data_size == 0 ||
-      session_data_size > kMaxSessionDataSize) {
-    return CURLE_OK;
-  }
-  exported->salted_hash.assign(salted_hash, salted_hash + salted_hash_size);
-  exported->session_data.assign(session_data, session_data + session_data_size);
-  return CURLE_OK;
 }
 
 /// Isolate the server and curl client even though both OpenSSL instances run
@@ -901,6 +874,7 @@ void TlsMockServer::Init(const curl::fuzzer::proto::Scenario& scenario, PeerRole
   auto handshake_profile = curl::fuzzer::proto::TLS_HANDSHAKE_DEFAULT;
   TlsEarlyDataPolicy early_data_policy = TlsEarlyDataPolicy::kDisabled;
   auto ocsp_staple_profile = curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE;
+  session_cache_profile_ = curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT;
 
   switch (role) {
     case PeerRole::kHttp11:
@@ -908,6 +882,7 @@ void TlsMockServer::Init(const curl::fuzzer::proto::Scenario& scenario, PeerRole
         handshake_profile = scenario.tls_handshake_profile();
         early_data_policy = EarlyDataPolicyForScenario(scenario);
         ocsp_staple_profile = scenario.tls_ocsp_staple_profile();
+        session_cache_profile_ = scenario.tls_session_cache_profile();
       }
       break;
     case PeerRole::kHttp2Origin:
@@ -953,6 +928,35 @@ std::size_t TlsMockServer::exported_session_count() const { return exported_sess
 /// @return number of copied session representations successfully imported
 /// into curl's cache again.
 std::size_t TlsMockServer::imported_session_count() const { return imported_session_count_; }
+
+/// Import the retained session into a caller-configured cache.
+/// @param easy Fresh easy handle whose cache receives the session.
+/// @return The public import result for the selected profile.
+CURLcode TlsMockServer::ImportArchivedSession(CURL* easy) {
+  CURLcode result = CURLE_BAD_FUNCTION_ARGUMENT;
+  switch (session_cache_profile_) {
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SALTED_HASH:
+      result = session_archive_.ImportBySaltedHash(easy);
+      break;
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SESSION_KEY:
+      result = session_archive_.ImportBySessionKey(easy);
+      break;
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_MALFORMED_SALTED_HASH:
+      result = session_archive_.ImportMalformedSaltedHash(easy);
+      break;
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT:
+    default:
+      result = session_archive_.ImportBySaltedHash(easy);
+      break;
+  }
+  if (result == CURLE_OK) {
+    ++imported_session_count_;
+  }
+  return result;
+}
+
+/// @return the one bounded session retained from curl's export callback.
+const TlsSessionArchive& TlsMockServer::session_archive() const { return session_archive_; }
 
 /// @return protocol version selected by the most recent completed handshake,
 /// or zero when no connection completed TLS negotiation.
@@ -1037,19 +1041,17 @@ void TlsMockServer::ObserveActiveTransfer(CURL* easy) {
     return;
   }
   ++session_export_attempt_count_;
-  ExportedSession exported;
-  const CURLcode export_result = curl_easy_ssls_export(easy, &CaptureExportedSession, &exported);
-  if (export_result != CURLE_OK || exported.session_data.empty()) {
+  const CURLcode export_result = session_archive_.CaptureFrom(easy);
+  if (export_result != CURLE_OK || session_archive_.empty()) {
     return;
   }
   ++exported_session_count_;
 
-  // curl holds the SSL session-cache lock throughout CaptureExportedSession.
-  // This deliberately separate call therefore exercises import without
-  // recursive API use or retaining any callback-owned pointer.
-  if (curl_easy_ssls_import(easy, nullptr, exported.salted_hash.data(), exported.salted_hash.size(),
-                            exported.session_data.data(), exported.session_data.size()) == CURLE_OK) {
-    ++imported_session_count_;
+  // curl holds the cache lock throughout export. Import only after the public
+  // export call returns. Nondefault profiles wait until the runner destroys
+  // this handle and installs a new cache on the replay handle.
+  if (session_cache_profile_ == curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT) {
+    (void)ImportArchivedSession(easy);
   }
 }
 

@@ -38,6 +38,17 @@ struct CurlMultiDeleter {
   }
 };
 
+/// @brief Destroy an independently owned share handle.
+struct CurlShareDeleter {
+  /// Release a share handle through libcurl's matching cleanup API.
+  /// @param share Handle owned by the invoking smart pointer.
+  void operator()(CURLSH* share) const noexcept {
+    if (share != nullptr) {
+      (void)curl_share_cleanup(share);
+    }
+  }
+};
+
 /// @brief Destroy a caller-owned curl_slist.
 struct CurlSlistDeleter {
   /// Release a complete caller-owned linked list.
@@ -56,6 +67,8 @@ struct CurlMimeDeleter {
 using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
 /// Unique ownership of a CURL multi handle.
 using CurlMultiPtr = std::unique_ptr<CURLM, CurlMultiDeleter>;
+/// Unique ownership of a CURL share handle.
+using CurlSharePtr = std::unique_ptr<CURLSH, CurlShareDeleter>;
 /// Unique ownership of a caller-owned curl_slist.
 using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
 /// Unique ownership of a caller-owned curl_mime tree.

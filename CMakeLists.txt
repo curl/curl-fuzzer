@@ -1945,6 +1945,8 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             proto_fuzzer/pop3s_mock_server.cc
             proto_fuzzer/smtps_mock_server.cc
             proto_fuzzer/tls_mock_server.cc
+            proto_fuzzer/tls_session_archive.cc
+            proto_fuzzer/tls_session_replay.cc
             proto_fuzzer/tls_test_credential_cache.cc
             proto_fuzzer/tls_websocket_mock_server.cc)
     endif()
@@ -2932,6 +2934,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/h2_runtime.cc
                 proto_fuzzer/h2_origin_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
@@ -3149,6 +3152,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/ldap_mock_server.cc
                 proto_fuzzer/ldaps_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc)
             target_compile_definitions(ldaps_mock_server_test PRIVATE
                 PROTO_FUZZER_HAS_TLS_MOCK_SERVER)
@@ -3170,6 +3174,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/smtps_mock_server.cc
                 proto_fuzzer/smtp_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
@@ -3217,6 +3222,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/imaps_mock_server.cc
                 proto_fuzzer/imap_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
@@ -3264,6 +3270,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/pop3s_mock_server.cc
                 proto_fuzzer/pop3_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
@@ -3313,6 +3320,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/mqtts_mock_server.cc
                 proto_fuzzer/mqtt_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc
@@ -3362,6 +3370,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/ftps_mock_server.cc
                 proto_fuzzer/ftp_mock_server.cc
                 proto_fuzzer/tls_mock_server.cc
+                proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
                 proto_fuzzer/mock_server.cc
                 proto_fuzzer/mock_server_base.cc

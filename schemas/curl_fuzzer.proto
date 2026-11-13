@@ -1175,6 +1175,19 @@ message Scenario {
       }
     }
   ];
+  // Replay one exported TLS session through a new easy handle and a new
+  // shared session cache. The keyed profiles import by either the opaque
+  // session key or its salted hash. The malformed profile truncates the
+  // salted hash to cover bounded import rejection. Zero preserves the
+  // historical single-transfer path and its same-cache import probe.
+  TlsSessionCacheProfile tls_session_cache_profile = 54 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -1228,6 +1241,16 @@ enum TlsOcspStapleProfile {
   TLS_OCSP_STAPLE_SHA256_CERT_ID = 6;
   TLS_OCSP_STAPLE_EXPIRED = 7;
   TLS_OCSP_STAPLE_BAD_SIGNATURE = 8;
+}
+
+// Bounded session-cache replay modes for the verified HTTPS target. Every
+// nonzero mode destroys the first easy handle before it creates a fresh share
+// and second handle. The peer and its server-side session cache stay alive.
+enum TlsSessionCacheProfile {
+  TLS_SESSION_CACHE_DEFAULT = 0;
+  TLS_SESSION_CACHE_FRESH_SALTED_HASH = 1;
+  TLS_SESSION_CACHE_FRESH_SESSION_KEY = 2;
+  TLS_SESSION_CACHE_MALFORMED_SALTED_HASH = 3;
 }
 
 // Bounded, harness-owned probes for Gopher's synchronous selector write and

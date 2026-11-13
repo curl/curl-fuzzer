@@ -15,6 +15,7 @@
 #include <string>
 
 #include "proto_fuzzer/mock_server.h"
+#include "proto_fuzzer/tls_session_archive.h"
 
 namespace proto_fuzzer {
 
@@ -116,6 +117,10 @@ class TlsMockServer : public MockServer {
 
   std::size_t imported_session_count() const;
 
+  CURLcode ImportArchivedSession(CURL* easy);
+
+  const TlsSessionArchive& session_archive() const;
+
   int negotiated_tls_version() const;
 
   std::size_t completed_handshake_count() const;
@@ -164,6 +169,8 @@ class TlsMockServer : public MockServer {
   std::size_t session_export_attempt_count_ = 0;
   std::size_t exported_session_count_ = 0;
   std::size_t imported_session_count_ = 0;
+  curl::fuzzer::proto::TlsSessionCacheProfile session_cache_profile_ = curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT;
+  TlsSessionArchive session_archive_;
 };
 
 }  // namespace proto_fuzzer

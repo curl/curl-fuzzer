@@ -643,6 +643,37 @@ void TestTlsOcspStapleProfilePolicy() {
          "non-HTTPS policy retained OCSP response generation");
 }
 
+void TestTlsSessionCacheProfilePolicy() {
+  constexpr curl::fuzzer::proto::TlsSessionCacheProfile kProfiles[] = {
+      curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SALTED_HASH,
+      curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SESSION_KEY,
+      curl::fuzzer::proto::TLS_SESSION_CACHE_MALFORMED_SALTED_HASH,
+  };
+  for (const auto profile : kProfiles) {
+    Scenario https;
+    https.set_tls_session_cache_profile(profile);
+    NormalizeScenarioForTarget(&https, TargetProfile::kFastHttps);
+    Expect(https.tls_session_cache_profile() == profile,
+           "HTTPS policy discarded a bounded TLS session-cache profile");
+  }
+
+  Scenario unknown;
+  unknown.set_tls_session_cache_profile(
+      static_cast<curl::fuzzer::proto::TlsSessionCacheProfile>(99));
+  NormalizeScenarioForTarget(&unknown, TargetProfile::kFastHttps);
+  Expect(unknown.tls_session_cache_profile() ==
+             curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT,
+         "HTTPS policy retained an unknown TLS session-cache profile");
+
+  Scenario plaintext;
+  plaintext.set_tls_session_cache_profile(
+      curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SALTED_HASH);
+  NormalizeScenarioForTarget(&plaintext, TargetProfile::kDeepHttp);
+  Expect(plaintext.tls_session_cache_profile() ==
+             curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT,
+         "non-HTTPS policy retained TLS session-cache replay work");
+}
+
 void TestHttpsH2PolicyRejectsUnknownTlsGroupProfile() {
   Scenario scenario;
   scenario.set_tls_group_profile(
@@ -4025,6 +4056,7 @@ int main() {
   TestTlsClientCredentialProfilePolicy();
   TestTlsHandshakeProfilePolicy();
   TestTlsOcspStapleProfilePolicy();
+  TestTlsSessionCacheProfilePolicy();
   TestHttpsH2PolicyRejectsUnknownTlsGroupProfile();
   TestOtherPoliciesDiscardTlsGroupProfiles();
   TestFastHttp3PolicyMaterializesUsefulPlan();

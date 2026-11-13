@@ -193,6 +193,20 @@ void CanonicalizeTlsOcspStapleProfile(curl::fuzzer::proto::Scenario* scenario) {
   }
 }
 
+/// Keep fresh-cache replay inside its closed set of public import paths.
+void CanonicalizeTlsSessionCacheProfile(curl::fuzzer::proto::Scenario* scenario) {
+  switch (scenario->tls_session_cache_profile()) {
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_DEFAULT:
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SALTED_HASH:
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_FRESH_SESSION_KEY:
+    case curl::fuzzer::proto::TLS_SESSION_CACHE_MALFORMED_SALTED_HASH:
+      return;
+    default:
+      scenario->clear_tls_session_cache_profile();
+      return;
+  }
+}
+
 /// Keep Gopher's harness-owned transport probe inside its closed enum. The
 /// fixed TLS hostname is long enough to reach the session-key size limit but
 /// remains below the structured target's 32 KiB input cap.
@@ -2060,6 +2074,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->clear_tls_client_credential_profile();
     scenario->clear_tls_handshake_profile();
     scenario->clear_tls_ocsp_staple_profile();
+    scenario->clear_tls_session_cache_profile();
   }
 
   if (profile == TargetProfile::kFastHttp3) {
@@ -2624,6 +2639,7 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       CanonicalizeTlsClientCredentialProfile(scenario);
       CanonicalizeTlsHandshakeProfile(scenario);
       CanonicalizeTlsOcspStapleProfile(scenario);
+      CanonicalizeTlsSessionCacheProfile(scenario);
       return;
 
     case TargetProfile::kHttpsH2:
