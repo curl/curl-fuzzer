@@ -264,6 +264,14 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             expected_fields.update(
                 {"pinned_public_key_file", "tls_ocsp_staple_profile"}
             )
+        if slug in {"compatibility", "deep_http", "fast_https"}:
+            expected_fields.update(
+                {
+                    "http_upload_trailers",
+                    "http_upload_trailers.lines",
+                    "http_upload_trailers.result",
+                }
+            )
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
         if slug in {"compatibility", "fast_rtsp"}:
@@ -395,6 +403,14 @@ def test_active_schema_keeps_selector_regressions_explicit(tmp_path: Path) -> No
     assert ocsp_staple.number == 49
     assert ocsp_staple.eligibility.profiles == {
         "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_FAST_HTTPS",
+    }
+
+    upload_trailers = model.fields["curl.fuzzer.proto.Scenario.http_upload_trailers"]
+    assert upload_trailers.number == 50
+    assert upload_trailers.eligibility.profiles == {
+        "TARGET_PROFILE_COMPATIBILITY",
+        "TARGET_PROFILE_DEEP_HTTP",
         "TARGET_PROFILE_FAST_HTTPS",
     }
 

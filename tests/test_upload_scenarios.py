@@ -67,3 +67,28 @@ def test_upload_crlf_seed_rewinds_the_line_conversion_reader() -> None:
     assert "seek_result: UPLOAD_SEEK_OK" in scenario
     assert "307 Temporary Redirect" in scenario
     assert "subsequent_connections {" in scenario
+
+
+def test_upload_trailer_seeds_cover_success_malformed_and_abort() -> None:
+    """Keep each trailer callback outcome tied to a real chunked upload."""
+    valid = (SCENARIOS / "http_upload_trailers_valid.textproto").read_text(
+        encoding="utf-8"
+    )
+    malformed = (SCENARIOS / "http_upload_trailers_malformed.textproto").read_text(
+        encoding="utf-8"
+    )
+    abort = (SCENARIOS / "http_upload_trailers_abort.textproto").read_text(
+        encoding="utf-8"
+    )
+
+    for scenario in (valid, malformed, abort):
+        assert "options { upload: true }" in scenario
+        assert "upload {" in scenario
+        assert "http_upload_trailers {" in scenario
+        assert 'request_headers: "Expect:"' in scenario
+
+    assert valid.count("lines:") == 2
+    assert "HTTP_UPLOAD_TRAILER_SUCCESS" in valid
+    assert 'lines: "missing-colon"' in malformed
+    assert 'lines: ": missing-name"' in malformed
+    assert "HTTP_UPLOAD_TRAILER_ABORT" in abort

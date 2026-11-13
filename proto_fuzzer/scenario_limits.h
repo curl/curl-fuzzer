@@ -36,6 +36,12 @@ inline constexpr std::size_t kMaxAllocationFailures = 4;
 inline constexpr std::size_t kMaxAllocationOrdinal = 4096;
 /// Request headers retain useful combinatorial interactions at this size.
 inline constexpr std::size_t kMaxRequestHeaders = 16;
+/// Request upload trailers need only a short list to cover duplicate and
+/// malformed header handling.
+inline constexpr std::size_t kMaxHttpUploadTrailers = 8;
+/// One trailer line remains large enough to exercise header validation without
+/// turning the final chunk into bulk data.
+inline constexpr std::size_t kMaxHttpUploadTrailerBytes = 256;
 /// Host-cache mutations need only a compact sequence of add/remove/wildcard
 /// entries. The runtime appends one harness-owned loopback mapping separately.
 inline constexpr std::size_t kMaxResolveEntries = 16;

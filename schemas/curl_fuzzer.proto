@@ -1130,6 +1130,19 @@ message Scenario {
       }
     }
   ];
+  // Supply request trailers through CURLOPT_TRAILERFUNCTION. The callback
+  // copies a bounded list into a fresh curl_slist when curl finishes a
+  // chunked HTTP/1.1 upload. HTTP/2, HTTP/3, proxy, WebSocket, and non-HTTP
+  // targets exclude this field because their request paths do not consume it.
+  HttpUploadTrailers http_upload_trailers = 50 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
 }
 
 // Test-only certificate bundles available to the in-process TLS server. Zero
@@ -2696,6 +2709,34 @@ enum UploadSeekResult {
   UPLOAD_SEEK_OK = 0;
   UPLOAD_SEEK_CANTSEEK = 1;
   UPLOAD_SEEK_FAIL = 2;
+}
+
+// A bounded request-trailer list returned after curl finishes a chunked
+// HTTP/1.1 upload. Each entry is one complete header line without CRLF.
+message HttpUploadTrailers {
+  repeated bytes lines = 1 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
+  HttpUploadTrailerResult result = 2 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_DEEP_HTTP
+        profiles: TARGET_PROFILE_FAST_HTTPS
+      }
+    }
+  ];
+}
+
+enum HttpUploadTrailerResult {
+  HTTP_UPLOAD_TRAILER_SUCCESS = 0;
+  HTTP_UPLOAD_TRAILER_ABORT = 1;
 }
 
 // A multipart request body. Runtime budgets cap both this list and the total

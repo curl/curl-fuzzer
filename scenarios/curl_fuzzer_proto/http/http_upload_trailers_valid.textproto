@@ -1,0 +1,23 @@
+# A chunked PUT invokes the trailer callback after the upload source reaches
+# EOF. Two valid lines cover list iteration and final-chunk serialization.
+scheme: SCHEME_HTTP
+host_path: "upload.test/trailers/valid"
+options { upload: true }
+request_headers: "Expect:"
+upload {
+  data: "trailer-body"
+  read_sizes: 3
+  terminal: UPLOAD_TERMINAL_EOF
+}
+http_upload_trailers {
+  lines: "X-Fuzz-Trailer: complete"
+  lines: "X-Fuzz-Sequence: second"
+  result: HTTP_UPLOAD_TRAILER_SUCCESS
+}
+connection {
+  # Two empty event-loop turns let curl flush the final chunk before the peer
+  # sends its response and stops request transmission.
+  on_readable: ""
+  on_readable: ""
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

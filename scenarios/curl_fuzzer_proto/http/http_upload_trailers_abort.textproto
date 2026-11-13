@@ -1,0 +1,17 @@
+# The explicit callback failure reaches curl's abort path after it consumes a
+# small request body. No trailer list allocation is required for this result.
+scheme: SCHEME_HTTP
+host_path: "upload.test/trailers/abort"
+options { upload: true }
+request_headers: "Expect:"
+upload {
+  data: "abort-trailer-body"
+  terminal: UPLOAD_TERMINAL_EOF
+}
+http_upload_trailers {
+  lines: "X-Ignored-Trailer: true"
+  result: HTTP_UPLOAD_TRAILER_ABORT
+}
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+}

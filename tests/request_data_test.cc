@@ -24,6 +24,7 @@ namespace {
 using Scenario = curl::fuzzer::proto::Scenario;
 using ApiPlan = curl::fuzzer::proto::ApiPlan;
 using UploadScriptState = proto_fuzzer::UploadScriptState;
+using HttpUploadTrailerState = proto_fuzzer::HttpUploadTrailerState;
 using ScenarioRequestData = proto_fuzzer::ScenarioRequestData;
 using ApiLifecycle = proto_fuzzer::ApiLifecycle;
 using test_support::Expect;
@@ -669,6 +670,119 @@ void TestUploadCallbackInstallationIsDemandDriven() {
   curl_easy_cleanup(easy);
 }
 
+void TestHttpUploadTrailerCallbacksAreOwnedAndBounded() {
+  CURL *easy = curl_easy_init();
+  Expect(easy != nullptr, "curl_easy_init failed for request trailers");
+
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  auto *trailers = scenario.mutable_http_upload_trailers();
+  for (std::size_t index = 0;
+       index < proto_fuzzer::scenario_limits::kMaxHttpUploadTrailers + 3;
+       ++index) {
+    trailers->add_lines(
+        "X-Trailer-" + std::to_string(index) + ": " +
+        std::string(proto_fuzzer::scenario_limits::kMaxHttpUploadTrailerBytes +
+                        19,
+                    't'));
+  }
+
+  {
+    HttpUploadTrailerState state(scenario);
+    curl_slist *first = nullptr;
+    curl_slist *second = nullptr;
+    Expect(state.BuildList(&first) == CURL_TRAILERFUNC_OK && first != nullptr,
+           "request trailer callback did not build its first list");
+    Expect(state.BuildList(&second) == CURL_TRAILERFUNC_OK && second != nullptr,
+           "request trailer callback did not build its second list");
+    Expect(first != second,
+           "request trailer callback reused a list owned by its caller");
+
+    std::size_t count = 0;
+    for (const curl_slist *entry = first; entry != nullptr;
+         entry = entry->next) {
+      Expect(std::strlen(entry->data) <=
+                 proto_fuzzer::scenario_limits::kMaxHttpUploadTrailerBytes,
+             "request trailer line exceeded its runtime byte budget");
+      ++count;
+    }
+    Expect(count == proto_fuzzer::scenario_limits::kMaxHttpUploadTrailers,
+           "request trailer callback returned the wrong bounded prefix");
+    Expect(state.callback_count() == 2,
+           "request trailer callback count did not track fresh lists");
+    curl_slist_free_all(first);
+    curl_slist_free_all(second);
+  }
+
+  {
+    ScenarioRequestData request_data(easy, scenario);
+    Expect(request_data.http_upload_trailer_callback_installed(),
+           "HTTP trailer message did not install its callback");
+    Expect(request_data.stats().http_upload_trailers ==
+               proto_fuzzer::scenario_limits::kMaxHttpUploadTrailers,
+           "request trailer list exceeded its runtime count budget");
+  }
+
+  Scenario abort;
+  abort.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  abort.mutable_http_upload_trailers()->add_lines("X-Abort: ignored");
+  abort.mutable_http_upload_trailers()->set_result(
+      curl::fuzzer::proto::HTTP_UPLOAD_TRAILER_ABORT);
+  HttpUploadTrailerState abort_state(abort);
+  curl_slist sentinel{};
+  curl_slist *aborted = &sentinel;
+  Expect(abort_state.BuildList(&aborted) == CURL_TRAILERFUNC_ABORT &&
+             aborted == nullptr,
+         "request trailer abort did not stop before list allocation");
+
+  Scenario ftp;
+  ftp.set_scheme(curl::fuzzer::proto::SCHEME_FTP);
+  ftp.mutable_http_upload_trailers()->add_lines("X-Inert: true");
+  {
+    ScenarioRequestData request_data(easy, ftp);
+    Expect(!request_data.http_upload_trailer_callback_installed() &&
+               request_data.stats().http_upload_trailers == 0,
+           "non-HTTP scenario installed a request trailer callback");
+  }
+
+  Scenario http2;
+  http2.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  http2.mutable_http_upload_trailers()->add_lines("X-Inert-H2: true");
+  auto *http_version = http2.add_options();
+  http_version->set_option_id(curl::fuzzer::proto::CURLOPT_HTTP_VERSION);
+  http_version->set_uint_value(CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE);
+  {
+    ScenarioRequestData request_data(easy, http2);
+    Expect(!request_data.http_upload_trailer_callback_installed(),
+           "HTTP/2 scenario installed an HTTP/1.1 trailer callback");
+  }
+
+  Scenario proxy;
+  proxy.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  proxy.mutable_http_upload_trailers()->add_lines("X-Inert-Proxy: true");
+  proxy.set_http_transport_mode(
+      curl::fuzzer::proto::HTTP_TRANSPORT_FORWARD_PROXY);
+  {
+    ScenarioRequestData request_data(easy, proxy);
+    Expect(!request_data.http_upload_trailer_callback_installed(),
+           "HTTP proxy scenario installed an origin trailer callback");
+  }
+
+  Scenario proxy_option;
+  proxy_option.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  proxy_option.mutable_http_upload_trailers()->add_lines(
+      "X-Inert-Proxy-Option: true");
+  proxy_option.set_proxy_socket_option_mode(
+      curl::fuzzer::proto::PROXY_SOCKET_OPTION_ENV_HTTP_PROXY);
+  {
+    ScenarioRequestData request_data(easy, proxy_option);
+    Expect(!request_data.http_upload_trailer_callback_installed(),
+           "HTTP proxy-option scenario installed an origin trailer callback");
+  }
+
+  curl_easy_cleanup(easy);
+}
+
 void TestGeneratedMimeDataUsesSharedRuntimeBudget() {
   CURL *easy = curl_easy_init();
   Expect(easy != nullptr, "curl_easy_init failed for generated MIME data");
@@ -714,6 +828,7 @@ int main() {
   TestEmptyAndNullInputsRemainCheap();
   TestResolveEntriesAreExplicitBoundedPointerState();
   TestUploadCallbackInstallationIsDemandDriven();
+  TestHttpUploadTrailerCallbacksAreOwnedAndBounded();
   TestGeneratedMimeDataUsesSharedRuntimeBudget();
   TestFallbackUploadRemainsDeterministic();
   TestTelnetWithoutUploadUsesImmediateEof();
