@@ -9,7 +9,7 @@ define their entrypoints in their top-level implementation files instead.
 | Target family | Shared implementation | Input model |
 | --- | --- | --- |
 | `curl_fuzzer_proto*` | `proto_fuzzer/`, generated profile Traits, ordinary profile descriptors, and generated protobuf sources | Target-specific generated message lowered to an internal `Scenario` |
-| `fuzz_url`, `fuzz_bufq`, `fuzz_doh`, `fuzz_netrc`, `fuzz_private` | Dedicated source files | Raw target-specific bytes |
+| `fuzz_url`, `fuzz_bufq`, `fuzz_doh`, `fuzz_netrc`, `fuzz_private`, `fuzz_setopt` | Dedicated source files | Raw target-specific bytes |
 
 The normal data flow is:
 
