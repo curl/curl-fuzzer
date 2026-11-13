@@ -1,0 +1,17 @@
+# POSTQUOTE runs after the transfer completion response.
+scheme: SCHEME_FTP
+host_path: "ftp.test/file.bin"
+ftp_postquote: "SITE CLEANUP file.bin"
+connection {
+  initial_response: "220 ready\r\n"
+  on_readable: "331 password\r\n"
+  on_readable: "230 logged in\r\n"
+  on_readable: "257 \"/\"\r\n"
+  on_readable: "229 Entering Extended Passive Mode (|||1025|)\r\n"
+  on_readable: "200 binary\r\n"
+  on_readable: "213 4\r\n"
+  on_readable: "150 data\r\n"
+  on_readable: "226 complete\r\n"
+  on_readable: "200 cleanup complete\r\n"
+}
+subsequent_connections { initial_response: "body" }

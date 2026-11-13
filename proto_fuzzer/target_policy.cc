@@ -1299,6 +1299,15 @@ void BoundScenarioShape(curl::fuzzer::proto::Scenario* scenario) {
   }
   BoundStringValues(scenario->mutable_mail_rcpt(), scenario_limits::kMaxMailRecipients,
                     scenario_limits::kMaxMailRecipientBytes);
+  std::size_t remaining_ftp_quote_commands = scenario_limits::kMaxFtpQuoteCommands;
+  const auto bound_ftp_quote_list = [&remaining_ftp_quote_commands](auto* commands) {
+    const std::size_t retained = std::min<std::size_t>(remaining_ftp_quote_commands, commands->size());
+    BoundStringValues(commands, retained, scenario_limits::kMaxFtpQuoteCommandBytes);
+    remaining_ftp_quote_commands -= retained;
+  };
+  bound_ftp_quote_list(scenario->mutable_ftp_quote());
+  bound_ftp_quote_list(scenario->mutable_ftp_prequote());
+  bound_ftp_quote_list(scenario->mutable_ftp_postquote());
   BoundFileInputs(scenario);
 }
 
@@ -1971,6 +1980,9 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
 
   if (profile != TargetProfile::kFastFtp) {
     scenario->clear_ftp_auth_tls_filter_allocation_failure();
+    scenario->clear_ftp_quote();
+    scenario->clear_ftp_prequote();
+    scenario->clear_ftp_postquote();
   }
 
   if (profile != TargetProfile::kFastGopher) {

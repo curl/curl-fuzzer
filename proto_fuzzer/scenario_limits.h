@@ -55,6 +55,12 @@ inline constexpr std::size_t kMaxMailRecipients = 8;
 /// Keep recipient mailbox bytes within curl's normal address-processing range;
 /// oversized suffixes add no distinct SMTP parser state.
 inline constexpr std::size_t kMaxMailRecipientBytes = 1024;
+/// QUOTE, PREQUOTE, and POSTQUOTE share one command budget because each entry
+/// drives another FTP control exchange.
+inline constexpr std::size_t kMaxFtpQuoteCommands = 16;
+/// FTP quote commands use NUL-terminated curl_slist entries. Longer suffixes
+/// add bulk allocation without adding useful command-state coverage.
+inline constexpr std::size_t kMaxFtpQuoteCommandBytes = 256;
 /// One filename-only parser input can span many lines and cross curl's normal
 /// transfer buffer boundary without permitting mutation-sized temporary files.
 inline constexpr std::size_t kMaxFileInputBytes = 64 * 1024;

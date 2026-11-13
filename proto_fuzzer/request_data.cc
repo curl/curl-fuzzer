@@ -584,8 +584,8 @@ std::size_t HttpUploadTrailerState::callback_count() const { return callback_cou
 /// `easy` must remain alive until this object is destroyed, because cleanup
 /// first detaches the pointers from the handle and only then frees them.
 /// @param easy Easy handle that will perform this scenario.
-/// @param scenario Source headers/TELNET options, optional MIME body, and
-///                 upload script.
+/// @param scenario Source protocol lists, optional MIME body, and upload
+///                 script.
 /// @param apply_resolve_entries Whether to install the scenario's bounded
 ///        resolver mappings plus the mandatory loopback mapping.
 ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::Scenario& scenario,
@@ -595,6 +595,9 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
       resolve_entries_(nullptr),
       telnet_options_(nullptr),
       mail_rcpt_(nullptr),
+      ftp_quote_(nullptr),
+      ftp_prequote_(nullptr),
+      ftp_postquote_(nullptr),
       upload_state_(scenario),
       http_upload_trailer_state_(scenario),
       mime_post_(nullptr),
@@ -645,6 +648,21 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
                                  scenario_limits::kMaxMailRecipientBytes, &stats_.mail_rcpt);
   }
 
+  if (scenario.scheme() == curl::fuzzer::proto::SCHEME_FTP || scenario.scheme() == curl::fuzzer::proto::SCHEME_FTPS) {
+    // The three lists share a work budget in their execution order. Runtime
+    // enforces the bound independently because compatibility inputs bypass
+    // fixed-target postprocessing.
+    std::size_t remaining = scenario_limits::kMaxFtpQuoteCommands;
+    ftp_quote_ =
+        BuildStringList(scenario.ftp_quote(), remaining, scenario_limits::kMaxFtpQuoteCommandBytes, &stats_.ftp_quote);
+    remaining -= stats_.ftp_quote;
+    ftp_prequote_ = BuildStringList(scenario.ftp_prequote(), remaining, scenario_limits::kMaxFtpQuoteCommandBytes,
+                                    &stats_.ftp_prequote);
+    remaining -= stats_.ftp_prequote;
+    ftp_postquote_ = BuildStringList(scenario.ftp_postquote(), remaining, scenario_limits::kMaxFtpQuoteCommandBytes,
+                                     &stats_.ftp_postquote);
+  }
+
   if (resolve_entries_built) {
     resolve_entries_ready_ = curl_easy_setopt(easy_, CURLOPT_RESOLVE, resolve_entries_.get()) == CURLE_OK;
   }
@@ -679,6 +697,15 @@ ScenarioRequestData::ScenarioRequestData(CURL* easy, const curl::fuzzer::proto::
   }
   if (mail_rcpt_ != nullptr) {
     (void)curl_easy_setopt(easy_, CURLOPT_MAIL_RCPT, mail_rcpt_.get());
+  }
+  if (ftp_quote_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_QUOTE, ftp_quote_.get());
+  }
+  if (ftp_prequote_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_PREQUOTE, ftp_prequote_.get());
+  }
+  if (ftp_postquote_ != nullptr) {
+    (void)curl_easy_setopt(easy_, CURLOPT_POSTQUOTE, ftp_postquote_.get());
   }
   if (request_headers_ != nullptr) {
     (void)curl_easy_setopt(easy_, CURLOPT_HTTPHEADER, request_headers_.get());
@@ -722,6 +749,15 @@ ScenarioRequestData::~ScenarioRequestData() {
     }
     if (mail_rcpt_ != nullptr) {
       (void)curl_easy_setopt(easy_, CURLOPT_MAIL_RCPT, nullptr);
+    }
+    if (ftp_postquote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_POSTQUOTE, nullptr);
+    }
+    if (ftp_prequote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_PREQUOTE, nullptr);
+    }
+    if (ftp_quote_ != nullptr) {
+      (void)curl_easy_setopt(easy_, CURLOPT_QUOTE, nullptr);
     }
   }
   // Callback MIME parts retain upload_state_ as userdata. Release the root
