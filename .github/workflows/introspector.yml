@@ -34,8 +34,6 @@ name: Fuzz Introspector
       - 'tests/pop3s_mock_server_test.cc'
       - 'tests/tftp_mock_server_test.cc'
   pull_request:
-    branches:
-      - master
     paths:
       - '.github/workflows/introspector.yml'
       - 'CMakeLists.txt'

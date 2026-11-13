@@ -9,9 +9,6 @@ name: CI
       - main
       - '*/ci'
   pull_request:
-    branches:
-      - master
-      - main
   # This makes the workflow callable by curl/curl
   workflow_call: {}
 
