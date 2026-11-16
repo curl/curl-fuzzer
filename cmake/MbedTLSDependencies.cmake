@@ -23,7 +23,7 @@ if(NOT DEFINED MINIMAL_INSTALL_STAMP_NAME)
 endif()
 
 # renovate: datasource=github-releases depName=Mbed-TLS/mbedtls
-set(MBEDTLS_VERSION 4.2.0)
+set(MBEDTLS_VERSION 4.3.0)
 set(MBEDTLS_INSTALL_DIR
     ${CMAKE_BINARY_DIR}/mbedtls-${MBEDTLS_VERSION}-install)
 set(MBEDTLS_INCLUDE_DIR ${MBEDTLS_INSTALL_DIR}/include)
