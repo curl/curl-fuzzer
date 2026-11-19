@@ -1437,6 +1437,21 @@ message Http3Plan {
       }
     }
   ];
+  // Advertise a small request-stream receive window and wait for the bounded
+  // upload before sending a final response, so the client must handle QUIC flow control.
+  bool small_upload_window = 3 [
+    (curl.fuzzer.schema.scenario_field) = {
+      eligibility {
+        profiles: TARGET_PROFILE_COMPATIBILITY
+        profiles: TARGET_PROFILE_FAST_HTTP3
+        guards {
+          fact: SELECTOR_FACT_HTTP3_CONNECT_UDP_PROXY
+          expected: false
+          profiles: TARGET_PROFILE_FAST_HTTP3
+        }
+      }
+    }
+  ];
 }
 
 // One operation performed by the in-process HTTP/3 peer. The oneof prevents a
@@ -5240,6 +5255,16 @@ message SetOption {
         native_name: "CURLOPT_MAX_SEND_SPEED_LARGE"
         eligibility {
           profiles: TARGET_PROFILE_FAST_FILE
+        }
+      }
+    ];
+    // Exercise the HTTP/3 receive-window rate-limit path without allowing
+    // mutated one-byte-per-second downloads to stall the fuzzing lane.
+    uint64 max_recv_speed_large = 107 [
+      (curl.fuzzer.schema.curl_option) = {
+        native_name: "CURLOPT_MAX_RECV_SPEED_LARGE"
+        eligibility {
+          profiles: TARGET_PROFILE_FAST_HTTP3
         }
       }
     ];

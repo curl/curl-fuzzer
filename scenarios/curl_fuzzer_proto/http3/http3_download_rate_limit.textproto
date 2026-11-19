@@ -1,0 +1,13 @@
+# A bounded receive rate activates curl's QUIC response-window rate limiter.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/limited-download"
+options { max_recv_speed_large: 65536 }
+http3_plan {
+  actions {
+    structured_response {
+      status_code: 200
+      body_chunks: "rate-limited response body"
+      finish_stream: true
+    }
+  }
+}

@@ -905,6 +905,124 @@ void TestFastHttp3PolicyBoundsOrderedActions() {
          "fast HTTP/3 policy left an empty ordered action inert");
 }
 
+void TestHttp3SmallUploadWindowRequiresCompleteUpload() {
+  Scenario base;
+  base.mutable_http3_plan()->set_small_upload_window(true);
+  base.mutable_upload()->set_data(std::string(256, 'a'));
+  base.mutable_upload()->set_terminal(curl::fuzzer::proto::UPLOAD_TERMINAL_EOF);
+  auto* option = base.add_options();
+  option->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  option->set_bool_value(true);
+  auto* size_option = base.add_options();
+  size_option->set_option_id(curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE);
+  size_option->set_uint_value(256);
+
+  Scenario valid = base;
+  NormalizeScenarioForTarget(&valid, TargetProfile::kFastHttp3);
+  Expect(valid.http3_plan().small_upload_window(),
+         "HTTP/3 policy discarded a complete flow-controlled upload");
+
+  Scenario no_upload = base;
+  no_upload.clear_options();
+  NormalizeScenarioForTarget(&no_upload, TargetProfile::kFastHttp3);
+  Expect(!no_upload.http3_plan().small_upload_window(),
+         "HTTP/3 policy waited for a request body without CURLOPT_UPLOAD");
+
+  Scenario short_upload = base;
+  short_upload.mutable_upload()->set_data("short");
+  NormalizeScenarioForTarget(&short_upload, TargetProfile::kFastHttp3);
+  Expect(!short_upload.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained flow control for an upload below the window");
+
+  Scenario short_declared_length = base;
+  short_declared_length.mutable_options(1)->set_uint_value(96);
+  NormalizeScenarioForTarget(&short_declared_length, TargetProfile::kFastHttp3);
+  Expect(!short_declared_length.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained flow control for a short declared length");
+
+  Scenario oversized_length = base;
+  oversized_length.mutable_options(1)->set_uint_value(257);
+  NormalizeScenarioForTarget(&oversized_length, TargetProfile::kFastHttp3);
+  Expect(!oversized_length.http3_plan().small_upload_window(),
+         "HTTP/3 policy waited for more bytes than the upload script provides");
+
+  Scenario overridden_method = base;
+  auto* get_option = overridden_method.add_options();
+  get_option->set_option_id(curl::fuzzer::proto::CURLOPT_HTTPGET);
+  get_option->set_bool_value(true);
+  NormalizeScenarioForTarget(&overridden_method, TargetProfile::kFastHttp3);
+  Expect(!overridden_method.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained an upload probe after HTTPGET overrode PUT");
+
+  Scenario head = base;
+  auto* head_option = head.add_options();
+  head_option->set_option_id(curl::fuzzer::proto::CURLOPT_NOBODY);
+  head_option->set_bool_value(true);
+  NormalizeScenarioForTarget(&head, TargetProfile::kFastHttp3);
+  Expect(!head.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained an upload probe after NOBODY overrode PUT");
+
+  Scenario post = base;
+  auto* post_option = post.add_options();
+  post_option->set_option_id(curl::fuzzer::proto::CURLOPT_POST);
+  post_option->set_bool_value(false);
+  NormalizeScenarioForTarget(&post, TargetProfile::kFastHttp3);
+  Expect(!post.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained an upload probe after POST overrode PUT");
+
+  Scenario mime = base;
+  mime.mutable_mime_post();
+  NormalizeScenarioForTarget(&mime, TargetProfile::kFastHttp3);
+  Expect(!mime.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained an upload probe for a MIME body");
+
+  Scenario noncanonical = base;
+  auto* noncanonical_get = noncanonical.add_options();
+  noncanonical_get->set_option_id(curl::fuzzer::proto::CURLOPT_HTTPGET);
+  noncanonical_get->set_uint_value(1);
+  NormalizeScenarioForTarget(&noncanonical, TargetProfile::kFastHttp3);
+  Expect(!noncanonical.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained a mismatched HTTPGET override");
+  const std::string normalized = noncanonical.SerializeAsString();
+  NormalizeScenarioForTarget(&noncanonical, TargetProfile::kFastHttp3);
+  Expect(noncanonical.SerializeAsString() == normalized,
+         "HTTP/3 upload probe normalization was not idempotent");
+
+  Scenario aborted = base;
+  aborted.mutable_upload()->set_terminal(curl::fuzzer::proto::UPLOAD_TERMINAL_ABORT);
+  NormalizeScenarioForTarget(&aborted, TargetProfile::kFastHttp3);
+  Expect(!aborted.http3_plan().small_upload_window(),
+         "HTTP/3 policy waited for an intentionally aborted upload");
+
+  Scenario proxy = base;
+  proxy.mutable_http3_plan()->set_use_h1_connect_udp_proxy(true);
+  NormalizeScenarioForTarget(&proxy, TargetProfile::kFastHttp3);
+  Expect(!proxy.http3_plan().small_upload_window(),
+         "HTTP/3 policy retained an origin upload probe in proxy mode");
+}
+
+void TestHttp3DownloadRateIsBounded() {
+  Scenario scenario;
+  auto* rate = scenario.add_options();
+  rate->set_option_id(curl::fuzzer::proto::CURLOPT_MAX_RECV_SPEED_LARGE);
+  rate->set_uint_value(1);
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp3);
+  Expect(scenario.options_size() == 1 &&
+             scenario.options(0).option_id() == curl::fuzzer::proto::CURLOPT_MAX_RECV_SPEED_LARGE &&
+             scenario.options(0).uint_value() == 65536,
+         "HTTP/3 policy did not bound the receive rate");
+
+  scenario.mutable_options(0)->set_uint_value(0);
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp3);
+  Expect(scenario.options(0).uint_value() == 0,
+         "HTTP/3 policy did not preserve the disabled receive rate");
+
+  scenario.mutable_options(0)->set_uint_value(std::numeric_limits<std::uint64_t>::max());
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kFastHttp3);
+  Expect(scenario.options(0).uint_value() == 1048576,
+         "HTTP/3 policy did not cap an oversized receive rate");
+}
+
 void TestNonHttp3PoliciesDiscardPlans() {
   constexpr TargetProfile kOtherPolicies[] = {
       TargetProfile::kFastHttp,      TargetProfile::kDeepHttp,
@@ -4062,6 +4180,8 @@ int main() {
   TestFastHttp3PolicyMaterializesUsefulPlan();
   TestFastHttp3ProxyPolicyRetainsStreamScript();
   TestFastHttp3PolicyBoundsOrderedActions();
+  TestHttp3DownloadRateIsBounded();
+  TestHttp3SmallUploadWindowRequiresCompleteUpload();
   TestNonHttp3PoliciesDiscardPlans();
   TestNonTlsPoliciesDiscardTlsCertificateChains();
   TestH2ProxyPolicy();

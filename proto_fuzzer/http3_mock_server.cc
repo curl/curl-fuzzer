@@ -288,6 +288,11 @@ std::string NormalizeHeaderValue(const std::string& source) {
   return result;
 }
 
+/// Map a fuzzed status code into the valid HTTP range.
+std::uint32_t NormalizeResponseStatus(std::uint32_t status_code) {
+  return status_code >= 100U && status_code <= 599U ? status_code : 100U + status_code % 500U;
+}
+
 /// Return ngtcp2's nanosecond-resolution monotonic timestamp.
 ngtcp2_tstamp QuicNow() {
   const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -352,6 +357,7 @@ class Http3MockServerImpl {
   }
 
   std::size_t DrivePeerTurn() {
+    ++peer_turn_;
     if (server_fd_ < 0 || transport_failed_) {
       return 0;
     }
@@ -377,6 +383,10 @@ class Http3MockServerImpl {
   bool handshake_complete() const { return handshake_complete_; }
 
   bool request_headers_received() const { return request_headers_received_; }
+
+  std::size_t request_body_bytes() const { return request_body_bytes_; }
+
+  std::size_t request_body_turns() const { return request_body_turns_; }
 
   std::size_t executed_action_count() const { return next_action_; }
 
@@ -470,6 +480,11 @@ class Http3MockServerImpl {
     response_body_.finish_stream = false;
     response_body_.has_trailers = false;
     next_action_ = 0;
+    request_body_bytes_ = 0;
+    request_body_turns_ = 0;
+    last_request_body_turn_ = 0;
+    peer_turn_ = 0;
+    request_stream_finished_ = false;
     server_port_ = 0;
     socket_opened_ = false;
     handshake_complete_ = false;
@@ -769,7 +784,12 @@ class Http3MockServerImpl {
     ngtcp2_transport_params parameters;
     ngtcp2_transport_params_default(&parameters);
     parameters.initial_max_stream_data_bidi_local = kMaxPendingPlaintextBytes;
-    parameters.initial_max_stream_data_bidi_remote = kMaxPendingPlaintextBytes;
+    // From the server's view, curl opens the remote bidirectional streams.
+    // Keep the normal receive window on the unidirectional control and QPACK streams.
+    parameters.initial_max_stream_data_bidi_remote =
+        scenario_ != nullptr && scenario_->http3_plan().small_upload_window()
+            ? scenario_limits::kHttp3SmallUploadWindowBytes
+            : kMaxPendingPlaintextBytes;
     parameters.initial_max_stream_data_uni = kMaxPendingPlaintextBytes;
     parameters.initial_max_data = kMaxPendingPlaintextBytes * 4U;
     parameters.initial_max_streams_bidi = kMaxStreams;
@@ -1049,13 +1069,15 @@ class Http3MockServerImpl {
       return progress;
     }
 
+    const bool waiting_for_upload =
+        scenario_ != nullptr && scenario_->http3_plan().small_upload_window() && !request_stream_finished_;
     const std::size_t action_count =
         scenario_ == nullptr
             ? 0
             : std::min<std::size_t>(scenario_limits::kMaxHttp3Actions, scenario_->http3_plan().actions_size());
     if (next_action_ >= action_count) {
       // An empty H3 plan still needs one successful response after a request.
-      if (action_count == 0 && !default_response_started_ && request_headers_received_) {
+      if (action_count == 0 && !default_response_started_ && request_headers_received_ && !waiting_for_upload) {
         default_response_started_ = true;
         if (SubmitStructuredResponse(default_response_)) {
           waiting_for_h3_drain_ = true;
@@ -1067,6 +1089,13 @@ class Http3MockServerImpl {
     }
 
     const auto& action = scenario_->http3_plan().actions(static_cast<int>(next_action_));
+    // If curl sends Expect: 100-continue, it waits for the interim response
+    // before sending the body. Let the next informational response through.
+    // Leave other actions queued in order until the request stream ends.
+    if (waiting_for_upload && (!action.has_structured_response() ||
+                               NormalizeResponseStatus(action.structured_response().status_code()) >= 200U)) {
+      return progress;
+    }
     if (action.has_structured_response()) {
       if (!request_headers_received_) {
         return progress;
@@ -1316,10 +1345,7 @@ class Http3MockServerImpl {
       return false;
     }
 
-    std::uint32_t status_code = response.status_code();
-    if (status_code < 100U || status_code > 599U) {
-      status_code = 100U + status_code % 500U;
-    }
+    const std::uint32_t status_code = NormalizeResponseStatus(response.status_code());
     std::vector<std::pair<std::string, std::string>> fields;
     fields.reserve(1 + std::min<std::size_t>(scenario_limits::kMaxHttp3Headers, response.response_headers_size()));
     fields.emplace_back(":status", std::to_string(status_code));
@@ -1422,12 +1448,19 @@ class Http3MockServerImpl {
     return role_stream_ids_[static_cast<std::size_t>(role_value)];
   }
 
-  // nghttp3 callbacks replenish QUIC flow-control credit only as application
-  // bytes are consumed, then discover the first request stream for responses.
+  // nghttp3_conn_read_stream2 excludes DATA payload bytes from its consumed
+  // byte count. Return stream and connection credit for those bytes here.
   static int ReceiveRequestData(nghttp3_conn* /*connection*/, std::int64_t stream_id, const std::uint8_t* /*data*/,
                                 std::size_t data_length, void* user_data, void* /*stream_user_data*/) {
     auto* self = static_cast<Http3MockServerImpl*>(user_data);
     if (self != nullptr && self->quic_connection_ != nullptr) {
+      // A turn can deliver several DATA callbacks. Count the turn once so
+      // fragmentation within a turn cannot satisfy the multi-turn test.
+      if (data_length != 0 && self->last_request_body_turn_ != self->peer_turn_) {
+        ++self->request_body_turns_;
+        self->last_request_body_turn_ = self->peer_turn_;
+      }
+      self->request_body_bytes_ += data_length;
       ngtcp2_conn_extend_max_stream_offset(self->quic_connection_, stream_id, data_length);
       ngtcp2_conn_extend_max_offset(self->quic_connection_, data_length);
     }
@@ -1463,8 +1496,14 @@ class Http3MockServerImpl {
     return 0;
   }
 
-  static int EndRequestStream(nghttp3_conn* /*connection*/, std::int64_t /*stream_id*/, void* /*user_data*/,
+  static int EndRequestStream(nghttp3_conn* /*connection*/, std::int64_t stream_id, void* user_data,
                               void* /*stream_user_data*/) {
+    auto* self = static_cast<Http3MockServerImpl*>(user_data);
+    // Only FIN on the request selected for the response releases the wait.
+    // Curl can finish that request before it uses all the scripted bytes.
+    if (self != nullptr && self->role_stream_ids_[kResponseStream] == stream_id) {
+      self->request_stream_finished_ = true;
+    }
     return 0;
   }
 
@@ -1526,11 +1565,16 @@ class Http3MockServerImpl {
   std::uint64_t random_counter_ = 0;
   std::uint64_t close_error_code_ = 0;
   std::size_t next_action_ = 0;
+  std::size_t request_body_bytes_ = 0;
+  std::size_t request_body_turns_ = 0;
+  std::size_t last_request_body_turn_ = 0;
+  std::size_t peer_turn_ = 0;
   int server_fd_ = -1;
   std::uint16_t server_port_ = 0;
   bool socket_opened_ = false;
   bool handshake_complete_ = false;
   bool request_headers_received_ = false;
+  bool request_stream_finished_ = false;
   bool server_streams_bound_ = false;
   bool bootstrap_drained_ = false;
   bool waiting_for_h3_drain_ = false;
@@ -1574,6 +1618,12 @@ bool Http3MockServer::handshake_complete() const { return impl_ != nullptr && im
 
 /// @return true after nghttp3 has decoded a complete request field section.
 bool Http3MockServer::request_headers_received() const { return impl_ != nullptr && impl_->request_headers_received(); }
+
+/// @return Total request body bytes received on the peer connection.
+std::size_t Http3MockServer::request_body_bytes() const { return impl_ == nullptr ? 0 : impl_->request_body_bytes(); }
+
+/// @return Number of peer turns in which the connection received request body bytes.
+std::size_t Http3MockServer::request_body_turns() const { return impl_ == nullptr ? 0 : impl_->request_body_turns(); }
 
 /// @return number of ordered Http3Action entries accepted by the peer.
 std::size_t Http3MockServer::executed_action_count() const {

@@ -41,6 +41,8 @@ struct Http3RunResult {
   long http_version = CURL_HTTP_VERSION_NONE;
   bool handshake_complete = false;
   bool request_headers_received = false;
+  std::size_t request_body_bytes = 0;
+  std::size_t request_body_turns = 0;
   std::size_t executed_action_count = 0;
   std::uint16_t server_port = 0;
 };
@@ -83,6 +85,8 @@ Http3RunResult RunScenario(const Scenario &scenario, const char *path) {
                           &result.http_version);
   result.handshake_complete = server.handshake_complete();
   result.request_headers_received = server.request_headers_received();
+  result.request_body_bytes = server.request_body_bytes();
+  result.request_body_turns = server.request_body_turns();
   result.executed_action_count = server.executed_action_count();
   result.server_port = server.server_port();
 
@@ -217,6 +221,89 @@ void TestFreshUnknownUnidirectionalStream() {
          "HTTP/3 server did not execute the fresh-stream and response actions");
 }
 
+void TestUploadExceedsQuicStreamWindow() {
+  Scenario scenario;
+  scenario.mutable_http3_plan()->set_small_upload_window(true);
+  auto* response = scenario.mutable_http3_plan()->add_actions()->mutable_structured_response();
+  response->set_status_code(200);
+  response->set_finish_stream(true);
+  scenario.mutable_upload()->set_data(std::string(256, 'a'));
+  scenario.mutable_upload()->set_terminal(curl::fuzzer::proto::UPLOAD_TERMINAL_EOF);
+  auto* upload_option = scenario.add_options();
+  upload_option->set_option_id(curl::fuzzer::proto::CURLOPT_UPLOAD);
+  upload_option->set_bool_value(true);
+  auto* size_option = scenario.add_options();
+  size_option->set_option_id(curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE);
+  size_option->set_uint_value(256);
+  scenario.add_request_headers("Expect:");
+
+  const Http3RunResult result = RunScenario(scenario, "upload-flow-control");
+  Expect(result.code == CURLE_OK, "HTTP/3 flow-controlled upload did not complete");
+  Expect(result.http_version == CURL_HTTP_VERSION_3, "flow-controlled upload did not use HTTP/3");
+  Expect(result.request_headers_received && result.request_body_bytes == 256,
+         "peer did not consume the full flow-controlled upload");
+  // The body exceeds the initial window. A later turn must receive the rest
+  // after the peer sends more credit.
+  Expect(result.request_body_turns >= 2,
+         "upload data did not require a QUIC receive-credit round trip");
+  Expect(result.executed_action_count == 1, "peer did not send the response after the upload");
+
+  // The peer waits for the request FIN, not for all scripted bytes: curl can
+  // legitimately stop before the end of the script at its declared size.
+  size_option->set_uint_value(160);
+  const Http3RunResult shorter = RunScenario(scenario, "shorter-upload");
+  Expect(shorter.code == CURLE_OK && shorter.request_body_bytes == 160,
+         "peer waited beyond the declared HTTP/3 upload size");
+
+  // Exercise the case where the first response must arrive before curl can
+  // send the body and the peer can send the final response.
+  size_option->set_uint_value(256);
+  scenario.set_request_headers(0, "Expect: 100-continue");
+  auto* actions = scenario.mutable_http3_plan()->mutable_actions();
+  actions->Add()->mutable_structured_response()->set_status_code(100);
+  actions->SwapElements(0, 1);
+
+  const Http3RunResult continued = RunScenario(scenario, "expect-continue");
+  Expect(continued.code == CURLE_OK && continued.response_code == 200,
+         "HTTP/3 upload did not complete after 100 Continue");
+  Expect(continued.headers.find("HTTP/3 100") != std::string::npos &&
+             continued.request_body_bytes == 256 && continued.request_body_turns >= 2 &&
+             continued.executed_action_count == 2,
+         "peer did not send the interim response and receive the full flow-controlled upload");
+}
+
+void TestRejectedRequestStream() {
+  Scenario scenario;
+  auto* reset = scenario.mutable_http3_plan()->add_actions()->mutable_stream_reset();
+  reset->set_role(curl::fuzzer::proto::HTTP3_STREAM_RESPONSE);
+  reset->set_application_error_code(267);  // H3_REQUEST_REJECTED
+
+  const Http3RunResult result = RunScenario(scenario, "request-rejected");
+  Expect(result.handshake_complete && result.request_headers_received,
+         "HTTP/3 rejected request did not reach the peer");
+  Expect(result.executed_action_count == 1,
+         "HTTP/3 peer did not send the request rejection");
+  Expect(result.code != CURLE_OK,
+         "HTTP/3 rejected request unexpectedly completed successfully");
+}
+
+void TestDownloadReceiveRate() {
+  Scenario scenario;
+  auto* rate = scenario.add_options();
+  rate->set_option_id(curl::fuzzer::proto::CURLOPT_MAX_RECV_SPEED_LARGE);
+  rate->set_uint_value(65536);
+  auto* response = scenario.mutable_http3_plan()->add_actions()->mutable_structured_response();
+  response->set_status_code(200);
+  response->add_body_chunks("rate-limited response body");
+  response->set_finish_stream(true);
+
+  const Http3RunResult result = RunScenario(scenario, "limited-download");
+  Expect(result.code == CURLE_OK && result.body == "rate-limited response body",
+         "HTTP/3 rate-limited response did not complete");
+  Expect(result.http_version == CURL_HTTP_VERSION_3 && result.executed_action_count == 1,
+         "HTTP/3 rate-limited response did not reach the scripted peer");
+}
+
 } // namespace
 
 int main() {
@@ -227,6 +314,9 @@ int main() {
   TestRawResponseStreamDataFrame();
   TestRawResponseFromFrameZero();
   TestFreshUnknownUnidirectionalStream();
+  TestUploadExceedsQuicStreamWindow();
+  TestRejectedRequestStream();
+  TestDownloadReceiveRate();
   curl_global_cleanup();
   return 0;
 }
