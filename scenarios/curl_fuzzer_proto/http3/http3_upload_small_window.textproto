@@ -1,0 +1,21 @@
+# Receive a PUT larger than the peer's 128-byte QUIC stream window before
+# replying. The peer grants more credit only as it consumes the request body.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/upload/flow-control"
+options { upload: true }
+options { infilesize_large: 256 }
+request_headers: "Expect:"
+upload {
+  data: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  read_sizes: 256
+  terminal: UPLOAD_TERMINAL_EOF
+}
+http3_plan {
+  small_upload_window: true
+  actions {
+    structured_response {
+      status_code: 200
+      finish_stream: true
+    }
+  }
+}

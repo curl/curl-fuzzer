@@ -314,7 +314,18 @@ Other peers intentionally give those fields narrower meanings:
   handshake and discards the ordinary connection script. Setting
   `http3_plan.use_h1_connect_udp_proxy` instead uses `connection` for a local
   HTTP/1.1 CONNECT-UDP upgrade and capsule bytes; direct HTTP/3 actions are
-  cleared.
+  cleared. `http3_plan.small_upload_window` gives the origin a 128-byte
+  request-stream window and grants more credit as it parses the upload.
+  The peer can send structured informational responses before the upload ends,
+  including `100 Continue`. It waits for the request-stream FIN before it
+  starts any other scripted action or sends a default response. SETTINGS and
+  QPACK traffic continue during the upload.
+  The fixed HTTP/3 target clears this probe for missing, short, or aborting
+  uploads and in CONNECT-UDP mode.
+  A response-stream reset with application error code 267 exercises request
+  rejection. `options.max_recv_speed_large` activates HTTP/3 response receive
+  rate limiting; the fixed target clamps nonzero rates to 65536–1048576 bytes/s
+  to keep fuzz runs bounded.
 
 Use a seed already assigned to the intended target as the closest example.
 A valid protobuf message can still be irrelevant to a lane if that lane's

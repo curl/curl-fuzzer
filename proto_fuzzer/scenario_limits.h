@@ -182,6 +182,8 @@ inline constexpr std::size_t kMaxHttp2ObservedBytes = 64 * 1024;
 /// Ordered H3 work needs enough slots to interleave response fragments with
 /// stream and connection state changes without becoming mutation-sized.
 inline constexpr std::size_t kMaxHttp3Actions = 16;
+/// Initial QUIC stream credit in bytes for the HTTP/3 upload probe.
+inline constexpr std::size_t kHttp3SmallUploadWindowBytes = 128;
 /// Keep each structured header block small enough for cheap QPACK encoding.
 inline constexpr std::size_t kMaxHttp3Headers = 16;
 /// Trailer lists need fewer entries while retaining duplicate-name behavior.

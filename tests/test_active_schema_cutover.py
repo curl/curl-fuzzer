@@ -201,7 +201,10 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
         if field.native_name is not None
     }
     baseline_options = {option["name"] for option in options["options"]}
-    assert set(typed_options) == baseline_options | {"CURLOPT_MAX_SEND_SPEED_LARGE"}
+    assert set(typed_options) == baseline_options | {
+        "CURLOPT_MAX_SEND_SPEED_LARGE",
+        "CURLOPT_MAX_RECV_SPEED_LARGE",
+    }
     for tag, option in enumerate(options["options"], 1):
         field = typed_options[option["name"]]
         assert field.number == tag
@@ -217,6 +220,11 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
     assert max_send_speed.number == 106
     assert kind_by_type[max_send_speed.proto_type] == "uint64"
     assert max_send_speed.eligibility.profiles == {"TARGET_PROFILE_FAST_FILE"}
+
+    max_recv_speed = typed_options["CURLOPT_MAX_RECV_SPEED_LARGE"]
+    assert max_recv_speed.number == 107
+    assert kind_by_type[max_recv_speed.proto_type] == "uint64"
+    assert max_recv_speed.eligibility.profiles == {"TARGET_PROFILE_FAST_HTTP3"}
 
     ech = typed_options["CURLOPT_ECH"]
     assert [
@@ -285,6 +293,8 @@ def test_active_schema_matches_baselines_and_projects_all_profiles(
             )
         if slug in {"compatibility", "fast_http2"}:
             expected_fields.add("http2_connect_flush_probe")
+        if slug in {"compatibility", "fast_http3"}:
+            expected_fields.add("http3_plan.small_upload_window")
         if slug in {"compatibility", "fast_rtsp"}:
             expected_fields.add("rtsp_probe_mode")
         if slug in {"fast_imap", "fast_pop3"}:

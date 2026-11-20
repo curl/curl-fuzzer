@@ -50,6 +50,10 @@ class Http3MockServer final : public MockServerBase {
 
   bool request_headers_received() const;
 
+  std::size_t request_body_bytes() const;
+
+  std::size_t request_body_turns() const;
+
   std::size_t executed_action_count() const;
 
   std::uint16_t server_port() const;

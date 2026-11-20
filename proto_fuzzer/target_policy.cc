@@ -1195,6 +1195,7 @@ void BoundHttp2PlanShape(curl::fuzzer::proto::Http2Plan* plan) {
 void BoundHttp3PlanShape(curl::fuzzer::proto::Http3Plan* plan) {
   if (plan->use_h1_connect_udp_proxy()) {
     plan->clear_actions();
+    plan->clear_small_upload_window();
     return;
   }
   TrimRepeated(plan->mutable_actions(), scenario_limits::kMaxHttp3Actions);
@@ -2081,6 +2082,17 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
     scenario->set_scheme(curl::fuzzer::proto::SCHEME_HTTPS);
     RemoveIgnoredHttp3Shape(scenario);
     PruneAndBoundScenarioShape(scenario, profile, prune_conditional_eligibility);
+    for (auto& option : *scenario->mutable_options()) {
+      if (option.option_id() == curl::fuzzer::proto::CURLOPT_MAX_RECV_SPEED_LARGE) {
+        // A nonzero rate makes curl limit the receive credit it grants the
+        // peer. Keep the rate high enough for this lane's short drive budget
+        // and safely within curl_off_t's range. Zero disables the limiter.
+        const std::uint64_t rate = DecodeIntegralOptionValue(option);
+        if (rate != 0) {
+          option.set_uint_value(std::min<std::uint64_t>(std::max<std::uint64_t>(rate, 65536U), 1048576U));
+        }
+      }
+    }
     // The ordinary QUIC peer consumes Http3Plan and has no use for a stream
     // response. CONNECT-UDP proxy mode instead feeds the retained Connection
     // bytes to curl's HTTP/1.1 proxy state machine and capsule filter.
@@ -2088,6 +2100,41 @@ void ApplyLanePolicy(curl::fuzzer::proto::Scenario* scenario, TargetProfile prof
       scenario->clear_connection();
     }
     BoundHttp3PlanShape(scenario->mutable_http3_plan());
+    // The probe waits for a complete callback-backed PUT. Read the options in
+    // the same order as libcurl receives them because later options can change
+    // the request method or upload length.
+    bool sends_upload = false;
+    // An absent length and curl's -1 both mean the upload ends at callback EOF.
+    std::uint64_t upload_size = std::numeric_limits<std::uint64_t>::max();
+    for (const auto& option : scenario->options()) {
+      if (option.option_id() == curl::fuzzer::proto::CURLOPT_UPLOAD) {
+        // UPLOAD selects PUT when true and GET when false.
+        sends_upload = DecodeIntegralOptionValue(option) != 0;
+      } else if ((option.option_id() == curl::fuzzer::proto::CURLOPT_HTTPGET ||
+                  option.option_id() == curl::fuzzer::proto::CURLOPT_NOBODY) &&
+                 DecodeIntegralOptionValue(option) != 0) {
+        // These flags displace an active PUT only when enabled.
+        sends_upload = false;
+      } else if (option.option_id() == curl::fuzzer::proto::CURLOPT_POST ||
+                 option.option_id() == curl::fuzzer::proto::CURLOPT_POSTFIELDS ||
+                 option.option_id() == curl::fuzzer::proto::CURLOPT_COPYPOSTFIELDS) {
+        // POSTFIELDS and COPYPOSTFIELDS select POST. POST selects POST or GET,
+        // so even a false POST flag displaces an earlier PUT.
+        sends_upload = false;
+      } else if (option.option_id() == curl::fuzzer::proto::CURLOPT_INFILESIZE_LARGE) {
+        upload_size = DecodeIntegralOptionValue(option);
+      }
+    }
+    // MIME supplies a separate body. For a scripted PUT, both the available
+    // data and any declared length must exceed the initial credit. The script
+    // must provide enough bytes for the declared length and finish normally.
+    if (!sends_upload || scenario->has_mime_post() || !scenario->has_upload() ||
+        scenario->upload().data().size() <= scenario_limits::kHttp3SmallUploadWindowBytes ||
+        upload_size <= scenario_limits::kHttp3SmallUploadWindowBytes ||
+        (upload_size != std::numeric_limits<std::uint64_t>::max() && upload_size > scenario->upload().data().size()) ||
+        scenario->upload().terminal() != curl::fuzzer::proto::UPLOAD_TERMINAL_EOF) {
+      scenario->mutable_http3_plan()->clear_small_upload_window();
+    }
     CanonicalizeHttp3Authority(scenario);
     CanonicalizeTlsCertificateChain(scenario);
     return;

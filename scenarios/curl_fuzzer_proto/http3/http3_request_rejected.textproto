@@ -1,0 +1,12 @@
+# A peer-initiated H3_REQUEST_REJECTED reset of the request stream should
+# exercise curl's refused-stream handling before response headers arrive.
+scheme: SCHEME_HTTPS
+host_path: "tls.test/rejected"
+http3_plan {
+  actions {
+    stream_reset {
+      role: HTTP3_STREAM_RESPONSE
+      application_error_code: 267
+    }
+  }
+}
