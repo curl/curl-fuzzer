@@ -22,7 +22,11 @@ def _replace_version(module: str, variable: str, version: str) -> str:
 
 
 def _cache_names(
-    tmp_path: Path, *, gmp_version: str | None = None, nettle_version: str | None = None
+    tmp_path: Path,
+    *,
+    gmp_version: str | None = None,
+    nettle_version: str | None = None,
+    libtasn1_version: str | None = None,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     source_dir = tmp_path / "source"
     build_dir = tmp_path / "build"
@@ -33,6 +37,8 @@ def _cache_names(
         module = _replace_version(module, "GNUTLS_GMP_VERSION", gmp_version)
     if nettle_version is not None:
         module = _replace_version(module, "GNUTLS_NETTLE_VERSION", nettle_version)
+    if libtasn1_version is not None:
+        module = _replace_version(module, "GNUTLS_LIBTASN1_VERSION", libtasn1_version)
     (source_dir / "GnuTLSDependencies.cmake").write_text(module, encoding="utf-8")
 
     (source_dir / "CMakeLists.txt").write_text(
@@ -51,6 +57,7 @@ file(WRITE ${CMAKE_BINARY_DIR}/cache-prefixes.txt "")
 foreach(target IN ITEMS
         gnutls_gmp_external
         gnutls_nettle_external
+        gnutls_libtasn1_external
         gnutls_external)
     get_property(prefix TARGET ${target} PROPERTY _EP_PREFIX)
     get_filename_component(prefix_name ${prefix} NAME)
@@ -85,22 +92,33 @@ def test_transitive_versions_are_part_of_gnutls_cache_identities(
     bumped_nettle = _cache_names(
         tmp_path / "bumped-nettle", nettle_version="99.2-cache-test"
     )
+    bumped_libtasn1 = _cache_names(
+        tmp_path / "bumped-libtasn1", libtasn1_version="99.3-cache-test"
+    )
 
-    for baseline_names, bumped_gmp_names, bumped_nettle_names in zip(
-        baseline, bumped_gmp, bumped_nettle, strict=True
+    for baseline_names, bumped_gmp_names, bumped_nettle_names, bumped_libtasn1_names in zip(
+        baseline, bumped_gmp, bumped_nettle, bumped_libtasn1, strict=True
     ):
         assert (
             len(baseline_names)
             == len(bumped_gmp_names)
             == len(bumped_nettle_names)
-            == 3
+            == len(bumped_libtasn1_names)
+            == 4
         )
-        gmp, nettle, gnutls = range(3)
+        gmp, nettle, libtasn1, gnutls = range(4)
 
         assert bumped_gmp_names[gmp] != baseline_names[gmp]
         assert bumped_gmp_names[nettle] != baseline_names[nettle]
+        assert bumped_gmp_names[libtasn1] == baseline_names[libtasn1]
         assert bumped_gmp_names[gnutls] != baseline_names[gnutls]
 
         assert bumped_nettle_names[gmp] == baseline_names[gmp]
         assert bumped_nettle_names[nettle] != baseline_names[nettle]
+        assert bumped_nettle_names[libtasn1] == baseline_names[libtasn1]
         assert bumped_nettle_names[gnutls] != baseline_names[gnutls]
+
+        assert bumped_libtasn1_names[gmp] == baseline_names[gmp]
+        assert bumped_libtasn1_names[nettle] == baseline_names[nettle]
+        assert bumped_libtasn1_names[libtasn1] != baseline_names[libtasn1]
+        assert bumped_libtasn1_names[gnutls] != baseline_names[gnutls]
