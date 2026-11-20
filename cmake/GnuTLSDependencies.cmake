@@ -172,7 +172,7 @@ else()
 endif()
 
 # renovate: datasource=gitlab-tags depName=gnutls/gnutls
-set(GNUTLS_VERSION 3.8.13)
+set(GNUTLS_VERSION 3.8.14)
 string(REGEX MATCH "^[0-9]+\\.[0-9]+" GNUTLS_SERIES "${GNUTLS_VERSION}")
 # GnuTLS compiles against Nettle's headers, so a Nettle or GMP upgrade must
 # invalidate the cached GnuTLS archive even when GNUTLS_VERSION is unchanged.
