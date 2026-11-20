@@ -1,11 +1,9 @@
 # Build the static dependency stack used by curl's GnuTLS backend.
 #
-# GnuTLS can use the libtasn1 and libunistring copies shipped in its release
-# tarball. Curl also calls Nettle directly, so the smallest hermetic stack is
-# GMP -> Nettle -> GnuTLS. All three builds deliberately disable assembler and
-# optional dynamic integrations: sanitizer instrumentation then covers every
-# dependency path and the resulting fuzzer has no non-system runtime library
-# dependency.
+# GnuTLS 3.8.14 no longer bundles libtasn1, but still bundles libunistring.
+# Curl also calls Nettle directly. Build GMP -> Nettle and libtasn1 -> GnuTLS
+# as static, sanitizer-instrumented dependencies with no non-system runtime
+# library dependency.
 
 include_guard(GLOBAL)
 include(ExternalProject)
@@ -171,13 +169,61 @@ else()
     add_dependencies(gnutls_nettle_external gnutls_gmp_external)
 endif()
 
+# renovate: datasource=custom.gnu depName=libtasn1
+set(GNUTLS_LIBTASN1_VERSION 4.21.0)
+set(GNUTLS_LIBTASN1_CACHE_ID libtasn1-${GNUTLS_LIBTASN1_VERSION})
+set(GNUTLS_LIBTASN1_INSTALL_DIR
+    ${CMAKE_BINARY_DIR}/${GNUTLS_LIBTASN1_CACHE_ID}-install)
+set(GNUTLS_LIBTASN1_STATIC_LIB
+    ${GNUTLS_LIBTASN1_INSTALL_DIR}/lib/libtasn1.a)
+set(GNUTLS_LIBTASN1_INSTALL_STAMP
+    ${GNUTLS_LIBTASN1_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
+
+if(NOT EXISTS ${GNUTLS_LIBTASN1_INSTALL_STAMP} OR
+   NOT EXISTS ${GNUTLS_LIBTASN1_STATIC_LIB})
+    ExternalProject_Add(gnutls_libtasn1_external
+        URL
+            https://mirrors.kernel.org/gnu/libtasn1/libtasn1-${GNUTLS_LIBTASN1_VERSION}.tar.gz
+            https://ftp.gnu.org/gnu/libtasn1/libtasn1-${GNUTLS_LIBTASN1_VERSION}.tar.gz
+        PREFIX
+            ${CMAKE_BINARY_DIR}/${GNUTLS_LIBTASN1_CACHE_ID}-${MINIMAL_INSTALL_RECIPE}
+        CONFIGURE_COMMAND
+            ${CMAKE_COMMAND} -E env
+                "CC=${_GNUTLS_DEPS_CC}"
+                "CFLAGS=$ENV{CFLAGS}"
+                "CPPFLAGS=$ENV{CPPFLAGS}"
+                "LDFLAGS=$ENV{LDFLAGS}"
+                <SOURCE_DIR>/configure
+                    --prefix=${GNUTLS_LIBTASN1_INSTALL_DIR}
+                    --libdir=${GNUTLS_LIBTASN1_INSTALL_DIR}/lib
+                    --disable-shared
+                    --enable-static
+                    --disable-doc
+        BUILD_COMMAND ${_GNUTLS_DEPS_MAKE}
+        INSTALL_COMMAND
+            ${CMAKE_COMMAND} -E remove_directory ${GNUTLS_LIBTASN1_INSTALL_DIR}
+        COMMAND ${_GNUTLS_DEPS_MAKE} install
+        COMMAND ${CMAKE_COMMAND} -E touch ${GNUTLS_LIBTASN1_INSTALL_STAMP}
+        BUILD_IN_SOURCE 1
+        BUILD_BYPRODUCTS
+            ${GNUTLS_LIBTASN1_STATIC_LIB}
+            ${GNUTLS_LIBTASN1_INSTALL_STAMP}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_NO_PROGRESS 1
+    )
+else()
+    message(STATUS
+        "libtasn1 for GnuTLS already installed at ${GNUTLS_LIBTASN1_INSTALL_DIR}, skipping build")
+    add_custom_target(gnutls_libtasn1_external)
+endif()
+
 # renovate: datasource=gitlab-tags depName=gnutls/gnutls
-set(GNUTLS_VERSION 3.8.13)
+set(GNUTLS_VERSION 3.8.14)
 string(REGEX MATCH "^[0-9]+\\.[0-9]+" GNUTLS_SERIES "${GNUTLS_VERSION}")
-# GnuTLS compiles against Nettle's headers, so a Nettle or GMP upgrade must
+# GnuTLS compiles against these dependencies' headers, so their upgrades must
 # invalidate the cached GnuTLS archive even when GNUTLS_VERSION is unchanged.
 set(GNUTLS_CACHE_ID
-    gnutls-${GNUTLS_VERSION}-${GNUTLS_NETTLE_CACHE_ID})
+    gnutls-${GNUTLS_VERSION}-${GNUTLS_NETTLE_CACHE_ID}-${GNUTLS_LIBTASN1_CACHE_ID})
 set(GNUTLS_INSTALL_DIR ${CMAKE_BINARY_DIR}/${GNUTLS_CACHE_ID}-install)
 set(GNUTLS_INCLUDE_DIR ${GNUTLS_INSTALL_DIR}/include)
 set(GNUTLS_STATIC_LIB ${GNUTLS_INSTALL_DIR}/lib/libgnutls.a)
@@ -185,16 +231,16 @@ set(GNUTLS_INSTALL_STAMP
     ${GNUTLS_INSTALL_DIR}/${MINIMAL_INSTALL_STAMP_NAME})
 
 set(_GNUTLS_PKG_CONFIG_PATH
-    "${GNUTLS_NETTLE_INSTALL_DIR}/lib/pkgconfig:${GNUTLS_GMP_INSTALL_DIR}/lib/pkgconfig")
+    "${GNUTLS_LIBTASN1_INSTALL_DIR}/lib/pkgconfig:${GNUTLS_NETTLE_INSTALL_DIR}/lib/pkgconfig:${GNUTLS_GMP_INSTALL_DIR}/lib/pkgconfig")
 if(NOT "$ENV{PKG_CONFIG_PATH}" STREQUAL "")
     string(APPEND _GNUTLS_PKG_CONFIG_PATH ":$ENV{PKG_CONFIG_PATH}")
 endif()
 set(_GNUTLS_CPPFLAGS "$ENV{CPPFLAGS}")
 string(APPEND _GNUTLS_CPPFLAGS
-    " -I${GNUTLS_NETTLE_INCLUDE_DIR} -I${GNUTLS_GMP_INCLUDE_DIR}")
+    " -I${GNUTLS_LIBTASN1_INSTALL_DIR}/include -I${GNUTLS_NETTLE_INCLUDE_DIR} -I${GNUTLS_GMP_INCLUDE_DIR}")
 set(_GNUTLS_LDFLAGS "$ENV{LDFLAGS}")
 string(APPEND _GNUTLS_LDFLAGS
-    " -L${GNUTLS_NETTLE_INSTALL_DIR}/lib -L${GNUTLS_GMP_INSTALL_DIR}/lib")
+    " -L${GNUTLS_LIBTASN1_INSTALL_DIR}/lib -L${GNUTLS_NETTLE_INSTALL_DIR}/lib -L${GNUTLS_GMP_INSTALL_DIR}/lib")
 
 if(NOT EXISTS ${GNUTLS_INSTALL_STAMP} OR
    NOT EXISTS ${GNUTLS_STATIC_LIB})
@@ -223,7 +269,6 @@ if(NOT EXISTS ${GNUTLS_INSTALL_STAMP} OR
                     --disable-libdane
                     --disable-nls
                     --disable-hardware-acceleration
-                    --with-included-libtasn1
                     --with-included-unistring
                     --without-idn
                     --without-p11-kit
@@ -245,19 +290,22 @@ if(NOT EXISTS ${GNUTLS_INSTALL_STAMP} OR
         DOWNLOAD_NO_PROGRESS 1
     )
     add_dependencies(gnutls_external gnutls_nettle_external)
+    add_dependencies(gnutls_external gnutls_libtasn1_external)
 else()
     message(STATUS
         "GnuTLS already installed at ${GNUTLS_INSTALL_DIR}, skipping build")
     add_custom_target(gnutls_external)
     add_dependencies(gnutls_external gnutls_nettle_external)
+    add_dependencies(gnutls_external gnutls_libtasn1_external)
 endif()
 
 add_custom_target(gnutls_dependencies DEPENDS gnutls_external)
 
-# Archive order matters when consumers link statically: GnuTLS calls Hogweed
-# and Nettle, while Hogweed and Nettle call GMP.
+# Archive order matters when consumers link statically: GnuTLS calls libtasn1,
+# Hogweed and Nettle, while Hogweed and Nettle call GMP.
 set(GNUTLS_STATIC_LIBS
     ${GNUTLS_STATIC_LIB}
+    ${GNUTLS_LIBTASN1_STATIC_LIB}
     ${GNUTLS_HOGWEED_STATIC_LIB}
     ${GNUTLS_NETTLE_STATIC_LIB}
     ${GNUTLS_GMP_STATIC_LIB}
@@ -265,13 +313,14 @@ set(GNUTLS_STATIC_LIBS
 set(GNUTLS_SYSTEM_LIBS ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL Linux)
     # GnuTLS' configure records this in Libs.private on Linux. Keep it after
-    # the four archives so Clang can resolve the atomic helpers they use.
+    # the archives so Clang can resolve the atomic helpers they use.
     list(APPEND GNUTLS_SYSTEM_LIBS atomic)
 endif()
 set(GNUTLS_EXTERNAL_DEP gnutls_external)
 set(GNUTLS_CACHE_INSTALL_DIRS
     ${GNUTLS_GMP_INSTALL_DIR}
     ${GNUTLS_NETTLE_INSTALL_DIR}
+    ${GNUTLS_LIBTASN1_INSTALL_DIR}
     ${GNUTLS_INSTALL_DIR}
 )
 

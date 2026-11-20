@@ -136,6 +136,15 @@
     },
     {
       "matchDatasources": [
+        "custom.gnu"
+      ],
+      "matchPackageNames": [
+        "libtasn1"
+      ],
+      "extractVersion": "^libtasn1-(?<version>\\d+\\.\\d+\\.\\d+)\\.tar\\.gz$"
+    },
+    {
+      "matchDatasources": [
         "gitlab-tags"
       ],
       "matchPackageNames": [

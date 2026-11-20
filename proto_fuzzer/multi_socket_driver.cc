@@ -144,7 +144,11 @@ MultiSocketDriver::DriveResult MultiSocketDriver::DriveReady(int* running_handle
     }
   }
 
-  if (result.code == CURLM_OK && timer_pending_ && timeout_ms_ == 0) {
+  long remaining_ms = -1;
+  if (result.code == CURLM_OK && timer_pending_ && timeout_ms_ > 0) {
+    (void)curl_multi_timeout(multi_, &remaining_ms);
+  }
+  if (result.code == CURLM_OK && timer_pending_ && (timeout_ms_ == 0 || (timeout_ms_ > 0 && remaining_ms == 0))) {
     // Clear first: the action may synchronously install another zero timer,
     // which belongs to the next outer loop turn rather than recursive work.
     timer_pending_ = false;

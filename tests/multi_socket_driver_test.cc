@@ -13,6 +13,9 @@
 
 extern "C" int TestNotifySocket(curl_socket_t socket, int what);
 extern "C" std::size_t TestSocketAssignmentCount();
+extern "C" int TestNotifyTimer(long timeout_ms);
+extern "C" void TestSetRemainingTimeout(long timeout_ms);
+extern "C" std::size_t TestTimerActionCount();
 
 namespace {
 
@@ -51,9 +54,32 @@ void TestWatchExhaustion() {
   Expect(!next_driver.watch_exhausted(), "exhaustion leaked to another drive");
 }
 
+void TestPositiveTimerFiresWhenDue() {
+  proto_fuzzer::MultiSocketDriver driver;
+  char multi_token = 0;
+  Expect(driver.Install(reinterpret_cast<CURLM *>(&multi_token)),
+         "socket driver timer installation failed");
+  int running_handles = 1;
+  Expect(driver.Start(&running_handles) == CURLM_OK, "socket driver failed to start");
+  const std::size_t initial_actions = TestTimerActionCount();
+  Expect(TestNotifyTimer(1) == 0, "socket driver rejected positive timer");
+  TestSetRemainingTimeout(1);
+  Expect(driver.DriveReady(&running_handles).code == CURLM_OK &&
+             TestTimerActionCount() == initial_actions,
+         "socket driver fired a positive timer early");
+  TestSetRemainingTimeout(0);
+  Expect(driver.DriveReady(&running_handles).code == CURLM_OK &&
+             TestTimerActionCount() == initial_actions + 1,
+         "socket driver missed an expired positive timer");
+  (void)driver.DriveReady(&running_handles);
+  Expect(TestTimerActionCount() == initial_actions + 1,
+         "socket driver fired an expired timer twice");
+}
+
 } // namespace
 
 int main() {
   TestWatchExhaustion();
+  TestPositiveTimerFiresWhenDue();
   return 0;
 }

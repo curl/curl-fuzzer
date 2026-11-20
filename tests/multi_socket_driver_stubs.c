@@ -15,7 +15,11 @@
  * make watch exhaustion independent of network and resolver timing. */
 static curl_socket_callback socket_callback;
 static void *socket_userdata;
+static curl_multi_timer_callback timer_callback;
+static void *timer_userdata;
 static size_t assignment_count;
+static size_t timer_action_count;
+static long remaining_timeout_ms;
 
 int TestNotifySocket(curl_socket_t socket, int what)
 {
@@ -29,6 +33,23 @@ size_t TestSocketAssignmentCount(void)
   return assignment_count;
 }
 
+int TestNotifyTimer(long timeout_ms)
+{
+  if(!timer_callback)
+    return -2;
+  return timer_callback(NULL, timeout_ms, timer_userdata);
+}
+
+void TestSetRemainingTimeout(long timeout_ms)
+{
+  remaining_timeout_ms = timeout_ms;
+}
+
+size_t TestTimerActionCount(void)
+{
+  return timer_action_count;
+}
+
 CURLMcode curl_multi_setopt(CURLM *multi, CURLMoption option, ...)
 {
   va_list args;
@@ -40,6 +61,12 @@ CURLMcode curl_multi_setopt(CURLM *multi, CURLMoption option, ...)
     break;
   case CURLMOPT_SOCKETDATA:
     socket_userdata = va_arg(args, void *);
+    break;
+  case CURLMOPT_TIMERFUNCTION:
+    timer_callback = va_arg(args, curl_multi_timer_callback);
+    break;
+  case CURLMOPT_TIMERDATA:
+    timer_userdata = va_arg(args, void *);
     break;
   default:
     break;
@@ -62,17 +89,18 @@ CURLMcode curl_multi_socket_action(CURLM *multi, curl_socket_t socket,
                                  int events, int *running_handles)
 {
   (void)multi;
-  (void)socket;
   (void)events;
   (void)running_handles;
-  return CURLM_BAD_HANDLE;
+  if(socket == CURL_SOCKET_TIMEOUT)
+    ++timer_action_count;
+  return CURLM_OK;
 }
 
 CURLMcode curl_multi_timeout(CURLM *multi, long *timeout_ms)
 {
   (void)multi;
-  (void)timeout_ms;
-  return CURLM_BAD_HANDLE;
+  *timeout_ms = remaining_timeout_ms;
+  return CURLM_OK;
 }
 
 CURLMcode curl_multi_wakeup(CURLM *multi)
