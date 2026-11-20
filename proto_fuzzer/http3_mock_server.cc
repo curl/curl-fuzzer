@@ -18,6 +18,7 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -1683,8 +1684,13 @@ void Http3MockServer::RunLoop(CURLM* multi, CURL* easy, const curl::fuzzer::prot
       progress += drive_result.made_progress ? 1U : 0U;
       if (progress != 0) {
         idle_iterations = 0;
-      } else if (++idle_iterations >= kHttp3IdleIterations) {
-        break;
+      } else {
+        if (++idle_iterations >= kHttp3IdleIterations) {
+          break;
+        }
+        // The client can have a positive QUIC timer while waiting for stream
+        // credit. A zero-timeout spin exhausts the idle budget before it fires.
+        (void)::poll(nullptr, 0, 1);
       }
     }
     return;

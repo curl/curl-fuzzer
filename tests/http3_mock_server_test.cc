@@ -69,8 +69,8 @@ Http3RunResult RunScenario(const Scenario &scenario, const char *path) {
              CURLE_OK,
          "HTTP/3 header callback setup failed");
   Expect(curl_easy_setopt(easy.get(), CURLOPT_HEADERDATA, &result.headers) ==
-             CURLE_OK,
-         "HTTP/3 header data setup failed");
+              CURLE_OK,
+          "HTTP/3 header data setup failed");
   (void)proto_fuzzer::ApplyScenarioOptions(easy.get(), scenario);
 
   proto_fuzzer::Http3MockServer server(scenario.tls_certificate_chain());
@@ -264,6 +264,17 @@ void TestUploadExceedsQuicStreamWindow() {
   actions->SwapElements(0, 1);
 
   const Http3RunResult continued = RunScenario(scenario, "expect-continue");
+  if (continued.code != CURLE_OK || continued.response_code != 200) {
+    std::cerr << "expect-continue CURLcode=" << continued.code
+              << " (" << curl_easy_strerror(continued.code) << ")"
+              << " status=" << continued.response_code
+              << " handshake=" << continued.handshake_complete
+              << " headers_received=" << continued.request_headers_received
+              << " body_bytes=" << continued.request_body_bytes
+              << " body_turns=" << continued.request_body_turns
+              << " actions=" << continued.executed_action_count
+              << " response_headers=" << continued.headers << '\n';
+  }
   Expect(continued.code == CURLE_OK && continued.response_code == 200,
          "HTTP/3 upload did not complete after 100 Continue");
   Expect(continued.headers.find("HTTP/3 100") != std::string::npos &&
