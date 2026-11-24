@@ -1665,6 +1665,30 @@ void TestTlsServerCompletesVerifiedTransfer() {
          "single TLS transfer completed an unexpected number of handshakes");
 }
 
+void TestTlsHostnameMismatchIsRejected() {
+  constexpr curl::fuzzer::proto::TlsOcspStapleProfile kProfiles[] = {
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE,
+#if !defined(CURL_FUZZER_EXPECT_MBEDTLS)
+      curl::fuzzer::proto::TLS_OCSP_STAPLE_GOOD,
+#endif
+  };
+  for (const auto profile : kProfiles) {
+    Scenario scenario = MakeTlsScenario("hostname-mismatch", "unreachable");
+    scenario.set_host_path("wrong.test/hostname-mismatch");
+    scenario.set_tls_ocsp_staple_profile(profile);
+    if (profile != curl::fuzzer::proto::TLS_OCSP_STAPLE_NONE) {
+      AddBoolOption(&scenario, curl::fuzzer::proto::CURLOPT_SSL_VERIFYSTATUS,
+                    true);
+    }
+
+    const TlsTransferResult result = DriveTlsScenario(scenario);
+    Expect(result.code == CURLE_PEER_FAILED_VERIFICATION,
+           "TLS peer certificate was accepted for a mismatched hostname");
+    Expect(result.response.empty(),
+           "curl delivered HTTP data after rejecting the peer hostname");
+  }
+}
+
 #ifdef CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES
 void TestTlsAllKeyTypesReachCertificateInfo() {
   Scenario scenario = MakeTlsScenario("certinfo-all-key-types", "keys");
@@ -3415,6 +3439,7 @@ int main() {
   TestHttpsigAlgorithmsEmitSignatureHeaders();
 #endif
   TestTlsServerCompletesVerifiedTransfer();
+  TestTlsHostnameMismatchIsRejected();
 #ifdef CURL_FUZZER_HAS_CERTINFO_ALL_KEY_TYPES
   TestTlsAllKeyTypesReachCertificateInfo();
 #endif

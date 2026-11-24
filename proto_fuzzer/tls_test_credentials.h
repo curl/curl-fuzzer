@@ -12,25 +12,23 @@
 
 namespace proto_fuzzer::tls_test_credentials {
 
-/// Self-signed P-256 certificate for tls.test. It is deliberately checked in
-/// with its key: authenticity is irrelevant to the isolated socketpair, while
-/// stable credentials make verification, certificate-info, and session-cache
-/// paths deterministic across fuzz workers. The hostname is a PrintableString
-/// common name so OpenSSL converts it to owned UTF-8 before curl performs its
-/// embedded-NUL check. OpenSSL's fuzzing mode deliberately omits the courtesy
-/// NUL it normally appends to ASN.1 strings, exposing curl's unsafe strlen on
-/// SAN data; using the common-name path keeps successful TLS coverage possible
-/// while still reaching Curl_cert_hostcheck.
+/// Self-signed P-256 certificate for tls.test. Its DNS subject alternative
+/// name (SAN) lists the server hostname. Curl uses the SAN for hostname
+/// verification without a common-name fallback. Stable credentials keep the
+/// certificate-info and session-cache paths deterministic across fuzz workers.
+/// OpenSSL's fuzzing mode omits the trailing NUL in ASN.1 strings. Curl
+/// compares the SAN with its explicit length.
 inline constexpr char kCertificatePem[] = R"PEM(-----BEGIN CERTIFICATE-----
-MIIBoTCCAUigAwIBAgIUTrd5BlbzPwzAZVPyiMSWVcHWgoowCgYIKoZIzj0EAwIw
+MIIBuDCCAV+gAwIBAgIUTrd5BlbzPwzAZVPyiMSWVcHWgoowCgYIKoZIzj0EAwIw
 EzERMA8GA1UEAxMIdGxzLnRlc3QwIBcNMjYwODMxMTUyMTQ1WhgPMjEyNjA4MDcx
 NTIxNDVaMBMxETAPBgNVBAMTCHRscy50ZXN0MFkwEwYHKoZIzj0CAQYIKoZIzj0D
 AQcDQgAEr/RA8idLSfFXwuj+q8c+vSOWCiByiVUqTt9tN1RGNrxwa/4HuVet9SCk
-XKXqaDjjz6E9osU1U5vsLf5MV/KfxqN4MHYwDwYDVR0TAQH/BAUwAwEB/zAOBgNV
-HQ8BAf8EBAMCAoQwEwYDVR0lBAwwCgYIKwYBBQUHAwEwHQYDVR0OBBYEFAs69Bbr
-sqQ7Elj+Be/JurMNf3kRMB8GA1UdIwQYMBaAFAs69BbrsqQ7Elj+Be/JurMNf3kR
-MAoGCCqGSM49BAMCA0cAMEQCICHgECQlZ7uDVLFlUIw2kFI4r7bgjdfYShhiCPCT
-MNp/AiAOx/lLgYPkZlukA/yG3Wm96JM7tTMr9ZdlR4owOjuJig==
+XKXqaDjjz6E9osU1U5vsLf5MV/KfxqOBjjCBizAPBgNVHRMBAf8EBTADAQH/MA4G
+A1UdDwEB/wQEAwIChDATBgNVHSUEDDAKBggrBgEFBQcDATAdBgNVHQ4EFgQUCzr0
+FuuypDsSWP4F78m6sw1/eREwHwYDVR0jBBgwFoAUCzr0FuuypDsSWP4F78m6sw1/
+eREwEwYDVR0RBAwwCoIIdGxzLnRlc3QwCgYIKoZIzj0EAwIDRwAwRAIgUz5cc7qW
+LO6fFNQRz5OQAOWksD/i+k2z1IZwLkj2mAQCIBmqjfAK3co8PRiC6y7lv7+OqbbQ
+azhlz9dvehyxJoT2
 -----END CERTIFICATE-----
 )PEM";
 
@@ -51,16 +49,17 @@ VSpO3203VEY2vHBr/ge5V631IKRcpepoOOPPoT2ixTVTm+wt/kxX8p/G
 /// P-256 server leaf issued by kCertificatePem. OpenSSL does not staple OCSP
 /// responses for a self-signed server certificate, so OCSP scenarios use this
 /// leaf while retaining kCertificatePem as their trust anchor and issuer.
+/// Its DNS SAN also lists tls.test.
 inline constexpr char kOcspLeafCertificatePem[] = R"PEM(-----BEGIN CERTIFICATE-----
-MIIBjTCCATKgAwIBAgIBAjAKBggqhkjOPQQDAjATMREwDwYDVQQDEwh0bHMudGVz
+MIIBpDCCAUmgAwIBAgIBAjAKBggqhkjOPQQDAjATMREwDwYDVQQDEwh0bHMudGVz
 dDAgFw0yNjExMTAyMTA2NDlaGA8yMTI2MTAxNzIxMDY0OVowEzERMA8GA1UEAwwI
 dGxzLnRlc3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASQW6SgL4zULucu3LMr
 xutTxTQ5bc8UPf05oWAvToUcB/QqgWDmUI6au7qZ//SJz9ELtCQ0/W4mMotuvWl+
-Wdh4o3UwczAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAK
-BggrBgEFBQcDATAdBgNVHQ4EFgQUn0lvXBcK4lRxdDHjcn5mtfg2aBswHwYDVR0j
-BBgwFoAUCzr0FuuypDsSWP4F78m6sw1/eREwCgYIKoZIzj0EAwIDSQAwRgIhANPm
-9eekbWDJA62fMJGXM9528MJkHg7NWi5l7sHA+MEKAiEA9hJxqdS+kxfKmZ/WnEb3
-9PbWlWDPBQOQjP1JwKh0wwQ=
+Wdh4o4GLMIGIMAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQM
+MAoGCCsGAQUFBwMBMB0GA1UdDgQWBBSfSW9cFwriVHF0MeNyfma1+DZoGzAfBgNV
+HSMEGDAWgBQLOvQW67KkOxJY/gXvybqzDX95ETATBgNVHREEDDAKggh0bHMudGVz
+dDAKBggqhkjOPQQDAgNJADBGAiEAj02L/xwk6PZPaqVXL+4lxHNb6g+gGhRg2xZQ
+ESyLGtkCIQCXMWZeeEx9Ofj9wrXacx8xK/ADHiwGcjXl7rikG5PYBw==
 -----END CERTIFICATE-----
 )PEM";
 

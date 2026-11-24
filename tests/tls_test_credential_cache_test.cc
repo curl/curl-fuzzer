@@ -172,7 +172,7 @@ void TestIssuerSignedOcspLeaf() {
   EVP_PKEY *issuer_key = proto_fuzzer::CachedTlsTestIssuerPrivateKey();
   Expect(leaf != nullptr && issuer != nullptr && issuer_key != nullptr &&
              leaf != issuer && X509_self_signed(leaf, 0) == 0 &&
-             X509_get_ext_by_NID(leaf, NID_subject_alt_name, -1) < 0 &&
+             X509_get_ext_by_NID(leaf, NID_subject_alt_name, -1) >= 0 &&
              X509_check_issued(issuer, leaf) == X509_V_OK &&
              X509_verify(leaf, X509_get0_pubkey(issuer)) == 1 &&
              X509_check_private_key(issuer, issuer_key) == 1,
