@@ -103,7 +103,7 @@ endif()
 # Install zstd
 #
 # renovate: datasource=github-tags depName=facebook/zstd
-set(ZSTD_VERSION 1.5.7)
+set(ZSTD_VERSION 1.6.0)
 set(ZSTD_URL https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz)
 set(ZSTD_BUILD_NAME zstd-${ZSTD_VERSION})
 set(ZSTD_INSTALL_DIR ${CMAKE_BINARY_DIR}/${ZSTD_BUILD_NAME}-install)
