@@ -76,11 +76,12 @@ jobs:
           path: ${{ env.BUILD_DIR }}
           key: mainline-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sanitizer }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('.github/workflows/build.yml', 'CMakeLists.txt', 'cmake/*.cmake', 'mainline.sh', 'pyproject.toml', 'uv.lock', 'src/curl_fuzzer_tools/check_python_protobuf.py', 'scripts/compile_target.sh', 'scripts/trim_cache.sh') }}
 
-      - name: Compile mainline
-        run: uv run --locked --no-sync ./mainline.sh
+      - name: Compile mainline dependencies
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        run: uv run --locked --no-sync ./mainline.sh -t deps
 
-      # Keep installed libraries and protoc; remove curl checkout/build state,
-      # generated files and objects so the next run still rebuilds current code.
+      # Save installed libraries and protoc before building curl and tests.
+      # The mainline step regenerates the build tree after trimming.
       - name: Trim mainline dependency cache
         if: steps.dependency-cache.outputs.cache-hit != 'true'
         run: ./scripts/trim_cache.sh "$BUILD_DIR"
@@ -91,6 +92,9 @@ jobs:
         with:
           path: ${{ env.BUILD_DIR }}
           key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
+
+      - name: Compile mainline
+        run: uv run --locked --no-sync ./mainline.sh
 
   just_dependencies:
     name: 'Just dependencies'

@@ -1868,6 +1868,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         set(GENERATOR_PROTOC_DEP host_protoc)
     endif()
 
+    # Cache every dependency needed by the structured fuzzers before building
+    # curl or generated sources. MSan also needs its clean host protoc.
+    add_dependencies(deps libprotobuf_mutator_external ${GENERATOR_PROTOC_DEP})
+
     # The checked-in schema is the authoring and eligibility authority. Compile
     # it to a descriptor first, then derive a metadata-free authoring view, the
     # generic runtime representation, and one restricted mutation root per
@@ -2029,6 +2033,17 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     add_custom_target(curl_fuzzer_proto_generated
         DEPENDS ${GEN_PB_CC} ${GEN_PB_H})
 
+    # The runtime schema is identical in every fuzzer and test executable.
+    add_library(curl_fuzzer_proto_schema OBJECT ${GEN_PB_CC})
+    target_compile_features(curl_fuzzer_proto_schema PRIVATE cxx_std_17)
+    target_compile_options(curl_fuzzer_proto_schema PRIVATE ${COMMON_FLAGS})
+    target_include_directories(curl_fuzzer_proto_schema PRIVATE
+        ${CMAKE_BINARY_DIR}
+        ${LPM_PB_INCLUDE})
+    add_dependencies(curl_fuzzer_proto_schema
+        curl_fuzzer_proto_generated
+        libprotobuf_mutator_external)
+
     # Write out a linker response file listing every .a the LPM install
     # produced — LPM's own libs (libprotobuf-mutator, libprotobuf-mutator-
     # libfuzzer) plus everything under its bundled protobuf (libprotobuf,
@@ -2113,7 +2128,6 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         ${PROTO_FUZZER_TLS_SOURCES}
         proto_fuzzer/websocket_mock_server.cc
         proto_fuzzer/ws_frame.cc
-        ${GEN_PB_CC}
     )
     target_compile_features(curl_fuzzer_proto_runtime PRIVATE cxx_std_17)
     target_compile_options(curl_fuzzer_proto_runtime PRIVATE ${COMMON_FLAGS})
@@ -2253,6 +2267,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         add_executable(${_name}
             fuzzer_entrypoints/${_name}.cc
             $<TARGET_OBJECTS:curl_fuzzer_proto_runtime>
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
             $<TARGET_OBJECTS:${_curl_runner}>
             $<TARGET_OBJECTS:curl_fuzzer_profile_${PROTO_PROFILE}>
         )
@@ -2730,12 +2745,40 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
     # them separate from the full harness object library so CTest can validate
     # normalization without linking curl or running a fuzzing engine.
     if(BUILD_TESTING)
+        # These sources use public curl APIs and no test-specific definitions.
+        # Separate object libraries let each test select only its dependencies.
+        set(PROTO_FUZZER_TEST_SUPPORT_SOURCES
+            proto_fuzzer/mock_server.cc
+            proto_fuzzer/mock_server_base.cc
+            proto_fuzzer/multi_socket_driver.cc
+            proto_fuzzer/option_apply.cc
+            proto_fuzzer/option_model.cc
+            proto_fuzzer/pingpong_mock_server.cc
+            proto_fuzzer/request_data.cc
+            proto_fuzzer/ws_frame.cc)
+        foreach(_source IN LISTS PROTO_FUZZER_TEST_SUPPORT_SOURCES)
+            get_filename_component(_name ${_source} NAME_WE)
+            add_library(curl_fuzzer_test_${_name} OBJECT ${_source})
+            target_compile_features(curl_fuzzer_test_${_name} PRIVATE cxx_std_17)
+            target_compile_options(curl_fuzzer_test_${_name} PRIVATE
+                ${COMMON_FLAGS})
+            target_include_directories(curl_fuzzer_test_${_name} PRIVATE
+                ${CURL_INCLUDE_DIRS}
+                ${CMAKE_BINARY_DIR}
+                ${CMAKE_SOURCE_DIR}
+                ${LPM_PB_INCLUDE})
+            add_dependencies(curl_fuzzer_test_${_name}
+                curl_external
+                curl_fuzzer_proto_generated
+                libprotobuf_mutator_external)
+        endforeach()
+
         add_executable(target_policy_test
             tests/target_policy_test.cc
             proto_fuzzer/target_policy.cc
-            proto_fuzzer/option_model.cc
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
             proto_fuzzer/telnet_scenario.cc
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
         target_compile_features(target_policy_test PRIVATE cxx_std_17)
         target_compile_options(target_policy_test PRIVATE ${COMMON_FLAGS})
@@ -2765,9 +2808,9 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         add_executable(profile_fuzzer_test
             tests/profile_fuzzer_test.cc
             proto_fuzzer/target_policy.cc
-            proto_fuzzer/option_model.cc
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
             proto_fuzzer/telnet_scenario.cc
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
         target_compile_features(profile_fuzzer_test PRIVATE cxx_std_17)
         target_compile_options(profile_fuzzer_test PRIVATE ${COMMON_FLAGS})
@@ -2800,10 +2843,10 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         # socket timing into a resource-lifetime unit test.
         add_executable(request_data_test
             tests/request_data_test.cc
-            proto_fuzzer/option_apply.cc
-            proto_fuzzer/option_model.cc
-            proto_fuzzer/request_data.cc
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+            $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
         target_compile_features(request_data_test PRIVATE cxx_std_17)
         target_compile_options(request_data_test PRIVATE ${COMMON_FLAGS})
@@ -2832,7 +2875,7 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
         add_executable(h2_plan_test
             tests/h2_plan_test.cc
             proto_fuzzer/h2_plan.cc
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
         target_compile_features(h2_plan_test PRIVATE cxx_std_17)
         target_compile_options(h2_plan_test PRIVATE ${COMMON_FLAGS})
@@ -2863,13 +2906,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             proto_fuzzer/h2_cleartext_mock_server.cc
             proto_fuzzer/h2_plan.cc
             proto_fuzzer/h2_runtime.cc
-            proto_fuzzer/mock_server.cc
-            proto_fuzzer/mock_server_base.cc
-            proto_fuzzer/multi_socket_driver.cc
-            proto_fuzzer/option_apply.cc
-            proto_fuzzer/option_model.cc
-            proto_fuzzer/ws_frame.cc
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+            $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+            $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+            $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
         target_compile_features(h2_cleartext_mock_server_test PRIVATE cxx_std_17)
         target_compile_options(h2_cleartext_mock_server_test PRIVATE ${COMMON_FLAGS})
@@ -2918,15 +2961,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             proto_fuzzer/h2_runtime.cc
             proto_fuzzer/ftp_mock_server.cc
             proto_fuzzer/happy_eyeballs_mock_server.cc
-            proto_fuzzer/mock_server.cc
-            proto_fuzzer/mock_server_base.cc
-            proto_fuzzer/multi_socket_driver.cc
+            $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+            $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+            $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
             proto_fuzzer/multi_transfer_runner.cc
             proto_fuzzer/transfer_session.cc
-            proto_fuzzer/option_apply.cc
-            proto_fuzzer/option_model.cc
-            proto_fuzzer/pingpong_mock_server.cc
-            proto_fuzzer/request_data.cc
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+            $<TARGET_OBJECTS:curl_fuzzer_test_pingpong_mock_server>
+            $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
             proto_fuzzer/smtp_mock_server.cc
             proto_fuzzer/imap_mock_server.cc
             proto_fuzzer/ipfs_url.cc
@@ -2938,14 +2981,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             proto_fuzzer/telnet_scenario.cc
             ${PROTO_FUZZER_TLS_SOURCES}
             proto_fuzzer/websocket_mock_server.cc
-            proto_fuzzer/ws_frame.cc
+            $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
             $<TARGET_OBJECTS:curl_fuzzer_profile_api>
             $<TARGET_OBJECTS:curl_fuzzer_profile_compatibility>
             $<TARGET_OBJECTS:curl_fuzzer_profile_deep_http>
             $<TARGET_OBJECTS:curl_fuzzer_profile_fast_http>
             $<TARGET_OBJECTS:curl_fuzzer_profile_fast_https>
             $<TARGET_OBJECTS:curl_fuzzer_profile_h2_proxy>
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
 
         function(curl_add_mock_server_test _name _curl_client)
@@ -3068,13 +3111,13 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC}
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
             )
             target_compile_features(h2_origin_mock_server_test PRIVATE
                 cxx_std_17)
@@ -3119,16 +3162,16 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             tests/multi_transfer_runner_test.cc
             proto_fuzzer/api_lifecycle.cc
             proto_fuzzer/bounded_anonymous_input_file.cc
-            proto_fuzzer/mock_server.cc
-            proto_fuzzer/mock_server_base.cc
-            proto_fuzzer/multi_socket_driver.cc
+            $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+            $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+            $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
             proto_fuzzer/multi_transfer_runner.cc
             proto_fuzzer/transfer_session.cc
-            proto_fuzzer/option_apply.cc
-            proto_fuzzer/option_model.cc
-            proto_fuzzer/request_data.cc
-            proto_fuzzer/ws_frame.cc
-            ${GEN_PB_CC}
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+            $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+            $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+            $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+            $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
         )
         target_compile_features(multi_transfer_runner_test PRIVATE cxx_std_17)
         target_compile_options(multi_transfer_runner_test PRIVATE ${COMMON_FLAGS})
@@ -3164,15 +3207,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 ${_test_source}
                 ${_peer_source}
                 ${ARGN}
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/pingpong_mock_server.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC}
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_pingpong_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>
             )
             target_compile_features(${_name} PRIVATE cxx_std_17)
             target_compile_options(${_name} PRIVATE ${COMMON_FLAGS})
@@ -3308,15 +3351,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/pingpong_mock_server.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC})
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_pingpong_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>)
             target_compile_features(smtps_mock_server_test PRIVATE cxx_std_17)
             target_compile_options(smtps_mock_server_test PRIVATE ${COMMON_FLAGS})
             target_compile_definitions(smtps_mock_server_test PRIVATE
@@ -3356,15 +3399,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/pingpong_mock_server.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC})
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_pingpong_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>)
             target_compile_features(imaps_mock_server_test PRIVATE cxx_std_17)
             target_compile_options(imaps_mock_server_test PRIVATE ${COMMON_FLAGS})
             target_compile_definitions(imaps_mock_server_test PRIVATE
@@ -3404,15 +3447,15 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/pingpong_mock_server.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC})
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_pingpong_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>)
             target_compile_features(pop3s_mock_server_test PRIVATE cxx_std_17)
             target_compile_options(pop3s_mock_server_test PRIVATE ${COMMON_FLAGS})
             target_compile_definitions(pop3s_mock_server_test PRIVATE
@@ -3454,14 +3497,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC})
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>)
             target_compile_features(mqtts_mock_server_test PRIVATE cxx_std_17)
             target_compile_options(mqtts_mock_server_test PRIVATE ${COMMON_FLAGS})
             target_compile_definitions(mqtts_mock_server_test PRIVATE
@@ -3504,14 +3547,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
                 proto_fuzzer/tls_mock_server.cc
                 proto_fuzzer/tls_session_archive.cc
                 proto_fuzzer/tls_test_credential_cache.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC})
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>)
             target_compile_features(ftps_mock_server_test PRIVATE cxx_std_17)
             target_compile_options(ftps_mock_server_test PRIVATE ${COMMON_FLAGS})
             target_compile_definitions(ftps_mock_server_test PRIVATE
@@ -3546,14 +3589,14 @@ if(NOT "$ENV{ARCHITECTURE}" STREQUAL "i386" OR
             add_executable(http3_mock_server_test
                 tests/http3_mock_server_test.cc
                 proto_fuzzer/http3_mock_server.cc
-                proto_fuzzer/mock_server.cc
-                proto_fuzzer/mock_server_base.cc
-                proto_fuzzer/multi_socket_driver.cc
-                proto_fuzzer/option_apply.cc
-                proto_fuzzer/option_model.cc
-                proto_fuzzer/request_data.cc
-                proto_fuzzer/ws_frame.cc
-                ${GEN_PB_CC})
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server>
+                $<TARGET_OBJECTS:curl_fuzzer_test_mock_server_base>
+                $<TARGET_OBJECTS:curl_fuzzer_test_multi_socket_driver>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_apply>
+                $<TARGET_OBJECTS:curl_fuzzer_test_option_model>
+                $<TARGET_OBJECTS:curl_fuzzer_test_request_data>
+                $<TARGET_OBJECTS:curl_fuzzer_test_ws_frame>
+                $<TARGET_OBJECTS:curl_fuzzer_proto_schema>)
             target_compile_features(http3_mock_server_test PRIVATE cxx_std_17)
             target_compile_options(http3_mock_server_test PRIVATE
                 ${COMMON_FLAGS})
