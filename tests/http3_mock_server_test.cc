@@ -47,7 +47,8 @@ struct Http3RunResult {
   std::uint16_t server_port = 0;
 };
 
-Http3RunResult RunScenario(const Scenario &scenario, const char *path) {
+Http3RunResult RunScenario(const Scenario &scenario, const char *path,
+                          const char *hostname = "tls.test") {
   Http3RunResult result;
   CurlEasyPtr easy(curl_easy_init());
   Expect(easy != nullptr, "curl_easy_init failed");
@@ -56,7 +57,7 @@ Http3RunResult RunScenario(const Scenario &scenario, const char *path) {
   Expect(connect_to != nullptr,
          "HTTP/3 baseline did not create CONNECT_TO state");
 
-  const std::string url = std::string("https://tls.test/") + path;
+  const std::string url = std::string("https://") + hostname + "/" + path;
   Expect(curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()) == CURLE_OK,
          "HTTP/3 URL setup failed");
   Expect(curl_easy_setopt(easy.get(), CURLOPT_WRITEFUNCTION, &CollectBytes) ==
@@ -94,6 +95,23 @@ Http3RunResult RunScenario(const Scenario &scenario, const char *path) {
   easy.reset();
   connect_to.reset();
   return result;
+}
+
+void TestHostnameMismatchIsRejected() {
+  Scenario scenario;
+  auto *response = scenario.mutable_http3_plan()
+                       ->add_actions()
+                       ->mutable_structured_response();
+  response->set_status_code(200);
+  response->add_body_chunks("unreachable");
+  response->set_finish_stream(true);
+
+  const Http3RunResult result =
+      RunScenario(scenario, "hostname-mismatch", "wrong.test");
+  Expect(result.code == CURLE_PEER_FAILED_VERIFICATION,
+         "HTTP/3 peer certificate was accepted for a mismatched hostname");
+  Expect(result.body.empty() && result.headers.empty(),
+         "curl delivered HTTP/3 data after rejecting the peer hostname");
 }
 
 void TestStructuredResponseWithTrailers() {
@@ -322,6 +340,7 @@ int main() {
     Fail("curl_global_init failed");
   }
   TestStructuredResponseWithTrailers();
+  TestHostnameMismatchIsRejected();
   TestRawResponseStreamDataFrame();
   TestRawResponseFromFrameZero();
   TestFreshUnknownUnidirectionalStream();
