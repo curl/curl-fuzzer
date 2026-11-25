@@ -124,6 +124,11 @@ line-ending = "auto"
 # renovate: datasource=github-releases depName=astral-sh/uv
 required-version = "==0.13.9"
 
+[tool.uv.dependency-groups]
+# Introspector's tree-sitter 0.27 requires Python 3.11+, but the tools still
+# support Python 3.10 without this optional development group.
+introspector = { requires-python = ">=3.11,<4" }
+
 [[tool.uv.index]]
 name = "pypi"
 url = "https://pypi.org/simple/"
