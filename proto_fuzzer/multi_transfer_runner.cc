@@ -109,7 +109,9 @@ class MultiTransferDriver {
         TransferState& transfer = transfers_[index];
         if (transfer.session.easy() == message->easy_handle) {
           ++stats_.completion_messages;
-          if (message->data.result == CURLE_FILESIZE_EXCEEDED) {
+          if (message->data.result == CURLE_OK) {
+            ++stats_.successful_completions;
+          } else if (message->data.result == CURLE_FILESIZE_EXCEEDED) {
             ++stats_.response_limit_completions;
           }
           break;
@@ -125,6 +127,11 @@ class MultiTransferDriver {
   bool ApplyAction(const curl::fuzzer::proto::MultiAction& action) {
     if (transfer_count_ == 0) {
       return false;
+    }
+    if (action.kind() == curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED) {
+      // A network change applies to the shared multi, not a selected easy.
+      // Invalidate active and idle connections as well as cached DNS results.
+      return curl_multi_setopt(multi_, CURLMOPT_NETWORK_CHANGED, CURLMNWC_CLEAR_ALL) == CURLM_OK;
     }
     TransferState& transfer = transfers_[static_cast<std::size_t>(action.transfer_selector()) % transfer_count_];
     CURL* easy = transfer.session.easy();
@@ -154,6 +161,7 @@ class MultiTransferDriver {
         }
         return false;
       case curl::fuzzer::proto::MULTI_ACTION_NONE:
+      case curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED:
       default:
         return false;
     }

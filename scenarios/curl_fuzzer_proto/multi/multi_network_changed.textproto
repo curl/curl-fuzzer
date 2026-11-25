@@ -1,0 +1,20 @@
+# Mark an active connection stale before its response finishes. Queued
+# transfers must open a new connection, then may reuse that new connection.
+scheme: SCHEME_HTTP
+host_path: "multi.test/network-change"
+connection {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\na"
+}
+subsequent_connections {
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nb"
+  on_readable: "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nc"
+}
+multi_plan {
+  transfer_count: 3
+  max_host_connections: 1
+  max_total_connections: 1
+  connection_cache_size: 1
+  keep_connections_open: true
+  actions { kind: MULTI_ACTION_NONE }
+  actions { kind: MULTI_ACTION_NETWORK_CHANGED }
+}

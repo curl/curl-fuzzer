@@ -926,7 +926,11 @@ void BoundMultiPlanShape(curl::fuzzer::proto::MultiPlan* plan) {
   }
 
   for (auto& action : *plan->mutable_actions()) {
-    action.set_transfer_selector(action.transfer_selector() % transfer_count);
+    if (action.kind() == curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED) {
+      action.set_transfer_selector(0);
+    } else {
+      action.set_transfer_selector(action.transfer_selector() % transfer_count);
+    }
     switch (action.kind()) {
       case curl::fuzzer::proto::MULTI_ACTION_NONE:
       case curl::fuzzer::proto::MULTI_ACTION_PAUSE_RECV:
@@ -935,6 +939,7 @@ void BoundMultiPlanShape(curl::fuzzer::proto::MultiPlan* plan) {
       case curl::fuzzer::proto::MULTI_ACTION_RESUME:
       case curl::fuzzer::proto::MULTI_ACTION_REMOVE:
       case curl::fuzzer::proto::MULTI_ACTION_READD:
+      case curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED:
         break;
       default:
         action.set_kind(curl::fuzzer::proto::MULTI_ACTION_NONE);
