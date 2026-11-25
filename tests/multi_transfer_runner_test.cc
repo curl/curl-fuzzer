@@ -102,6 +102,35 @@ void TestQueuesAndReusesOneConnection() {
          "queued transfers opened another connection instead of reusing one");
 }
 
+void TestNetworkChangeInvalidatesActiveConnection() {
+  Scenario scenario;
+  scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
+  scenario.set_host_path("multi.test/network-change");
+  scenario.mutable_connection()->add_on_readable(
+      "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\na");
+  auto *next = scenario.add_subsequent_connections();
+  next->add_on_readable("HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nb");
+  next->add_on_readable("HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nc");
+  auto *plan = scenario.mutable_multi_plan();
+  plan->set_transfer_count(3);
+  plan->set_max_host_connections(1);
+  plan->set_max_total_connections(1);
+  plan->set_connection_cache_size(1);
+  plan->set_keep_connections_open(true);
+  plan->add_actions()->set_kind(curl::fuzzer::proto::MULTI_ACTION_NONE);
+  plan->add_actions()->set_kind(
+      curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED);
+
+  const proto_fuzzer::MultiTransferRunStats stats =
+      proto_fuzzer::RunMultiTransferScenario(scenario);
+  Expect(stats.actions_consumed == 2 && stats.completion_messages == 3 &&
+             stats.successful_completions == 3,
+         "network change interrupted a transfer or left queued transfers "
+         "incomplete");
+  Expect(stats.opened_connections == 2,
+         "network change did not invalidate the active connection for reuse");
+}
+
 void TestConsumesBoundedActions() {
   Scenario scenario;
   scenario.set_scheme(curl::fuzzer::proto::SCHEME_HTTP);
@@ -174,7 +203,7 @@ void TestBoundsDecodedResponseWorkAfterInputOptions() {
 
   const proto_fuzzer::MultiTransferRunStats stats =
       proto_fuzzer::RunMultiTransferScenario(scenario);
-  Expect(stats.completion_messages == 2 &&
+  Expect(stats.completion_messages == 2 && stats.successful_completions == 0 &&
              stats.response_limit_completions == 2,
          "input options removed the multi runner decoded-response limit");
 }
@@ -185,6 +214,7 @@ int main() {
   TestCompletesConcurrentHandles();
   TestNotificationTypeValidation();
   TestQueuesAndReusesOneConnection();
+  TestNetworkChangeInvalidatesActiveConnection();
   TestConsumesBoundedActions();
   TestAppliesClosedStateProbeToEveryHandle();
   TestBoundsDecodedResponseWorkAfterInputOptions();

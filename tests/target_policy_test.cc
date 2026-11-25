@@ -3391,6 +3391,14 @@ void TestMultiPolicyRetainsAndBoundsItsPlan() {
              proto_fuzzer::scenario_limits::kMaxMultiTransfers - 1,
          "multi policy retained response scripts beyond its handle count");
 
+  scenario.mutable_multi_plan()->mutable_actions(0)->set_kind(
+      curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED);
+  NormalizeScenarioForTarget(&scenario, TargetProfile::kMulti);
+  Expect(scenario.multi_plan().actions(0).kind() ==
+                 curl::fuzzer::proto::MULTI_ACTION_NETWORK_CHANGED &&
+             scenario.multi_plan().actions(0).transfer_selector() == 0,
+         "multi policy did not canonicalize the network-change action");
+
   scenario.mutable_multi_plan()->set_state_probe_profile(
       static_cast<curl::fuzzer::proto::MultiStateProbeProfile>(99));
   NormalizeScenarioForTarget(&scenario, TargetProfile::kMulti);

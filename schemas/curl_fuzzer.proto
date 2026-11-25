@@ -2646,6 +2646,8 @@ enum MultiActionKind {
   MULTI_ACTION_RESUME = 4;
   MULTI_ACTION_REMOVE = 5;
   MULTI_ACTION_READD = 6;
+  // Invalidate cached DNS and connections while transfers share the multi.
+  MULTI_ACTION_NETWORK_CHANGED = 7;
 }
 
 // A bounded source for CURLOPT_READFUNCTION. The payload and read-limit list

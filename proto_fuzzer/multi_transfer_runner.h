@@ -25,6 +25,8 @@ struct MultiTransferRunStats {
   std::size_t added_handles = 0;
   /// CURLMSG_DONE records consumed across all configured handles.
   std::size_t completion_messages = 0;
+  /// CURLMSG_DONE records whose transfer result is CURLE_OK.
+  std::size_t successful_completions = 0;
   /// Transfers stopped by the runner's fixed decoded-response limit.
   std::size_t response_limit_completions = 0;
   /// CURLMNOTIFY_INFO_READ notifications dispatched to the multi handle.
